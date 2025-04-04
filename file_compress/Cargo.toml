@@ -1,0 +1,9 @@
+[package]
+name = "file_compress"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sha1 = "0.10.6"
+zip = "2.6.0"
+zstd = "0.13.3"
