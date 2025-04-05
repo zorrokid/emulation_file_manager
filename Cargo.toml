@@ -1,4 +1,4 @@
 [workspace]
-members = ["file_compress", "cli", "ui"]
+members = ["file_compress", "cli", "ui", "file_export"]
 
 resolver = "2"
