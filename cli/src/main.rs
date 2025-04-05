@@ -1,5 +1,8 @@
+use std::{collections::HashMap, path::Path};
+
 use clap::Parser;
 use file_compress::{read_zip_file, CompressionMethod};
+use file_export::{export_files, ExportType};
 
 #[derive(Parser, Debug)]
 struct Cli {
@@ -16,11 +19,33 @@ struct Cli {
 
 fn main() {
     let args = Cli::parse();
-    if let Err(e) = read_zip_file(
+    match read_zip_file(
         args.input_file.as_str(),
         args.output_directory.as_str(),
         args.compression_method,
     ) {
-        eprintln!("Error processing file: {}", e);
+        Ok(hash_map) => {
+            /*for (file_name, checksum) in hash_map {
+                println!("File: {}, Checksum: {}", file_name, checksum);
+            }*/
+            // let's try exporting the files...
+            let input_path = Path::new(&args.output_directory);
+            let output_path = Path::new(&args.output_directory).join("export");
+            let output_filename_mapping = hash_map
+                .iter()
+                .map(|(k, v)| (k.clone(), format!("{}-{}-exported", k.clone(), v.clone())))
+                .collect::<HashMap<_, _>>();
+            export_files(
+                input_path,
+                &output_path,
+                output_filename_mapping,
+                hash_map.clone(),
+                ExportType::IndividualFilesWithoutCompression,
+            )
+            .expect("Failed to export files");
+        }
+        Err(e) => {
+            eprintln!("Error reading zip file: {}", e);
+        }
     }
 }
