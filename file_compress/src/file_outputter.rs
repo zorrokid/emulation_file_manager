@@ -31,7 +31,7 @@ impl FromStr for CompressionMethod {
 pub trait FileOutputter {
     fn output(
         &self,
-        output_path: &Path,
+        output_dir: &Path,
         buffer: &[u8],
         file_name: &str,
     ) -> Result<(), Box<dyn std::error::Error>>;
@@ -53,24 +53,24 @@ impl FileOutputter for CompressionMethod {
 }
 
 fn output_without_compression(
-    output_path: &Path,
+    output_dir: &Path,
     buffer: &[u8],
-    _: &str,
+    file_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    if let Some(parent) = output_path.parent() {
+    if let Some(parent) = output_dir.parent() {
         create_dir_all(parent)?;
     }
-    let mut output_file = File::create(output_path)?;
+    let mut output_file = File::create(output_dir.join(file_name))?;
     output_file.write_all(buffer)?;
     Ok(())
 }
 
 fn output_zstd_compressed(
-    output_path: &Path,
+    output_dir: &Path,
     buffer: &[u8],
-    _: &str,
+    file_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let zstd_file_path = output_path.with_extension("zst");
+    let zstd_file_path = output_dir.join(file_name).with_extension("zst");
     if let Some(parent) = zstd_file_path.parent() {
         create_dir_all(parent)?;
     }
@@ -82,11 +82,11 @@ fn output_zstd_compressed(
 }
 
 fn output_zip_compressed(
-    output_path: &Path,
+    output_dir: &Path,
     buffer: &[u8],
     file_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let zip_file_path = output_path.with_extension("zip");
+    let zip_file_path = output_dir.join(file_name).with_extension("zip");
     if let Some(parent) = zip_file_path.parent() {
         create_dir_all(parent)?;
     }
@@ -97,4 +97,64 @@ fn output_zip_compressed(
     zip_writer.write_all(buffer)?;
     zip_writer.finish()?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use tempfile::tempdir;
+
+    use super::*;
+
+    #[test]
+    fn test_output_without_compression() {
+        let temp_dir = tempdir().unwrap();
+        let output_path = temp_dir.path();
+        let buffer = b"Hello, world!";
+        let file_name = "test";
+
+        let method = CompressionMethod::None;
+
+        method
+            .output(output_path, buffer, file_name)
+            .expect("Failed to write file");
+
+        let output_data = fs::read(output_path.join(file_name)).expect("Failed to read file");
+        assert_eq!(output_data, buffer);
+    }
+
+    #[test]
+    fn test_output_zstd_compressed() {
+        let temp_dir = tempdir().unwrap();
+        let output_path = temp_dir.path();
+        let buffer = b"Hello, world!";
+        let method = CompressionMethod::Zstd;
+        let file_name = "test";
+
+        method
+            .output(output_path, buffer, file_name)
+            .expect("Failed to write file");
+
+        let output_data =
+            fs::read(output_path.join("test").with_extension("zst")).expect("Failed to read file");
+        assert!(!output_data.is_empty());
+    }
+
+    #[test]
+    fn test_output_zip_compressed() {
+        let temp_dir = tempdir().unwrap();
+        let output_path = temp_dir.path();
+        let buffer = b"Hello, world!";
+        let method = CompressionMethod::Zip;
+        let file_name = "test";
+
+        method
+            .output(output_path, buffer, file_name)
+            .expect("Failed to write file");
+
+        let output_data = fs::read(output_path.join(file_name).with_extension("zip"))
+            .expect("Failed to read file");
+        assert!(!output_data.is_empty());
+    }
 }
