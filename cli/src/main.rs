@@ -1,7 +1,7 @@
 use std::{collections::HashMap, path::Path};
 
 use clap::Parser;
-use file_export::{export_files, ExportType};
+use file_export::{export_files, export_files_zipped};
 use file_import::{read_zip_file, CompressionMethod};
 
 #[derive(Parser, Debug)]
@@ -35,10 +35,16 @@ fn main() {
             export_files(
                 input_path,
                 &output_path,
+                output_filename_mapping.clone(),
+                hash_map.clone(),
+            )
+            .expect("Failed to export files");
+            export_files_zipped(
+                input_path,
+                &output_path,
                 output_filename_mapping,
                 hash_map.clone(),
-                ExportType::CombinedZipArhive,
-                Some(String::from("test")),
+                "exported_files.zip".to_string(),
             )
             .expect("Failed to export files");
         }
