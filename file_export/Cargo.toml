@@ -5,4 +5,5 @@ edition = "2021"
 
 [dependencies]
 sha1 = "0.10.6"
+tempfile = "3.19.1"
 zstd = "0.13.3"
