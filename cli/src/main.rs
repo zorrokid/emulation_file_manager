@@ -37,7 +37,8 @@ fn main() {
                 &output_path,
                 output_filename_mapping,
                 hash_map.clone(),
-                ExportType::IndividualFilesWithoutCompression,
+                ExportType::CombinedZipArhive,
+                Some(String::from("test")),
             )
             .expect("Failed to export files");
         }

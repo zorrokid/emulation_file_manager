@@ -1,13 +1,9 @@
+pub mod file_outputter;
 use std::{collections::HashMap, fs::File, io::Read, path::Path};
 
+pub use file_outputter::ExportType;
+use file_outputter::{output_files_combined_zip, output_files_individually_with_zip};
 use sha1::{Digest, Sha1};
-
-#[derive(Clone, Debug)]
-pub enum ExportType {
-    CombinedZipArhive,
-    IndividualZipFiles,
-    IndividualFilesWithoutCompression,
-}
 
 pub fn export_files(
     file_path: &Path,
@@ -17,9 +13,12 @@ pub fn export_files(
     // key is the archive file name, value is the checksum
     filename_checksum_mapping: HashMap<String, String>,
     // TODO
-    _export_type: ExportType,
+    export_type: ExportType,
+    container_name: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let mut output_file_names: Vec<String> = Vec::new();
     for (archive_file_name, output_file_name) in output_file_name_mapping {
+        output_file_names.push(output_file_name.clone());
         // souce files are in zstd format
         let file_path = file_path.join(&archive_file_name).with_extension("zst");
         let output_file_path = output_dir.join(&output_file_name);
@@ -34,6 +33,15 @@ pub fn export_files(
             )
             .into());
         }
+    }
+    if export_type == ExportType::CombinedZipArhive {
+        if let Some(container_name) = container_name {
+            output_files_combined_zip(output_dir, output_file_names, container_name)?;
+        } else {
+            return Err("Container name is required for combined zip archive".into());
+        }
+    } else if export_type == ExportType::IndividualZipFiles {
+        output_files_individually_with_zip(output_dir, output_file_names)?;
     }
     Ok(())
 }

@@ -37,6 +37,7 @@ fn test_export_files() {
         output_file_name_mapping,
         filename_checksum_mapping,
         ExportType::IndividualFilesWithoutCompression,
+        None,
     )
     .unwrap();
 
