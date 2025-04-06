@@ -25,9 +25,6 @@ fn main() {
         args.compression_method,
     ) {
         Ok(hash_map) => {
-            /*for (file_name, checksum) in hash_map {
-                println!("File: {}, Checksum: {}", file_name, checksum);
-            }*/
             // let's try exporting the files...
             let input_path = Path::new(&args.output_directory);
             let output_path = Path::new(&args.output_directory).join("export");
