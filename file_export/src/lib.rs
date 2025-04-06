@@ -1,9 +1,7 @@
-pub mod file_outputter;
 use std::{collections::HashMap, fs::File, io::Read, path::Path};
 
-pub use file_outputter::ExportType;
-use file_outputter::{output_files_combined_zip, output_files_individually_with_zip};
 use sha1::{Digest, Sha1};
+use zip::write::FileOptions;
 
 pub fn export_files(
     file_path: &Path,
@@ -12,9 +10,6 @@ pub fn export_files(
     output_file_name_mapping: HashMap<String, String>,
     // key is the archive file name, value is the checksum
     filename_checksum_mapping: HashMap<String, String>,
-    // TODO
-    export_type: ExportType,
-    container_name: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut output_file_names: Vec<String> = Vec::new();
     for (archive_file_name, output_file_name) in output_file_name_mapping {
@@ -34,15 +29,45 @@ pub fn export_files(
             .into());
         }
     }
-    if export_type == ExportType::CombinedZipArhive {
-        if let Some(container_name) = container_name {
-            output_files_combined_zip(output_dir, output_file_names, container_name)?;
-        } else {
-            return Err("Container name is required for combined zip archive".into());
+    Ok(())
+}
+
+pub fn export_files_zipped(
+    file_path: &Path,
+    output_dir: &Path,
+    // key is the archive file name, value is the output file name
+    output_file_name_mapping: HashMap<String, String>,
+    // key is the archive file name, value is the checksum
+    filename_checksum_mapping: HashMap<String, String>,
+    container_name: String,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let zip_path = output_dir.join(container_name);
+    let mut zip_writer = zip::ZipWriter::new(File::create(zip_path)?);
+    let file_options: FileOptions<'_, ()> = FileOptions::default();
+
+    for (archive_file_name, output_file_name) in output_file_name_mapping {
+        let file_path = file_path.join(&archive_file_name).with_extension("zst");
+
+        // Add to combined zip archive
+
+        zip_writer.start_file(&output_file_name, file_options)?;
+        decompress_zstd_to_writer(&file_path, &mut zip_writer)?;
+
+        // Verify checksum
+        if let Err(e) = check_file_checksum(
+            &file_path,
+            filename_checksum_mapping.get(&archive_file_name).unwrap(),
+        ) {
+            return Err(format!(
+                "Checksum verification failed for file: {}. Error: {}",
+                archive_file_name, e
+            )
+            .into());
         }
-    } else if export_type == ExportType::IndividualZipFiles {
-        output_files_individually_with_zip(output_dir, output_file_names)?;
     }
+
+    zip_writer.finish()?;
+
     Ok(())
 }
 
@@ -61,6 +86,16 @@ fn decompress_zstd_file(
     }
     let mut output_file = File::create(output_path)?;
     std::io::copy(&mut zstd_reader, &mut output_file)?;
+    Ok(())
+}
+
+fn decompress_zstd_to_writer(
+    input_path: &Path,
+    output_writer: &mut dyn std::io::Write,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let file = File::open(input_path)?;
+    let mut zstd_reader = zstd::Decoder::new(file)?;
+    std::io::copy(&mut zstd_reader, output_writer)?;
     Ok(())
 }
 
