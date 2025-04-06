@@ -10,12 +10,14 @@ pub fn read_zip_file(
     output_dir: &str,
     compression_type: CompressionMethod,
 ) -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
+    println!("Reading zip file: {}", file_path);
     let file = File::open(file_path)?;
     let mut archive = ZipArchive::new(file)?;
     let mut hash_map = HashMap::new();
 
     for i in 0..archive.len() {
         let mut file = archive.by_index(i)?;
+        println!("File: {}", file.name());
 
         if file.is_file() {
             let mut hasher = Sha1::new();
@@ -23,10 +25,12 @@ pub fn read_zip_file(
             file.read_to_end(&mut buffer)?;
             hasher.update(&buffer);
             let checksum = hasher.finalize();
+            println!("Checksum: {:x}", checksum);
             hash_map.insert(file.name().to_string(), format!("{:x}", checksum));
 
-            let output_path = Path::new(output_dir).join(file.name());
-            compression_type.output(&output_path, &buffer, file.name())?;
+            let output_path = Path::new(output_dir);
+            println!("Output path: {}", output_path.display());
+            compression_type.output(output_path, &buffer, file.name())?;
         }
     }
     Ok(hash_map)

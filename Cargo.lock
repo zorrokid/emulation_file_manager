@@ -197,6 +197,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "file_compress",
+ "file_export",
 ]
 
 [[package]]
@@ -332,6 +333,10 @@ dependencies = [
 [[package]]
 name = "file_export"
 version = "0.1.0"
+dependencies = [
+ "sha1",
+ "zstd",
+]
 
 [[package]]
 name = "flate2"
