@@ -57,7 +57,6 @@ fn output_without_compression(
     buffer: &[u8],
     file_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    println!("Outputting without compression");
     if let Some(parent) = output_dir.parent() {
         create_dir_all(parent)?;
     }
@@ -71,9 +70,7 @@ fn output_zstd_compressed(
     buffer: &[u8],
     file_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    println!("Outputting with zstd compression");
     let zstd_file_path = output_dir.join(file_name).with_extension("zst");
-    println!("Zstd file path: {}", zstd_file_path.display());
     if let Some(parent) = zstd_file_path.parent() {
         create_dir_all(parent)?;
     }
@@ -89,9 +86,7 @@ fn output_zip_compressed(
     buffer: &[u8],
     file_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    println!("Outputting with zip compression");
     let zip_file_path = output_dir.join(file_name).with_extension("zip");
-    println!("Zip file path: {}", zip_file_path.display());
     if let Some(parent) = zip_file_path.parent() {
         create_dir_all(parent)?;
     }
