@@ -5,5 +5,5 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "4.5.35", features = ["derive"] }
-file_compress = { path = "../file_compress" }
+file_import = { path = "../file_import" }
 file_export = { path = "../file_export" }

@@ -5,19 +5,32 @@ use std::{collections::HashMap, fs::File, io::Read, path::Path};
 
 use zip::ZipArchive;
 
+/// Reads the give zip file and imports it to the output directory in given compression method.
+/// Calculate the checksum of each file in the zip archive and return a hash map with file names
+/// and their checksums.
+///
+/// # Arguments
+///
+/// * `file_path` - The path to the zip file.
+/// * `output_dir` - The directory where the files will be extracted.
+/// * `compression_type` - The compression method to use for the output files.
+///
+/// # Returns
+///
+/// A `Result` containing a hash map with file names and their checksums, or an error if the
+/// operation fails.
+///
 pub fn read_zip_file(
     file_path: &str,
     output_dir: &str,
     compression_type: CompressionMethod,
 ) -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
-    println!("Reading zip file: {}", file_path);
     let file = File::open(file_path)?;
     let mut archive = ZipArchive::new(file)?;
     let mut hash_map = HashMap::new();
 
     for i in 0..archive.len() {
         let mut file = archive.by_index(i)?;
-        println!("File: {}", file.name());
 
         if file.is_file() {
             let mut hasher = Sha1::new();
@@ -25,11 +38,9 @@ pub fn read_zip_file(
             file.read_to_end(&mut buffer)?;
             hasher.update(&buffer);
             let checksum = hasher.finalize();
-            println!("Checksum: {:x}", checksum);
             hash_map.insert(file.name().to_string(), format!("{:x}", checksum));
 
             let output_path = Path::new(output_dir);
-            println!("Output path: {}", output_path.display());
             compression_type.output(output_path, &buffer, file.name())?;
         }
     }
