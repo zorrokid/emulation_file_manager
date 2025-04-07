@@ -3,6 +3,20 @@ use std::{collections::HashMap, fs::File, io::Read, path::Path};
 use sha1::{Digest, Sha1};
 use zip::write::FileOptions;
 
+/// Exports files from a given zstd archive directory to an output directory decompressed and with given output file name
+/// mapping. Files are also checked for their SHA1 checksums provided in filename checksum map.
+///
+/// # Arguments
+///
+/// * `file_path` - The path to the directory containing the archived collection files.
+/// * `output_dir` - The directory where the files will be exported.
+/// * `output_file_name_mapping` - A hash map where the key is the archive file name and the value is the output file name.
+/// * `filename_checksum_mapping` - A hash map where the key is the archive file name and the value is the SHA1 checksum.
+///
+/// # Returns
+///
+/// A `Result` indicating success or failure of the operation.
+///
 pub fn export_files(
     file_path: &Path,
     output_dir: &Path,
@@ -32,6 +46,20 @@ pub fn export_files(
     Ok(())
 }
 
+/// Exports files from a given zstd archive directory to an output directory compressed to a zip
+/// archive containing the files to be exported with given output file name mapping. Files are also checked for their SHA1 checksums provided in filename checksum map.
+///
+/// # Arguments
+///
+/// * `file_path` - The path to the directory containing the archived collection files.
+/// * `output_dir` - The directory where the files will be exported.
+/// * `output_file_name_mapping` - A hash map where the key is the archive file name and the value is the output file name.
+/// * `filename_checksum_mapping` - A hash map where the key is the archive file name and the value is the SHA1 checksum.
+/// * `container_name` - The name of the zip file to be created.
+///
+/// # Returns
+///
+/// A `Result` indicating success or failure of the operation.
 pub fn export_files_zipped(
     file_path: &Path,
     output_dir: &Path,

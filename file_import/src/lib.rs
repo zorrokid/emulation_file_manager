@@ -27,7 +27,7 @@ pub fn read_zip_file(
 ) -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
     let file = File::open(file_path)?;
     let mut archive = ZipArchive::new(file)?;
-    let mut hash_map = HashMap::new();
+    let mut file_name_to_checksum_map = HashMap::new();
 
     for i in 0..archive.len() {
         let mut file = archive.by_index(i)?;
@@ -38,13 +38,13 @@ pub fn read_zip_file(
             file.read_to_end(&mut buffer)?;
             hasher.update(&buffer);
             let checksum = hasher.finalize();
-            hash_map.insert(file.name().to_string(), format!("{:x}", checksum));
+            file_name_to_checksum_map.insert(file.name().to_string(), format!("{:x}", checksum));
 
             let output_path = Path::new(output_dir);
             compression_type.output(output_path, &buffer, file.name())?;
         }
     }
-    Ok(hash_map)
+    Ok(file_name_to_checksum_map)
 }
 
 #[cfg(test)]
