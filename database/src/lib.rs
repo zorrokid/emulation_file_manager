@@ -1,3 +1,4 @@
+pub mod models;
 use std::{env, sync::Arc};
 
 use dotenvy::dotenv;
