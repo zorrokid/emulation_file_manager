@@ -7,3 +7,5 @@ edition = "2021"
 clap = { version = "4.5.35", features = ["derive"] }
 file_import = { path = "../file_import" }
 file_export = { path = "../file_export" }
+database = { path = "../database" }
+async-std = "1.13.1"
