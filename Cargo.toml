@@ -1,4 +1,4 @@
 [workspace]
-members = ["file_import", "cli", "ui", "file_export"]
+members = ["file_import", "cli", "ui", "file_export", "database"]
 
 resolver = "2"
