@@ -24,7 +24,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let args = Cli::parse();
         let db_pool = get_db_pool().await.unwrap();
 
-        let file_info_repository = FileInfoRepository::new(Arc::clone(&db_pool));
+        let _file_info_repository = FileInfoRepository::new(Arc::clone(&db_pool));
 
         match read_zip_file(
             args.input_file.as_str(),
