@@ -59,6 +59,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 println!("File set: {:?}", file_set);
 
+                // let's try fetching file info from database
+                let file_info = repository_manager
+                    .get_file_info_repository()
+                    .get_file_infos_by_file_set(file_set_id)
+                    .await
+                    .expect("Failed to fetch file info from database");
+
+                println!("File info: {:?}", file_info);
+
                 // let's try exporting the files...
                 let input_path = Path::new(&output_directory);
                 let output_path = Path::new(&output_directory).join("export");
