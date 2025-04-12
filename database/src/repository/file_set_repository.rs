@@ -2,17 +2,9 @@ use std::sync::Arc;
 
 use sqlx::{sqlite::SqliteRow, FromRow, Pool, Row, Sqlite};
 
-// TODO move to better place
-#[derive(Debug, Clone)]
-pub struct PickedFileInfo {
-    pub sha1_checksum: String,
-    pub file_size: i64,
-    pub file_name: String,
-}
-
 use crate::{
     database_error::DatabaseError,
-    models::{FileSet, FileType},
+    models::{FileSet, FileType, PickedFileInfo},
 };
 
 pub struct FileSetRepository {
@@ -66,7 +58,7 @@ impl FileSetRepository {
         Ok(count > 0)
     }
 
-    async fn get_file_sets(&self, ids: Vec<i64>) -> Result<Vec<FileSet>, DatabaseError> {
+    pub async fn get_file_sets(&self, ids: Vec<i64>) -> Result<Vec<FileSet>, DatabaseError> {
         let placeholders = ids.iter().map(|_| "?").collect::<Vec<&str>>().join(",");
         let query = format!(
             "SELECT id, file_name,  file_type 
@@ -84,9 +76,9 @@ impl FileSetRepository {
         Ok(file_sets)
     }
 
-    async fn add_file_set(
+    pub async fn add_file_set(
         &self,
-        file_name: &String,
+        file_name: &str,
         file_type: &FileType,
         files: &Vec<PickedFileInfo>,
     ) -> Result<i64, DatabaseError> {

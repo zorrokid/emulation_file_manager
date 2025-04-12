@@ -2,7 +2,11 @@ use std::{collections::HashMap, path::Path, sync::Arc};
 
 use async_std::task;
 use clap::Parser;
-use database::{get_db_pool;
+use database::{
+    get_db_pool,
+    models::{FileType, PickedFileInfo},
+    repository_manager::RepositoryManager,
+};
 use file_export::{export_files, export_files_zipped};
 use file_import::{read_zip_file, CompressionMethod};
 
@@ -23,18 +27,41 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     task::block_on(async {
         let args = Cli::parse();
         let db_pool = get_db_pool().await.unwrap();
+        let repository_manager = RepositoryManager::new(Arc::clone(&db_pool));
 
-        let _file_info_repository = FileInfoRepository::new(Arc::clone(&db_pool));
-
-        match read_zip_file(
-            args.input_file.as_str(),
-            args.output_directory.as_str(),
-            args.compression_method,
-        ) {
+        let file_name = args.input_file;
+        let output_directory = args.output_directory;
+        match read_zip_file(&file_name, &output_directory, args.compression_method) {
             Ok(hash_map) => {
+                // let't try inserting file set to database
+                let file_type = FileType::Rom;
+                let picked_files = hash_map
+                    .iter()
+                    .map(|(k, v)| PickedFileInfo {
+                        file_name: k.clone(),
+                        file_size: 0, // TODO: set the correct file size
+                        sha1_checksum: v.clone(),
+                    })
+                    .collect();
+
+                let file_set_id = repository_manager
+                    .get_file_set_repository()
+                    .add_file_set(&file_name, &file_type, &picked_files)
+                    .await
+                    .expect("Failed to insert file set to database");
+
+                // let's try fetching file set from database
+                let file_set = repository_manager
+                    .get_file_set_repository()
+                    .get_file_sets(vec![file_set_id])
+                    .await
+                    .expect("Failed to fetch file set from database");
+
+                println!("File set: {:?}", file_set);
+
                 // let's try exporting the files...
-                let input_path = Path::new(&args.output_directory);
-                let output_path = Path::new(&args.output_directory).join("export");
+                let input_path = Path::new(&output_directory);
+                let output_path = Path::new(&output_directory).join("export");
                 let output_filename_mapping = hash_map
                     .iter()
                     .map(|(k, v)| (k.clone(), format!("{}-{}-exported", k.clone(), v.clone())))

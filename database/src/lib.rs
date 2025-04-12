@@ -1,7 +1,8 @@
 mod database_error;
 mod database_path;
-mod models;
+pub mod models;
 mod repository;
+pub mod repository_manager;
 
 use std::sync::Arc;
 
@@ -12,6 +13,7 @@ pub async fn get_db_pool() -> Result<Arc<Pool<Sqlite>>, sqlx::Error> {
     let db_path = base_dir.join("data/db.sqlite");
     let db_url = format!("sqlite://{}", db_path.display());*/
     let db_url = database_path::get_database_url();
+    println!("Database URL: {}", db_url);
     let pool = SqlitePool::connect(&db_url).await?;
     Ok(Arc::new(pool))
 }
