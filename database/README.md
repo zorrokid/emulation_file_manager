@@ -9,3 +9,7 @@ Creating database: `sqlx database create`
 Add migration: `sqlx migrate add <name>`
 
 Run migrations: `sqlx migrate run`
+
+# Check 
+
+cargo sqlx prepare --check

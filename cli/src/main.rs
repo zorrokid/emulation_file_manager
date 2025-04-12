@@ -2,7 +2,7 @@ use std::{collections::HashMap, path::Path, sync::Arc};
 
 use async_std::task;
 use clap::Parser;
-use database::{get_db_pool, repository::file_info_repository::FileInfoRepository};
+use database::{get_db_pool;
 use file_export::{export_files, export_files_zipped};
 use file_import::{read_zip_file, CompressionMethod};
 

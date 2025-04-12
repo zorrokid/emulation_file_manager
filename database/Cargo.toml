@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+async-std = { version = "1.13.1", features = ["attributes"] }
+directories-next = "2.0.0"
 dotenvy = "0.15.7"
 sqlx = { version = "0.8.3", features = ["runtime-async-std", "sqlite", "migrate"] }
+thiserror = "2.0.12"
 
