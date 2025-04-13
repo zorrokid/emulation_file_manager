@@ -124,6 +124,9 @@ mod tests {
 
     use super::*;
 
+    const TEST_FILE_NAME: &str = "test_file";
+    const TEST_ZIP_ARCHIVE_NAME: &str = "test_archive";
+
     fn create_test_zip_file(
         output_path: &Path,
         file_name: &str,
@@ -144,13 +147,14 @@ mod tests {
         let temp_dir = tempdir().unwrap();
         let output_path = temp_dir.path();
         let buffer = b"Hello, world!";
-        let file_name = "test";
 
-        let zip_output_path = output_path.join("test.zip");
-        let file = create_test_zip_file(&zip_output_path, file_name, buffer).unwrap();
+        let zip_output_path = output_path
+            .join(TEST_ZIP_ARCHIVE_NAME)
+            .with_extension("zip");
+        let file = create_test_zip_file(&zip_output_path, TEST_FILE_NAME, buffer).unwrap();
         let mut zip_archive = zip::ZipArchive::new(file).expect("Failed to read zip file");
         let mut zip_file = zip_archive
-            .by_name(file_name)
+            .by_name(TEST_FILE_NAME)
             .expect("Failed to find file in zip archive");
 
         let method = CompressionMethod::None;
@@ -159,7 +163,7 @@ mod tests {
             .output(output_path, &mut zip_file)
             .expect("Failed to write file");
 
-        let output_data = fs::read(output_path.join(file_name)).expect("Failed to read file");
+        let output_data = fs::read(output_path.join(TEST_FILE_NAME)).expect("Failed to read file");
         assert_eq!(output_data, buffer);
     }
 
@@ -168,22 +172,24 @@ mod tests {
         let temp_dir = tempdir().unwrap();
         let output_path = temp_dir.path();
         let method = CompressionMethod::Zstd;
-        let file_name = "test";
         let file_content_buffer = b"Hello, world!";
 
-        let zip_output_path = output_path.join("test").with_extension("zip");
-        let file = create_test_zip_file(&zip_output_path, file_name, file_content_buffer).unwrap();
+        let zip_output_path = output_path
+            .join(TEST_ZIP_ARCHIVE_NAME)
+            .with_extension("zip");
+        let file =
+            create_test_zip_file(&zip_output_path, TEST_FILE_NAME, file_content_buffer).unwrap();
         let mut zip_archive = zip::ZipArchive::new(file).expect("Failed to read zip file");
         let mut zip_file = zip_archive
-            .by_name(file_name)
+            .by_name(TEST_FILE_NAME)
             .expect("Failed to find file in zip archive");
 
         method
             .output(output_path, &mut zip_file)
             .expect("Failed to write file");
 
-        let output_data =
-            fs::read(output_path.join("test").with_extension("zst")).expect("Failed to read file");
+        let output_data = fs::read(output_path.join(TEST_FILE_NAME).with_extension("zst"))
+            .expect("Failed to read file");
         assert!(!output_data.is_empty());
     }
 
@@ -193,10 +199,11 @@ mod tests {
         let tempdir_path = temp_dir.path();
         let buffer = b"Hello, world!";
         let method = CompressionMethod::Zip;
-        let file_name = "test";
 
-        let test_input_zip_path = tempdir_path.join("file_container").with_extension("zip");
-        let zip_file = create_test_zip_file(&test_input_zip_path, file_name, buffer).unwrap();
+        let test_input_zip_path = tempdir_path
+            .join(TEST_ZIP_ARCHIVE_NAME)
+            .with_extension("zip");
+        let zip_file = create_test_zip_file(&test_input_zip_path, TEST_FILE_NAME, buffer).unwrap();
         let mut zip_archive = zip::ZipArchive::new(zip_file).expect("Failed to read zip file");
         let mut first_file_in_zip_archive = zip_archive
             .by_index(0)
@@ -206,7 +213,7 @@ mod tests {
             .output(tempdir_path, &mut first_file_in_zip_archive)
             .expect("Failed to write file");
 
-        let output_data = fs::read(tempdir_path.join(file_name).with_extension("zip"))
+        let output_data = fs::read(tempdir_path.join(TEST_FILE_NAME).with_extension("zip"))
             .expect("Failed to read file");
         assert!(!output_data.is_empty());
     }
