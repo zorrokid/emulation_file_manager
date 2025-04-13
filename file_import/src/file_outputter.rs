@@ -1,12 +1,12 @@
 use std::{
     fs::{create_dir_all, File},
-    io::Write,
+    io::{Read, Write},
     path::Path,
     str::FromStr,
 };
 use zstd::Encoder;
 
-use zip::write::FileOptions;
+use zip::{read::ZipFile, write::FileOptions};
 
 #[derive(Clone, Debug)]
 pub enum CompressionMethod {
@@ -32,8 +32,7 @@ pub trait FileOutputter {
     fn output(
         &self,
         output_dir: &Path,
-        buffer: &[u8],
-        file_name: &str,
+        file: &mut ZipFile<'_, File>,
     ) -> Result<(), Box<dyn std::error::Error>>;
 }
 
@@ -41,60 +40,78 @@ impl FileOutputter for CompressionMethod {
     fn output(
         &self,
         output_path: &Path,
-        buffer: &[u8],
-        file_name: &str,
+        file: &mut ZipFile<'_, File>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         match self {
-            CompressionMethod::Zip => output_zip_compressed(output_path, buffer, file_name),
-            CompressionMethod::Zstd => output_zstd_compressed(output_path, buffer, file_name),
-            CompressionMethod::None => output_without_compression(output_path, buffer, file_name),
+            CompressionMethod::Zip => output_zip_compressed(output_path, file),
+            CompressionMethod::Zstd => output_zstd_compressed(output_path, file),
+            CompressionMethod::None => output_without_compression(output_path, file),
         }
     }
 }
 
 fn output_without_compression(
     output_dir: &Path,
-    buffer: &[u8],
-    file_name: &str,
+    file: &mut ZipFile<'_, File>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(parent) = output_dir.parent() {
         create_dir_all(parent)?;
     }
-    let mut output_file = File::create(output_dir.join(file_name))?;
-    output_file.write_all(buffer)?;
+    let mut output_file = File::create(output_dir.join(file.name()))?;
+    let mut buffer = [0u8; 8192]; // 8 KB buffer
+    loop {
+        let bytes_read = file.read(&mut buffer)?;
+        if bytes_read == 0 {
+            break; // EOF
+        }
+        output_file.write_all(&buffer[..bytes_read])?;
+    }
     Ok(())
 }
 
 fn output_zstd_compressed(
     output_dir: &Path,
-    buffer: &[u8],
-    file_name: &str,
+    file: &mut ZipFile<'_, File>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let zstd_file_path = output_dir.join(file_name).with_extension("zst");
+    let zstd_file_path = output_dir.join(file.name()).with_extension("zst");
     if let Some(parent) = zstd_file_path.parent() {
         create_dir_all(parent)?;
     }
     let zstd_file = File::create(zstd_file_path)?;
     let mut encoder = Encoder::new(zstd_file, 0)?;
-    encoder.write_all(buffer)?;
+    let mut buffer = [0u8; 8192]; // 8 KB buffer
+
+    loop {
+        let bytes_read = file.read(&mut buffer)?;
+        if bytes_read == 0 {
+            break; // EOF
+        }
+        encoder.write_all(&buffer[..bytes_read])?;
+    }
     encoder.finish()?;
     Ok(())
 }
 
 fn output_zip_compressed(
     output_dir: &Path,
-    buffer: &[u8],
-    file_name: &str,
+    file: &mut ZipFile<'_, File>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let zip_file_path = output_dir.join(file_name).with_extension("zip");
+    let zip_file_path = output_dir.join(file.name()).with_extension("zip");
     if let Some(parent) = zip_file_path.parent() {
         create_dir_all(parent)?;
     }
     let zip_file = File::create(zip_file_path)?;
     let mut zip_writer = zip::ZipWriter::new(zip_file);
     let file_options: FileOptions<'_, ()> = FileOptions::default();
-    zip_writer.start_file(file_name, file_options)?;
-    zip_writer.write_all(buffer)?;
+    zip_writer.start_file(file.name(), file_options)?;
+    let mut buffer = [0u8; 8192]; // 8 KB buffer
+    loop {
+        let bytes_read = file.read(&mut buffer)?;
+        if bytes_read == 0 {
+            break; // EOF
+        }
+        zip_writer.write_all(&buffer[..bytes_read])?;
+    }
     zip_writer.finish()?;
     Ok(())
 }
@@ -107,6 +124,21 @@ mod tests {
 
     use super::*;
 
+    fn create_test_zip_file(
+        output_path: &Path,
+        file_name: &str,
+        buffer: &[u8],
+    ) -> Result<File, Box<dyn std::error::Error>> {
+        let zip_file = File::create(output_path)?;
+        let mut zip_writer = zip::ZipWriter::new(zip_file);
+        let file_options: FileOptions<'_, ()> = FileOptions::default();
+        zip_writer.start_file(file_name, file_options)?;
+        zip_writer.write_all(buffer)?;
+        zip_writer.finish()?;
+        let file = File::open(output_path).expect("Failed to open zip file");
+        Ok(file)
+    }
+
     #[test]
     fn test_output_without_compression() {
         let temp_dir = tempdir().unwrap();
@@ -114,10 +146,17 @@ mod tests {
         let buffer = b"Hello, world!";
         let file_name = "test";
 
+        let zip_output_path = output_path.join("test.zip");
+        let file = create_test_zip_file(&zip_output_path, file_name, buffer).unwrap();
+        let mut zip_archive = zip::ZipArchive::new(file).expect("Failed to read zip file");
+        let mut zip_file = zip_archive
+            .by_name(file_name)
+            .expect("Failed to find file in zip archive");
+
         let method = CompressionMethod::None;
 
         method
-            .output(output_path, buffer, file_name)
+            .output(output_path, &mut zip_file)
             .expect("Failed to write file");
 
         let output_data = fs::read(output_path.join(file_name)).expect("Failed to read file");
@@ -128,12 +167,19 @@ mod tests {
     fn test_output_zstd_compressed() {
         let temp_dir = tempdir().unwrap();
         let output_path = temp_dir.path();
-        let buffer = b"Hello, world!";
         let method = CompressionMethod::Zstd;
         let file_name = "test";
+        let file_content_buffer = b"Hello, world!";
+
+        let zip_output_path = output_path.join("test").with_extension("zip");
+        let file = create_test_zip_file(&zip_output_path, file_name, file_content_buffer).unwrap();
+        let mut zip_archive = zip::ZipArchive::new(file).expect("Failed to read zip file");
+        let mut zip_file = zip_archive
+            .by_name(file_name)
+            .expect("Failed to find file in zip archive");
 
         method
-            .output(output_path, buffer, file_name)
+            .output(output_path, &mut zip_file)
             .expect("Failed to write file");
 
         let output_data =
@@ -144,16 +190,23 @@ mod tests {
     #[test]
     fn test_output_zip_compressed() {
         let temp_dir = tempdir().unwrap();
-        let output_path = temp_dir.path();
+        let tempdir_path = temp_dir.path();
         let buffer = b"Hello, world!";
         let method = CompressionMethod::Zip;
         let file_name = "test";
 
+        let test_input_zip_path = tempdir_path.join("file_container").with_extension("zip");
+        let zip_file = create_test_zip_file(&test_input_zip_path, file_name, buffer).unwrap();
+        let mut zip_archive = zip::ZipArchive::new(zip_file).expect("Failed to read zip file");
+        let mut first_file_in_zip_archive = zip_archive
+            .by_index(0)
+            .expect("Failed to find file in zip archive");
+
         method
-            .output(output_path, buffer, file_name)
+            .output(tempdir_path, &mut first_file_in_zip_archive)
             .expect("Failed to write file");
 
-        let output_data = fs::read(output_path.join(file_name).with_extension("zip"))
+        let output_data = fs::read(tempdir_path.join(file_name).with_extension("zip"))
             .expect("Failed to read file");
         assert!(!output_data.is_empty());
     }
