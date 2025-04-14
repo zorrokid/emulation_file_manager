@@ -54,6 +54,13 @@ impl SystemRepository {
 
         Ok(releases_count > 0 || emulators_count > 0)
     }
+
+    async fn add_system(&self, name: &String) -> Result<i64, DatabaseError> {
+        let result = sqlx::query!("INSERT INTO system (name) VALUES (?)", name)
+            .execute(&*self.pool)
+            .await?;
+        Ok(result.last_insert_rowid())
+    }
 }
 
 #[cfg(test)]
@@ -68,13 +75,14 @@ mod tests {
     #[async_std::test]
     async fn test_get_system() {
         let pool = setup_test_db().await;
-        let id = insert_test_system(&pool, TEST_SYSTEM_NAME).await;
-        let result = SystemRepository {
+        let repo = SystemRepository {
             pool: Arc::new(pool),
-        }
-        .get_system(id)
-        .await
-        .unwrap();
+        };
+        let id = repo
+            .add_system(&TEST_SYSTEM_NAME.to_string())
+            .await
+            .unwrap();
+        let result = repo.get_system(id).await.unwrap();
         assert_eq!(result.id, id);
         assert_eq!(result.name, TEST_SYSTEM_NAME);
     }
@@ -82,24 +90,18 @@ mod tests {
     #[async_std::test]
     async fn test_get_systems() {
         let pool = setup_test_db().await;
-        let id = insert_test_system(&pool, TEST_SYSTEM_NAME).await;
-        let result = SystemRepository {
+        let repo = SystemRepository {
             pool: Arc::new(pool),
-        }
-        .get_systems()
-        .await
-        .unwrap();
+        };
+        let id = repo
+            .add_system(&TEST_SYSTEM_NAME.to_string())
+            .await
+            .unwrap();
+
+        let result = repo.get_systems().await.unwrap();
         let result = &result[0];
         assert_eq!(result.id, id);
         assert_eq!(result.name, TEST_SYSTEM_NAME);
-    }
-
-    async fn insert_test_system(pool: &Pool<Sqlite>, system_name: &str) -> i64 {
-        let result = query!("INSERT INTO system (name) VALUES(?)", system_name)
-            .execute(pool)
-            .await
-            .unwrap();
-        result.last_insert_rowid()
     }
 
     async fn insert_test_release(pool: &Pool<Sqlite>) -> i64 {
@@ -126,11 +128,14 @@ mod tests {
     #[async_std::test]
     async fn test_is_system_in_use() {
         let pool = Arc::new(setup_test_db().await);
-        let system_id = insert_test_system(&pool.clone(), TEST_SYSTEM_NAME).await;
         let release_id = insert_test_release(&pool.clone()).await;
         let emulator_id = insert_test_emulator(&pool.clone()).await;
 
         let repo = SystemRepository { pool: pool.clone() };
+        let system_id = repo
+            .add_system(&TEST_SYSTEM_NAME.to_string())
+            .await
+            .unwrap();
 
         let result = repo.is_system_in_use(system_id).await.unwrap();
         assert!(!result);
