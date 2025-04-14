@@ -5,5 +5,7 @@ edition = "2021"
 
 [dependencies]
 async-process = "2.3.0"
+async-std = { version = "1.13.1", features = ["attributes"] }
 thiserror = "2.0.12"
+tempfile = "3.19.1"
 

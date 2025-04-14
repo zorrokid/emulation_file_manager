@@ -42,3 +42,32 @@ pub async fn run_with_emulator(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[async_std::test]
+    async fn test_run_with_emulator() {
+        let temp_dir = tempdir().unwrap();
+        let output_path = temp_dir.path();
+        let file_name = "test.d64";
+        let file_path = output_path.join(file_name);
+        std::fs::write(&file_path, "test data").unwrap();
+        let executable = "echo".to_string();
+        let arguments = "Hello, world!".to_string();
+        let file_names = vec![file_name.to_string()];
+        let selected_file_name = file_name.to_string();
+        let source_path = output_path.to_path_buf();
+        let result = run_with_emulator(
+            executable,
+            arguments,
+            file_names,
+            selected_file_name,
+            source_path,
+        )
+        .await;
+        assert!(result.is_ok(), "Emulator run failed: {:?}", result);
+    }
+}
