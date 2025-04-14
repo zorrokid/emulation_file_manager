@@ -82,7 +82,6 @@ mod tests {
     #[async_std::test]
     async fn test_get_systems() {
         let pool = setup_test_db().await;
-        let system_name = "Commodore 64";
         let id = insert_test_system(&pool, TEST_SYSTEM_NAME).await;
         let result = SystemRepository {
             pool: Arc::new(pool),
