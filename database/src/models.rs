@@ -84,3 +84,17 @@ pub struct Release {
     pub id: i64,
     pub name: String,
 }
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct System {
+    pub id: i64,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Emulator {
+    pub id: i64,
+    pub name: String,
+    pub executable: String,
+    pub extract_files: bool,
+}

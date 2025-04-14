@@ -1,6 +1,35 @@
+CREATE TABLE system (
+    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+    name TEXT NOT NULL
+);
+
+CREATE TABLE emulator (
+    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+    name TEXT NOT NULL,
+    executable TEXT NOT NULL,
+    extract_files INTEGER NOT NULL
+);
+
+CREATE TABLE emulator_system (
+    emulator_id INTEGER NOT NULL,
+    system_id INTEGER NOT NULL,
+    arguments TEXT,
+    PRIMARY KEY (emulator_id, system_id),
+    FOREIGN key (emulator_id) REFERENCES emulator(id),
+    FOREIGN KEY (system_id) REFERENCES system(id)
+);
+
 CREATE TABLE release (
     id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
     name TEXT NOT NULL
+);
+
+CREATE TABLE release_system (
+    release_id INTEGER NOT NULL,
+    system_id INTEGER NOT NULL,
+    PRIMARY KEY (release_id, system_id),
+    FOREIGN KEY (release_id) REFERENCES release(id),
+    FOREIGN KEY (system_id) REFERENCES system(id)
 );
  
 CREATE TABLE file_info (
@@ -31,4 +60,3 @@ CREATE TABLE release_file_set (
     PRIMARY KEY (release_id, file_set_id),
     FOREIGN KEY (release_id) REFERENCES release(id)
 );
- 
