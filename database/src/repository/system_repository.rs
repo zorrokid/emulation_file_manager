@@ -63,15 +63,12 @@ mod tests {
     use super::*;
     use sqlx::query;
 
+    const TEST_SYSTEM_NAME: &str = "Commodore 64";
+
     #[async_std::test]
     async fn test_get_system() {
         let pool = setup_test_db().await;
-        let system_name = "Commodore 64";
-        let result = query!("INSERT INTO system (name) VALUES(?)", system_name)
-            .execute(&pool)
-            .await
-            .unwrap();
-        let id = result.last_insert_rowid();
+        let id = insert_test_system(&pool, TEST_SYSTEM_NAME).await;
         let result = SystemRepository {
             pool: Arc::new(pool),
         }
@@ -79,6 +76,30 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(result.id, id);
-        assert_eq!(result.name, system_name);
+        assert_eq!(result.name, TEST_SYSTEM_NAME);
+    }
+
+    #[async_std::test]
+    async fn test_get_systems() {
+        let pool = setup_test_db().await;
+        let system_name = "Commodore 64";
+        let id = insert_test_system(&pool, TEST_SYSTEM_NAME).await;
+        let result = SystemRepository {
+            pool: Arc::new(pool),
+        }
+        .get_systems()
+        .await
+        .unwrap();
+        let result = &result[0];
+        assert_eq!(result.id, id);
+        assert_eq!(result.name, TEST_SYSTEM_NAME);
+    }
+
+    async fn insert_test_system(pool: &Pool<Sqlite>, system_name: &str) -> i64 {
+        let result = query!("INSERT INTO system (name) VALUES(?)", system_name)
+            .execute(pool)
+            .await
+            .unwrap();
+        result.last_insert_rowid()
     }
 }
