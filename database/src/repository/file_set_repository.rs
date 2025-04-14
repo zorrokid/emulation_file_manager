@@ -99,15 +99,29 @@ impl FileSetRepository {
         let collection_file_id = result.last_insert_rowid();
 
         for file in files {
-            let file_info_result = sqlx::query!(
-                "INSERT INTO file_info (sha1_checksum, file_size) VALUES (?, ?)",
-                file.sha1_checksum,
-                file.file_size
+            let existing_file_info = sqlx::query_scalar!(
+                "SELECT id 
+                 FROM file_info 
+                 WHERE sha1_checksum = ?",
+                file.sha1_checksum
             )
-            .execute(&mut *transaction)
+            .fetch_optional(&mut *transaction)
             .await?;
 
-            let file_info_id = file_info_result.last_insert_rowid();
+            let file_info_id = match existing_file_info {
+                Some(id) => id,
+                None => {
+                    let file_info_result = sqlx::query!(
+                        "INSERT INTO file_info (sha1_checksum, file_size) VALUES (?, ?)",
+                        file.sha1_checksum,
+                        file.file_size
+                    )
+                    .execute(&mut *transaction)
+                    .await?;
+
+                    file_info_result.last_insert_rowid()
+                }
+            };
 
             sqlx::query!(
                 "INSERT INTO file_set_file_info (file_set_id, file_info_id, file_name) 
@@ -139,10 +153,12 @@ impl FileSetRepository {
             return Err(DatabaseError::InUse);
         }
 
-        // TODO check also if file_info is linked to other file set(s)
-
         let mut transaction = self.pool.begin().await?;
 
+        // NOTE: we don't delete file_info, because it can be used in other file sets
+        // TODO: maybe check if file_info is used in other file sets and delete it if not?
+        // NOTE: file info is dependent on physical file, so we delete it only in those case when
+        // the actual file is deleted
         sqlx::query!("DELETE FROM file_set_file_info WHERE file_set_id = ?", id)
             .execute(&mut *transaction)
             .await?;
@@ -185,17 +201,7 @@ mod tests {
         .await
         .unwrap();
 
-        let release_result = query!(
-            "INSERT INTO release (
-                name
-            ) VALUES (?)",
-            "test",
-        )
-        .execute(&pool)
-        .await
-        .unwrap();
-
-        let release_id = release_result.last_insert_rowid();
+        let release_id = insert_test_release(&pool).await;
         let file_set_id = result.last_insert_rowid();
 
         query!(
@@ -231,17 +237,8 @@ mod tests {
         .execute(&pool)
         .await
         .unwrap();
-        let release_result = query!(
-            "INSERT INTO release (
-                name
-            ) VALUES (?)",
-            "test",
-        )
-        .execute(&pool)
-        .await
-        .unwrap();
 
-        let release_id = release_result.last_insert_rowid();
+        let release_id = insert_test_release(&pool).await;
         let file_set_id = result.last_insert_rowid();
 
         query!(
@@ -298,6 +295,62 @@ mod tests {
     }
 
     #[async_std::test]
+    async fn test_add_file_sets_with_common_files() {
+        let pool = Arc::new(setup_test_db().await);
+        let file_set_1_name = "file set 1".to_string();
+        let file_set_2_name = "file set 2".to_string();
+
+        let file_type = FileType::Rom;
+
+        let all_files = [
+            PickedFileInfo {
+                sha1_checksum: "test".to_string(),
+                file_size: 123,
+                file_name: "file 1".to_string(),
+            },
+            PickedFileInfo {
+                sha1_checksum: "test2".to_string(),
+                file_size: 123,
+                file_name: "file 2".to_string(),
+            },
+            PickedFileInfo {
+                sha1_checksum: "test3".to_string(),
+                file_size: 123,
+                file_name: "file 3".to_string(),
+            },
+        ];
+
+        let file_set_1_files = vec![all_files[0].clone(), all_files[1].clone()];
+        let file_set_2_files = vec![all_files[1].clone(), all_files[2].clone()];
+
+        let repo = FileSetRepository { pool: pool.clone() };
+
+        let _file_set_1_id = repo
+            .add_file_set(&file_set_1_name, &file_type, &file_set_1_files)
+            .await
+            .unwrap();
+
+        let _file_set_2_id = repo
+            .add_file_set(&file_set_2_name, &file_type, &file_set_2_files)
+            .await
+            .unwrap();
+
+        // In this case, expected behaviour is the file 2 is only added once
+        // and file set 1 and file set 2 are linked to the same file info
+
+        let file_2_instances = query_scalar!(
+            "SELECT COUNT(*) 
+             FROM file_info 
+             WHERE sha1_checksum = ?",
+            all_files[1].sha1_checksum
+        )
+        .fetch_one(&*pool)
+        .await
+        .unwrap();
+        assert_eq!(file_2_instances, 1);
+    }
+
+    #[async_std::test]
     async fn test_delete_file_set() {
         let pool = setup_test_db().await;
         let file_name = "test file".to_string();
@@ -343,17 +396,7 @@ mod tests {
         .await
         .unwrap();
 
-        let release_result = query!(
-            "INSERT INTO release (
-                name
-            ) VALUES (?)",
-            "test",
-        )
-        .execute(&pool)
-        .await
-        .unwrap();
-
-        let release_id = release_result.last_insert_rowid();
+        let release_id = insert_test_release(&pool).await;
         let file_set_id = result.last_insert_rowid();
 
         query!(
@@ -372,5 +415,18 @@ mod tests {
         .await;
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), DatabaseError::InUse);
+    }
+
+    async fn insert_test_release(pool: &Pool<Sqlite>) -> i64 {
+        let result = query!(
+            "INSERT INTO release (
+                name
+            ) VALUES (?)",
+            "test",
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+        result.last_insert_rowid()
     }
 }
