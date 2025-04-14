@@ -20,12 +20,6 @@ pub async fn run_with_emulator(
         return Err(EmulatorRunnerError::FileNotFound);
     }
 
-    println!(
-        "Running {} with emulator {}",
-        file_path.to_string_lossy(),
-        executable
-    );
-
     let mut command = Command::new(&executable);
 
     command.arg(&file_path).current_dir(source_path);
@@ -38,11 +32,13 @@ pub async fn run_with_emulator(
     let status = command.status().await.map_err(|e| {
         EmulatorRunnerError::IoError(format!("Failed to get status of emulator: {}", e))
     })?;
-    println!("Emulator exited with status: {}", status);
+
     if !status.success() {
-        eprintln!("Emulator failed with status: {}", status);
+        return Err(EmulatorRunnerError::IoError(format!(
+            "Emulator failed with status: {}",
+            status
+        )));
     }
-    println!("Finished running with emulator");
 
     Ok(())
 }
