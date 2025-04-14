@@ -1,7 +1,6 @@
 pub mod file_outputter;
 pub use file_outputter::{CompressionMethod, FileOutputter};
-use sha1::{Digest, Sha1};
-use std::{collections::HashMap, fs::File, io::Read, path::Path};
+use std::{collections::HashMap, fs::File, path::Path};
 
 use zip::ZipArchive;
 
@@ -31,22 +30,10 @@ pub fn read_zip_file(
 
     for i in 0..archive.len() {
         let mut file = archive.by_index(i)?;
-
         if file.is_file() {
-            let mut hasher = Sha1::new();
-            let mut buffer = [0u8; 8192]; // 8KB buffer
-            loop {
-                let bytes_read = file.read(&mut buffer)?;
-                if bytes_read == 0 {
-                    break; // EOF
-                }
-                hasher.update(&buffer[..bytes_read]);
-            }
-            let checksum = hasher.finalize();
-            file_name_to_checksum_map.insert(file.name().to_string(), format!("{:x}", checksum));
-
             let output_path = Path::new(output_dir);
-            compression_type.output(output_path, &mut file)?;
+            let checksum = compression_type.output(output_path, &mut file)?;
+            file_name_to_checksum_map.insert(file.name().to_string(), checksum);
         }
     }
     Ok(file_name_to_checksum_map)
