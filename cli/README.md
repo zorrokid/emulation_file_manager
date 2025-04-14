@@ -9,3 +9,7 @@ Creating database: `sqlx database create`
 Add migration: `sqlx migrate add <name>`
 
 Run migrations: `sqlx migrate run`
+
+Example usage:
+
+cli ../../zip2zstd/test.zip output zstd

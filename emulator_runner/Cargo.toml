@@ -1,0 +1,9 @@
+[package]
+name = "emulator_runner"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-process = "2.3.0"
+thiserror = "2.0.12"
+

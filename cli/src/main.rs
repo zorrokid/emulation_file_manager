@@ -7,6 +7,7 @@ use database::{
     models::{FileType, PickedFileInfo},
     repository_manager::RepositoryManager,
 };
+use emulator_runner::run_with_emulator;
 use file_export::{export_files, export_files_zipped};
 use file_import::{read_zip_file, CompressionMethod};
 
@@ -90,6 +91,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "exported_files.zip".to_string(),
                 )
                 .expect("Failed to export files");
+
+                // let's try running an emulator
+                let executable = "x64".to_string();
+                let arguments = "".to_string();
+                let file_names = vec!["test.d64".to_string()];
+                let selected_file_name = "test.d64".to_string();
+                let file_path = std::env::current_dir()
+                    .expect("Failed to get current directory")
+                    .join("test_files")
+                    .to_path_buf();
+
+                run_with_emulator(
+                    executable,
+                    arguments,
+                    file_names,
+                    selected_file_name,
+                    file_path,
+                )
+                .await
+                .expect("Failed to run emulator");
             }
             Err(e) => {
                 eprintln!("Error reading zip file: {}", e);
