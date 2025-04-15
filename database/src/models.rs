@@ -91,10 +91,17 @@ pub struct System {
     pub name: String,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, FromRow)]
 pub struct Emulator {
     pub id: i64,
     pub name: String,
     pub executable: String,
     pub extract_files: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, FromRow)]
+pub struct EmulatorSystem {
+    pub system_id: i64,
+    pub system_name: String,
+    pub arguments: String,
 }

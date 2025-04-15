@@ -1,4 +1,4 @@
-mod database_error;
+pub mod database_error;
 mod database_path;
 pub mod models;
 mod repository;

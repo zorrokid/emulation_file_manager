@@ -5,6 +5,24 @@ use error::EmulatorRunnerError;
 
 pub mod error;
 
+/// Asynchronous function to run an emulator with the given executable, arguments, and file names.
+/// It takes the selected file name and source path to locate the file.
+///
+/// # arguments
+/// * `executable`: emulator executable name (if it's found on system path) or the full path to the emulator executable.
+/// * `arguments`: The arguments to pass to the emulator.
+/// * `file_names`: A vector of file names to be used with emulator to run a certain software release.
+/// * `selected_file_name`: The name of the entry point file of the set of file_names to be executed.
+/// * `source_path`: The path where the files are located.
+///
+/// # returns
+/// * `Result<(), EmulatorRunnerError>`: Returns Ok if the emulator runs successfully, or an error if it fails.
+///
+/// # errors
+/// * `EmulatorRunnerError::NoFileSelected`: If no file is selected.
+/// * `EmulatorRunnerError::FileNotFound`: If the selected file is not found.
+/// * `EmulatorRunnerError::IoError`: If there is an IO error while running the emulator.
+///
 pub async fn run_with_emulator(
     executable: String,
     arguments: String,
