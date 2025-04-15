@@ -105,3 +105,16 @@ pub struct EmulatorSystem {
     pub system_name: String,
     pub arguments: String,
 }
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Franchise {
+    pub id: i64,
+    pub name: String,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct SoftwareTitle {
+    pub id: i64,
+    pub name: String,
+    pub franchise_id: Option<i64>,
+}

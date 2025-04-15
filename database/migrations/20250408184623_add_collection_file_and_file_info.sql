@@ -19,6 +19,18 @@ CREATE TABLE emulator_system (
     FOREIGN KEY (system_id) REFERENCES system(id)
 );
 
+CREATE TABLE franchise (
+    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+    name TEXT NOT NULL
+);
+
+CREATE TABLE software_title (
+    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+    name TEXT NOT NULL,
+    franchise_id INTEGER,
+    FOREIGN KEY (franchise_id) REFERENCES franchise(id)
+);
+
 CREATE TABLE release (
     id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
     name TEXT NOT NULL
@@ -31,6 +43,15 @@ CREATE TABLE release_system (
     FOREIGN KEY (release_id) REFERENCES release(id),
     FOREIGN KEY (system_id) REFERENCES system(id)
 );
+
+CREATE TABLE release_software_title (
+    release_id INTEGER NOT NULL,
+    software_title_id INTEGER NOT NULL,
+    PRIMARY KEY (release_id, software_title_id),
+    FOREIGN KEY (release_id) REFERENCES release(id),
+    FOREIGN KEY (software_title_id) REFERENCES software_title(id)
+);
+
  
 CREATE TABLE file_info (
     id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -60,3 +81,5 @@ CREATE TABLE release_file_set (
     PRIMARY KEY (release_id, file_set_id),
     FOREIGN KEY (release_id) REFERENCES release(id)
 );
+
+
