@@ -7,11 +7,7 @@ pub struct EmulatorViewModel {
 }
 
 pub struct EmulatorSystemViewModel {
-    pub system: SystemViewModel,
+    pub system_id: i64,
+    pub system_name: String,
     pub arguments: String,
-}
-
-pub struct SystemViewModel {
-    pub id: i64,
-    pub name: String,
 }

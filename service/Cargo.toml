@@ -5,3 +5,5 @@ edition = "2021"
 
 [dependencies]
 database = { path = "../database" }
+async-std = { version = "1.13.1", features = ["attributes"] }
+

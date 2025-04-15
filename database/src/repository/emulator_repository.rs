@@ -16,7 +16,7 @@ impl EmulatorRepository {
         Self { pool }
     }
 
-    async fn get_emulators(&self) -> Result<Vec<Emulator>, DatabaseError> {
+    pub async fn get_emulators(&self) -> Result<Vec<Emulator>, DatabaseError> {
         let emulators = sqlx::query_as::<_, Emulator>(
             "SELECT id, name, executable, extract_files
              FROM emulator",
@@ -26,7 +26,7 @@ impl EmulatorRepository {
         Ok(emulators)
     }
 
-    async fn get_emulator_with_systems(
+    pub async fn get_emulator_with_systems(
         &self,
         id: i64,
     ) -> Result<(Emulator, Vec<EmulatorSystem>), DatabaseError> {
@@ -54,7 +54,7 @@ impl EmulatorRepository {
         Ok((emulator, emulator_systems))
     }
 
-    async fn add_emulator(
+    pub async fn add_emulator(
         &self,
         name: String,
         executable: String,
@@ -75,14 +75,14 @@ impl EmulatorRepository {
         Ok(result.last_insert_rowid())
     }
 
-    async fn delete_emulator(&self, id: i64) -> Result<(), DatabaseError> {
+    pub async fn delete_emulator(&self, id: i64) -> Result<(), DatabaseError> {
         sqlx::query!("DELETE FROM emulator WHERE id = ?", id)
             .execute(&*self.pool)
             .await?;
         Ok(())
     }
 
-    async fn update_emulator(&self, emulator: &Emulator) -> Result<i64, DatabaseError> {
+    pub async fn update_emulator(&self, emulator: &Emulator) -> Result<i64, DatabaseError> {
         let result = sqlx::query!(
             "UPDATE emulator SET 
              name = ?, 
@@ -99,7 +99,7 @@ impl EmulatorRepository {
         Ok(result.last_insert_rowid())
     }
 
-    async fn add_emulator_system(
+    pub async fn add_emulator_system(
         &self,
         emulator_id: i64,
         system_id: i64,
@@ -120,7 +120,7 @@ impl EmulatorRepository {
         Ok(())
     }
 
-    async fn remove_emulator_system(
+    pub async fn remove_emulator_system(
         &self,
         emulator_id: i64,
         system_id: i64,

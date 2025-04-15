@@ -7,7 +7,6 @@ use crate::repository::{
     file_set_repository::FileSetRepository, system_repository::SystemRepository,
 };
 pub struct RepositoryManager {
-    pool: Arc<Pool<Sqlite>>,
     file_info_repository: FileInfoRepository,
     file_set_repository: FileSetRepository,
     emulator_repository: EmulatorRepository,
@@ -22,7 +21,6 @@ impl RepositoryManager {
         let system_repository = SystemRepository::new(pool.clone());
 
         Self {
-            pool,
             file_info_repository,
             file_set_repository,
             emulator_repository,
@@ -41,7 +39,6 @@ impl RepositoryManager {
     pub fn get_emulator_repository(&self) -> &EmulatorRepository {
         &self.emulator_repository
     }
-
     pub fn get_system_repository(&self) -> &SystemRepository {
         &self.system_repository
     }
