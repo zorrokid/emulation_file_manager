@@ -82,4 +82,8 @@ CREATE TABLE release_file_set (
     FOREIGN KEY (release_id) REFERENCES release(id)
 );
 
+CREATE TABLE setting (
+    key TEXT NOT NULL PRIMARY KEY,
+    value TEXT NOT NULL
+);
 
