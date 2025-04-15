@@ -36,7 +36,7 @@ impl Ui {
     }
 
     fn title(&self) -> String {
-        "My Application".to_string()
+        "Software Collection Manager".to_string()
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
