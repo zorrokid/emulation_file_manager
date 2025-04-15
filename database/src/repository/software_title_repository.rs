@@ -13,7 +13,7 @@ impl SoftwareTitleRepository {
         Self { pool }
     }
 
-    async fn get_software_title(&self, id: i64) -> Result<SoftwareTitle, DatabaseError> {
+    pub async fn get_software_title(&self, id: i64) -> Result<SoftwareTitle, DatabaseError> {
         let software_title = sqlx::query_as!(
             SoftwareTitle,
             "SELECT id, name, franchise_id FROM software_title WHERE id = ?",
@@ -25,7 +25,7 @@ impl SoftwareTitleRepository {
         Ok(software_title)
     }
 
-    async fn get_all_software_titles(&self) -> Result<Vec<SoftwareTitle>, DatabaseError> {
+    pub async fn get_all_software_titles(&self) -> Result<Vec<SoftwareTitle>, DatabaseError> {
         let software_titles = sqlx::query_as!(
             SoftwareTitle,
             "SELECT id, name, franchise_id FROM software_title"
@@ -35,9 +35,9 @@ impl SoftwareTitleRepository {
         Ok(software_titles)
     }
 
-    async fn add_software_title(
+    pub async fn add_software_title(
         &self,
-        name: &str,
+        name: String,
         franchise_id: Option<i64>,
     ) -> Result<i64, DatabaseError> {
         let result = sqlx::query!(
@@ -50,7 +50,7 @@ impl SoftwareTitleRepository {
         Ok(result.last_insert_rowid())
     }
 
-    async fn update_software_title(
+    pub async fn update_software_title(
         &self,
         software_title: &SoftwareTitle,
     ) -> Result<i64, DatabaseError> {
@@ -65,7 +65,7 @@ impl SoftwareTitleRepository {
         Ok(result.last_insert_rowid())
     }
 
-    async fn delete_software_title(&self, id: i64) -> Result<i64, DatabaseError> {
+    pub async fn delete_software_title(&self, id: i64) -> Result<i64, DatabaseError> {
         let count = sqlx::query_scalar!(
             "SELECT COUNT(*) FROM release_software_title WHERE software_title_id = ?",
             id
@@ -95,7 +95,7 @@ mod tests {
 
         // Add a new software title
         let software_title_id = software_title_repository
-            .add_software_title("Test Software Title", None)
+            .add_software_title("Test Software Title".to_string(), None)
             .await
             .unwrap();
 

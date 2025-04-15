@@ -189,6 +189,10 @@ mod tests {
         let (updated_emulator, _) = repo.get_emulator_with_systems(emulator_id).await.unwrap();
         assert_eq!(updated_emulator.name, "Updated Emulator");
 
+        // try deleting the emulator before removing the system relation
+        let result = repo.delete_emulator(emulator_id).await;
+        assert!(result.is_err());
+
         repo.remove_emulator_system(emulator_id, system_id)
             .await
             .unwrap();
