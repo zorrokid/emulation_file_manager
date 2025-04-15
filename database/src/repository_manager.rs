@@ -5,8 +5,8 @@ use sqlx::{Pool, Sqlite};
 use crate::repository::{
     emulator_repository::EmulatorRepository, file_info_repository::FileInfoRepository,
     file_set_repository::FileSetRepository, franchise_repository::FranchiseRepository,
-    release_repository::ReleaseRepository, software_title_repository::SoftwareTitleRepository,
-    system_repository::SystemRepository,
+    release_repository::ReleaseRepository, setting_repository::SettingRepository,
+    software_title_repository::SoftwareTitleRepository, system_repository::SystemRepository,
 };
 
 pub struct RepositoryManager {
@@ -17,6 +17,7 @@ pub struct RepositoryManager {
     franchise_repository: FranchiseRepository,
     release_repository: ReleaseRepository,
     software_title_repository: SoftwareTitleRepository,
+    setting_repository: SettingRepository,
 }
 
 impl RepositoryManager {
@@ -28,6 +29,7 @@ impl RepositoryManager {
         let franchise_repository = FranchiseRepository::new(pool.clone());
         let release_repository = ReleaseRepository::new(pool.clone());
         let software_title_repository = SoftwareTitleRepository::new(pool.clone());
+        let setting_repository = SettingRepository::new(pool.clone());
 
         Self {
             file_info_repository,
@@ -37,6 +39,7 @@ impl RepositoryManager {
             franchise_repository,
             release_repository,
             software_title_repository,
+            setting_repository,
         }
     }
 
@@ -66,5 +69,9 @@ impl RepositoryManager {
 
     pub fn get_software_title_repository(&self) -> &SoftwareTitleRepository {
         &self.software_title_repository
+    }
+
+    pub fn settings(&self) -> &SettingRepository {
+        &self.setting_repository
     }
 }

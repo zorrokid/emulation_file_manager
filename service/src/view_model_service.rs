@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use database::{database_error::DatabaseError, repository_manager::RepositoryManager};
 
-use crate::view_models::{EmulatorSystemViewModel, EmulatorViewModel};
+use crate::view_models::{EmulatorSystemViewModel, EmulatorViewModel, Settings};
 
 pub struct ViewModelService {
     repository_manager: Arc<RepositoryManager>,
@@ -38,13 +38,20 @@ impl ViewModelService {
                 .collect(),
         })
     }
+
+    pub async fn get_settings(&self) -> Result<Settings, DatabaseError> {
+        let settings_map = self.repository_manager.settings().get_settings().await?;
+        Ok(Settings::from(settings_map))
+    }
 }
 
 #[cfg(test)]
 mod tests {
 
+    use std::path::PathBuf;
+
     use super::*;
-    use database::setup_test_db;
+    use database::{models::SettingName, setup_test_db};
 
     #[async_std::test]
     async fn test_get_emulator_view_model() {
@@ -84,5 +91,25 @@ mod tests {
         assert_eq!(emulator_view_model.systems[0].system_id, system_id);
         assert_eq!(emulator_view_model.systems[0].system_name, "Test System");
         assert_eq!(emulator_view_model.systems[0].arguments, "args");
+    }
+
+    #[async_std::test]
+    async fn test_get_settings() {
+        let pool = setup_test_db().await;
+        let pool = Arc::new(pool);
+        let repository_manager = Arc::new(RepositoryManager::new(pool.clone()));
+        let view_model_service = ViewModelService::new(repository_manager.clone());
+
+        repository_manager
+            .settings()
+            .add_setting(SettingName::CollectionRootDir.as_str(), "test_value")
+            .await
+            .unwrap();
+
+        let settings = view_model_service.get_settings().await.unwrap();
+        assert_eq!(
+            settings.collection_root_dir,
+            Some(PathBuf::from("test_value"))
+        );
     }
 }
