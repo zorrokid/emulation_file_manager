@@ -1,5 +1,10 @@
+mod error;
 mod tabs;
 
+use std::{cell::OnceCell, sync::Arc};
+
+use database::{get_db_pool, repository_manager::RepositoryManager};
+use error::Error;
 use iced::widget::column;
 use iced::Task;
 use tabs::{
@@ -14,24 +19,44 @@ fn main() -> iced::Result {
 struct Ui {
     title_bar: TitleBar,
     tabs_controller: TabsController,
+    repositories: OnceCell<Arc<RepositoryManager>>,
 }
 
 #[derive(Debug, Clone)]
 enum Message {
     TabsController(tabs::tabs_controller::Message),
     TitleBar(tabs::title_bar::Message),
+    RepositoriesInitialized(Result<Arc<RepositoryManager>, Error>),
 }
 
 impl Ui {
     fn new() -> (Self, Task<Message>) {
         let (tabs_controller, task) = TabsController::new(None);
+
+        let initialize_task = Task::perform(
+            async {
+                match get_db_pool().await {
+                    Ok(pool) => {
+                        let repositories = Arc::new(RepositoryManager::new(pool));
+                        Ok(repositories)
+                    }
+                    Err(err) => Err(Error::DbError(format!(
+                        "Failed connecting to database: {}",
+                        err
+                    ))),
+                }
+            },
+            Message::RepositoriesInitialized,
+        );
+        let combined_task = Task::batch(vec![task.map(Message::TabsController), initialize_task]);
         let title_bar = TitleBar::new();
         (
             Self {
                 tabs_controller,
                 title_bar,
+                repositories: OnceCell::new(),
             },
-            task.map(Message::TabsController),
+            combined_task,
         )
     }
 
@@ -41,6 +66,17 @@ impl Ui {
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
+            Message::RepositoriesInitialized(result) => {
+                match result {
+                    Ok(repositories) => self.repositories.set(repositories).unwrap_or_else(|_| {
+                        panic!("Failed to set repositories, already set?",);
+                    }),
+                    Err(err) => {
+                        eprintln!("Failed connecting to database: {}", err);
+                    }
+                }
+                Task::none()
+            }
             Message::TabsController(message) => self
                 .tabs_controller
                 .update(message)

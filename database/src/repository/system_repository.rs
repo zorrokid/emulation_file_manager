@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::{database_error::DatabaseError, models::System};
 use sqlx::{Pool, Sqlite};
 
+#[derive(Debug)]
 pub struct SystemRepository {
     pool: Arc<Pool<Sqlite>>,
 }

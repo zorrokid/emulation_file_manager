@@ -9,4 +9,5 @@ directories-next = "2.0.0"
 dotenvy = "0.15.7"
 sqlx = { version = "0.8.3", features = ["runtime-async-std", "sqlite", "migrate"] }
 thiserror = "2.0.12"
+file_system = { path = "../file_system" }
 

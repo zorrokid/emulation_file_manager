@@ -9,6 +9,7 @@ use crate::repository::{
     software_title_repository::SoftwareTitleRepository, system_repository::SystemRepository,
 };
 
+#[derive(Debug)]
 pub struct RepositoryManager {
     file_info_repository: FileInfoRepository,
     file_set_repository: FileSetRepository,

@@ -4,6 +4,7 @@ use sqlx::{Pool, Sqlite};
 
 use crate::{database_error::DatabaseError, models::Release};
 
+#[derive(Debug)]
 pub struct ReleaseRepository {
     pool: Arc<Pool<Sqlite>>,
 }

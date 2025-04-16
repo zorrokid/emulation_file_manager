@@ -6,15 +6,18 @@ pub mod repository_manager;
 
 use std::sync::Arc;
 
-use sqlx::{migrate, Pool, Sqlite, SqlitePool};
+use database_path::get_database_file_path;
+use sqlx::{migrate, sqlite::SqliteConnectOptions, Pool, Sqlite, SqlitePool};
 
 pub async fn get_db_pool() -> Result<Arc<Pool<Sqlite>>, sqlx::Error> {
-    /*let base_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let db_path = base_dir.join("data/db.sqlite");
-    let db_url = format!("sqlite://{}", db_path.display());*/
-    let db_url = database_path::get_database_url();
-    println!("Database URL: {}", db_url);
-    let pool = SqlitePool::connect(&db_url).await?;
+    let db_file_path = get_database_file_path();
+    let pool = SqlitePool::connect_with(
+        SqliteConnectOptions::new()
+            .filename(db_file_path)
+            .create_if_missing(true),
+    )
+    .await?;
+    sqlx::migrate!().run(&pool).await?;
     Ok(Arc::new(pool))
 }
 

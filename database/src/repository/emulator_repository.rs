@@ -7,6 +7,7 @@ use crate::{
     models::{Emulator, EmulatorSystem},
 };
 
+#[derive(Debug)]
 pub struct EmulatorRepository {
     pool: Arc<Pool<Sqlite>>,
 }

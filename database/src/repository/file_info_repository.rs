@@ -4,6 +4,7 @@ use sqlx::{Pool, QueryBuilder, Sqlite};
 
 use crate::{database_error::DatabaseError, models::FileInfo};
 
+#[derive(Debug)]
 pub struct FileInfoRepository {
     pool: Arc<Pool<Sqlite>>,
 }

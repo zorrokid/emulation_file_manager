@@ -7,6 +7,7 @@ use crate::{
     models::{FileSet, FileType, PickedFileInfo},
 };
 
+#[derive(Debug)]
 pub struct FileSetRepository {
     pool: Arc<Pool<Sqlite>>,
 }

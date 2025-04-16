@@ -5,3 +5,5 @@ edition = "2021"
 
 [dependencies]
 iced = { version = "0.13.1", features = ["image"] }
+database = { path = "../database" }
+service = { path = "../service" }
