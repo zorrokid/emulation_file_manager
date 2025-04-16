@@ -5,7 +5,7 @@ use std::{cell::OnceCell, sync::Arc};
 
 use database::{get_db_pool, repository_manager::RepositoryManager};
 use error::Error;
-use iced::widget::column;
+use iced::widget::{column, text};
 use iced::Task;
 use tabs::{
     tabs_controller::TabsController,
@@ -18,7 +18,7 @@ fn main() -> iced::Result {
 
 struct Ui {
     title_bar: TitleBar,
-    tabs_controller: TabsController,
+    tabs_controller: OnceCell<TabsController>,
     repositories: OnceCell<Arc<RepositoryManager>>,
 }
 
@@ -31,8 +31,6 @@ enum Message {
 
 impl Ui {
     fn new() -> (Self, Task<Message>) {
-        let (tabs_controller, task) = TabsController::new(None);
-
         let initialize_task = Task::perform(
             async {
                 match get_db_pool().await {
@@ -48,15 +46,14 @@ impl Ui {
             },
             Message::RepositoriesInitialized,
         );
-        let combined_task = Task::batch(vec![task.map(Message::TabsController), initialize_task]);
         let title_bar = TitleBar::new();
         (
             Self {
-                tabs_controller,
+                tabs_controller: OnceCell::new(),
                 title_bar,
                 repositories: OnceCell::new(),
             },
-            combined_task,
+            initialize_task,
         )
     }
 
@@ -66,19 +63,29 @@ impl Ui {
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::RepositoriesInitialized(result) => {
-                match result {
-                    Ok(repositories) => self.repositories.set(repositories).unwrap_or_else(|_| {
-                        panic!("Failed to set repositories, already set?",);
-                    }),
-                    Err(err) => {
-                        eprintln!("Failed connecting to database: {}", err);
-                    }
+            Message::RepositoriesInitialized(result) => match result {
+                Ok(repositories) => {
+                    let repo_clone = repositories.clone();
+                    let (tabs_controller, task) = TabsController::new(None, repo_clone);
+                    self.repositories.set(repositories).unwrap_or_else(|_| {
+                        panic!("Failed to set repositories, already set?");
+                    });
+                    self.tabs_controller
+                        .set(tabs_controller)
+                        .unwrap_or_else(|_| {
+                            panic!("Failed to set tabs controller, already set?");
+                        });
+                    task.map(Message::TabsController)
                 }
-                Task::none()
-            }
+                Err(err) => {
+                    eprintln!("Failed connecting to database: {}", err);
+                    Task::none()
+                }
+            },
             Message::TabsController(message) => self
                 .tabs_controller
+                .get_mut()
+                .expect("TabsControler expected to be initialized by now.")
                 .update(message)
                 .map(Message::TabsController),
             Message::TitleBar(message) => {
@@ -86,6 +93,8 @@ impl Ui {
                 match message {
                     title_bar::Message::TabSelected(tab) => self
                         .tabs_controller
+                        .get_mut()
+                        .expect("TabsControler expected to be initialized by now.")
                         .switch_to_tab(tab)
                         .map(Message::TabsController),
                 }
@@ -95,7 +104,11 @@ impl Ui {
 
     fn view(&self) -> iced::Element<Message> {
         let title_bar_view = self.title_bar.view().map(Message::TitleBar);
-        let tab_view = self.tabs_controller.view().map(Message::TabsController);
+        let tab_view = if let Some(tabs_controller) = self.tabs_controller.get() {
+            tabs_controller.view().map(Message::TabsController)
+        } else {
+            text!("Initializing").into()
+        };
         column![title_bar_view, tab_view].into()
     }
 }

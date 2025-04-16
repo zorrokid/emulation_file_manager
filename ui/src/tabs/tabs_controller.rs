@@ -1,3 +1,6 @@
+use std::sync::Arc;
+
+use database::repository_manager::RepositoryManager;
 use iced::Task;
 
 use super::{home_tab, settings_tab};
@@ -12,6 +15,7 @@ pub enum Tab {
 pub enum Message {
     Home(home_tab::Message),
     Settings(settings_tab::Message),
+    RepositoriesTestTaskPerformed(String),
 }
 
 pub struct TabsController {
@@ -21,9 +25,29 @@ pub struct TabsController {
 }
 
 impl TabsController {
-    pub fn new(selected_tab: Option<Tab>) -> (Self, Task<Message>) {
+    pub fn new(
+        selected_tab: Option<Tab>,
+        repositories: Arc<RepositoryManager>,
+    ) -> (Self, Task<Message>) {
         let settings_tab = settings_tab::SettingsTab::new();
         let home_tab = home_tab::HomeTab::new();
+
+        let repositories_clone = Arc::clone(&repositories);
+        let repositories_test_task = Task::perform(
+            async move {
+                repositories_clone
+                    .settings()
+                    .add_setting("Test", "value")
+                    .await
+                    .unwrap();
+                repositories_clone
+                    .settings()
+                    .get_setting("Test")
+                    .await
+                    .unwrap()
+            },
+            Message::RepositoriesTestTaskPerformed,
+        );
 
         (
             Self {
@@ -31,7 +55,7 @@ impl TabsController {
                 settings_tab,
                 current_tab: selected_tab.unwrap_or(Tab::Home),
             },
-            Task::none(),
+            repositories_test_task,
         )
     }
 
@@ -39,6 +63,10 @@ impl TabsController {
         match message {
             Message::Home(message) => self.home_tab.update(message).map(Message::Home),
             Message::Settings(message) => self.settings_tab.update(message).map(Message::Settings),
+            Message::RepositoriesTestTaskPerformed(message) => {
+                println!("{}", message);
+                Task::none()
+            }
         }
     }
 
