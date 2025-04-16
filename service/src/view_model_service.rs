@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use database::{database_error::DatabaseError, repository_manager::RepositoryManager};
 
-use crate::view_models::{EmulatorSystemViewModel, EmulatorViewModel, Settings};
+use crate::view_models::{EmulatorSystemViewModel, EmulatorViewModel, Settings, SystemListModel};
 
 pub struct ViewModelService {
     repository_manager: Arc<RepositoryManager>,
@@ -42,6 +42,27 @@ impl ViewModelService {
     pub async fn get_settings(&self) -> Result<Settings, DatabaseError> {
         let settings_map = self.repository_manager.settings().get_settings().await?;
         Ok(Settings::from(settings_map))
+    }
+
+    pub async fn get_system_list_models(&self) -> Result<Vec<SystemListModel>, DatabaseError> {
+        let systems = self
+            .repository_manager
+            .get_system_repository()
+            .get_systems()
+            .await?;
+
+        let mut list_models: Vec<SystemListModel> =
+            systems.iter().map(SystemListModel::from).collect();
+
+        for system in list_models.iter_mut() {
+            system.can_delete = !self
+                .repository_manager
+                .get_system_repository()
+                .is_system_in_use(system.id)
+                .await?;
+        }
+
+        Ok(list_models)
     }
 }
 
@@ -107,9 +128,6 @@ mod tests {
             .unwrap();
 
         let settings = view_model_service.get_settings().await.unwrap();
-        assert_eq!(
-            settings.collection_root_dir,
-            Some(PathBuf::from("test_value"))
-        );
+        assert_eq!(settings.collection_root_dir, PathBuf::from("test_value"));
     }
 }

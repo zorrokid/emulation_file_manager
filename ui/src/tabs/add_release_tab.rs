@@ -2,9 +2,12 @@ use std::sync::Arc;
 
 use database::repository_manager::RepositoryManager;
 use iced::{widget::text, Task};
+use service::{view_model_service::ViewModelService, view_models::SystemListModel};
 
 pub struct AddReleaseTab {
     repositories: Arc<RepositoryManager>,
+    view_model_service: Arc<ViewModelService>,
+    systems: Vec<SystemListModel>,
 }
 
 #[derive(Debug, Clone)]
@@ -13,7 +16,10 @@ pub enum Message {
 }
 
 impl AddReleaseTab {
-    pub fn new(repositories: Arc<RepositoryManager>) -> (Self, Task<Message>) {
+    pub fn new(
+        repositories: Arc<RepositoryManager>,
+        view_model_service: Arc<ViewModelService>,
+    ) -> (Self, Task<Message>) {
         let repositories_clone = Arc::clone(&repositories);
         let repositories_test_task = Task::perform(
             async move {
@@ -36,7 +42,14 @@ impl AddReleaseTab {
             Message::RepositoriesTestTaskPerformed,
         );
 
-        (Self { repositories }, repositories_test_task)
+        (
+            Self {
+                repositories,
+                view_model_service,
+                systems: vec![],
+            },
+            repositories_test_task,
+        )
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {

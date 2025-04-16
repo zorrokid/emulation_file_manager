@@ -1,6 +1,6 @@
 use std::{collections::HashMap, path::PathBuf};
 
-use database::models::SettingName;
+use database::models::{SettingName, System};
 use file_system::get_files_root_dir;
 
 pub struct EmulatorViewModel {
@@ -34,4 +34,18 @@ impl From<HashMap<String, String>> for Settings {
     }
 }
 
-fn get_default_folder() {}
+pub struct SystemListModel {
+    pub id: i64,
+    pub name: String,
+    pub can_delete: bool,
+}
+
+impl From<&System> for SystemListModel {
+    fn from(system: &System) -> Self {
+        SystemListModel {
+            id: system.id,
+            name: system.name.clone(),
+            can_delete: false,
+        }
+    }
+}

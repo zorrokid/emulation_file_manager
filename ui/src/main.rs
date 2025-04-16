@@ -7,6 +7,7 @@ use database::{get_db_pool, repository_manager::RepositoryManager};
 use error::Error;
 use iced::widget::{column, text};
 use iced::Task;
+use service::view_model_service::ViewModelService;
 use tabs::{
     tabs_controller::TabsController,
     title_bar::{self, TitleBar},
@@ -20,6 +21,7 @@ struct Ui {
     title_bar: TitleBar,
     tabs_controller: OnceCell<TabsController>,
     repositories: OnceCell<Arc<RepositoryManager>>,
+    view_model_service: OnceCell<Arc<ViewModelService>>,
 }
 
 #[derive(Debug, Clone)]
@@ -52,6 +54,7 @@ impl Ui {
                 tabs_controller: OnceCell::new(),
                 title_bar,
                 repositories: OnceCell::new(),
+                view_model_service: OnceCell::new(),
             },
             initialize_task,
         )
@@ -65,8 +68,13 @@ impl Ui {
         match message {
             Message::RepositoriesInitialized(result) => match result {
                 Ok(repositories) => {
-                    let repo_clone = repositories.clone();
-                    let (tabs_controller, task) = TabsController::new(None, repo_clone);
+                    let view_model_service =
+                        Arc::new(ViewModelService::new(Arc::clone(&repositories)));
+                    let (tabs_controller, task) = TabsController::new(
+                        None,
+                        Arc::clone(&repositories),
+                        Arc::clone(&view_model_service),
+                    );
                     self.repositories.set(repositories).unwrap_or_else(|_| {
                         panic!("Failed to set repositories, already set?");
                     });
@@ -74,6 +82,11 @@ impl Ui {
                         .set(tabs_controller)
                         .unwrap_or_else(|_| {
                             panic!("Failed to set tabs controller, already set?");
+                        });
+                    self.view_model_service
+                        .set(view_model_service)
+                        .unwrap_or_else(|_| {
+                            panic!("Failed to set view modelservice, already set?");
                         });
                     task.map(Message::TabsController)
                 }

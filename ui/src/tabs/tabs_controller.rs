@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use database::repository_manager::RepositoryManager;
 use iced::Task;
+use service::view_model_service::ViewModelService;
 
 use super::{add_release_tab, home_tab, settings_tab};
 
@@ -30,10 +31,12 @@ impl TabsController {
     pub fn new(
         selected_tab: Option<Tab>,
         repositories: Arc<RepositoryManager>,
+        view_model_service: Arc<ViewModelService>,
     ) -> (Self, Task<Message>) {
         let settings_tab = settings_tab::SettingsTab::new();
         let home_tab = home_tab::HomeTab::new();
-        let (add_release_tab, task) = add_release_tab::AddReleaseTab::new(repositories);
+        let (add_release_tab, task) =
+            add_release_tab::AddReleaseTab::new(repositories, view_model_service);
 
         (
             Self {
