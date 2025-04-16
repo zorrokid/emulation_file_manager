@@ -35,16 +35,21 @@ impl TabsController {
         let repositories_clone = Arc::clone(&repositories);
         let repositories_test_task = Task::perform(
             async move {
-                repositories_clone
-                    .settings()
-                    .add_setting("Test", "value")
-                    .await
-                    .unwrap();
-                repositories_clone
-                    .settings()
-                    .get_setting("Test")
-                    .await
-                    .unwrap()
+                match repositories_clone.settings().get_setting("Test").await {
+                    Ok(value) => value,
+                    Err(_) => {
+                        repositories_clone
+                            .settings()
+                            .add_setting("Test", "value")
+                            .await
+                            .unwrap();
+                        repositories_clone
+                            .settings()
+                            .get_setting("Test")
+                            .await
+                            .unwrap()
+                    }
+                }
             },
             Message::RepositoriesTestTaskPerformed,
         );
