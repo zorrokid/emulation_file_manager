@@ -17,7 +17,6 @@ pub enum Message {
     Home(home_tab::Message),
     Settings(settings_tab::Message),
     AddRelease(add_release_tab::Message),
-    RepositoriesTestTaskPerformed(String),
 }
 
 pub struct TabsController {
@@ -34,29 +33,7 @@ impl TabsController {
     ) -> (Self, Task<Message>) {
         let settings_tab = settings_tab::SettingsTab::new();
         let home_tab = home_tab::HomeTab::new();
-        let add_release_tab = add_release_tab::AddReleaseTab::new();
-
-        let repositories_clone = Arc::clone(&repositories);
-        let repositories_test_task = Task::perform(
-            async move {
-                match repositories_clone.settings().get_setting("Test").await {
-                    Ok(value) => value,
-                    Err(_) => {
-                        repositories_clone
-                            .settings()
-                            .add_setting("Test", "value")
-                            .await
-                            .unwrap();
-                        repositories_clone
-                            .settings()
-                            .get_setting("Test")
-                            .await
-                            .unwrap()
-                    }
-                }
-            },
-            Message::RepositoriesTestTaskPerformed,
-        );
+        let (add_release_tab, task) = add_release_tab::AddReleaseTab::new(repositories);
 
         (
             Self {
@@ -65,7 +42,7 @@ impl TabsController {
                 current_tab: selected_tab.unwrap_or(Tab::Home),
                 add_release_tab,
             },
-            repositories_test_task,
+            task.map(Message::AddRelease),
         )
     }
 
@@ -73,10 +50,10 @@ impl TabsController {
         match message {
             Message::Home(message) => self.home_tab.update(message).map(Message::Home),
             Message::Settings(message) => self.settings_tab.update(message).map(Message::Settings),
-            Message::RepositoriesTestTaskPerformed(message) => {
-                println!("{}", message);
-                Task::none()
-            }
+            Message::AddRelease(message) => self
+                .add_release_tab
+                .update(message)
+                .map(Message::AddRelease),
         }
     }
 
