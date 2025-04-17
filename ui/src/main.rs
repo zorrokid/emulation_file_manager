@@ -1,12 +1,12 @@
-mod error;
 mod tabs;
+mod widgets;
 
 use std::{cell::OnceCell, sync::Arc};
 
 use database::{get_db_pool, repository_manager::RepositoryManager};
-use error::Error;
 use iced::widget::{column, text};
 use iced::Task;
+use service::error::Error;
 use service::view_model_service::ViewModelService;
 use tabs::{
     tabs_controller::TabsController,

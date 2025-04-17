@@ -1,4 +1,8 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::HashMap,
+    fmt::{self, Display, Formatter},
+    path::PathBuf,
+};
 
 use database::models::{SettingName, System};
 use file_system::get_files_root_dir;
@@ -34,6 +38,7 @@ impl From<HashMap<String, String>> for Settings {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct SystemListModel {
     pub id: i64,
     pub name: String,
@@ -47,5 +52,11 @@ impl From<&System> for SystemListModel {
             name: system.name.clone(),
             can_delete: false,
         }
+    }
+}
+
+impl Display for SystemListModel {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name)
     }
 }

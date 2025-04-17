@@ -2,7 +2,10 @@ use std::sync::Arc;
 
 use database::{database_error::DatabaseError, repository_manager::RepositoryManager};
 
-use crate::view_models::{EmulatorSystemViewModel, EmulatorViewModel, Settings, SystemListModel};
+use crate::{
+    error::Error,
+    view_models::{EmulatorSystemViewModel, EmulatorViewModel, Settings, SystemListModel},
+};
 
 pub struct ViewModelService {
     repository_manager: Arc<RepositoryManager>,
@@ -44,12 +47,13 @@ impl ViewModelService {
         Ok(Settings::from(settings_map))
     }
 
-    pub async fn get_system_list_models(&self) -> Result<Vec<SystemListModel>, DatabaseError> {
+    pub async fn get_system_list_models(&self) -> Result<Vec<SystemListModel>, Error> {
         let systems = self
             .repository_manager
             .get_system_repository()
             .get_systems()
-            .await?;
+            .await
+            .map_err(|err| Error::DbError(err.to_string()))?;
 
         let mut list_models: Vec<SystemListModel> =
             systems.iter().map(SystemListModel::from).collect();
@@ -59,7 +63,8 @@ impl ViewModelService {
                 .repository_manager
                 .get_system_repository()
                 .is_system_in_use(system.id)
-                .await?;
+                .await
+                .map_err(|err| Error::DbError(err.to_string()))?;
         }
 
         Ok(list_models)
