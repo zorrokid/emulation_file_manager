@@ -74,10 +74,14 @@ impl AddReleaseTab {
                 }
                 add_system_widget::Action::None => Task::none(),
             },
-            Message::SystemSelect(message) => self
-                .systems_widget
-                .update(message)
-                .map(Message::SystemSelect),
+            Message::SystemSelect(message) => {
+                if let system_select_widget::Message::SystemSelected(system) = message {
+                    println!("Selected system: {:?}", system);
+                    Task::none()
+                } else {
+                    Task::none()
+                }
+            }
             Message::SystemAdded(result) => match result {
                 Ok(_) => {
                     let service = Arc::clone(&self.view_model_service);

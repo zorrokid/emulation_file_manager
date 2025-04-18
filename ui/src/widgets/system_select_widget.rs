@@ -22,15 +22,13 @@ impl SystemSelectWidget {
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::SystemSelected(system) => {
-                println!("Selected system {}", system);
-            }
+            Message::SystemSelected(system) => Task::done(Message::SystemSelected(system.clone())),
             Message::SetSystems(systems) => {
                 self.systems = systems;
                 self.selected_system = None;
+                Task::none()
             }
         }
-        Task::none()
     }
 
     pub fn view(&self) -> iced::Element<Message> {
