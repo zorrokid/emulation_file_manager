@@ -1,7 +1,4 @@
-use iced::{
-    widget::{button, row, text_input},
-    Task,
-};
+use iced::widget::{button, row, text_input};
 
 pub struct AddSystemWidget {
     system_name: String,
@@ -14,6 +11,11 @@ pub enum Message {
     Submit,
 }
 
+pub enum Action {
+    AddSystem(String),
+    None,
+}
+
 impl AddSystemWidget {
     pub fn new() -> Self {
         Self {
@@ -21,13 +23,13 @@ impl AddSystemWidget {
         }
     }
 
-    pub fn update(&mut self, message: Message) -> Task<Message> {
+    pub fn update(&mut self, message: Message) -> Action {
         match message {
             Message::SystemNameUpdated(name) => self.system_name = name,
-            Message::Submit => println!("Submit"),
+            Message::Submit => return Action::AddSystem(self.system_name.clone()),
             Message::CancelAddSystem => println!("Cancel"),
         }
-        Task::none()
+        Action::None
     }
 
     pub fn view(&self) -> iced::Element<Message> {

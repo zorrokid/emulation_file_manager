@@ -20,6 +20,11 @@ impl SystemsWidget {
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
+        match message {
+            Message::SystemSelected(system) => {
+                println!("Selected system {}", system);
+            }
+        }
         Task::none()
     }
 

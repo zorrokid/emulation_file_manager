@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use crate::{database_error::DatabaseError, models::System};
+use crate::{
+    database_error::{DatabaseError, Error},
+    models::System,
+};
 use sqlx::{Pool, Sqlite};
 
 #[derive(Debug)]
@@ -12,7 +15,7 @@ impl SystemRepository {
     pub fn new(pool: Arc<Pool<Sqlite>>) -> Self {
         Self { pool }
     }
-    pub async fn get_system(&self, id: i64) -> Result<System, DatabaseError> {
+    pub async fn get_system(&self, id: i64) -> Result<System, Error> {
         let system = sqlx::query_as!(
             System,
             "SELECT id, name 
@@ -24,14 +27,14 @@ impl SystemRepository {
         Ok(system)
     }
 
-    pub async fn get_systems(&self) -> Result<Vec<System>, DatabaseError> {
+    pub async fn get_systems(&self) -> Result<Vec<System>, Error> {
         let systems = sqlx::query_as!(System, "SELECT id, name FROM system")
             .fetch_all(&*self.pool)
             .await?;
         Ok(systems)
     }
 
-    pub async fn is_system_in_use(&self, system_id: i64) -> Result<bool, DatabaseError> {
+    pub async fn is_system_in_use(&self, system_id: i64) -> Result<bool, Error> {
         let releases_count = sqlx::query_scalar!(
             "SELECT COUNT(*) 
              FROM release_system 
@@ -53,7 +56,7 @@ impl SystemRepository {
         Ok(releases_count > 0 || emulators_count > 0)
     }
 
-    pub async fn add_system(&self, name: String) -> Result<i64, DatabaseError> {
+    pub async fn add_system(&self, name: String) -> Result<i64, Error> {
         let result = sqlx::query!("INSERT INTO system (name) VALUES (?)", name)
             .execute(&*self.pool)
             .await?;

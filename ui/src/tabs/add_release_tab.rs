@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
-use database::repository_manager::RepositoryManager;
-use iced::{widget::text, Task};
+use database::{database_error::Error as DatabaseError, repository_manager::RepositoryManager};
+use iced::{
+    widget::{column, text},
+    Task,
+};
 use service::{error::Error, view_model_service::ViewModelService, view_models::SystemListModel};
 
 use crate::widgets::{
@@ -20,7 +23,9 @@ pub struct AddReleaseTab {
 #[derive(Debug, Clone)]
 pub enum Message {
     SystemsFetched(Result<Vec<SystemListModel>, Error>),
-    AddSystem(add_system_widget::Message),
+    AddSystem(crate::widgets::add_system_widget::Message),
+    SystemMessage(crate::widgets::systems_widget::Message),
+    SystemAdded(Result<i64, DatabaseError>),
 }
 
 impl AddReleaseTab {
@@ -59,15 +64,41 @@ impl AddReleaseTab {
                 }
                 Task::none()
             }
-            Message::AddSystem(message) => self
-                .add_system_widget
+            Message::AddSystem(message) => match self.add_system_widget.update(message) {
+                add_system_widget::Action::AddSystem(name) => {
+                    println!("submitted");
+                    let repo = Arc::clone(&self.repositories);
+                    Task::perform(
+                        async move { repo.get_system_repository().add_system(name).await },
+                        Message::SystemAdded,
+                    )
+                }
+                add_system_widget::Action::None => Task::none(),
+            },
+            Message::SystemMessage(message) => self
+                .systems_widget
                 .update(message)
-                .map(Message::AddSystem),
+                .map(Message::SystemMessage),
+            Message::SystemAdded(result) => {
+                match result {
+                    Ok(id) => {
+                        println!("added system with id: {}", id);
+
+                        /*self.systems_widget.add_system(id);
+                        self.add_system_widget.reset();*/
+                    }
+                    Err(error) => {
+                        eprint!("Error when adding system: {}", error);
+                    }
+                }
+                Task::none()
+            }
         }
     }
 
     pub fn view(&self) -> iced::Element<Message> {
         let add_system_view = self.add_system_widget.view().map(Message::AddSystem);
-        add_system_view
+        let systems_view = self.systems_widget.view().map(Message::SystemMessage);
+        column![add_system_view, systems_view].into()
     }
 }
