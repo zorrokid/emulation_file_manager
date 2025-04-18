@@ -21,7 +21,7 @@ pub struct AddReleaseTab {
 pub enum Message {
     SystemsFetched(Result<Vec<SystemListModel>, Error>),
     AddSystem(crate::widgets::add_system_widget::Message),
-    SystemMessage(crate::widgets::system_select_widget::Message),
+    SystemSelect(crate::widgets::system_select_widget::Message),
     SystemAdded(Result<i64, DatabaseError>),
 }
 
@@ -57,7 +57,7 @@ impl AddReleaseTab {
                         .update(system_select_widget::Message::SetSystems(
                             self.systems.clone(),
                         ))
-                        .map(Message::SystemMessage)
+                        .map(Message::SystemSelect)
                 }
                 Err(error) => {
                     eprint!("Error when fetching systems: {}", error);
@@ -66,7 +66,6 @@ impl AddReleaseTab {
             },
             Message::AddSystem(message) => match self.add_system_widget.update(message) {
                 add_system_widget::Action::AddSystem(name) => {
-                    println!("submitted");
                     let repo = Arc::clone(&self.repositories);
                     Task::perform(
                         async move { repo.get_system_repository().add_system(name).await },
@@ -75,35 +74,29 @@ impl AddReleaseTab {
                 }
                 add_system_widget::Action::None => Task::none(),
             },
-            Message::SystemMessage(message) => self
+            Message::SystemSelect(message) => self
                 .systems_widget
                 .update(message)
-                .map(Message::SystemMessage),
-            Message::SystemAdded(result) => {
-                match result {
-                    Ok(id) => {
-                        println!("added system with id: {}", id);
-                        let service = Arc::clone(&self.view_model_service);
-                        Task::perform(
-                            async move { service.get_system_list_models().await },
-                            Message::SystemsFetched,
-                        )
-
-                        /*self.systems_widget.add_system(id);
-                        self.add_system_widget.reset();*/
-                    }
-                    Err(error) => {
-                        eprint!("Error when adding system: {}", error);
-                        Task::none()
-                    }
+                .map(Message::SystemSelect),
+            Message::SystemAdded(result) => match result {
+                Ok(_) => {
+                    let service = Arc::clone(&self.view_model_service);
+                    Task::perform(
+                        async move { service.get_system_list_models().await },
+                        Message::SystemsFetched,
+                    )
                 }
-            }
+                Err(error) => {
+                    eprint!("Error when adding system: {}", error);
+                    Task::none()
+                }
+            },
         }
     }
 
     pub fn view(&self) -> iced::Element<Message> {
         let add_system_view = self.add_system_widget.view().map(Message::AddSystem);
-        let systems_view = self.systems_widget.view().map(Message::SystemMessage);
+        let systems_view = self.systems_widget.view().map(Message::SystemSelect);
         column![add_system_view, systems_view].into()
     }
 }
