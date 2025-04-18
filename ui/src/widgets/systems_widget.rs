@@ -9,6 +9,7 @@ pub struct SystemsWidget {
 #[derive(Debug, Clone)]
 pub enum Message {
     SystemSelected(SystemListModel),
+    SetSystems(Vec<SystemListModel>),
 }
 
 impl SystemsWidget {
@@ -23,6 +24,10 @@ impl SystemsWidget {
         match message {
             Message::SystemSelected(system) => {
                 println!("Selected system {}", system);
+            }
+            Message::SetSystems(systems) => {
+                self.systems = systems;
+                self.selected_system = None;
             }
         }
         Task::none()

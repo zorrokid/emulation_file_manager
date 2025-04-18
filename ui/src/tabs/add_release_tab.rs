@@ -9,7 +9,7 @@ use service::{error::Error, view_model_service::ViewModelService, view_models::S
 
 use crate::widgets::{
     add_system_widget::{self, AddSystemWidget},
-    systems_widget::SystemsWidget,
+    systems_widget::{self, SystemsWidget},
 };
 
 pub struct AddReleaseTab {
@@ -53,17 +53,18 @@ impl AddReleaseTab {
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::SystemsFetched(result) => {
-                match result {
-                    Ok(systems) => {
-                        self.systems = systems;
-                    }
-                    Err(error) => {
-                        eprint!("Error when fetching systems: {}", error);
-                    }
+            Message::SystemsFetched(result) => match result {
+                Ok(systems) => {
+                    self.systems = systems;
+                    self.systems_widget
+                        .update(systems_widget::Message::SetSystems(self.systems.clone()))
+                        .map(Message::SystemMessage)
                 }
-                Task::none()
-            }
+                Err(error) => {
+                    eprint!("Error when fetching systems: {}", error);
+                    Task::none()
+                }
+            },
             Message::AddSystem(message) => match self.add_system_widget.update(message) {
                 add_system_widget::Action::AddSystem(name) => {
                     println!("submitted");
@@ -83,15 +84,20 @@ impl AddReleaseTab {
                 match result {
                     Ok(id) => {
                         println!("added system with id: {}", id);
+                        let service = Arc::clone(&self.view_model_service);
+                        Task::perform(
+                            async move { service.get_system_list_models().await },
+                            Message::SystemsFetched,
+                        )
 
                         /*self.systems_widget.add_system(id);
                         self.add_system_widget.reset();*/
                     }
                     Err(error) => {
                         eprint!("Error when adding system: {}", error);
+                        Task::none()
                     }
                 }
-                Task::none()
             }
         }
     }
