@@ -1,7 +1,7 @@
 use iced::{widget::pick_list, Task};
 use service::view_models::SystemListModel;
 
-pub struct SystemsWidget {
+pub struct SystemSelectWidget {
     systems: Vec<SystemListModel>,
     selected_system: Option<SystemListModel>,
 }
@@ -12,7 +12,7 @@ pub enum Message {
     SetSystems(Vec<SystemListModel>),
 }
 
-impl SystemsWidget {
+impl SystemSelectWidget {
     pub fn new() -> Self {
         Self {
             systems: vec![],

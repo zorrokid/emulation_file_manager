@@ -1,22 +1,19 @@
 use std::sync::Arc;
 
 use database::{database_error::Error as DatabaseError, repository_manager::RepositoryManager};
-use iced::{
-    widget::{column, text},
-    Task,
-};
+use iced::{widget::column, Task};
 use service::{error::Error, view_model_service::ViewModelService, view_models::SystemListModel};
 
 use crate::widgets::{
     add_system_widget::{self, AddSystemWidget},
-    systems_widget::{self, SystemsWidget},
+    system_select_widget::{self, SystemSelectWidget},
 };
 
 pub struct AddReleaseTab {
     repositories: Arc<RepositoryManager>,
     view_model_service: Arc<ViewModelService>,
     systems: Vec<SystemListModel>,
-    systems_widget: SystemsWidget,
+    systems_widget: SystemSelectWidget,
     add_system_widget: AddSystemWidget,
 }
 
@@ -24,7 +21,7 @@ pub struct AddReleaseTab {
 pub enum Message {
     SystemsFetched(Result<Vec<SystemListModel>, Error>),
     AddSystem(crate::widgets::add_system_widget::Message),
-    SystemMessage(crate::widgets::systems_widget::Message),
+    SystemMessage(crate::widgets::system_select_widget::Message),
     SystemAdded(Result<i64, DatabaseError>),
 }
 
@@ -44,7 +41,7 @@ impl AddReleaseTab {
                 repositories,
                 view_model_service,
                 systems: vec![],
-                systems_widget: SystemsWidget::new(),
+                systems_widget: SystemSelectWidget::new(),
                 add_system_widget: AddSystemWidget::new(),
             },
             fetch_systems_task,
@@ -57,7 +54,9 @@ impl AddReleaseTab {
                 Ok(systems) => {
                     self.systems = systems;
                     self.systems_widget
-                        .update(systems_widget::Message::SetSystems(self.systems.clone()))
+                        .update(system_select_widget::Message::SetSystems(
+                            self.systems.clone(),
+                        ))
                         .map(Message::SystemMessage)
                 }
                 Err(error) => {
