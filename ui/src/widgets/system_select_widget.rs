@@ -1,5 +1,11 @@
-use iced::{widget::pick_list, Task};
+use iced::{
+    alignment::Vertical,
+    widget::{pick_list, row, text},
+    Padding, Task,
+};
 use service::view_models::SystemListModel;
+
+use crate::defaults::{DEFAULT_PADDING, DEFAULT_SPACING};
 
 pub struct SystemSelectWidget {
     systems: Vec<SystemListModel>,
@@ -32,11 +38,16 @@ impl SystemSelectWidget {
     }
 
     pub fn view(&self) -> iced::Element<Message> {
-        pick_list(
+        let system_select = pick_list(
             self.systems.as_slice(),
             self.selected_system.clone(),
             Message::SystemSelected,
-        )
-        .into()
+        );
+        let label = text!("Select system");
+        row![label, system_select]
+            .spacing(DEFAULT_SPACING)
+            .padding(DEFAULT_PADDING)
+            .align_y(Vertical::Center)
+            .into()
     }
 }

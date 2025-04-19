@@ -1,4 +1,9 @@
-use iced::widget::{button, row, text_input};
+use iced::{
+    alignment,
+    widget::{button, row, text_input},
+};
+
+use crate::defaults::{DEFAULT_PADDING, DEFAULT_SPACING};
 
 pub struct AddSystemWidget {
     system_name: String,
@@ -39,6 +44,10 @@ impl AddSystemWidget {
         let submit_button = button("Submit system")
             .on_press_maybe((!self.system_name.is_empty()).then_some(Message::Submit));
         let cancel_button = button("Cancel").on_press(Message::CancelAddSystem);
-        row![name_input, submit_button, cancel_button].into()
+        row![name_input, submit_button, cancel_button]
+            .spacing(DEFAULT_SPACING)
+            .padding(DEFAULT_PADDING)
+            .align_y(alignment::Vertical::Center)
+            .into()
     }
 }

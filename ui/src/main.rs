@@ -1,3 +1,4 @@
+mod defaults;
 mod tabs;
 mod widgets;
 
