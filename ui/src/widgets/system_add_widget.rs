@@ -5,7 +5,7 @@ use iced::{
 
 use crate::defaults::{DEFAULT_PADDING, DEFAULT_SPACING};
 
-pub struct AddSystemWidget {
+pub struct SystemAddWidget {
     system_name: String,
 }
 
@@ -21,7 +21,7 @@ pub enum Action {
     None,
 }
 
-impl AddSystemWidget {
+impl SystemAddWidget {
     pub fn new() -> Self {
         Self {
             system_name: "".to_string(),
