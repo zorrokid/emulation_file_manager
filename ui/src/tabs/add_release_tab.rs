@@ -4,7 +4,10 @@ use database::repository_manager::RepositoryManager;
 use iced::Task;
 use service::view_model_service::ViewModelService;
 
-use crate::widgets::systems_widget::{self, SystemsWidget};
+use crate::widgets::{
+    system_select_widget,
+    systems_widget::{self, SystemsWidget},
+};
 
 pub struct AddReleaseTab {
     repositories: Arc<RepositoryManager>,
@@ -38,10 +41,17 @@ impl AddReleaseTab {
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::SystemsWidget(message) => self
-                .systems_widget
-                .update(message)
-                .map(Message::SystemsWidget),
+            Message::SystemsWidget(message) => {
+                if let systems_widget::Message::SystemSelect(message) = &message {
+                    if let system_select_widget::Message::SystemSelected(system) = message {
+                        println!("AddReleaseTab: System selected: {:?}", system);
+                        self.selected_system_ids.push(system.id);
+                    }
+                }
+                self.systems_widget
+                    .update(message)
+                    .map(Message::SystemsWidget)
+            }
         }
     }
 

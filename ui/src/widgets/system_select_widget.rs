@@ -1,7 +1,7 @@
 use iced::{
     alignment::Vertical,
     widget::{pick_list, row, text},
-    Padding, Task,
+    Task,
 };
 use service::view_models::SystemListModel;
 

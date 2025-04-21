@@ -26,8 +26,8 @@ pub struct SystemsWidget {
 #[derive(Debug, Clone)]
 pub enum Message {
     SystemsFetched(Result<Vec<SystemListModel>, Error>),
-    AddSystem(crate::widgets::system_add_widget::Message),
-    SystemSelect(crate::widgets::system_select_widget::Message),
+    AddSystem(system_add_widget::Message),
+    SystemSelect(system_select_widget::Message),
     SystemAdded(Result<i64, DatabaseError>),
     RemoveSystem(i64),
 }
