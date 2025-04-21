@@ -4,7 +4,10 @@ use database::{database_error::DatabaseError, repository_manager::RepositoryMana
 
 use crate::{
     error::Error,
-    view_models::{EmulatorSystemViewModel, EmulatorViewModel, Settings, SystemListModel},
+    view_models::{
+        EmulatorSystemViewModel, EmulatorViewModel, Settings, SoftwareTitleListModel,
+        SystemListModel,
+    },
 };
 
 pub struct ViewModelService {
@@ -63,6 +66,32 @@ impl ViewModelService {
                 .repository_manager
                 .get_system_repository()
                 .is_system_in_use(system.id)
+                .await
+                .map_err(|err| Error::DbError(err.to_string()))?;
+        }
+
+        Ok(list_models)
+    }
+
+    pub async fn get_software_title_list_models(
+        &self,
+    ) -> Result<Vec<SoftwareTitleListModel>, Error> {
+        let systems = self
+            .repository_manager
+            .get_software_title_repository()
+            // TODO: add search filter
+            .get_all_software_titles()
+            .await
+            .map_err(|err| Error::DbError(err.to_string()))?;
+
+        let mut list_models: Vec<SoftwareTitleListModel> =
+            systems.iter().map(SoftwareTitleListModel::from).collect();
+
+        for system in list_models.iter_mut() {
+            system.can_delete = !self
+                .repository_manager
+                .get_software_title_repository()
+                .is_software_title_in_use(system.id)
                 .await
                 .map_err(|err| Error::DbError(err.to_string()))?;
         }
