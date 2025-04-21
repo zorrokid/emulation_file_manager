@@ -1,10 +1,12 @@
 use std::sync::Arc;
 
 use database::repository_manager::RepositoryManager;
-use iced::Task;
+use iced::{widget::column, Task};
 use service::view_model_service::ViewModelService;
 
 use crate::widgets::{
+    software_title_select_widget,
+    software_titles_widget::{self, SoftwareTitlesWidget},
     system_select_widget,
     systems_widget::{self, SystemsWidget},
 };
@@ -14,11 +16,14 @@ pub struct AddReleaseTab {
     view_model_service: Arc<ViewModelService>,
     systems_widget: SystemsWidget,
     selected_system_ids: Vec<i64>,
+    software_titles_widget: SoftwareTitlesWidget,
+    selected_software_title_ids: Vec<i64>,
 }
 
 #[derive(Debug, Clone)]
 pub enum Message {
     SystemsWidget(systems_widget::Message),
+    SoftwareTitlesWidget(software_titles_widget::Message),
 }
 
 impl AddReleaseTab {
@@ -26,16 +31,25 @@ impl AddReleaseTab {
         repositories: Arc<RepositoryManager>,
         view_model_service: Arc<ViewModelService>,
     ) -> (Self, Task<Message>) {
-        let (systems_widget, task) =
+        let (systems_widget, systems_task) =
             SystemsWidget::new(Arc::clone(&repositories), Arc::clone(&view_model_service));
+        let (software_titles_widget, software_titles_task) =
+            SoftwareTitlesWidget::new(Arc::clone(&repositories), Arc::clone(&view_model_service));
+
+        let combined_task = Task::batch(vec![
+            systems_task.map(Message::SystemsWidget),
+            software_titles_task.map(Message::SoftwareTitlesWidget),
+        ]);
         (
             Self {
                 repositories,
                 view_model_service,
                 selected_system_ids: vec![],
                 systems_widget,
+                software_titles_widget,
+                selected_software_title_ids: vec![],
             },
-            task.map(Message::SystemsWidget),
+            combined_task,
         )
     }
 
@@ -57,10 +71,40 @@ impl AddReleaseTab {
                     .update(message)
                     .map(Message::SystemsWidget)
             }
+            Message::SoftwareTitlesWidget(message) => {
+                if let software_titles_widget::Message::SoftwareTitleSelect(
+                    software_title_select_widget::Message::SoftwareTitleSelected(software_title),
+                ) = &message
+                {
+                    println!(
+                        "AddReleaseTab: Software title selected: {:?}",
+                        software_title
+                    );
+                    self.selected_software_title_ids.push(software_title.id);
+                }
+                if let software_titles_widget::Message::RemoveSoftwareTitle(software_title_id) =
+                    &message
+                {
+                    println!(
+                        "AddReleaseTab: Software title removed: {:?}",
+                        software_title_id
+                    );
+                    self.selected_software_title_ids
+                        .retain(|&id| id != *software_title_id);
+                }
+                self.software_titles_widget
+                    .update(message)
+                    .map(Message::SoftwareTitlesWidget)
+            }
         }
     }
 
     pub fn view(&self) -> iced::Element<Message> {
-        self.systems_widget.view().map(Message::SystemsWidget)
+        let systems_view = self.systems_widget.view().map(Message::SystemsWidget);
+        let software_titles_view = self
+            .software_titles_widget
+            .view()
+            .map(Message::SoftwareTitlesWidget);
+        column![systems_view, software_titles_view].into()
     }
 }

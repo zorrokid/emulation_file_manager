@@ -14,7 +14,7 @@ impl ReleaseRepository {
         Self { pool }
     }
 
-    async fn get_release(&self, id: i64) -> Result<Release, DatabaseError> {
+    pub async fn get_release(&self, id: i64) -> Result<Release, DatabaseError> {
         let release = sqlx::query_as!(
             Release,
             "SELECT id, name 
@@ -27,7 +27,7 @@ impl ReleaseRepository {
         Ok(release)
     }
 
-    async fn get_releases_with_software_title(
+    pub async fn get_releases_with_software_title(
         &self,
         software_title_id: i64,
     ) -> Result<Vec<Release>, DatabaseError> {
@@ -46,14 +46,14 @@ impl ReleaseRepository {
         Ok(releases)
     }
 
-    async fn add_release(&self, release_name: &str) -> Result<i64, DatabaseError> {
+    pub async fn add_release(&self, release_name: &str) -> Result<i64, DatabaseError> {
         let result = sqlx::query!("INSERT INTO release (name) VALUES (?)", release_name)
             .execute(&*self.pool)
             .await?;
         Ok(result.last_insert_rowid())
     }
 
-    async fn update_release(&self, release: &Release) -> Result<u64, DatabaseError> {
+    pub async fn update_release(&self, release: &Release) -> Result<u64, DatabaseError> {
         let result = sqlx::query!(
             "UPDATE release SET name = ? WHERE id = ?",
             release.name,
@@ -64,7 +64,7 @@ impl ReleaseRepository {
         Ok(result.rows_affected())
     }
 
-    async fn delete_release(&self, id: i64) -> Result<i64, DatabaseError> {
+    pub async fn delete_release(&self, id: i64) -> Result<i64, DatabaseError> {
         let count = sqlx::query_scalar!(
             "SELECT COUNT(*) FROM release_file_set WHERE release_id = ?",
             id
@@ -81,7 +81,7 @@ impl ReleaseRepository {
         Ok(id)
     }
 
-    async fn add_software_title_to_release(
+    pub async fn add_software_title_to_release(
         &self,
         release_id: i64,
         software_title_id: i64,
@@ -96,7 +96,7 @@ impl ReleaseRepository {
         Ok(())
     }
 
-    async fn remove_software_title_from_release(
+    pub async fn remove_software_title_from_release(
         &self,
         release_id: i64,
         software_title_id: i64,
@@ -111,7 +111,7 @@ impl ReleaseRepository {
         Ok(())
     }
 
-    async fn has_release_files(&self, release_id: i64) -> Result<bool, DatabaseError> {
+    pub async fn has_release_files(&self, release_id: i64) -> Result<bool, DatabaseError> {
         let count = sqlx::query_scalar!(
             "SELECT COUNT(*) FROM release_file_set WHERE release_id = ?",
             release_id
