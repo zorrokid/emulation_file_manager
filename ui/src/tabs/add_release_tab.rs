@@ -49,6 +49,10 @@ impl AddReleaseTab {
                     println!("AddReleaseTab: System selected: {:?}", system);
                     self.selected_system_ids.push(system.id);
                 }
+                if let systems_widget::Message::RemoveSystem(system_id) = &message {
+                    println!("AddReleaseTab: System removed: {:?}", system_id);
+                    self.selected_system_ids.retain(|&id| id != *system_id);
+                }
                 self.systems_widget
                     .update(message)
                     .map(Message::SystemsWidget)
