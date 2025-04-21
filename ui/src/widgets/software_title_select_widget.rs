@@ -45,7 +45,7 @@ impl SoftwareTitleSelectWidget {
             self.selected_software_title.clone(),
             Message::SoftwareTitleSelected,
         );
-        let label = text!("Select software_title");
+        let label = text!("Select software title");
         row![label, software_title_select]
             .spacing(DEFAULT_SPACING)
             .padding(DEFAULT_PADDING)
