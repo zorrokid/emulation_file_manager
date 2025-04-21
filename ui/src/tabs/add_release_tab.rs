@@ -42,11 +42,12 @@ impl AddReleaseTab {
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::SystemsWidget(message) => {
-                if let systems_widget::Message::SystemSelect(message) = &message {
-                    if let system_select_widget::Message::SystemSelected(system) = message {
-                        println!("AddReleaseTab: System selected: {:?}", system);
-                        self.selected_system_ids.push(system.id);
-                    }
+                if let systems_widget::Message::SystemSelect(
+                    system_select_widget::Message::SystemSelected(system),
+                ) = &message
+                {
+                    println!("AddReleaseTab: System selected: {:?}", system);
+                    self.selected_system_ids.push(system.id);
                 }
                 self.systems_widget
                     .update(message)
