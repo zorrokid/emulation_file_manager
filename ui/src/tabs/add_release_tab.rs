@@ -56,42 +56,47 @@ impl AddReleaseTab {
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::SystemsWidget(message) => {
-                if let systems_widget::Message::SystemSelect(
-                    system_select_widget::Message::SystemSelected(system),
-                ) = &message
-                {
-                    println!("AddReleaseTab: System selected: {:?}", system);
-                    self.selected_system_ids.push(system.id);
-                }
-                if let systems_widget::Message::RemoveSystem(system_id) = &message {
-                    println!("AddReleaseTab: System removed: {:?}", system_id);
-                    self.selected_system_ids.retain(|&id| id != *system_id);
+                match &message {
+                    systems_widget::Message::SystemSelect(
+                        system_select_widget::Message::SystemSelected(system),
+                    ) => {
+                        println!("AddReleaseTab: System selected: {:?}", system);
+                        self.selected_system_ids.push(system.id);
+                    }
+                    systems_widget::Message::RemoveSystem(system_id) => {
+                        println!("AddReleaseTab: System removed: {:?}", system_id);
+                        self.selected_system_ids.retain(|&id| id != *system_id);
+                    }
+                    _ => {}
                 }
                 self.systems_widget
                     .update(message)
                     .map(Message::SystemsWidget)
             }
             Message::SoftwareTitlesWidget(message) => {
-                if let software_titles_widget::Message::SoftwareTitleSelect(
-                    software_title_select_widget::Message::SoftwareTitleSelected(software_title),
-                ) = &message
-                {
-                    println!(
-                        "AddReleaseTab: Software title selected: {:?}",
-                        software_title
-                    );
-                    self.selected_software_title_ids.push(software_title.id);
+                match &message {
+                    software_titles_widget::Message::SoftwareTitleSelect(
+                        software_title_select_widget::Message::SoftwareTitleSelected(
+                            software_title,
+                        ),
+                    ) => {
+                        println!(
+                            "AddReleaseTab: Software title selected: {:?}",
+                            software_title
+                        );
+                        self.selected_software_title_ids.push(software_title.id);
+                    }
+                    software_titles_widget::Message::RemoveSoftwareTitle(software_title_id) => {
+                        println!(
+                            "AddReleaseTab: Software title removed: {:?}",
+                            software_title_id
+                        );
+                        self.selected_software_title_ids
+                            .retain(|&id| id != *software_title_id);
+                    }
+                    _ => {}
                 }
-                if let software_titles_widget::Message::RemoveSoftwareTitle(software_title_id) =
-                    &message
-                {
-                    println!(
-                        "AddReleaseTab: Software title removed: {:?}",
-                        software_title_id
-                    );
-                    self.selected_software_title_ids
-                        .retain(|&id| id != *software_title_id);
-                }
+
                 self.software_titles_widget
                     .update(message)
                     .map(Message::SoftwareTitlesWidget)
