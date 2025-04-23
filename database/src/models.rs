@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use sqlx::FromRow;
 
 // TODO move to better place
@@ -51,6 +53,20 @@ impl TryFrom<i64> for FileType {
                     "Invalid file type",
                 )),
             }),
+        }
+    }
+}
+
+impl Display for FileType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FileType::Rom => write!(f, "Rom"),
+            FileType::DiskImage => write!(f, "Disk Image"),
+            FileType::TapeImage => write!(f, "Tape Image"),
+            FileType::Screenshot => write!(f, "Screenshot"),
+            FileType::Manual => write!(f, "Manual"),
+            FileType::CoverScan => write!(f, "Cover Scan"),
+            FileType::MemorySnapshot => write!(f, "Memory Snapshot"),
         }
     }
 }

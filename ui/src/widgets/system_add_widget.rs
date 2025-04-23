@@ -28,6 +28,7 @@ impl SystemAddWidget {
         }
     }
 
+    // TODO: maybe return Task<Message> instead of Action
     pub fn update(&mut self, message: Message) -> Action {
         match message {
             Message::SystemNameUpdated(name) => self.system_name = name,
