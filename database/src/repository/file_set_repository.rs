@@ -34,7 +34,7 @@ impl FileSetRepository {
         &self,
         release_id: i64,
     ) -> Result<Vec<FileSet>, DatabaseError> {
-        let collection_files = sqlx::query_as(
+        let file_sets = sqlx::query_as(
             "SELECT c.id, c.file_name, c.file_type 
              FROM file_set c 
              INNER JOIN release_file_set rcf
@@ -44,7 +44,7 @@ impl FileSetRepository {
         .bind(release_id)
         .fetch_all(&*self.pool)
         .await?;
-        Ok(collection_files)
+        Ok(file_sets)
     }
 
     async fn is_file_set_in_release(&self, file_set_id: i64) -> Result<bool, DatabaseError> {
@@ -74,6 +74,16 @@ impl FileSetRepository {
         }
 
         let file_sets = query_builder.fetch_all(&*self.pool).await?;
+        Ok(file_sets)
+    }
+
+    pub async fn get_all_file_sets(&self) -> Result<Vec<FileSet>, DatabaseError> {
+        let file_sets = sqlx::query_as(
+            "SELECT id, file_name, file_type 
+             FROM file_set",
+        )
+        .fetch_all(&*self.pool)
+        .await?;
         Ok(file_sets)
     }
 

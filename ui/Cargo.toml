@@ -7,3 +7,4 @@ edition = "2021"
 iced = { version = "0.13.1", features = ["image"] }
 database = { path = "../database" }
 service = { path = "../service" }
+rfd = "0.15.3"

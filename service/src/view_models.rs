@@ -4,7 +4,7 @@ use std::{
     path::PathBuf,
 };
 
-use database::models::{SettingName, SoftwareTitle, System};
+use database::models::{FileSet, FileType, SettingName, SoftwareTitle, System};
 use file_system::get_files_root_dir;
 
 pub struct EmulatorViewModel {
@@ -81,5 +81,28 @@ impl From<&SoftwareTitle> for SoftwareTitleListModel {
 impl Display for SoftwareTitleListModel {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.name)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct FileSetListModel {
+    pub id: i64,
+    pub file_set_name: String,
+    pub file_type: FileType,
+}
+
+impl From<&FileSet> for FileSetListModel {
+    fn from(file_set: &FileSet) -> Self {
+        FileSetListModel {
+            id: file_set.id,
+            file_set_name: file_set.file_name.clone(),
+            file_type: file_set.file_type,
+        }
+    }
+}
+
+impl Display for FileSetListModel {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.file_set_name)
     }
 }

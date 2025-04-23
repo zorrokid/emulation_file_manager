@@ -1,3 +1,6 @@
+pub mod file_add_widget;
+pub mod file_select_widget;
+pub mod files_widget;
 pub mod software_title_add_widget;
 pub mod software_title_select_widget;
 pub mod software_titles_widget;

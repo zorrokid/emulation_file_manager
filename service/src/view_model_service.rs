@@ -5,8 +5,8 @@ use database::{database_error::DatabaseError, repository_manager::RepositoryMana
 use crate::{
     error::Error,
     view_models::{
-        EmulatorSystemViewModel, EmulatorViewModel, Settings, SoftwareTitleListModel,
-        SystemListModel,
+        EmulatorSystemViewModel, EmulatorViewModel, FileSetListModel, Settings,
+        SoftwareTitleListModel, SystemListModel,
     },
 };
 
@@ -95,6 +95,21 @@ impl ViewModelService {
                 .await
                 .map_err(|err| Error::DbError(err.to_string()))?;
         }
+
+        Ok(list_models)
+    }
+
+    pub async fn get_file_set_list_models(&self) -> Result<Vec<FileSetListModel>, Error> {
+        let file_sets = self
+            .repository_manager
+            .get_file_set_repository()
+            // TODO: get filtered subset of file sets
+            .get_all_file_sets()
+            .await
+            .map_err(|err| Error::DbError(err.to_string()))?;
+
+        let list_models: Vec<FileSetListModel> =
+            file_sets.iter().map(FileSetListModel::from).collect();
 
         Ok(list_models)
     }
