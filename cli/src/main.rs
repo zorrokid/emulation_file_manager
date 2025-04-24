@@ -9,7 +9,7 @@ use database::{
 };
 use emulator_runner::run_with_emulator;
 use file_export::{export_files, export_files_zipped};
-use file_import::{read_zip_file, CompressionMethod};
+use file_import::{import_files_from_zip, read_zip_contents, CompressionMethod};
 
 #[derive(Parser, Debug)]
 struct Cli {
@@ -32,7 +32,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let file_name = args.input_file;
         let output_directory = args.output_directory;
-        match read_zip_file(&file_name, &output_directory, args.compression_method) {
+        let file_name_to_checksum_filter =
+            read_zip_contents(&file_name).expect("Failed to read zip contents");
+        match import_files_from_zip(
+            &file_name,
+            &output_directory,
+            args.compression_method,
+            file_name_to_checksum_filter,
+        ) {
             Ok(hash_map) => {
                 // let't try inserting file set to database
                 let file_type = FileType::Rom;
