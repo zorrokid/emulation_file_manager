@@ -4701,6 +4701,7 @@ name = "ui"
 version = "0.1.0"
 dependencies = [
  "database",
+ "file_import",
  "iced",
  "rfd",
  "service",

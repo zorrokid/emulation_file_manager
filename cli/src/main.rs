@@ -31,9 +31,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let repository_manager = RepositoryManager::new(Arc::clone(&db_pool));
 
         let file_name = args.input_file;
+        let file_path = Path::new(&file_name);
         let output_directory = args.output_directory;
         let file_name_to_checksum_filter =
-            read_zip_contents(&file_name).expect("Failed to read zip contents");
+            read_zip_contents(file_path).expect("Failed to read zip contents");
         match import_files_from_zip(
             &file_name,
             &output_directory,

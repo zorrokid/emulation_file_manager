@@ -61,6 +61,9 @@ impl FileAddWidget {
                 if let Some(handle) = file_handle {
                     println!("File selected: {:?}", handle.file_name());
                     self.file_name = handle.file_name();
+                    let file_path = handle.path();
+                    let file_map = file_import::read_zip_contents(file_path);
+                    println!("File map: {:?}", file_map);
                 }
             }
         }
