@@ -64,7 +64,7 @@ pub fn import_files_from_zip(
 ///
 /// A `Result` containing a hash map with file names and their SHA-1 checksums, or an error if the operation fails.
 pub fn read_zip_contents(
-    file_path: &str,
+    file_path: &Path,
 ) -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
     let file = File::open(file_path)?;
     let mut archive = ZipArchive::new(file)?;
@@ -145,7 +145,7 @@ mod tests {
         zip_writer.write_all(TEST_FILE_CONTENT).unwrap();
         zip_writer.finish().unwrap();
 
-        let result = read_zip_contents(zip_file_path.to_str().unwrap());
+        let result = read_zip_contents(zip_file_path.as_path());
         assert!(result.is_ok());
         let hash_map = result.unwrap();
         assert_eq!(hash_map.len(), 1);
