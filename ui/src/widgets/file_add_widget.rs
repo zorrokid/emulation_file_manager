@@ -73,6 +73,7 @@ impl FileAddWidget {
                     println!("File selected: {:?}", handle.file_name());
                     self.file_name = handle.file_name();
                     let file_path = handle.path();
+                    // TODO: this needs to be async
                     let file_map = file_import::read_zip_contents(file_path);
                     println!("File map: {:?}", file_map);
                     if let Ok(file_map) = file_map {
