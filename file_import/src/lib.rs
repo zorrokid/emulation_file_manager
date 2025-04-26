@@ -54,7 +54,7 @@ pub fn import_files_from_zip(
     Ok(file_name_to_checksum_map)
 }
 
-/// Reads the contents of a zip file and calculates the SHA-1 checksum for each file.
+/// Get the contentsofazip file.
 ///
 /// # Arguments
 ///
@@ -62,31 +62,15 @@ pub fn import_files_from_zip(
 ///
 /// # Returns
 ///
-/// A `Result` containing a hash map with file names and their SHA-1 checksums, or an error if the operation fails.
-pub fn read_zip_contents(
-    file_path: &Path,
-) -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
+/// A `Result` containing a list of file names in the archive or an error if the operation fails.
+pub fn read_zip_contents(file_path: &Path) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let file = File::open(file_path)?;
-    let mut archive = ZipArchive::new(file)?;
-    let mut file_name_to_checksum_map = HashMap::new();
-    for i in 0..archive.len() {
-        let mut file = archive.by_index(i)?;
-        if file.is_file() {
-            let mut buffer = [0u8; 8192]; // 8 KB buffer
-            let mut hasher = Sha1::new();
-            loop {
-                let bytes_read = file.read(&mut buffer)?;
-                if bytes_read == 0 {
-                    break; // EOF
-                }
-                hasher.update(&buffer[..bytes_read]);
-            }
-            let checksum = hasher.finalize();
-            let checksum_as_string = format!("{:x}", checksum);
-            file_name_to_checksum_map.insert(file.name().to_string(), checksum_as_string);
-        }
-    }
-    Ok(file_name_to_checksum_map)
+    let archive = ZipArchive::new(file)?;
+    let zip_contents = archive
+        .file_names()
+        .map(|name| name.to_string())
+        .collect::<Vec<_>>();
+    Ok(zip_contents)
 }
 
 #[cfg(test)]

@@ -14,7 +14,7 @@ pub struct FileAddWidget {
     file_name: String,
     selected_file_type: Option<FileType>,
     current_picked_file: Option<FileHandle>,
-    current_picked_file_content: HashMap<String, String>,
+    current_picked_file_content: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -33,7 +33,7 @@ impl FileAddWidget {
             file_name: "".to_string(),
             selected_file_type: None,
             current_picked_file: None,
-            current_picked_file_content: HashMap::new(),
+            current_picked_file_content: Vec::new(),
         }
     }
 
@@ -74,11 +74,10 @@ impl FileAddWidget {
                     self.file_name = handle.file_name();
                     let file_path = handle.path();
                     // TODO: this needs to be async
-                    let file_map = file_import::read_zip_contents(file_path);
-                    println!("File map: {:?}", file_map);
-                    if let Ok(file_map) = file_map {
+                    let zip_contents_result = file_import::read_zip_contents(file_path);
+                    if let Ok(files_in_zip) = zip_contents_result {
                         self.current_picked_file = Some(handle);
-                        self.current_picked_file_content = file_map;
+                        self.current_picked_file_content = files_in_zip;
                     } else {
                         // TODO: submit error
                         eprintln!("Error reading file contents");
@@ -131,13 +130,10 @@ impl FileAddWidget {
 
     fn create_picked_file_contents(&self) -> Element<Message> {
         let mut rows: Vec<Element<Message>> = Vec::new();
-        for (file_name, checksum) in &self.current_picked_file_content {
-            let row = row![
-                text!("File name: {}", file_name),
-                text!("Checksum: {}", checksum)
-            ]
-            .spacing(DEFAULT_SPACING)
-            .padding(DEFAULT_PADDING);
+        for file_name in &self.current_picked_file_content {
+            let row = row![text!("File name: {}", file_name),]
+                .spacing(DEFAULT_SPACING)
+                .padding(DEFAULT_PADDING);
             rows.push(row.into());
         }
         Column::with_children(rows).into()
