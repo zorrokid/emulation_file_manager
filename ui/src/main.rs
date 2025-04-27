@@ -14,7 +14,8 @@ use tabs::{
     title_bar::{self, TitleBar},
 };
 
-fn main() -> iced::Result {
+#[tokio::main]
+async fn main() -> iced::Result {
     iced::application(Ui::title, Ui::update, Ui::view).run_with(Ui::new)
 }
 

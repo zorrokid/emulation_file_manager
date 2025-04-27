@@ -1,9 +1,30 @@
 pub mod file_outputter;
 pub use file_outputter::{CompressionMethod, FileOutputter};
 use sha1::{Digest, Sha1};
-use std::{collections::HashMap, fs::File, io::Read, path::Path};
+use std::{
+    collections::HashMap,
+    fmt::Display,
+    fs::File,
+    io::Read,
+    path::{Path, PathBuf},
+};
 
 use zip::ZipArchive;
+
+#[derive(Debug, Clone)]
+pub enum FileImportError {
+    ZipError(String),
+    FileIoError(String),
+}
+
+impl Display for FileImportError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FileImportError::ZipError(err) => write!(f, "Zip error: {}", err),
+            FileImportError::FileIoError(err) => write!(f, "File IO error: {}", err),
+        }
+    }
+}
 
 /// Reads the give zip file and imports the files listed in file_name_checksum_filter to the output directory in given compression method.
 ///
@@ -63,14 +84,45 @@ pub fn import_files_from_zip(
 /// # Returns
 ///
 /// A `Result` containing a list of file names in the archive or an error if the operation fails.
-pub fn read_zip_contents(file_path: &Path) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-    let file = File::open(file_path)?;
-    let archive = ZipArchive::new(file)?;
+pub fn read_zip_contents(file_path: PathBuf) -> Result<Vec<String>, FileImportError> {
+    let file = File::open(file_path)
+        .map_err(|e| FileImportError::FileIoError(format!("Failed opening file: {}", e)))?;
+    let archive = ZipArchive::new(file)
+        .map_err(|e| FileImportError::ZipError(format!("Failed reading Zip file: {}", e)))?;
     let zip_contents = archive
         .file_names()
         .map(|name| name.to_string())
         .collect::<Vec<_>>();
     Ok(zip_contents)
+}
+
+/// Asynchronously reads the contents of a zip file.
+pub async fn read_zip_contents_async(file_path: PathBuf) -> Result<Vec<String>, FileImportError> {
+    use async_std::fs::File;
+    use async_std::io::BufReader;
+    use async_zip::base::read::seek::ZipFileReader;
+    //use tokio::{fs::File, io::BufReader};
+    let file = File::open(file_path)
+        .await
+        .map_err(|e| FileImportError::FileIoError(format!("Failed opening file: {}", e)))?;
+    let file = BufReader::new(file);
+    let zip = ZipFileReader::new(file)
+        .await
+        .map_err(|e| FileImportError::ZipError(format!("Failed reading Zip file: {}", e)))?;
+    let zip_file = zip.file();
+
+    let mut file_names: Vec<String> = Vec::new();
+
+    for entry in zip_file.entries() {
+        let file_name_as_zipstring = entry.filename();
+        let file_name_as_string: String =
+            file_name_as_zipstring.clone().into_string().map_err(|e| {
+                FileImportError::ZipError(format!("Failed to conver ZipString to String: {}", e))
+            })?;
+        file_names.push(file_name_as_string);
+    }
+
+    Ok(file_names)
 }
 
 #[cfg(test)]
