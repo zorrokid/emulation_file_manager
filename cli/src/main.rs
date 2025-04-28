@@ -1,4 +1,8 @@
-use std::{collections::HashMap, path::Path, sync::Arc};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use async_std::task;
 use clap::Parser;
@@ -31,15 +35,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let repository_manager = RepositoryManager::new(Arc::clone(&db_pool));
 
         let file_name = args.input_file;
-        let file_path = Path::new(&file_name);
+        let file_path = PathBuf::from(&file_name);
         let output_directory = args.output_directory;
-        let file_name_to_checksum_filter =
-            read_zip_contents(file_path).expect("Failed to read zip contents");
+        let file_name_filter = read_zip_contents(file_path).expect("Failed to read zip contents");
         match import_files_from_zip(
             &file_name,
             &output_directory,
             args.compression_method,
-            file_name_to_checksum_filter,
+            file_name_filter,
         ) {
             Ok(hash_map) => {
                 // let't try inserting file set to database

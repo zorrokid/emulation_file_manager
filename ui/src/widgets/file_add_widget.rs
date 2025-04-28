@@ -1,8 +1,10 @@
+use std::collections::HashSet;
+
 use database::models::FileType;
 use file_import::FileImportError;
 use iced::{
     alignment,
-    widget::{button, checkbox, column, pick_list, row, text, text_input, Column},
+    widget::{button, checkbox, column, pick_list, row, text_input, Column},
     Element, Task,
 };
 use rfd::FileHandle;
@@ -13,8 +15,8 @@ pub struct FileAddWidget {
     file_name: String,
     selected_file_type: Option<FileType>,
     current_picked_file: Option<FileHandle>,
-    current_picked_file_content: Vec<String>,
-    selected_files_from_current_picked_file: Vec<String>,
+    current_picked_file_content: HashSet<String>,
+    selected_files_from_current_picked_file: HashSet<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -25,7 +27,7 @@ pub enum Message {
     StartFileSelection,
     FileTypeSelected(FileType),
     FilePicked(Option<FileHandle>),
-    FileContentsRead(Result<Vec<String>, FileImportError>),
+    FileContentsRead(Result<HashSet<String>, FileImportError>),
     FileSelectionToggled(String),
 }
 
@@ -35,8 +37,8 @@ impl FileAddWidget {
             file_name: "".to_string(),
             selected_file_type: None,
             current_picked_file: None,
-            current_picked_file_content: Vec::new(),
-            selected_files_from_current_picked_file: Vec::new(),
+            current_picked_file_content: HashSet::new(),
+            selected_files_from_current_picked_file: HashSet::new(),
         }
     }
 
@@ -103,7 +105,8 @@ impl FileAddWidget {
                     self.selected_files_from_current_picked_file
                         .retain(|f| f != &file_name);
                 } else {
-                    self.selected_files_from_current_picked_file.push(file_name);
+                    self.selected_files_from_current_picked_file
+                        .insert(file_name);
                 }
             }
         }
