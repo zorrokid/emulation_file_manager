@@ -9,3 +9,4 @@ database = { path = "../database" }
 service = { path = "../service" }
 file_import = { path = "../file_import" }
 rfd = "0.15.3"
+
