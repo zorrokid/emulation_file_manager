@@ -2,7 +2,7 @@ pub mod file_outputter;
 pub use file_outputter::{CompressionMethod, FileOutputter};
 use std::{
     collections::{HashMap, HashSet},
-    fmt::Display,
+    fmt::{format, Display},
     fs::File,
     path::{Path, PathBuf},
 };
@@ -24,10 +24,9 @@ impl Display for FileImportError {
     }
 }
 
-/// Reads the give zip file and imports the files listed in file_name_checksum_filter to the output directory in given compression method.
+/// Reads the give zip file and imports the files listed in filter to the output directory in given compression method.
 ///
-/// Calculate the checksum of each file in the zip archive, compare the checksum to give checksum
-/// in file_name_checksum_filter and also return a hash map of imported files with file names and their checksums.
+/// Calculate the checksum of each file in the zip archive and return a hash map of imported files with file names and their checksums.
 ///
 /// # Arguments
 ///
@@ -41,20 +40,30 @@ impl Display for FileImportError {
 /// A `Result` containing a hash map with file names and their checksums, or an error if the operation fails.
 ///
 pub fn import_files_from_zip(
-    file_path: &str,
-    output_dir: &str,
+    file_path: PathBuf,
+    output_dir: PathBuf,
     compression_type: CompressionMethod,
     file_name_filter: HashSet<String>,
-) -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
-    let file = File::open(file_path)?;
-    let mut archive = ZipArchive::new(file)?;
+) -> Result<HashMap<String, String>, FileImportError> {
+    let file = File::open(file_path)
+        .map_err(|e| FileImportError::FileIoError(format!("Failed opening file: {}", e)))?;
+    let mut archive = ZipArchive::new(file)
+        .map_err(|e| FileImportError::ZipError(format!("Failed reading Zip file: {}", e)))?;
     let mut file_name_to_checksum_map = HashMap::new();
 
     for i in 0..archive.len() {
-        let mut file = archive.by_index(i)?;
+        let mut file = archive
+            .by_index(i)
+            .map_err(|e| FileImportError::ZipError(format!("Failed reading Zip file: {}", e)))?;
         if file.is_file() && file_name_filter.contains(file.name()) {
-            let output_path = Path::new(output_dir);
-            let checksum = compression_type.output(output_path, &mut file)?;
+            let checksum = compression_type
+                .output(&output_dir, &mut file)
+                .map_err(|e| {
+                    FileImportError::FileIoError(format!(
+                        "Failed writing file to output directory: {}",
+                        e
+                    ))
+                })?;
             file_name_to_checksum_map.insert(file.name().to_string(), checksum);
         }
     }
@@ -99,7 +108,7 @@ mod tests {
     #[test]
     fn test_read_zip_file() {
         let temp_dir = tempdir().unwrap();
-        let output_path = temp_dir.path();
+        let output_path = temp_dir.into_path();
         let method = CompressionMethod::Zstd;
 
         let zip_file_path = output_path.join(TEST_ZIP_ARCHIVE_NAME);
@@ -111,12 +120,7 @@ mod tests {
         zip_writer.finish().unwrap();
         let mut file_name_filter = HashSet::new();
         file_name_filter.insert(TEST_FILE_NAME.to_string());
-        let result = import_files_from_zip(
-            zip_file_path.to_str().unwrap(),
-            output_path.to_str().unwrap(),
-            method,
-            file_name_filter,
-        );
+        let result = import_files_from_zip(zip_file_path, output_path, method, file_name_filter);
         assert!(result.is_ok());
         let hash_map = result.unwrap();
         assert_eq!(hash_map.len(), 1);

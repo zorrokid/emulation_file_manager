@@ -34,13 +34,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let db_pool = get_db_pool().await.unwrap();
         let repository_manager = RepositoryManager::new(Arc::clone(&db_pool));
 
-        let file_name = args.input_file;
+        let file_name = PathBuf::from(args.input_file);
         let file_path = PathBuf::from(&file_name);
-        let output_directory = args.output_directory;
+        let output_directory = PathBuf::from(args.output_directory);
         let file_name_filter = read_zip_contents(file_path).expect("Failed to read zip contents");
         match import_files_from_zip(
-            &file_name,
-            &output_directory,
+            file_name,
+            output_directory,
             args.compression_method,
             file_name_filter,
         ) {

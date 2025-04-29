@@ -45,8 +45,13 @@ impl ViewModelService {
         })
     }
 
-    pub async fn get_settings(&self) -> Result<Settings, DatabaseError> {
-        let settings_map = self.repository_manager.settings().get_settings().await?;
+    pub async fn get_settings(&self) -> Result<Settings, Error> {
+        let settings_map = self
+            .repository_manager
+            .settings()
+            .get_settings()
+            .await
+            .map_err(|err| Error::DbError(err.to_string()))?;
         Ok(Settings::from(settings_map))
     }
 

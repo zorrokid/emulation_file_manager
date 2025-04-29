@@ -1,7 +1,10 @@
-use std::collections::HashSet;
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+};
 
 use database::models::FileType;
-use file_import::FileImportError;
+use file_import::{CompressionMethod, FileImportError};
 use iced::{
     alignment,
     widget::{button, checkbox, column, pick_list, row, scrollable, text_input, Column},
@@ -17,6 +20,8 @@ pub struct FileAddWidget {
     current_picked_file: Option<FileHandle>,
     current_picked_file_content: HashSet<String>,
     selected_files_from_current_picked_file: HashSet<String>,
+    collection_root_dir: PathBuf,
+    imported_files: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone)]
@@ -29,16 +34,19 @@ pub enum Message {
     FilePicked(Option<FileHandle>),
     FileContentsRead(Result<HashSet<String>, FileImportError>),
     FileSelectionToggled(String),
+    FilesImported(Result<HashMap<String, String>, FileImportError>),
 }
 
 impl FileAddWidget {
-    pub fn new() -> Self {
+    pub fn new(collection_root_dir: PathBuf) -> Self {
         Self {
             file_name: "".to_string(),
             selected_file_type: None,
             current_picked_file: None,
             current_picked_file_content: HashSet::new(),
             selected_files_from_current_picked_file: HashSet::new(),
+            collection_root_dir,
+            imported_files: HashMap::new(),
         }
     }
 
@@ -48,8 +56,38 @@ impl FileAddWidget {
                 self.file_name = name;
             }
             Message::Submit => {
-                // TODO
+                if let Some(handle) = &self.current_picked_file {
+                    let file_path = handle.path().to_path_buf().clone();
+                    let collection_root_dir = self.collection_root_dir.clone();
+                    let file_filter = self.selected_files_from_current_picked_file.clone();
+                    return Task::perform(
+                        async move {
+                            file_import::import_files_from_zip(
+                                file_path,
+                                collection_root_dir,
+                                CompressionMethod::Zstd,
+                                file_filter,
+                            )
+                        },
+                        Message::FilesImported,
+                    );
+                } else {
+                    eprintln!("No file selected");
+                    return Task::none();
+                }
             }
+            Message::FilesImported(result) => match result {
+                Ok(files) => {
+                    self.imported_files = files.clone();
+                    // TODO: save imported files to database
+                    // TODO: if files are saved successfully, clear the selected files
+                    // TODO: if files are NOT saved successfully, delete the imported files and
+                    // show an error message
+                }
+                Err(err) => {
+                    eprintln!("Error importing files: {}", err);
+                }
+            },
             Message::CancelAddFile => {
                 self.file_name = "".to_string();
                 self.selected_file_type = None;
