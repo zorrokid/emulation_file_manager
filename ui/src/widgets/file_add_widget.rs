@@ -4,7 +4,7 @@ use database::models::FileType;
 use file_import::FileImportError;
 use iced::{
     alignment,
-    widget::{button, checkbox, column, pick_list, row, text_input, Column},
+    widget::{button, checkbox, column, pick_list, row, scrollable, text_input, Column},
     Element, Task,
 };
 use rfd::FileHandle;
@@ -51,8 +51,11 @@ impl FileAddWidget {
                 // TODO
             }
             Message::CancelAddFile => {
-                // TODO
-                println!("Cancel");
+                self.file_name = "".to_string();
+                self.selected_file_type = None;
+                self.current_picked_file = None;
+                self.current_picked_file_content.clear();
+                self.selected_files_from_current_picked_file.clear();
             }
             Message::StartFileSelection => {
                 if self.selected_file_type.is_none() {
@@ -127,7 +130,7 @@ impl FileAddWidget {
                 .spacing(DEFAULT_SPACING)
                 .padding(DEFAULT_PADDING)
                 .align_y(alignment::Vertical::Center),
-            picked_file_contents,
+            scrollable(picked_file_contents),
         ]
         .into()
     }
