@@ -1,10 +1,11 @@
 pub mod file_outputter;
+pub mod test_utils;
 pub use file_outputter::{CompressionMethod, FileOutputter};
 use std::{
     collections::{HashMap, HashSet},
-    fmt::{format, Display},
+    fmt::Display,
     fs::File,
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 
 use zip::ZipArchive;
@@ -22,6 +23,16 @@ impl Display for FileImportError {
             FileImportError::FileIoError(err) => write!(f, "File IO error: {}", err),
         }
     }
+}
+
+pub type Sha1Checksum = [u8; 20];
+pub type FileSize = u64;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ImportedFile {
+    file_name: String,
+    sha1_checksum: Sha1Checksum,
+    file_size: FileSize,
 }
 
 /// Reads the give zip file and imports the files listed in filter to the output directory in given compression method.
@@ -44,19 +55,19 @@ pub fn import_files_from_zip(
     output_dir: PathBuf,
     compression_type: CompressionMethod,
     file_name_filter: HashSet<String>,
-) -> Result<HashMap<String, String>, FileImportError> {
+) -> Result<HashMap<Sha1Checksum, ImportedFile>, FileImportError> {
     let file = File::open(file_path)
         .map_err(|e| FileImportError::FileIoError(format!("Failed opening file: {}", e)))?;
     let mut archive = ZipArchive::new(file)
         .map_err(|e| FileImportError::ZipError(format!("Failed reading Zip file: {}", e)))?;
-    let mut file_name_to_checksum_map = HashMap::new();
+    let mut file_name_to_checksum_map: HashMap<Sha1Checksum, ImportedFile> = HashMap::new();
 
     for i in 0..archive.len() {
         let mut file = archive
             .by_index(i)
             .map_err(|e| FileImportError::ZipError(format!("Failed reading Zip file: {}", e)))?;
         if file.is_file() && file_name_filter.contains(file.name()) {
-            let checksum = compression_type
+            let (sha1_checksum, file_size) = compression_type
                 .output(&output_dir, &mut file)
                 .map_err(|e| {
                     FileImportError::FileIoError(format!(
@@ -64,7 +75,13 @@ pub fn import_files_from_zip(
                         e
                     ))
                 })?;
-            file_name_to_checksum_map.insert(file.name().to_string(), checksum);
+            let imported_file = ImportedFile {
+                file_name: file.name().to_string(),
+                sha1_checksum,
+                file_size,
+            };
+
+            file_name_to_checksum_map.insert(sha1_checksum, imported_file);
         }
     }
     Ok(file_name_to_checksum_map)
@@ -97,11 +114,11 @@ mod tests {
     use std::io::Write;
 
     use super::*;
+    use crate::test_utils::test_utils;
     use tempfile::tempdir;
     use zip::write::FileOptions;
 
-    const TEST_FILE_CONTENT: &[u8] = b"Hello, world!";
-    const TEST_FILE_CONTENT_SHA1: &str = "943a702d06f34599aee1f8da8ef9f7296031d699";
+    const TEST_FILE_CONTENT: &str = "Hello, world!";
     const TEST_FILE_NAME: &str = "test_file";
     const TEST_ZIP_ARCHIVE_NAME: &str = "test.zip";
 
@@ -116,15 +133,24 @@ mod tests {
         let mut zip_writer = zip::ZipWriter::new(zip_file);
         let file_options: FileOptions<'_, ()> = FileOptions::default();
         zip_writer.start_file(TEST_FILE_NAME, file_options).unwrap();
-        zip_writer.write_all(TEST_FILE_CONTENT).unwrap();
+        zip_writer.write_all(TEST_FILE_CONTENT.as_bytes()).unwrap();
         zip_writer.finish().unwrap();
         let mut file_name_filter = HashSet::new();
         file_name_filter.insert(TEST_FILE_NAME.to_string());
         let result = import_files_from_zip(zip_file_path, output_path, method, file_name_filter);
+        let (checksum, size) = test_utils::get_sha1_and_size(TEST_FILE_CONTENT);
         assert!(result.is_ok());
         let hash_map = result.unwrap();
         assert_eq!(hash_map.len(), 1);
-        assert_eq!(hash_map[TEST_FILE_NAME], TEST_FILE_CONTENT_SHA1);
+
+        assert_eq!(
+            hash_map[&checksum],
+            ImportedFile {
+                file_name: TEST_FILE_NAME.to_string(),
+                sha1_checksum: checksum,
+                file_size: size,
+            }
+        );
     }
 
     #[test]
@@ -137,7 +163,7 @@ mod tests {
         let mut zip_writer = zip::ZipWriter::new(zip_file);
         let file_options: FileOptions<'_, ()> = FileOptions::default();
         zip_writer.start_file(TEST_FILE_NAME, file_options).unwrap();
-        zip_writer.write_all(TEST_FILE_CONTENT).unwrap();
+        zip_writer.write_all(TEST_FILE_CONTENT.as_bytes()).unwrap();
         zip_writer.finish().unwrap();
 
         let result = read_zip_contents(zip_file_path);
