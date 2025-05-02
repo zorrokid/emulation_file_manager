@@ -1,10 +1,14 @@
 use std::{
     collections::{HashMap, HashSet},
     path::PathBuf,
+    sync::Arc,
 };
 
-use database::models::FileType;
-use file_import::{CompressionMethod, FileImportError};
+use database::{
+    models::{FileType, PickedFileInfo},
+    repository_manager::RepositoryManager,
+};
+use file_import::{CompressionMethod, FileImportError, ImportedFile, Sha1Checksum};
 use iced::{
     alignment,
     widget::{button, checkbox, column, pick_list, row, scrollable, text_input, Column},
@@ -21,7 +25,8 @@ pub struct FileAddWidget {
     current_picked_file_content: HashSet<String>,
     selected_files_from_current_picked_file: HashSet<String>,
     collection_root_dir: PathBuf,
-    imported_files: HashMap<String, String>,
+    imported_files: HashMap<Sha1Checksum, ImportedFile>,
+    repositories: Arc<RepositoryManager>,
 }
 
 #[derive(Debug, Clone)]
@@ -34,11 +39,11 @@ pub enum Message {
     FilePicked(Option<FileHandle>),
     FileContentsRead(Result<HashSet<String>, FileImportError>),
     FileSelectionToggled(String),
-    FilesImported(Result<HashMap<String, String>, FileImportError>),
+    FilesImported(Result<HashMap<Sha1Checksum, ImportedFile>, FileImportError>),
 }
 
 impl FileAddWidget {
-    pub fn new(collection_root_dir: PathBuf) -> Self {
+    pub fn new(collection_root_dir: PathBuf, repositories: Arc<RepositoryManager>) -> Self {
         Self {
             file_name: "".to_string(),
             selected_file_type: None,
@@ -47,6 +52,7 @@ impl FileAddWidget {
             selected_files_from_current_picked_file: HashSet::new(),
             collection_root_dir,
             imported_files: HashMap::new(),
+            repositories,
         }
     }
 
@@ -78,7 +84,25 @@ impl FileAddWidget {
             }
             Message::FilesImported(result) => match result {
                 Ok(files) => {
-                    self.imported_files = files.clone();
+                    if let Some(file_type) = self.selected_file_type {
+                        self.imported_files = files.clone();
+                        let repo = Arc::clone(&self.repositories);
+                        let file_name = self.file_name.clone();
+                        let files = self
+                            .selected_files_from_current_picked_file
+                            .iter()
+                            .map(|f| f.to_string())
+                            .collect::<Vec<PickedFileInfo>>();
+                        Task::perform(
+                            {
+                                repo.get_file_set_repository()
+                                    .add_file_set(file_name, file_type, files)
+                                    .await
+                            },
+                            Message::FilesSavedToDatabase,
+                        )
+                    }
+
                     // TODO: save imported files to database
                     // TODO: if files are saved successfully, clear the selected files
                     // TODO: if files are NOT saved successfully, delete the imported files and

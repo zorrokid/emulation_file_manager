@@ -30,7 +30,7 @@ impl FromRow<'_, SqliteRow> for FileSet {
 }
 
 impl FileSetRepository {
-    async fn get_file_sets_for_release(
+    pub async fn get_file_sets_for_release(
         &self,
         release_id: i64,
     ) -> Result<Vec<FileSet>, DatabaseError> {
@@ -47,7 +47,7 @@ impl FileSetRepository {
         Ok(file_sets)
     }
 
-    async fn is_file_set_in_release(&self, file_set_id: i64) -> Result<bool, DatabaseError> {
+    pub async fn is_file_set_in_release(&self, file_set_id: i64) -> Result<bool, DatabaseError> {
         let count = sqlx::query_scalar!(
             "SELECT COUNT(*) 
              FROM release_file_set
@@ -89,11 +89,11 @@ impl FileSetRepository {
 
     pub async fn add_file_set(
         &self,
-        file_name: &str,
-        file_type: &FileType,
-        files: &Vec<PickedFileInfo>,
+        file_name: String,
+        file_type: FileType,
+        files: Vec<PickedFileInfo>,
     ) -> Result<i64, DatabaseError> {
-        let file_type = *file_type as i64;
+        let file_type = file_type as i64;
 
         let mut transaction = self.pool.begin().await?;
 

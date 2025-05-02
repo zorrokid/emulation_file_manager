@@ -1,10 +1,15 @@
 pub mod file_outputter;
 pub mod test_utils;
 pub use file_outputter::{CompressionMethod, FileOutputter};
+use sha1::{
+    digest::{consts::U20, generic_array::GenericArray},
+    Digest, Sha1,
+};
 use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
     fs::File,
+    io::Read,
     path::PathBuf,
 };
 
@@ -87,7 +92,7 @@ pub fn import_files_from_zip(
     Ok(file_name_to_checksum_map)
 }
 
-/// Get the contentsofazip file.
+/// Get the contents of a zip file.
 ///
 /// # Arguments
 ///
@@ -107,6 +112,50 @@ pub fn read_zip_contents(file_path: PathBuf) -> Result<HashSet<String>, FileImpo
         .collect::<HashSet<_>>();
 
     Ok(zip_contents)
+}
+
+/// Get the contents of a zip file and calculate sha1 checksum for each file.
+///
+/// # Arguments
+///
+/// * `file_path` - The path to the zip file.
+///
+/// # Returns
+///
+/// A `Result` containing hash map from sha1 key to file name from files in the archive or an error if the operation fails.
+pub fn read_zip_contents_with_checksums(
+    file_path: PathBuf,
+) -> Result<HashMap<Sha1Checksum, String>, FileImportError> {
+    let file = File::open(file_path)
+        .map_err(|e| FileImportError::FileIoError(format!("Failed opening file: {}", e)))?;
+    let mut archive = ZipArchive::new(file)
+        .map_err(|e| FileImportError::ZipError(format!("Failed reading Zip file: {}", e)))?;
+
+    let mut sha1_to_file_name_map: HashMap<Sha1Checksum, String> = HashMap::new();
+
+    for i in 0..archive.len() {
+        let mut file = archive
+            .by_index(i)
+            .map_err(|e| FileImportError::ZipError(format!("Failed reading Zip file: {}", e)))?;
+        if file.is_file() {
+            let mut buffer = [0u8; 8192]; // 8 KB buffer
+            let mut hasher = Sha1::new();
+            loop {
+                let bytes_read = file.read(&mut buffer).map_err(|e| {
+                    FileImportError::FileIoError(format!("Failed reading file: {}", e))
+                })?;
+                if bytes_read == 0 {
+                    break; // EOF
+                }
+                hasher.update(&buffer[..bytes_read]);
+            }
+            let sha1_checksum: GenericArray<u8, U20> = hasher.finalize();
+            let sha1_checksum: Sha1Checksum = sha1_checksum.into();
+            sha1_to_file_name_map.insert(sha1_checksum, file.name().to_string());
+        }
+    }
+
+    Ok(sha1_to_file_name_map)
 }
 
 #[cfg(test)]
@@ -171,5 +220,27 @@ mod tests {
         let hash_set = result.unwrap();
         assert_eq!(hash_set.len(), 1);
         assert!(hash_set.contains(TEST_FILE_NAME));
+    }
+
+    #[test]
+    fn test_read_zip_contents_with_checksums() {
+        let temp_dir = tempdir().unwrap();
+        let output_path = temp_dir.path();
+
+        let zip_file_path = output_path.join(TEST_ZIP_ARCHIVE_NAME);
+        let zip_file = File::create(&zip_file_path).unwrap();
+        let mut zip_writer = zip::ZipWriter::new(zip_file);
+        let file_options: FileOptions<'_, ()> = FileOptions::default();
+        zip_writer.start_file(TEST_FILE_NAME, file_options).unwrap();
+        zip_writer.write_all(TEST_FILE_CONTENT.as_bytes()).unwrap();
+        zip_writer.finish().unwrap();
+
+        let result = read_zip_contents_with_checksums(zip_file_path);
+        assert!(result.is_ok());
+        let hash_map = result.unwrap();
+        assert_eq!(hash_map.len(), 1);
+        let (checksum, _) = test_utils::get_sha1_and_size(TEST_FILE_CONTENT);
+        assert!(hash_map.contains_key(&checksum));
+        assert_eq!(hash_map[&checksum], TEST_FILE_NAME.to_string());
     }
 }

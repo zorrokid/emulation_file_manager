@@ -86,8 +86,9 @@ impl FilesWidget {
             Message::SettingsFetched(result) => match result {
                 Ok(settings) => {
                     let collection_root_dir = settings.collection_root_dir.clone();
+                    let repositories = Arc::clone(&self.repositories);
                     self.add_file_widget
-                        .set(FileAddWidget::new(collection_root_dir));
+                        .set(FileAddWidget::new(collection_root_dir, repositories));
                     Task::none()
                 }
 
