@@ -1,5 +1,6 @@
 use std::{collections::HashMap, fs::File, io::Read, path::Path};
 
+use core_types::Sha1Checksum;
 use sha1::{Digest, Sha1};
 use zip::write::FileOptions;
 
@@ -23,7 +24,7 @@ pub fn export_files(
     // key is the archive file name, value is the output file name
     output_file_name_mapping: HashMap<String, String>,
     // key is the archive file name, value is the checksum
-    filename_checksum_mapping: HashMap<String, String>,
+    filename_checksum_mapping: HashMap<String, Sha1Checksum>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut output_file_names: Vec<String> = Vec::new();
     for (archive_file_name, output_file_name) in output_file_name_mapping {
@@ -66,7 +67,7 @@ pub fn export_files_zipped(
     // key is the archive file name, value is the output file name
     output_file_name_mapping: HashMap<String, String>,
     // key is the archive file name, value is the checksum
-    filename_checksum_mapping: HashMap<String, String>,
+    filename_checksum_mapping: HashMap<String, Sha1Checksum>,
     container_name: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let zip_path = output_dir.join(container_name);
@@ -129,7 +130,7 @@ fn decompress_zstd_to_writer(
 
 fn check_file_checksum(
     file_path: &Path,
-    expected_checksum: &str,
+    expected_checksum: &Sha1Checksum,
 ) -> Result<bool, Box<dyn std::error::Error>> {
     let mut hasher = Sha1::new();
     let mut file = File::open(file_path)?;
@@ -137,5 +138,6 @@ fn check_file_checksum(
     file.read_to_end(&mut buffer)?;
     hasher.update(&buffer);
     let calculated_checksum = hasher.finalize();
-    Ok(format!("{:x}", calculated_checksum) == expected_checksum)
+    let calculated_checksum = calculated_checksum.as_slice();
+    Ok(calculated_checksum == *expected_checksum)
 }

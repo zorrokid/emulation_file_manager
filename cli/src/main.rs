@@ -6,11 +6,8 @@ use std::{
 
 use async_std::task;
 use clap::Parser;
-use database::{
-    get_db_pool,
-    models::{FileType, PickedFileInfo},
-    repository_manager::RepositoryManager,
-};
+use core_types::ImportedFile;
+use database::{get_db_pool, models::FileType, repository_manager::RepositoryManager};
 use emulator_runner::run_with_emulator;
 use file_export::{export_files, export_files_zipped};
 use file_import::{import_files_from_zip, read_zip_contents, CompressionMethod};
@@ -34,13 +31,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let db_pool = get_db_pool().await.unwrap();
         let repository_manager = RepositoryManager::new(Arc::clone(&db_pool));
 
-        let file_name = PathBuf::from(args.input_file);
-        let file_path = PathBuf::from(&file_name);
+        let file_path = PathBuf::from(args.input_file);
+        let file_name = file_path
+            .file_name()
+            .expect("Failed to get file name")
+            .to_str()
+            .expect("Failed to convert file name to string")
+            .to_string();
         let output_directory = PathBuf::from(args.output_directory);
-        let file_name_filter = read_zip_contents(file_path).expect("Failed to read zip contents");
+        let file_name_filter =
+            read_zip_contents(file_path.clone()).expect("Failed to read zip contents");
         match import_files_from_zip(
-            file_name,
-            output_directory,
+            file_path.clone(),
+            output_directory.clone(),
             args.compression_method,
             file_name_filter,
         ) {
@@ -48,17 +51,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // let't try inserting file set to database
                 let file_type = FileType::Rom;
                 let picked_files = hash_map
-                    .iter()
-                    .map(|(k, v)| PickedFileInfo {
-                        file_name: k.clone(),
-                        file_size: 0, // TODO: set the correct file size
-                        sha1_checksum: v.clone(),
+                    .values()
+                    .map(|v| ImportedFile {
+                        file_name: v.file_name.clone(),
+                        sha1_checksum: v.sha1_checksum,
+                        file_size: v.file_size,
                     })
-                    .collect();
+                    .collect::<Vec<ImportedFile>>();
 
                 let file_set_id = repository_manager
                     .get_file_set_repository()
-                    .add_file_set(&file_name, &file_type, &picked_files)
+                    .add_file_set(file_name, file_type, picked_files)
                     .await
                     .expect("Failed to insert file set to database");
 
@@ -84,21 +87,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let input_path = Path::new(&output_directory);
                 let output_path = Path::new(&output_directory).join("export");
                 let output_filename_mapping = hash_map
-                    .iter()
-                    .map(|(k, v)| (k.clone(), format!("{}-{}-exported", k.clone(), v.clone())))
+                    .values()
+                    .map(|v| {
+                        (
+                            v.file_name.clone(),
+                            format!("{}-exported", v.file_name.clone()),
+                        )
+                    })
+                    .collect::<HashMap<_, _>>();
+                let filename_checksum_mapping = hash_map
+                    .values()
+                    .map(|v| (v.file_name.clone(), v.sha1_checksum))
                     .collect::<HashMap<_, _>>();
                 export_files(
                     input_path,
                     &output_path,
                     output_filename_mapping.clone(),
-                    hash_map.clone(),
+                    filename_checksum_mapping.clone(),
                 )
                 .expect("Failed to export files");
                 export_files_zipped(
                     input_path,
                     &output_path,
                     output_filename_mapping,
-                    hash_map.clone(),
+                    filename_checksum_mapping,
                     "exported_files.zip".to_string(),
                 )
                 .expect("Failed to export files");

@@ -144,8 +144,7 @@ mod tests {
     use std::fs;
 
     use tempfile::tempdir;
-
-    use crate::test_utils::test_utils::get_sha1_and_size;
+    use utils::test_utils::get_sha1_and_size;
 
     use super::*;
 

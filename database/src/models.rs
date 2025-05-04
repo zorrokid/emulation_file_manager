@@ -2,14 +2,6 @@ use std::fmt::Display;
 
 use sqlx::FromRow;
 
-// TODO move to better place
-#[derive(Debug, Clone)]
-pub struct PickedFileInfo {
-    pub sha1_checksum: String,
-    pub file_size: i64,
-    pub file_name: String,
-}
-
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum FileType {
     Rom = 1,
@@ -74,7 +66,7 @@ impl Display for FileType {
 #[derive(Debug, Clone, PartialEq, FromRow)]
 pub struct FileInfo {
     pub id: i64,
-    pub sha1_checksum: String,
+    pub sha1_checksum: Vec<u8>,
     pub file_size: i64,
 }
 
