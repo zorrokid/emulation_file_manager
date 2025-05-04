@@ -20,15 +20,111 @@ use rfd::FileHandle;
 
 use crate::defaults::{DEFAULT_PADDING, DEFAULT_SPACING};
 
-pub struct FileAddWidget {
-    file_name: String,
-    selected_file_type: Option<FileType>,
+pub struct FileImporter {
     current_picked_file: Option<FileHandle>,
     current_picked_file_content: HashMap<Sha1Checksum, ImportedFile>,
     existing_files: HashMap<Sha1Checksum, FileInfo>,
     selected_files_from_current_picked_file: HashSet<String>,
-    collection_root_dir: PathBuf,
     imported_files: HashMap<Sha1Checksum, ImportedFile>,
+}
+
+impl FileImporter {
+    pub fn new() -> Self {
+        Self {
+            current_picked_file: None,
+            current_picked_file_content: HashMap::new(),
+            existing_files: HashMap::new(),
+            selected_files_from_current_picked_file: HashSet::new(),
+            imported_files: HashMap::new(),
+        }
+    }
+    pub fn get_current_picked_file(&self) -> Option<&FileHandle> {
+        self.current_picked_file.as_ref()
+    }
+    pub fn get_current_picked_file_content(&self) -> &HashMap<Sha1Checksum, ImportedFile> {
+        &self.current_picked_file_content
+    }
+    pub fn get_selected_files_from_current_picked_file(&self) -> &HashSet<String> {
+        &self.selected_files_from_current_picked_file
+    }
+    pub fn set_current_picked_file(&mut self, file: FileHandle) {
+        self.current_picked_file = Some(file);
+    }
+    pub fn set_current_picked_file_content(
+        &mut self,
+        content: HashMap<Sha1Checksum, ImportedFile>,
+    ) {
+        self.selected_files_from_current_picked_file
+            .extend(content.values().map(|f| f.file_name.clone()));
+        self.current_picked_file_content = content;
+    }
+    pub fn set_existing_files(&mut self, files: Vec<FileInfo>) {
+        let mut file_map: HashMap<Sha1Checksum, FileInfo> = HashMap::new();
+        for file in files {
+            let checksum = file
+                .sha1_checksum
+                .clone()
+                .try_into()
+                .expect("Invalid checksum length");
+            file_map.insert(checksum, file);
+        }
+        self.existing_files = file_map;
+    }
+    pub fn set_imported_files(&mut self, files: HashMap<Sha1Checksum, ImportedFile>) {
+        self.imported_files = files;
+    }
+    pub fn clear(&mut self) {
+        self.current_picked_file = None;
+        self.current_picked_file_content.clear();
+        self.existing_files.clear();
+        self.selected_files_from_current_picked_file.clear();
+        self.imported_files.clear();
+    }
+
+    pub fn is_file_selected(&self, file_name: &str) -> bool {
+        self.selected_files_from_current_picked_file
+            .contains(file_name)
+    }
+
+    pub fn deselect_file(&mut self, file_name: &str) {
+        self.selected_files_from_current_picked_file
+            .remove(file_name);
+    }
+
+    pub fn select_file(&mut self, file_name: &str) {
+        self.selected_files_from_current_picked_file
+            .insert(file_name.to_string());
+    }
+
+    pub fn toggle_file_selection(&mut self, file_name: &str) {
+        if self.is_file_selected(file_name) {
+            self.deselect_file(file_name);
+        } else {
+            self.select_file(file_name);
+        }
+    }
+
+    pub fn get_filtered_picked_file_content(&self) -> Vec<ImportedFile> {
+        self.current_picked_file_content
+            .values()
+            .filter(|file| {
+                self.selected_files_from_current_picked_file
+                    .contains(&file.file_name)
+            })
+            .map(|file| ImportedFile {
+                file_name: file.file_name.clone(),
+                sha1_checksum: file.sha1_checksum,
+                file_size: file.file_size,
+            })
+            .collect::<Vec<ImportedFile>>()
+    }
+}
+
+pub struct FileAddWidget {
+    file_name: String,
+    selected_file_type: Option<FileType>,
+    file_importer: FileImporter,
+    collection_root_dir: PathBuf,
     repositories: Arc<RepositoryManager>,
 }
 
@@ -52,13 +148,9 @@ impl FileAddWidget {
         Self {
             file_name: "".to_string(),
             selected_file_type: None,
-            current_picked_file: None,
-            current_picked_file_content: HashMap::new(),
-            existing_files: HashMap::new(),
-            selected_files_from_current_picked_file: HashSet::new(),
             collection_root_dir,
-            imported_files: HashMap::new(),
             repositories,
+            file_importer: FileImporter::new(),
         }
     }
 
@@ -88,7 +180,7 @@ impl FileAddWidget {
                     println!("File selected: {:?}", handle.file_name());
                     self.file_name = handle.file_name();
                     let file_path = handle.path().to_path_buf();
-                    self.current_picked_file = Some(handle.clone());
+                    self.file_importer.set_current_picked_file(handle.clone());
 
                     return Task::perform(
                         async move { file_import::read_zip_contents_with_checksums(file_path) },
@@ -100,16 +192,14 @@ impl FileAddWidget {
             }
             Message::FileContentsRead(result) => match result {
                 Ok(files) => {
-                    self.current_picked_file_content = files.clone();
-                    self.selected_files_from_current_picked_file =
-                        files.values().map(|f| f.file_name.clone()).collect();
-
+                    let file_checksums = files.keys().cloned().collect::<Vec<Sha1Checksum>>();
+                    self.file_importer.set_current_picked_file_content(files);
                     let repo = Arc::clone(&self.repositories);
 
                     return Task::perform(
                         async move {
                             repo.get_file_info_repository()
-                                .get_file_infos_by_sha1_checksums(files.keys().cloned().collect())
+                                .get_file_infos_by_sha1_checksums(file_checksums)
                                 .await
                         },
                         Message::ExistingFilesRead,
@@ -121,33 +211,14 @@ impl FileAddWidget {
             },
             Message::ExistingFilesRead(result) => match result {
                 Ok(existing_files) => {
-                    // TODO: these files user cannot toggle but they should be filtered out from
-                    // import_files_from_zip call
-                    self.existing_files.clear();
-                    for file in existing_files {
-                        let checksum = file
-                            .sha1_checksum
-                            .clone()
-                            .try_into()
-                            .expect("Invalid checksum length");
-                        self.existing_files.insert(checksum, file);
-                    }
+                    self.file_importer.set_existing_files(existing_files);
                 }
                 Err(err) => {
                     eprintln!("Error reading existing files: {}", err);
                 }
             },
             Message::FileSelectionToggled(file_name) => {
-                if self
-                    .selected_files_from_current_picked_file
-                    .contains(&file_name)
-                {
-                    self.selected_files_from_current_picked_file
-                        .retain(|f| f != &file_name);
-                } else {
-                    self.selected_files_from_current_picked_file
-                        .insert(file_name);
-                }
+                self.file_importer.toggle_file_selection(&file_name)
             }
             Message::FileNameUpdated(name) => {
                 self.file_name = name;
@@ -155,15 +226,16 @@ impl FileAddWidget {
             Message::CancelAddFile => {
                 self.file_name = "".to_string();
                 self.selected_file_type = None;
-                self.current_picked_file = None;
-                self.current_picked_file_content.clear();
-                self.selected_files_from_current_picked_file.clear();
+                self.file_importer.clear();
             }
             Message::Submit => {
-                if let Some(handle) = &self.current_picked_file {
+                if let Some(handle) = &self.file_importer.get_current_picked_file() {
                     let file_path = handle.path().to_path_buf().clone();
                     let collection_root_dir = self.collection_root_dir.clone();
-                    let file_filter = self.selected_files_from_current_picked_file.clone();
+                    let file_filter = self
+                        .file_importer
+                        .get_selected_files_from_current_picked_file()
+                        .clone();
                     return Task::perform(
                         async move {
                             file_import::import_files_from_zip(
@@ -184,22 +256,11 @@ impl FileAddWidget {
             Message::FilesImported(result) => match result {
                 Ok(files) => {
                     if let Some(file_type) = self.selected_file_type {
-                        self.imported_files = files;
+                        self.file_importer.set_imported_files(files);
                         let repo = Arc::clone(&self.repositories);
                         let file_name = self.file_name.clone();
-                        let filtered_picked_file_content = self
-                            .current_picked_file_content
-                            .values()
-                            .filter(|file| {
-                                self.selected_files_from_current_picked_file
-                                    .contains(&file.file_name)
-                            })
-                            .map(|file| ImportedFile {
-                                file_name: file.file_name.clone(),
-                                sha1_checksum: file.sha1_checksum,
-                                file_size: file.file_size,
-                            })
-                            .collect::<Vec<ImportedFile>>();
+                        let filtered_picked_file_content =
+                            self.file_importer.get_filtered_picked_file_content();
                         return Task::perform(
                             async move {
                                 repo.get_file_set_repository()
@@ -223,10 +284,7 @@ impl FileAddWidget {
                     println!("Files saved to database with id: {}", file_set_id);
                     self.file_name = "".to_string();
                     self.selected_file_type = None;
-                    self.current_picked_file = None;
-                    self.current_picked_file_content.clear();
-                    self.selected_files_from_current_picked_file.clear();
-                    self.imported_files.clear();
+                    self.file_importer.clear();
                 }
                 Err(err) => {
                     eprintln!("Error saving files to database: {}", err);
@@ -277,10 +335,12 @@ impl FileAddWidget {
 
     fn create_picked_file_contents(&self) -> Element<Message> {
         let mut rows: Vec<Element<Message>> = Vec::new();
-        for (_, import_file) in &self.current_picked_file_content {
-            let is_selected = self
-                .selected_files_from_current_picked_file
-                .contains(&import_file.file_name);
+        for import_file in self
+            .file_importer
+            .get_current_picked_file_content()
+            .values()
+        {
+            let is_selected = self.file_importer.is_file_selected(&import_file.file_name);
             let checkbox: checkbox::Checkbox<'_, Message> =
                 checkbox(&import_file.file_name, is_selected).on_toggle(move |_| {
                     Message::FileSelectionToggled(import_file.file_name.clone())
