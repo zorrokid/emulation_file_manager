@@ -4,11 +4,12 @@ use std::{
     fs::{self, File},
 };
 
+use core_types::Sha1Checksum;
 use file_export::{export_files, export_files_zipped};
 use tempfile::tempdir;
+use utils::test_utils::get_sha1_and_size;
 
 const TEST_FILE_CONTENT: &str = "Hello, world!";
-const TEST_FILE_CONTENT_SHA1: &str = "943a702d06f34599aee1f8da8ef9f7296031d699";
 const TEST_FILE_NAME: &str = "test_file";
 const TEST_OUTPUT_FILE_NAME: &str = "output_file";
 const TEST_INPUT_FOLDER: &str = "input";
@@ -85,16 +86,14 @@ fn create_sample_compressed_file(
     compressed_file_path
 }
 
-fn prepare_file_mappings() -> (HashMap<String, String>, HashMap<String, String>) {
+fn prepare_file_mappings() -> (HashMap<String, Sha1Checksum>, HashMap<String, String>) {
     let mut output_file_name_mapping = HashMap::new();
     output_file_name_mapping.insert(
         TEST_FILE_NAME.to_string(),
         TEST_OUTPUT_FILE_NAME.to_string(),
     );
+    let (checksum, _) = get_sha1_and_size(TEST_FILE_CONTENT);
     let mut filename_checksum_mapping = HashMap::new();
-    filename_checksum_mapping.insert(
-        TEST_FILE_NAME.to_string(),
-        TEST_FILE_CONTENT_SHA1.to_string(),
-    );
+    filename_checksum_mapping.insert(TEST_FILE_NAME.to_string(), checksum);
     (filename_checksum_mapping, output_file_name_mapping)
 }

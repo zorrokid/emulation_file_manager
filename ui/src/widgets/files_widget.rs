@@ -1,11 +1,15 @@
-use std::sync::Arc;
+use std::{cell::OnceCell, sync::Arc};
 
 use database::{database_error::Error as DatabaseError, repository_manager::RepositoryManager};
 use iced::{
     widget::{button, column, row, text, Column},
     Element, Task,
 };
-use service::{error::Error, view_model_service::ViewModelService, view_models::FileSetListModel};
+use service::{
+    error::Error,
+    view_model_service::ViewModelService,
+    view_models::{FileSetListModel, Settings},
+};
 
 use crate::defaults::DEFAULT_SPACING;
 
@@ -19,7 +23,7 @@ pub struct FilesWidget {
     view_model_service: Arc<ViewModelService>,
     files: Vec<FileSetListModel>,
     files_widget: FileSelectWidget,
-    add_file_widget: FileAddWidget,
+    add_file_widget: OnceCell<FileAddWidget>,
     selected_file_ids: Vec<i64>,
 }
 
@@ -30,6 +34,7 @@ pub enum Message {
     FileSelect(file_select_widget::Message),
     FileAdded(Result<i64, DatabaseError>),
     RemoveFile(i64),
+    SettingsFetched(Result<Settings, Error>),
 }
 
 impl FilesWidget {
@@ -43,16 +48,24 @@ impl FilesWidget {
             Message::FilesFetched,
         );
 
+        let view_model_service_clone = Arc::clone(&view_model_service);
+        let fetch_settings_task = Task::perform(
+            async move { view_model_service_clone.get_settings().await },
+            Message::SettingsFetched,
+        );
+
+        let combined_task = Task::batch(vec![fetch_files_task, fetch_settings_task]);
+
         (
             Self {
                 repositories,
                 view_model_service,
                 files: vec![],
                 files_widget: FileSelectWidget::new(),
-                add_file_widget: FileAddWidget::new(),
+                add_file_widget: OnceCell::new(), // FileAddWidget::new(),
                 selected_file_ids: vec![],
             },
-            fetch_files_task,
+            combined_task,
         )
     }
 
@@ -70,9 +83,33 @@ impl FilesWidget {
                     Task::none()
                 }
             },
+            Message::SettingsFetched(result) => match result {
+                Ok(settings) => {
+                    let collection_root_dir = settings.collection_root_dir.clone();
+                    let repositories = Arc::clone(&self.repositories);
+                    self.add_file_widget
+                        .set(FileAddWidget::new(collection_root_dir, repositories))
+                        .unwrap_or_else(|_| {
+                            panic!("Failed to set add file widget, already set?");
+                        });
+                    Task::none()
+                }
+
+                Err(error) => {
+                    eprint!("Error when fetching settings: {}", error);
+                    Task::none()
+                }
+            },
             Message::AddFile(message) => {
-                // TODO
-                self.add_file_widget.update(message).map(Message::AddFile)
+                if let file_add_widget::Message::FileSetAdded(list_model) = &message {
+                    self.selected_file_ids.push(list_model.id);
+                    self.files.push(list_model.clone());
+                }
+                self.add_file_widget
+                    .get_mut()
+                    .expect("Add file widget not initialized")
+                    .update(message)
+                    .map(Message::AddFile)
             }
             Message::FileSelect(message) => {
                 if let file_select_widget::Message::FileSelected(file) = &message {
@@ -102,7 +139,12 @@ impl FilesWidget {
     }
 
     pub fn view(&self) -> iced::Element<Message> {
-        let add_file_view = self.add_file_widget.view().map(Message::AddFile);
+        let add_file_view = self
+            .add_file_widget
+            .get()
+            .expect("AddFileWidget not initialized")
+            .view()
+            .map(Message::AddFile);
         let files_view = self.files_widget.view().map(Message::FileSelect);
         let selected_files_list = self.create_selected_files_list();
         column![add_file_view, files_view, selected_files_list].into()
@@ -117,7 +159,8 @@ impl FilesWidget {
                     .files
                     .iter()
                     .find(|file| file.id == *id)
-                    .unwrap_or_else(|| panic!("File with id {} not found", id));
+                    .unwrap_or_else(|| panic!("File with id {} not found", id)); // <== TODO:
+                                                                                 // handle error
                 let remove_button = button("Remove").on_press(Message::RemoveFile(*id));
                 row![
                     text!("{}", file.file_set_name.clone()).width(200.0),

@@ -13,5 +13,7 @@ pub fn get_database_url() -> String {
 }
 
 pub fn get_database_file_path() -> PathBuf {
-    get_database_path()
+    let db_path = get_database_path();
+    println!("Database path: {}", db_path.display());
+    db_path
 }

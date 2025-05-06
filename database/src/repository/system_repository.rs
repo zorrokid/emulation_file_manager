@@ -1,9 +1,6 @@
 use std::sync::Arc;
 
-use crate::{
-    database_error::{DatabaseError, Error},
-    models::System,
-};
+use crate::{database_error::Error, models::System};
 use sqlx::{Pool, Sqlite};
 
 #[derive(Debug)]

@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
+use core_types::ImportedFile;
 use sqlx::{sqlite::SqliteRow, FromRow, Pool, Row, Sqlite};
 
 use crate::{
-    database_error::DatabaseError,
-    models::{FileSet, FileType, PickedFileInfo},
+    database_error::{DatabaseError, Error},
+    models::{FileSet, FileType},
 };
 
 #[derive(Debug)]
@@ -30,7 +31,7 @@ impl FromRow<'_, SqliteRow> for FileSet {
 }
 
 impl FileSetRepository {
-    async fn get_file_sets_for_release(
+    pub async fn get_file_sets_for_release(
         &self,
         release_id: i64,
     ) -> Result<Vec<FileSet>, DatabaseError> {
@@ -47,7 +48,7 @@ impl FileSetRepository {
         Ok(file_sets)
     }
 
-    async fn is_file_set_in_release(&self, file_set_id: i64) -> Result<bool, DatabaseError> {
+    pub async fn is_file_set_in_release(&self, file_set_id: i64) -> Result<bool, DatabaseError> {
         let count = sqlx::query_scalar!(
             "SELECT COUNT(*) 
              FROM release_file_set
@@ -89,11 +90,11 @@ impl FileSetRepository {
 
     pub async fn add_file_set(
         &self,
-        file_name: &str,
-        file_type: &FileType,
-        files: &Vec<PickedFileInfo>,
-    ) -> Result<i64, DatabaseError> {
-        let file_type = *file_type as i64;
+        file_name: String,
+        file_type: FileType,
+        files: Vec<ImportedFile>,
+    ) -> Result<i64, Error> {
+        let file_type = file_type as i64;
 
         let mut transaction = self.pool.begin().await?;
 
@@ -110,11 +111,12 @@ impl FileSetRepository {
         let collection_file_id = result.last_insert_rowid();
 
         for file in files {
+            let checksum = file.sha1_checksum.to_vec();
             let existing_file_info = sqlx::query_scalar!(
                 "SELECT id 
                  FROM file_info 
                  WHERE sha1_checksum = ?",
-                file.sha1_checksum
+                checksum
             )
             .fetch_optional(&mut *transaction)
             .await?;
@@ -122,10 +124,11 @@ impl FileSetRepository {
             let file_info_id = match existing_file_info {
                 Some(id) => id,
                 None => {
+                    let file_size = file.file_size as i64;
                     let file_info_result = sqlx::query!(
                         "INSERT INTO file_info (sha1_checksum, file_size) VALUES (?, ?)",
-                        file.sha1_checksum,
-                        file.file_size
+                        checksum,
+                        file_size
                     )
                     .execute(&mut *transaction)
                     .await?;
@@ -150,7 +153,7 @@ impl FileSetRepository {
         Ok(collection_file_id)
     }
 
-    async fn delete_file_set(&self, id: i64) -> Result<i64, DatabaseError> {
+    pub async fn delete_file_set(&self, id: i64) -> Result<i64, DatabaseError> {
         let is_in_use = sqlx::query_scalar!(
             "SELECT COUNT(*) 
              FROM release_file_set
@@ -275,20 +278,22 @@ mod tests {
         let pool = Arc::new(setup_test_db().await);
         let file_name = "test file".to_string();
         let file_type = FileType::Rom;
+        let checksum_1: [u8; 20] = [0; 20];
+        let checksum_2: [u8; 20] = [1; 20];
         let files = vec![
-            PickedFileInfo {
-                sha1_checksum: "test".to_string(),
+            ImportedFile {
+                sha1_checksum: checksum_1,
                 file_size: 123,
                 file_name: "test".to_string(),
             },
-            PickedFileInfo {
-                sha1_checksum: "test2".to_string(),
+            ImportedFile {
+                sha1_checksum: checksum_2,
                 file_size: 123,
                 file_name: "test2".to_string(),
             },
         ];
         let file_set_id = FileSetRepository { pool: pool.clone() }
-            .add_file_set(&file_name, &file_type, &files)
+            .add_file_set(file_name, file_type, files)
             .await
             .unwrap();
 
@@ -313,19 +318,22 @@ mod tests {
 
         let file_type = FileType::Rom;
 
+        let checksum_1: [u8; 20] = [0; 20];
+        let checksum_2: [u8; 20] = [1; 20];
+        let checksum_3: [u8; 20] = [2; 20];
         let all_files = [
-            PickedFileInfo {
-                sha1_checksum: "test".to_string(),
+            ImportedFile {
+                sha1_checksum: checksum_1,
                 file_size: 123,
                 file_name: "file 1".to_string(),
             },
-            PickedFileInfo {
-                sha1_checksum: "test2".to_string(),
+            ImportedFile {
+                sha1_checksum: checksum_2,
                 file_size: 123,
                 file_name: "file 2".to_string(),
             },
-            PickedFileInfo {
-                sha1_checksum: "test3".to_string(),
+            ImportedFile {
+                sha1_checksum: checksum_3,
                 file_size: 123,
                 file_name: "file 3".to_string(),
             },
@@ -337,23 +345,26 @@ mod tests {
         let repo = FileSetRepository { pool: pool.clone() };
 
         let _file_set_1_id = repo
-            .add_file_set(&file_set_1_name, &file_type, &file_set_1_files)
+            .add_file_set(file_set_1_name, file_type, file_set_1_files)
             .await
             .unwrap();
 
         let _file_set_2_id = repo
-            .add_file_set(&file_set_2_name, &file_type, &file_set_2_files)
+            .add_file_set(file_set_2_name, file_type, file_set_2_files)
             .await
             .unwrap();
 
         // In this case, expected behaviour is the file 2 is only added once
         // and file set 1 and file set 2 are linked to the same file info
+        //
+
+        let checksum_2_as_vec = checksum_2.to_vec();
 
         let file_2_instances = query_scalar!(
             "SELECT COUNT(*) 
              FROM file_info 
              WHERE sha1_checksum = ?",
-            all_files[1].sha1_checksum
+            checksum_2_as_vec
         )
         .fetch_one(&*pool)
         .await

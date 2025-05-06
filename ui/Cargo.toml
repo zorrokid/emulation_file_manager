@@ -8,5 +8,6 @@ iced = { version = "0.13.1", features = ["image"] }
 database = { path = "../database" }
 service = { path = "../service" }
 file_import = { path = "../file_import" }
+core_types = { path = "../core_types" }
 rfd = "0.15.3"
 

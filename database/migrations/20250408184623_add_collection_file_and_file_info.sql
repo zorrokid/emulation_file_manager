@@ -55,7 +55,7 @@ CREATE TABLE release_software_title (
  
 CREATE TABLE file_info (
     id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-    sha1_checksum TEXT NOT NULL,
+    sha1_checksum BLOB NOT NULL,
     file_size INTEGER NOT NULL
 );
 
