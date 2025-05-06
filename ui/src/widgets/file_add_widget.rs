@@ -17,6 +17,7 @@ use iced::{
     Element, Task,
 };
 use rfd::FileHandle;
+use service::view_models::FileSetListModel;
 
 use crate::defaults::{DEFAULT_PADDING, DEFAULT_SPACING};
 
@@ -141,6 +142,7 @@ pub enum Message {
     FilesImported(Result<HashMap<Sha1Checksum, ImportedFile>, FileImportError>),
     FilesSavedToDatabase(Result<i64, Error>),
     ExistingFilesRead(Result<Vec<FileInfo>, Error>),
+    FileSetAdded(FileSetListModel),
 }
 
 impl FileAddWidget {
@@ -177,7 +179,6 @@ impl FileAddWidget {
             }
             Message::FilePicked(file_handle) => {
                 if let Some(handle) = file_handle {
-                    println!("File selected: {:?}", handle.file_name());
                     self.file_name = handle.file_name();
                     let file_path = handle.path().to_path_buf();
                     self.file_importer.set_current_picked_file(handle.clone());
@@ -281,16 +282,26 @@ impl FileAddWidget {
             },
             Message::FilesSavedToDatabase(result) => match result {
                 Ok(file_set_id) => {
-                    println!("Files saved to database with id: {}", file_set_id);
-                    self.file_name = "".to_string();
-                    self.selected_file_type = None;
-                    self.file_importer.clear();
+                    if let Some(file_type) = self.selected_file_type {
+                        self.file_importer.set_imported_files(HashMap::new());
+                        self.file_importer.clear();
+                        let list_model = FileSetListModel {
+                            id: file_set_id,
+                            file_set_name: self.file_name.clone(),
+                            file_type,
+                        };
+                        self.file_name = "".to_string();
+                        self.selected_file_type = None;
+                        self.file_importer.clear();
+                        return Task::done(Message::FileSetAdded(list_model));
+                    }
                 }
                 Err(err) => {
                     eprintln!("Error saving files to database: {}", err);
                     // TODO: delete imported files and show error message
                 }
             },
+            _ => (),
         }
         Task::none()
     }

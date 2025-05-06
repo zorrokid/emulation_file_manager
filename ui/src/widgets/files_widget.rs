@@ -88,7 +88,10 @@ impl FilesWidget {
                     let collection_root_dir = settings.collection_root_dir.clone();
                     let repositories = Arc::clone(&self.repositories);
                     self.add_file_widget
-                        .set(FileAddWidget::new(collection_root_dir, repositories));
+                        .set(FileAddWidget::new(collection_root_dir, repositories))
+                        .unwrap_or_else(|_| {
+                            panic!("Failed to set add file widget, already set?");
+                        });
                     Task::none()
                 }
 
@@ -98,11 +101,15 @@ impl FilesWidget {
                 }
             },
             Message::AddFile(message) => {
-                let add_file_widget = self
-                    .add_file_widget
+                if let file_add_widget::Message::FileSetAdded(list_model) = &message {
+                    self.selected_file_ids.push(list_model.id);
+                    self.files.push(list_model.clone());
+                }
+                self.add_file_widget
                     .get_mut()
-                    .expect("Add file widget not initialized");
-                add_file_widget.update(message).map(Message::AddFile)
+                    .expect("Add file widget not initialized")
+                    .update(message)
+                    .map(Message::AddFile)
             }
             Message::FileSelect(message) => {
                 if let file_select_widget::Message::FileSelected(file) = &message {
@@ -152,7 +159,8 @@ impl FilesWidget {
                     .files
                     .iter()
                     .find(|file| file.id == *id)
-                    .unwrap_or_else(|| panic!("File with id {} not found", id));
+                    .unwrap_or_else(|| panic!("File with id {} not found", id)); // <== TODO:
+                                                                                 // handle error
                 let remove_button = button("Remove").on_press(Message::RemoveFile(*id));
                 row![
                     text!("{}", file.file_set_name.clone()).width(200.0),

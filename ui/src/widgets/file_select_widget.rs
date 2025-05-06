@@ -28,13 +28,14 @@ impl FileSelectWidget {
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::FileSelected(file) => Task::done(Message::FileSelected(file.clone())),
+            //Message::FileSelected(file) => Task::done(Message::FileSelected(file.clone())),
             Message::SetFiles(files) => {
                 self.files = files;
                 self.selected_file = None;
-                Task::none()
             }
+            _ => (),
         }
+        Task::none()
     }
 
     pub fn view(&self) -> iced::Element<Message> {
