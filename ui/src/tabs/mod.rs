@@ -1,4 +1,5 @@
 pub mod add_release_tab;
+pub mod emulators_tab;
 mod home_tab;
 mod settings_tab;
 pub mod tabs_controller;

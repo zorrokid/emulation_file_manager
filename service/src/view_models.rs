@@ -21,6 +21,18 @@ pub struct EmulatorSystemViewModel {
     pub arguments: String,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct EmulatorListModel {
+    pub id: i64,
+    pub name: String,
+}
+
+impl Display for EmulatorListModel {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Settings {
     pub collection_root_dir: PathBuf,

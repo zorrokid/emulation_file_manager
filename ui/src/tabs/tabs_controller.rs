@@ -4,13 +4,14 @@ use database::repository_manager::RepositoryManager;
 use iced::Task;
 use service::view_model_service::ViewModelService;
 
-use super::{add_release_tab, home_tab, settings_tab};
+use super::{add_release_tab, emulators_tab, home_tab, settings_tab};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Tab {
     Home,
     Settings,
     AddRelease,
+    Emulators,
 }
 
 #[derive(Debug, Clone)]
@@ -18,6 +19,7 @@ pub enum Message {
     Home(home_tab::Message),
     Settings(settings_tab::Message),
     AddRelease(add_release_tab::Message),
+    Emulators(emulators_tab::Message),
 }
 
 pub struct TabsController {
@@ -25,6 +27,7 @@ pub struct TabsController {
     home_tab: home_tab::HomeTab,
     settings_tab: settings_tab::SettingsTab,
     add_release_tab: add_release_tab::AddReleaseTab,
+    emulators_tab: emulators_tab::EmulatorsTab,
 }
 
 impl TabsController {
@@ -35,8 +38,11 @@ impl TabsController {
     ) -> (Self, Task<Message>) {
         let settings_tab = settings_tab::SettingsTab::new();
         let home_tab = home_tab::HomeTab::new();
-        let (add_release_tab, task) =
-            add_release_tab::AddReleaseTab::new(repositories, view_model_service);
+        let (add_release_tab, task) = add_release_tab::AddReleaseTab::new(
+            Arc::clone(&repositories),
+            Arc::clone(&view_model_service),
+        );
+        let emulators_tab = emulators_tab::EmulatorsTab::new(repositories, view_model_service);
 
         (
             Self {
@@ -44,6 +50,7 @@ impl TabsController {
                 settings_tab,
                 current_tab: selected_tab.unwrap_or(Tab::Home),
                 add_release_tab,
+                emulators_tab,
             },
             task.map(Message::AddRelease),
         )
@@ -57,6 +64,9 @@ impl TabsController {
                 .add_release_tab
                 .update(message)
                 .map(Message::AddRelease),
+            Message::Emulators(message) => {
+                self.emulators_tab.update(message).map(Message::Emulators)
+            }
         }
     }
 
@@ -65,6 +75,7 @@ impl TabsController {
             Tab::Home => self.home_tab.view().map(Message::Home),
             Tab::Settings => self.settings_tab.view().map(Message::Settings),
             Tab::AddRelease => self.add_release_tab.view().map(Message::AddRelease),
+            Tab::Emulators => self.emulators_tab.view().map(Message::Emulators),
         }
     }
 
