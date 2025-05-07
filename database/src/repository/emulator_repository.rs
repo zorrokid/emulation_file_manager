@@ -3,7 +3,7 @@ use std::sync::Arc;
 use sqlx::{Pool, Sqlite};
 
 use crate::{
-    database_error::DatabaseError,
+    database_error::{DatabaseError, Error},
     models::{Emulator, EmulatorSystem},
 };
 
@@ -60,7 +60,7 @@ impl EmulatorRepository {
         name: String,
         executable: String,
         extract_files: bool,
-    ) -> Result<i64, DatabaseError> {
+    ) -> Result<i64, Error> {
         let result = sqlx::query!(
             "INSERT INTO emulator (
                 name, 

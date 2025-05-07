@@ -22,10 +22,11 @@ impl EmulatorsTab {
         repositories: Arc<RepositoryManager>,
         view_model_service: Arc<ViewModelService>,
     ) -> Self {
+        let emulators_widget = EmulatorsWidget::new(Arc::clone(&repositories));
         Self {
             repositories,
             view_model_service,
-            emulators_widget: EmulatorsWidget::new(),
+            emulators_widget,
         }
     }
 

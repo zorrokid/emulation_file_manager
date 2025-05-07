@@ -1,7 +1,11 @@
+use std::sync::Arc;
+
+use database::{database_error::Error, repository_manager::RepositoryManager};
 use iced::{
     widget::{checkbox, text_input},
     Element, Task,
 };
+use service::view_models::EmulatorListModel;
 
 use crate::defaults::{DEFAULT_PADDING, DEFAULT_SPACING};
 
@@ -9,6 +13,7 @@ pub struct EmulatorAddWidget {
     emulator_name: String,
     emulator_executable: String,
     emulator_extract_files: bool,
+    repositories: Arc<RepositoryManager>,
 }
 
 #[derive(Debug, Clone)]
@@ -17,14 +22,17 @@ pub enum Message {
     EmulatorExecutableChanged(String),
     EmulatorExtractFilesChanged(bool),
     Submit,
+    EmulatorSaved(Result<i64, Error>),
+    EmulatorAdded(EmulatorListModel),
 }
 
 impl EmulatorAddWidget {
-    pub fn new() -> Self {
+    pub fn new(repositories: Arc<RepositoryManager>) -> Self {
         Self {
             emulator_name: String::new(),
             emulator_executable: String::new(),
             emulator_extract_files: false,
+            repositories,
         }
     }
 
@@ -36,8 +44,39 @@ impl EmulatorAddWidget {
                 self.emulator_extract_files = extract_files
             }
             Message::Submit => {
-                // Handle submission logic here
+                println!("Submitting emulator data...");
+                let repositories = Arc::clone(&self.repositories);
+                let emulator_name = self.emulator_name.clone();
+                let emulator_executable = self.emulator_executable.clone();
+                let emulator_extract_files = self.emulator_extract_files;
+                return Task::perform(
+                    async move {
+                        repositories
+                            .get_emulator_repository()
+                            .add_emulator(
+                                emulator_name,
+                                emulator_executable,
+                                emulator_extract_files,
+                            )
+                            .await
+                    },
+                    Message::EmulatorSaved,
+                );
             }
+            Message::EmulatorSaved(result) => match result {
+                Ok(id) => {
+                    println!("Emulator saved successfully with id: {:?}", id);
+                    let emulator = EmulatorListModel {
+                        id,
+                        name: self.emulator_name.clone(),
+                    };
+                    return Task::done(Message::EmulatorAdded(emulator));
+                }
+                Err(error) => {
+                    eprintln!("Error saving emulator: {:?}", error);
+                }
+            },
+            _ => {}
         }
         Task::none()
     }
