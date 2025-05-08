@@ -5,7 +5,7 @@ use iced::widget::{column, row, text, Column};
 use iced::Task;
 use service::error::Error;
 use service::view_model_service::ViewModelService;
-use service::view_models::EmulatorListModel;
+use service::view_models::{EmulatorListModel, EmulatorViewModel};
 
 use crate::defaults::{DEFAULT_PADDING, DEFAULT_SPACING};
 
@@ -16,7 +16,7 @@ use super::{
 
 pub struct EmulatorsWidget {
     emulators: Vec<EmulatorListModel>,
-    selected_emulator: Option<i64>,
+    selected_emulator: Option<EmulatorViewModel>,
     emulator_add_widget: EmulatorAddWidget,
     emulator_select_widget: EmulatorSelectWidget,
     view_model_service: Arc<ViewModelService>,
@@ -27,7 +27,7 @@ pub enum Message {
     EmulatorsFetched(Result<Vec<EmulatorListModel>, Error>),
     EmulatorAdd(emulator_add_widget::Message),
     EmulatorSelect(emulator_select_widget::Message),
-    EmulatorSelected(i64),
+    SelectedEmulatorLoaded(Result<EmulatorViewModel, Error>),
 }
 
 impl EmulatorsWidget {
@@ -73,9 +73,17 @@ impl EmulatorsWidget {
                     msg.clone()
                 {
                     println!("Emulator added: {:?}", emulator_list_model);
-                    self.selected_emulator = Some(emulator_list_model.id);
+                    let view_model_service = Arc::clone(&self.view_model_service);
+                    let fetch_emulator_task = Task::perform(
+                        async move {
+                            view_model_service
+                                .get_emulator_view_model(emulator_list_model.id)
+                                .await
+                        },
+                        Message::SelectedEmulatorLoaded,
+                    );
                     self.emulators.push(emulator_list_model);
-                    return Task::none();
+                    return fetch_emulator_task;
                 }
                 println!("Updating emulator add widget with message: {:?}", msg);
                 return self
@@ -84,14 +92,30 @@ impl EmulatorsWidget {
                     .map(Message::EmulatorAdd);
             }
             Message::EmulatorSelect(msg) => {
-                return self
+                let update_task = self
                     .emulator_select_widget
-                    .update(msg)
+                    .update(msg.clone())
                     .map(Message::EmulatorSelect);
+                if let emulator_select_widget::Message::EmulatorSelected(emulator_list_model) = &msg
+                {
+                    let view_model_service = Arc::clone(&self.view_model_service);
+                    let id = emulator_list_model.id;
+                    let fetch_emulator_task = Task::perform(
+                        async move { view_model_service.get_emulator_view_model(id).await },
+                        Message::SelectedEmulatorLoaded,
+                    );
+                    return Task::batch(vec![fetch_emulator_task, update_task]);
+                }
+                return update_task;
             }
-            Message::EmulatorSelected(id) => {
-                self.selected_emulator = Some(id);
-            }
+            Message::SelectedEmulatorLoaded(result) => match result {
+                Ok(emulator) => {
+                    self.selected_emulator = Some(emulator);
+                }
+                Err(error) => {
+                    eprintln!("Error loading selected emulator: {:?}", error);
+                }
+            },
         }
         Task::none()
     }
@@ -102,22 +126,22 @@ impl EmulatorsWidget {
             .emulator_select_widget
             .view()
             .map(Message::EmulatorSelect);
-        let emulators_list = self
-            .emulators
-            .iter()
-            .map(|emulator| {
-                let emulator_name = emulator.name.clone();
-                row![text!("{}", emulator_name)]
-                    .spacing(DEFAULT_SPACING)
-                    .padding(DEFAULT_PADDING)
-                    .into()
-            })
-            .collect::<Vec<iced::Element<Message>>>();
         column![
+            self.create_selected_emulator_view(),
             emulator_add_view,
             emulator_select_view,
-            Column::with_children(emulators_list)
         ]
         .into()
+    }
+
+    pub fn create_selected_emulator_view(&self) -> iced::Element<Message> {
+        let row_content = match &self.selected_emulator {
+            Some(emulator) => text!("{}", emulator.name.clone()),
+            None => text("No emulator selected"),
+        };
+        row![row_content]
+            .spacing(DEFAULT_SPACING)
+            .padding(DEFAULT_PADDING)
+            .into()
     }
 }

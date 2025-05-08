@@ -7,6 +7,7 @@ use std::{
 use database::models::{Emulator, FileSet, FileType, SettingName, SoftwareTitle, System};
 use file_system::get_files_root_dir;
 
+#[derive(Debug, Clone)]
 pub struct EmulatorViewModel {
     pub id: i64,
     pub name: String,
@@ -15,6 +16,7 @@ pub struct EmulatorViewModel {
     pub systems: Vec<EmulatorSystemViewModel>,
 }
 
+#[derive(Debug, Clone)]
 pub struct EmulatorSystemViewModel {
     pub system_id: i64,
     pub system_name: String,

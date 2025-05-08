@@ -22,7 +22,7 @@ impl ViewModelService {
     pub async fn get_emulator_view_model(
         &self,
         emulator_id: i64,
-    ) -> Result<EmulatorViewModel, DatabaseError> {
+    ) -> Result<EmulatorViewModel, Error> {
         let (emulator, emulator_systems) = self
             .repository_manager
             .get_emulator_repository()
