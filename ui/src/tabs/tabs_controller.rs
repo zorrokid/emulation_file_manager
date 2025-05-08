@@ -42,7 +42,13 @@ impl TabsController {
             Arc::clone(&repositories),
             Arc::clone(&view_model_service),
         );
-        let emulators_tab = emulators_tab::EmulatorsTab::new(repositories, view_model_service);
+        let (emulators_tab, emulators_task) =
+            emulators_tab::EmulatorsTab::new(repositories, view_model_service);
+
+        let combined_task = Task::batch(vec![
+            task.map(Message::AddRelease),
+            emulators_task.map(Message::Emulators),
+        ]);
 
         (
             Self {
@@ -52,7 +58,7 @@ impl TabsController {
                 add_release_tab,
                 emulators_tab,
             },
-            task.map(Message::AddRelease),
+            combined_task,
         )
     }
 

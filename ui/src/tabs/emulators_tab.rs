@@ -21,13 +21,17 @@ impl EmulatorsTab {
     pub fn new(
         repositories: Arc<RepositoryManager>,
         view_model_service: Arc<ViewModelService>,
-    ) -> Self {
-        let emulators_widget = EmulatorsWidget::new(Arc::clone(&repositories));
-        Self {
-            repositories,
-            view_model_service,
-            emulators_widget,
-        }
+    ) -> (Self, Task<Message>) {
+        let (emulators_widget, task) =
+            EmulatorsWidget::new(Arc::clone(&repositories), Arc::clone(&view_model_service));
+        (
+            Self {
+                repositories,
+                view_model_service,
+                emulators_widget,
+            },
+            task.map(Message::Emulators),
+        )
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {

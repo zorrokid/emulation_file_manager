@@ -1,8 +1,10 @@
 use std::sync::Arc;
 
-use database::{database_error::Error, repository_manager::RepositoryManager};
+use database::repository_manager::RepositoryManager;
 use iced::widget::{column, row, text, Column};
 use iced::Task;
+use service::error::Error;
+use service::view_model_service::ViewModelService;
 use service::view_models::EmulatorListModel;
 
 use crate::defaults::{DEFAULT_PADDING, DEFAULT_SPACING};
@@ -17,6 +19,7 @@ pub struct EmulatorsWidget {
     selected_emulator: Option<i64>,
     emulator_add_widget: EmulatorAddWidget,
     emulator_select_widget: EmulatorSelectWidget,
+    view_model_service: Arc<ViewModelService>,
 }
 
 #[derive(Debug, Clone)]
@@ -28,13 +31,25 @@ pub enum Message {
 }
 
 impl EmulatorsWidget {
-    pub fn new(repositories: Arc<RepositoryManager>) -> Self {
-        Self {
-            emulators: vec![],
-            selected_emulator: None,
-            emulator_add_widget: EmulatorAddWidget::new(repositories),
-            emulator_select_widget: EmulatorSelectWidget::new(),
-        }
+    pub fn new(
+        repositories: Arc<RepositoryManager>,
+        view_model_service: Arc<ViewModelService>,
+    ) -> (Self, Task<Message>) {
+        let view_model_service_clone = Arc::clone(&view_model_service);
+        let fech_emulators_task = Task::perform(
+            async move { view_model_service_clone.get_emulator_list_models().await },
+            Message::EmulatorsFetched,
+        );
+        (
+            Self {
+                emulators: vec![],
+                selected_emulator: None,
+                emulator_add_widget: EmulatorAddWidget::new(repositories),
+                emulator_select_widget: EmulatorSelectWidget::new(),
+                view_model_service,
+            },
+            fech_emulators_task,
+        )
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {

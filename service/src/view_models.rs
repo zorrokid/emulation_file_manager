@@ -4,7 +4,7 @@ use std::{
     path::PathBuf,
 };
 
-use database::models::{FileSet, FileType, SettingName, SoftwareTitle, System};
+use database::models::{Emulator, FileSet, FileType, SettingName, SoftwareTitle, System};
 use file_system::get_files_root_dir;
 
 pub struct EmulatorViewModel {
@@ -25,6 +25,15 @@ pub struct EmulatorSystemViewModel {
 pub struct EmulatorListModel {
     pub id: i64,
     pub name: String,
+}
+
+impl From<&Emulator> for EmulatorListModel {
+    fn from(emulator: &Emulator) -> Self {
+        EmulatorListModel {
+            id: emulator.id,
+            name: emulator.name.clone(),
+        }
+    }
 }
 
 impl Display for EmulatorListModel {
