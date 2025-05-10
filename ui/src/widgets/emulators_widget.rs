@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use database::repository_manager::RepositoryManager;
-use iced::widget::{column, row, text, Column};
+use iced::widget::{column, row, text};
 use iced::Task;
 use service::error::Error;
 use service::view_model_service::ViewModelService;
@@ -40,15 +40,22 @@ impl EmulatorsWidget {
             async move { view_model_service_clone.get_emulator_list_models().await },
             Message::EmulatorsFetched,
         );
+        let (emulator_add_widget, emulators_task) =
+            EmulatorAddWidget::new(Arc::clone(&repositories), Arc::clone(&view_model_service));
+
+        let combined_task = Task::batch(vec![
+            fech_emulators_task,
+            emulators_task.map(Message::EmulatorAdd),
+        ]);
         (
             Self {
                 emulators: vec![],
                 selected_emulator: None,
-                emulator_add_widget: EmulatorAddWidget::new(repositories),
+                emulator_add_widget,
                 emulator_select_widget: EmulatorSelectWidget::new(),
                 view_model_service,
             },
-            fech_emulators_task,
+            combined_task,
         )
     }
 
@@ -57,6 +64,9 @@ impl EmulatorsWidget {
             Message::EmulatorsFetched(result) => match result {
                 Ok(emulators) => {
                     self.emulators = emulators;
+                    println!("Emulators fetched: {:?}", self.emulators);
+                    // TODO: would it be possible to handle the EmulatosFetched message in the
+                    // emulator_select_widget?
                     return self
                         .emulator_select_widget
                         .update(emulator_select_widget::Message::SetEmulators(

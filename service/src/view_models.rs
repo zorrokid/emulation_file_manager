@@ -45,6 +45,12 @@ impl Display for EmulatorListModel {
 }
 
 #[derive(Debug, Clone)]
+pub struct EmulatorSystemListModel {
+    pub id: i64,
+    pub system_name: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct Settings {
     pub collection_root_dir: PathBuf,
 }

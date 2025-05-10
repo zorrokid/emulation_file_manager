@@ -85,10 +85,8 @@ impl SystemsWidget {
             Message::SystemSelect(message) => {
                 if let system_select_widget::Message::SystemSelected(system) = message {
                     self.selected_system_ids.push(system.id);
-                    Task::none()
-                } else {
-                    Task::none()
                 }
+                Task::none()
             }
             Message::SystemAdded(result) => match result {
                 Ok(_) => {
