@@ -109,6 +109,7 @@ pub struct Emulator {
 
 #[derive(Debug, Clone, PartialEq, FromRow)]
 pub struct EmulatorSystem {
+    pub id: i64,
     pub system_id: i64,
     pub system_name: String,
     pub arguments: String,

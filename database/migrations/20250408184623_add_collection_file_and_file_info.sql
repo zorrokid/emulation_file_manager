@@ -11,10 +11,10 @@ CREATE TABLE emulator (
 );
 
 CREATE TABLE emulator_system (
+    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
     emulator_id INTEGER NOT NULL,
     system_id INTEGER NOT NULL,
     arguments TEXT,
-    PRIMARY KEY (emulator_id, system_id),
     FOREIGN key (emulator_id) REFERENCES emulator(id),
     FOREIGN KEY (system_id) REFERENCES system(id)
 );

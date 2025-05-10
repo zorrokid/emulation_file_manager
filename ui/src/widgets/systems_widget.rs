@@ -18,8 +18,8 @@ pub struct SystemsWidget {
     repositories: Arc<RepositoryManager>,
     view_model_service: Arc<ViewModelService>,
     systems: Vec<SystemListModel>,
-    systems_widget: SystemSelectWidget,
-    add_system_widget: SystemAddWidget,
+    system_select_widget: SystemSelectWidget,
+    system_add_widget: SystemAddWidget,
     selected_system_ids: Vec<i64>,
 }
 
@@ -48,8 +48,8 @@ impl SystemsWidget {
                 repositories,
                 view_model_service,
                 systems: vec![],
-                systems_widget: SystemSelectWidget::new(),
-                add_system_widget: SystemAddWidget::new(),
+                system_select_widget: SystemSelectWidget::new(),
+                system_add_widget: SystemAddWidget::new(),
                 selected_system_ids: vec![],
             },
             fetch_systems_task,
@@ -61,7 +61,7 @@ impl SystemsWidget {
             Message::SystemsFetched(result) => match result {
                 Ok(systems) => {
                     self.systems = systems;
-                    self.systems_widget
+                    self.system_select_widget
                         .update(system_select_widget::Message::SetSystems(
                             self.systems.clone(),
                         ))
@@ -72,7 +72,7 @@ impl SystemsWidget {
                     Task::none()
                 }
             },
-            Message::AddSystem(message) => match self.add_system_widget.update(message) {
+            Message::AddSystem(message) => match self.system_add_widget.update(message) {
                 system_add_widget::Action::AddSystem(name) => {
                     let repo = Arc::clone(&self.repositories);
                     Task::perform(
@@ -85,10 +85,8 @@ impl SystemsWidget {
             Message::SystemSelect(message) => {
                 if let system_select_widget::Message::SystemSelected(system) = message {
                     self.selected_system_ids.push(system.id);
-                    Task::none()
-                } else {
-                    Task::none()
                 }
+                Task::none()
             }
             Message::SystemAdded(result) => match result {
                 Ok(_) => {
@@ -112,8 +110,8 @@ impl SystemsWidget {
     }
 
     pub fn view(&self) -> iced::Element<Message> {
-        let add_system_view = self.add_system_widget.view().map(Message::AddSystem);
-        let systems_view = self.systems_widget.view().map(Message::SystemSelect);
+        let add_system_view = self.system_add_widget.view().map(Message::AddSystem);
+        let systems_view = self.system_select_widget.view().map(Message::SystemSelect);
         let selected_systems_list = self.create_selected_systems_list();
         column![add_system_view, systems_view, selected_systems_list].into()
     }

@@ -5,7 +5,7 @@ use database::{database_error::DatabaseError, repository_manager::RepositoryMana
 use crate::{
     error::Error,
     view_models::{
-        EmulatorSystemViewModel, EmulatorViewModel, FileSetListModel, Settings,
+        EmulatorListModel, EmulatorSystemViewModel, EmulatorViewModel, FileSetListModel, Settings,
         SoftwareTitleListModel, SystemListModel,
     },
 };
@@ -22,7 +22,7 @@ impl ViewModelService {
     pub async fn get_emulator_view_model(
         &self,
         emulator_id: i64,
-    ) -> Result<EmulatorViewModel, DatabaseError> {
+    ) -> Result<EmulatorViewModel, Error> {
         let (emulator, emulator_systems) = self
             .repository_manager
             .get_emulator_repository()
@@ -43,6 +43,20 @@ impl ViewModelService {
                 })
                 .collect(),
         })
+    }
+
+    pub async fn get_emulator_list_models(&self) -> Result<Vec<EmulatorListModel>, Error> {
+        let emulators = self
+            .repository_manager
+            .get_emulator_repository()
+            .get_emulators()
+            .await
+            .map_err(|err| Error::DbError(err.to_string()))?;
+
+        let list_models: Vec<EmulatorListModel> =
+            emulators.iter().map(EmulatorListModel::from).collect();
+
+        Ok(list_models)
     }
 
     pub async fn get_settings(&self) -> Result<Settings, Error> {
