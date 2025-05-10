@@ -132,14 +132,16 @@ impl EmulatorsWidget {
 
     pub fn view(&self) -> iced::Element<Message> {
         let emulator_add_view = self.emulator_add_widget.view().map(Message::EmulatorAdd);
+
         let emulator_select_view = self
             .emulator_select_widget
             .view()
             .map(Message::EmulatorSelect);
+
         column![
+            emulator_select_view,
             self.create_selected_emulator_view(),
             emulator_add_view,
-            emulator_select_view,
         ]
         .into()
     }

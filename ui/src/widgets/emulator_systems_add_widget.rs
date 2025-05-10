@@ -103,11 +103,11 @@ impl EmulatorSystemsAddWidget {
                         id,
                         system_name: self.selected_system.as_ref().unwrap().name.clone(),
                     };
-                    return Task::done(Message::AddEmulatorSystem(list_model));
+                    Task::done(Message::AddEmulatorSystem(list_model))
                 }
                 Err(error) => {
                     eprintln!("Error saving emulator system: {}", error);
-                    return Task::none();
+                    Task::none()
                 }
             },
             Message::SetEmulatorId(id) => {

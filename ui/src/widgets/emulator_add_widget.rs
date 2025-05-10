@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use database::{database_error::Error, repository_manager::RepositoryManager};
 use iced::{
-    widget::{checkbox, text, text_input, Column},
+    widget::{button, checkbox, container, text, text_input, Column, Container},
     Element, Task,
 };
 use service::{
@@ -22,6 +22,7 @@ pub struct EmulatorAddWidget {
     emulator_systems_widget: EmulatorSystemsAddWidget,
     emulator_id: Option<i64>,
     emulator_systems: Vec<EmulatorSystemListModel>,
+    is_adding_emulator: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -34,6 +35,8 @@ pub enum Message {
     EmulatorAdded(EmulatorListModel),
     EmulatorSystemsAddWidget(emulator_systems_add_widget::Message),
     EmulatorSystemSaved(Result<i64, Error>),
+    StartAddEmulator,
+    CancelAddEmulator,
 }
 
 impl EmulatorAddWidget {
@@ -52,6 +55,7 @@ impl EmulatorAddWidget {
                 emulator_systems_widget,
                 emulator_id: None,
                 emulator_systems: vec![],
+                is_adding_emulator: false,
             },
             task.map(Message::EmulatorSystemsAddWidget),
         )
@@ -129,6 +133,12 @@ impl EmulatorAddWidget {
                     eprintln!("Error saving emulator system: {:?}", error);
                 }
             },
+            Message::StartAddEmulator => {
+                self.is_adding_emulator = true;
+            }
+            Message::CancelAddEmulator => {
+                self.is_adding_emulator = false;
+            }
             _ => {
                 println!("Unhandled message in EmulatorAddWidget: {:?}", message);
             }
@@ -137,6 +147,10 @@ impl EmulatorAddWidget {
     }
 
     pub fn view(&self) -> Element<Message> {
+        let add_emulator_button = button("Add Emulator").on_press(Message::StartAddEmulator);
+        let cancel_add_emulator_button =
+            button("Cancel add emulator").on_press(Message::CancelAddEmulator);
+
         let name_input =
             text_input("Emulator name", &self.emulator_name).on_input(Message::EmulatorNameChanged);
         let executable_input =
@@ -156,20 +170,30 @@ impl EmulatorAddWidget {
             .map(|system| text!("System: {}", system.system_name).into())
             .collect::<Vec<Element<Message>>>();
 
-        let submit_button = iced::widget::button("Submit").on_press(Message::Submit);
+        let submit_button = button("Submit").on_press(Message::Submit);
 
-        iced::widget::column![
-            name_input,
-            executable_input,
-            extract_files_checkbox,
-            Column::with_children(emulator_systems_list)
+        let emulator_systems_list = Column::with_children(emulator_systems_list)
+            .spacing(DEFAULT_SPACING)
+            .padding(DEFAULT_PADDING);
+
+        let emulator_add_view = if self.is_adding_emulator {
+            Column::new()
+                .push(cancel_add_emulator_button)
+                .push(name_input)
+                .push(executable_input)
+                .push(extract_files_checkbox)
+                .push(emulator_systems_list)
+                .push(emulator_systems_view)
+                .push(submit_button)
+        } else {
+            Column::new().push(add_emulator_button)
+        };
+        Container::new(
+            emulator_add_view
                 .spacing(DEFAULT_SPACING)
                 .padding(DEFAULT_PADDING),
-            emulator_systems_view,
-            submit_button,
-        ]
-        .spacing(DEFAULT_SPACING)
-        .padding(DEFAULT_PADDING)
+        )
+        .style(container::bordered_box)
         .into()
     }
 }
