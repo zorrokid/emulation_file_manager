@@ -41,6 +41,7 @@ impl EmulatorRepository {
 
         let emulator_systems = sqlx::query_as::<_, EmulatorSystem>(
             "SELECT 
+                es.id,
                 s.id AS system_id, 
                 s.name AS system_name, 
                 es.arguments 
@@ -53,27 +54,6 @@ impl EmulatorRepository {
         .await?;
 
         Ok((emulator, emulator_systems))
-    }
-
-    pub async fn add_emulator(
-        &self,
-        name: String,
-        executable: String,
-        extract_files: bool,
-    ) -> Result<i64, Error> {
-        let result = sqlx::query!(
-            "INSERT INTO emulator (
-                name, 
-                executable, 
-                extract_files 
-            ) VALUES (?, ?, ?)",
-            name,
-            executable,
-            extract_files,
-        )
-        .execute(&*self.pool)
-        .await?;
-        Ok(result.last_insert_rowid())
     }
 
     pub async fn add_emulator_with_systems(
@@ -143,27 +123,6 @@ impl EmulatorRepository {
         Ok(result.last_insert_rowid())
     }
 
-    pub async fn add_emulator_system(
-        &self,
-        emulator_id: i64,
-        system_id: i64,
-        arguments: String,
-    ) -> Result<i64, Error> {
-        let result = sqlx::query!(
-            "INSERT INTO emulator_system (
-                emulator_id, 
-                system_id, 
-                arguments
-            ) VALUES (?, ?, ?)",
-            emulator_id,
-            system_id,
-            arguments,
-        )
-        .execute(&*self.pool)
-        .await?;
-        Ok(result.last_insert_rowid())
-    }
-
     pub async fn remove_emulator_system(
         &self,
         emulator_id: i64,
@@ -191,25 +150,21 @@ mod tests {
         let pool = setup_test_db().await;
         let pool = Arc::new(pool);
         let repo = EmulatorRepository::new(pool.clone());
-
-        let emulator_id = repo
-            .add_emulator(
-                "Test Emulator".to_string(),
-                "test_executable".to_string(),
-                true,
-            )
-            .await
-            .unwrap();
-
         let system_repo = SystemRepository::new(pool.clone());
-
         let system_id = system_repo
             .add_system("Test System".to_string())
             .await
             .unwrap();
 
-        // Test add_emulator_system
-        repo.add_emulator_system(emulator_id, system_id, "args".to_string())
+        let emulator_systems = vec![(system_id, "args".to_string())];
+
+        let emulator_id = repo
+            .add_emulator_with_systems(
+                "Test Emulator".to_string(),
+                "test_executable".to_string(),
+                true,
+                emulator_systems,
+            )
             .await
             .unwrap();
 
