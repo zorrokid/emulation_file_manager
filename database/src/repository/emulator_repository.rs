@@ -76,6 +76,49 @@ impl EmulatorRepository {
         Ok(result.last_insert_rowid())
     }
 
+    pub async fn add_emulator_with_systems(
+        &self,
+        name: String,
+        executable: String,
+        extract_files: bool,
+        systems: Vec<(i64, String)>,
+    ) -> Result<i64, Error> {
+        let mut transaction = self.pool.begin().await?;
+
+        let result = sqlx::query!(
+            "INSERT INTO emulator (
+                name, 
+                executable, 
+                extract_files 
+            ) VALUES (?, ?, ?)",
+            name,
+            executable,
+            extract_files,
+        )
+        .execute(&mut *transaction)
+        .await?;
+
+        let emulator_id = result.last_insert_rowid();
+
+        for (system_id, arguments) in systems {
+            sqlx::query!(
+                "INSERT INTO emulator_system (
+                    emulator_id, 
+                    system_id, 
+                    arguments
+                ) VALUES (?, ?, ?)",
+                emulator_id,
+                system_id,
+                arguments,
+            )
+            .execute(&mut *transaction)
+            .await?;
+        }
+
+        transaction.commit().await?;
+        Ok(emulator_id)
+    }
+
     pub async fn delete_emulator(&self, id: i64) -> Result<(), DatabaseError> {
         sqlx::query!("DELETE FROM emulator WHERE id = ?", id)
             .execute(&*self.pool)
