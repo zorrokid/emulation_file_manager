@@ -19,7 +19,6 @@ pub struct EmulatorSystemsAddWidget {
     systems_widget: SystemsWidget,
     selected_system: Option<SystemListModel>,
     arguments: String,
-    emulator_id: Option<i64>,
 }
 
 #[derive(Debug, Clone)]
@@ -28,14 +27,12 @@ pub enum Message {
     ArgumentsChanged(String),
     Submit,
     AddEmulatorSystem(EmulatorSystem),
-    SetEmulatorId(i64),
 }
 
 impl EmulatorSystemsAddWidget {
     pub fn new(
         repositories: Arc<RepositoryManager>,
         view_model_service: Arc<ViewModelService>,
-        emulator_id: Option<i64>,
     ) -> (Self, Task<Message>) {
         let (systems_widget, task) = SystemsWidget::new(repositories, view_model_service);
 
@@ -44,7 +41,6 @@ impl EmulatorSystemsAddWidget {
                 systems_widget,
                 selected_system: None,
                 arguments: String::new(),
-                emulator_id,
             },
             task.map(Message::Systems),
         )
@@ -79,10 +75,6 @@ impl EmulatorSystemsAddWidget {
                         arguments,
                     }));
                 }
-                Task::none()
-            }
-            Message::SetEmulatorId(id) => {
-                self.emulator_id = Some(id);
                 Task::none()
             }
             _ => Task::none(),

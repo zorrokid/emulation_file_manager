@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
+use database::database_error::Error as DatabaseError;
 use database::repository_manager::RepositoryManager;
-use iced::widget::{column, row, text};
+use iced::widget::{button, column, row, text, Column};
 use iced::Task;
-use service::error::Error;
+use service::error::Error as ServiceError;
 use service::view_model_service::ViewModelService;
 use service::view_models::{EmulatorListModel, EmulatorViewModel};
 
@@ -20,14 +21,18 @@ pub struct EmulatorsWidget {
     emulator_add_widget: EmulatorAddWidget,
     emulator_select_widget: EmulatorSelectWidget,
     view_model_service: Arc<ViewModelService>,
+    repositories: Arc<RepositoryManager>,
 }
 
 #[derive(Debug, Clone)]
 pub enum Message {
-    EmulatorsFetched(Result<Vec<EmulatorListModel>, Error>),
+    EmulatorsFetched(Result<Vec<EmulatorListModel>, ServiceError>),
     EmulatorAdd(emulator_add_widget::Message),
     EmulatorSelect(emulator_select_widget::Message),
-    SelectedEmulatorLoaded(Result<EmulatorViewModel, Error>),
+    SelectedEmulatorLoaded(Result<EmulatorViewModel, ServiceError>),
+    RemoveEmulator(i64),
+    EditEmulator(i64),
+    EmulatorDeleted(Result<i64, DatabaseError>),
 }
 
 impl EmulatorsWidget {
@@ -54,6 +59,7 @@ impl EmulatorsWidget {
                 emulator_add_widget,
                 emulator_select_widget: EmulatorSelectWidget::new(),
                 view_model_service,
+                repositories,
             },
             combined_task,
         )
@@ -126,6 +132,32 @@ impl EmulatorsWidget {
                     eprintln!("Error loading selected emulator: {:?}", error);
                 }
             },
+            Message::RemoveEmulator(id) => {
+                let repositories = Arc::clone(&self.repositories);
+                let remove_emulator_task = Task::perform(
+                    async move {
+                        repositories
+                            .get_emulator_repository()
+                            .delete_emulator(id)
+                            .await
+                    },
+                    Message::EmulatorDeleted,
+                );
+                return remove_emulator_task;
+            }
+            Message::EditEmulator(_) => {
+                // TODO:
+            }
+            Message::EmulatorDeleted(result) => match result {
+                Ok(id) => {
+                    println!("Emulator deleted successfully with id: {:?}", id);
+                    self.emulators.retain(|e| e.id != id);
+                    self.selected_emulator = None;
+                }
+                Err(error) => {
+                    eprintln!("Error deleting emulator: {:?}", error);
+                }
+            },
         }
         Task::none()
     }
@@ -148,8 +180,22 @@ impl EmulatorsWidget {
 
     pub fn create_selected_emulator_view(&self) -> iced::Element<Message> {
         let row_content = match &self.selected_emulator {
-            Some(emulator) => text!("{}", emulator.name.clone()),
-            None => text("No emulator selected"),
+            Some(emulator) => {
+                let emulator_name = text!("{}", emulator.name.clone());
+                let remove_button = button("Remove").on_press(Message::RemoveEmulator(emulator.id));
+                let edit_button = button("Edit").on_press(Message::EditEmulator(emulator.id));
+
+                let emulator_name = row![emulator_name, remove_button, edit_button]
+                    .spacing(DEFAULT_SPACING)
+                    .padding(DEFAULT_PADDING);
+                let systems: Vec<iced::Element<Message>> = emulator
+                    .systems
+                    .iter()
+                    .map(|system| text!("{}: {}", system.system_name, system.arguments).into())
+                    .collect();
+                column![emulator_name, Column::with_children(systems)]
+            }
+            None => column![text("No emulator selected")],
         };
         row![row_content]
             .spacing(DEFAULT_SPACING)

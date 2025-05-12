@@ -99,11 +99,12 @@ impl EmulatorRepository {
         Ok(emulator_id)
     }
 
-    pub async fn delete_emulator(&self, id: i64) -> Result<(), DatabaseError> {
+    pub async fn delete_emulator(&self, id: i64) -> Result<i64, Error> {
+        // TODO ensure emulator system gets deleted as well
         sqlx::query!("DELETE FROM emulator WHERE id = ?", id)
             .execute(&*self.pool)
             .await?;
-        Ok(())
+        Ok(id)
     }
 
     pub async fn update_emulator(&self, emulator: &Emulator) -> Result<i64, DatabaseError> {

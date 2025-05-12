@@ -1,3 +1,5 @@
+PRAGMA foreign_keys = ON;
+
 CREATE TABLE system (
     id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
     name TEXT NOT NULL
@@ -15,8 +17,8 @@ CREATE TABLE emulator_system (
     emulator_id INTEGER NOT NULL,
     system_id INTEGER NOT NULL,
     arguments TEXT,
-    FOREIGN key (emulator_id) REFERENCES emulator(id),
-    FOREIGN KEY (system_id) REFERENCES system(id)
+    FOREIGN key (emulator_id) REFERENCES emulator(id) ON DELETE CASCADE,
+    FOREIGN KEY (system_id) REFERENCES system(id) ON DELETE CASCADE
 );
 
 CREATE TABLE franchise (

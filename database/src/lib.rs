@@ -18,6 +18,10 @@ pub async fn get_db_pool() -> Result<Arc<Pool<Sqlite>>, sqlx::Error> {
     )
     .await?;
     sqlx::migrate!().run(&pool).await?;
+    sqlx::query("PRAGMA foreign_keys = ON")
+        .execute(&pool)
+        .await
+        .expect("Failed to enable foreign keys");
     Ok(Arc::new(pool))
 }
 

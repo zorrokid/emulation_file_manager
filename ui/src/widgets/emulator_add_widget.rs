@@ -49,7 +49,7 @@ impl EmulatorAddWidget {
         view_model_service: Arc<ViewModelService>,
     ) -> (Self, Task<Message>) {
         let (emulator_systems_widget, task) =
-            EmulatorSystemsAddWidget::new(Arc::clone(&repositories), view_model_service, None);
+            EmulatorSystemsAddWidget::new(Arc::clone(&repositories), view_model_service);
         (
             Self {
                 emulator_name: String::new(),
@@ -102,20 +102,12 @@ impl EmulatorAddWidget {
             Message::EmulatorSaved(result) => match result {
                 Ok(id) => {
                     println!("Emulator saved successfully with id: {:?}", id);
+                    self.is_adding_emulator = false;
                     let emulator = EmulatorListModel {
                         id,
                         name: self.emulator_name.clone(),
                     };
-                    self.emulator_id = Some(id);
-                    let set_emulator_id_task = self
-                        .emulator_systems_widget
-                        .update(emulator_systems_add_widget::Message::SetEmulatorId(id))
-                        .map(Message::EmulatorSystemsAddWidget);
-
-                    let emulator_added_task = Task::done(Message::EmulatorAdded(emulator));
-                    let combined_task =
-                        Task::batch(vec![set_emulator_id_task, emulator_added_task]);
-                    return combined_task;
+                    return Task::done(Message::EmulatorAdded(emulator));
                 }
                 Err(error) => {
                     eprintln!("Error saving emulator: {:?}", error);
