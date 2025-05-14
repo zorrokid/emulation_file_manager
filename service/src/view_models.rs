@@ -18,6 +18,7 @@ pub struct EmulatorViewModel {
 
 #[derive(Debug, Clone)]
 pub struct EmulatorSystemViewModel {
+    pub id: i64,
     pub system_id: i64,
     pub system_name: String,
     pub arguments: String,

@@ -37,6 +37,7 @@ impl ViewModelService {
             systems: emulator_systems
                 .into_iter()
                 .map(|es| EmulatorSystemViewModel {
+                    id: es.id,
                     system_id: es.system_id,
                     system_name: es.system_name,
                     arguments: es.arguments,
