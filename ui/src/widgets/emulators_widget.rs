@@ -145,8 +145,11 @@ impl EmulatorsWidget {
                 );
                 return remove_emulator_task;
             }
-            Message::EditEmulator(_) => {
-                // TODO:
+            Message::EditEmulator(id) => {
+                return self
+                    .emulator_add_widget
+                    .update(emulator_add_widget::Message::SetEmulatorId(id))
+                    .map(Message::EmulatorAdd);
             }
             Message::EmulatorDeleted(result) => match result {
                 Ok(id) => {

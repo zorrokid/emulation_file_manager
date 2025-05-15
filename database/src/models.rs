@@ -115,6 +115,12 @@ pub struct EmulatorSystem {
     pub arguments: String,
 }
 
+pub struct EmulatorSystemUpdateModel {
+    pub id: Option<i64>,
+    pub system_id: i64,
+    pub arguments: String,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Franchise {
     pub id: i64,

@@ -4,18 +4,12 @@ use sqlx::{Pool, Sqlite};
 
 use crate::{
     database_error::{DatabaseError, Error},
-    models::{Emulator, EmulatorSystem},
+    models::{Emulator, EmulatorSystem, EmulatorSystemUpdateModel},
 };
 
 #[derive(Debug)]
 pub struct EmulatorRepository {
     pool: Arc<Pool<Sqlite>>,
-}
-
-pub struct EmulatorSystemUpdateModel {
-    pub id: Option<i64>,
-    pub system_id: i64,
-    pub arguments: String,
 }
 
 impl EmulatorRepository {
@@ -67,7 +61,7 @@ impl EmulatorRepository {
         name: String,
         executable: String,
         extract_files: bool,
-        systems: Vec<(i64, String)>,
+        systems: Vec<EmulatorSystemUpdateModel>,
     ) -> Result<i64, Error> {
         let mut transaction = self.pool.begin().await?;
 
@@ -86,7 +80,7 @@ impl EmulatorRepository {
 
         let emulator_id = result.last_insert_rowid();
 
-        for (system_id, arguments) in systems {
+        for system in systems {
             sqlx::query!(
                 "INSERT INTO emulator_system (
                     emulator_id, 
@@ -94,8 +88,8 @@ impl EmulatorRepository {
                     arguments
                 ) VALUES (?, ?, ?)",
                 emulator_id,
-                system_id,
-                arguments,
+                system.system_id,
+                system.arguments,
             )
             .execute(&mut *transaction)
             .await?;
@@ -114,6 +108,7 @@ impl EmulatorRepository {
         systems: Vec<EmulatorSystemUpdateModel>,
     ) -> Result<i64, Error> {
         let mut transaction = self.pool.begin().await?;
+        dbg!("Updating emulator with id: {}", emulator_id);
 
         // update first the emulator
         sqlx::query!(
@@ -373,10 +368,10 @@ mod tests {
         let result = repo.delete_emulator(emulator_id).await;
         assert!(result.is_ok());
 
-        // try get emulator
+        // try get emulator, should go to an error
         let result = repo.get_emulator_with_systems(emulator_id).await;
         assert!(result.is_err());
-        // try get emulator system 1
+        // try get emulator system 1, should go to an error
         let result = sqlx::query!(
             "SELECT id 
              FROM emulator_system 

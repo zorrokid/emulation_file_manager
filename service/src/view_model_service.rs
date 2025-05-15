@@ -29,6 +29,9 @@ impl ViewModelService {
             .get_emulator_with_systems(emulator_id)
             .await?;
 
+        println!("Emulator: {:?}", emulator);
+        println!("Emulator Systems: {:?}", emulator_systems);
+
         Ok(EmulatorViewModel {
             id: emulator.id,
             name: emulator.name,
