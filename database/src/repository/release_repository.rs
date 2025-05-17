@@ -1,12 +1,24 @@
 use std::sync::Arc;
 
-use sqlx::{Pool, Sqlite};
+use sqlx::{query_as, Pool, Sqlite};
 
-use crate::{database_error::DatabaseError, models::Release};
+use crate::{
+    database_error::{DatabaseError, Error},
+    models::{FileType, Release, ReleaseExtended},
+};
 
 #[derive(Debug)]
 pub struct ReleaseRepository {
     pool: Arc<Pool<Sqlite>>,
+}
+
+#[derive(sqlx::FromRow)]
+struct ReleaseExtendedRaw {
+    id: i64,
+    name: String,
+    system_names: Option<String>,
+    software_title_names: Option<String>,
+    file_types: Option<String>,
 }
 
 impl ReleaseRepository {
@@ -25,6 +37,75 @@ impl ReleaseRepository {
         .await?;
 
         Ok(release)
+    }
+
+    pub async fn get_releases(&self) -> Result<Vec<ReleaseExtended>, Error> {
+        let query = r#"
+            SELECT 
+                r.id as id, 
+                r.name as name,
+                GROUP_CONCAT(DISTINCT s.name) as system_names,
+                GROUP_CONCAT(DISTINCT st.name) as software_title_names,
+                GROUP_CONCAT(DISTINCT fs.file_type) as file_types
+             FROM 
+                release r
+             INNER JOIN 
+                release_software_title rst ON r.id = rst.release_id
+             INNER JOIN 
+                software_title st ON rst.software_title_id = st.id
+             INNER JOIN 
+                release_system rs ON r.id = rs.release_id
+             INNER JOIN 
+                system s ON rs.system_id = s.id
+             INNER JOIN 
+                release_file_set rfs ON r.id = rfs.release_id
+             INNER JOIN 
+                file_set fs ON rfs.file_set_id = fs.id
+             GROUP BY
+                r.id, r.name;
+        "#;
+        let raw_releases: Vec<ReleaseExtendedRaw> = query_as(query).fetch_all(&*self.pool).await?;
+
+        let mut releases: Vec<ReleaseExtended> = Vec::new();
+
+        for raw in raw_releases {
+            let system_names = raw
+                .system_names
+                .unwrap_or_default()
+                .split(',')
+                .map(String::from)
+                .collect();
+            let software_title_names = raw
+                .software_title_names
+                .unwrap_or_default()
+                .split(',')
+                .map(String::from)
+                .collect();
+            let file_types = raw
+                .file_types
+                .unwrap_or_default()
+                .split(',')
+                .map(|ft| {
+                    ft.parse::<i64>()
+                        .map_err(|e| {
+                            Error::ParseError(format!("Failed to parse '{}' as i64: {}", ft, e))
+                        })
+                        .and_then(|ft| {
+                            FileType::try_from(ft)
+                                .map_err(|e| Error::ParseError(format!("Invalid file type {}", ft)))
+                        })
+                })
+                .collect::<Result<Vec<FileType>, Error>>()?;
+            releases.push(ReleaseExtended {
+                id: raw.id,
+                name: raw.name,
+                system_names,
+                software_title_names,
+                file_types,
+            });
+        }
+
+        Ok(releases)
     }
 
     pub async fn get_releases_with_software_title(
@@ -51,6 +132,56 @@ impl ReleaseRepository {
             .execute(&*self.pool)
             .await?;
         Ok(result.last_insert_rowid())
+    }
+
+    pub async fn add_release_full(
+        &self,
+        release_name: String,
+        software_title_ids: Vec<i64>,
+        file_set_ids: Vec<i64>,
+        system_ids: Vec<i64>,
+    ) -> Result<i64, Error> {
+        let mut transaction = self.pool.begin().await?;
+
+        let result = sqlx::query!("INSERT INTO release (name) VALUES (?)", release_name)
+            .execute(&*self.pool)
+            .await?;
+
+        let release_id = result.last_insert_rowid();
+
+        for software_title_id in software_title_ids {
+            sqlx::query!(
+                "INSERT INTO release_software_title (release_id, software_title_id) VALUES (?, ?)",
+                release_id,
+                software_title_id
+            )
+            .execute(&mut *transaction)
+            .await?;
+        }
+
+        for file_id in file_set_ids {
+            sqlx::query!(
+                "INSERT INTO release_file_set (release_id, file_set_id) VALUES (?, ?)",
+                release_id,
+                file_id
+            )
+            .execute(&mut *transaction)
+            .await?;
+        }
+
+        for system_id in system_ids {
+            sqlx::query!(
+                "INSERT INTO release_system (release_id, system_id) VALUES (?, ?)",
+                release_id,
+                system_id
+            )
+            .execute(&mut *transaction)
+            .await?;
+        }
+
+        transaction.commit().await?;
+
+        Ok(release_id)
     }
 
     pub async fn update_release(&self, release: &Release) -> Result<u64, DatabaseError> {

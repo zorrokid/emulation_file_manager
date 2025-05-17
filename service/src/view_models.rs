@@ -4,7 +4,9 @@ use std::{
     path::PathBuf,
 };
 
-use database::models::{Emulator, FileSet, FileType, SettingName, SoftwareTitle, System};
+use database::models::{
+    Emulator, FileSet, FileType, ReleaseExtended, SettingName, SoftwareTitle, System,
+};
 use file_system::get_files_root_dir;
 
 #[derive(Debug, Clone)]
@@ -18,6 +20,7 @@ pub struct EmulatorViewModel {
 
 #[derive(Debug, Clone)]
 pub struct EmulatorSystemViewModel {
+    pub id: i64,
     pub system_id: i64,
     pub system_name: String,
     pub arguments: String,
@@ -133,5 +136,30 @@ impl From<&FileSet> for FileSetListModel {
 impl Display for FileSetListModel {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.file_set_name)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReleaseListModel {
+    pub id: i64,
+    pub name: String,
+    pub system_names: Vec<String>,
+    pub file_types: Vec<String>,
+}
+
+impl From<&ReleaseExtended> for ReleaseListModel {
+    fn from(release: &ReleaseExtended) -> Self {
+        ReleaseListModel {
+            id: release.id,
+            name: release.name.clone(),
+            system_names: release.system_names.clone(),
+            file_types: release.file_types.iter().map(|ft| ft.to_string()).collect(),
+        }
+    }
+}
+
+impl Display for ReleaseListModel {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{} [{}]", self.name, self.system_names.join(", "))
     }
 }

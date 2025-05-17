@@ -4,7 +4,7 @@ use sqlx::{Pool, Sqlite};
 
 use crate::{
     database_error::{DatabaseError, Error},
-    models::{Emulator, EmulatorSystem},
+    models::{Emulator, EmulatorSystem, EmulatorSystemUpdateModel},
 };
 
 #[derive(Debug)]
@@ -41,6 +41,7 @@ impl EmulatorRepository {
 
         let emulator_systems = sqlx::query_as::<_, EmulatorSystem>(
             "SELECT 
+                es.id,
                 s.id AS system_id, 
                 s.name AS system_name, 
                 es.arguments 
@@ -55,12 +56,15 @@ impl EmulatorRepository {
         Ok((emulator, emulator_systems))
     }
 
-    pub async fn add_emulator(
+    pub async fn add_emulator_with_systems(
         &self,
         name: String,
         executable: String,
         extract_files: bool,
+        systems: Vec<EmulatorSystemUpdateModel>,
     ) -> Result<i64, Error> {
+        let mut transaction = self.pool.begin().await?;
+
         let result = sqlx::query!(
             "INSERT INTO emulator (
                 name, 
@@ -71,16 +75,143 @@ impl EmulatorRepository {
             executable,
             extract_files,
         )
-        .execute(&*self.pool)
+        .execute(&mut *transaction)
         .await?;
-        Ok(result.last_insert_rowid())
+
+        let emulator_id = result.last_insert_rowid();
+
+        for system in systems {
+            sqlx::query!(
+                "INSERT INTO emulator_system (
+                    emulator_id, 
+                    system_id, 
+                    arguments
+                ) VALUES (?, ?, ?)",
+                emulator_id,
+                system.system_id,
+                system.arguments,
+            )
+            .execute(&mut *transaction)
+            .await?;
+        }
+
+        transaction.commit().await?;
+        Ok(emulator_id)
     }
 
-    pub async fn delete_emulator(&self, id: i64) -> Result<(), DatabaseError> {
+    pub async fn update_emulator_with_systems(
+        &self,
+        emulator_id: i64,
+        name: String,
+        executable: String,
+        extract_files: bool,
+        systems: Vec<EmulatorSystemUpdateModel>,
+    ) -> Result<i64, Error> {
+        let mut transaction = self.pool.begin().await?;
+        dbg!("Updating emulator with id: {}", emulator_id);
+
+        // update first the emulator
+        sqlx::query!(
+            "UPDATE emulator 
+             SET 
+                name = ?, 
+                executable = ?, 
+                extract_files = ? 
+                WHERE id = ?",
+            name,
+            executable,
+            extract_files,
+            emulator_id,
+        )
+        .execute(&mut *transaction)
+        .await?;
+
+        // split emulator system to ones that are new and ones that are existing
+        let (systems_to_update, systems_to_insert): (Vec<_>, Vec<_>) =
+            systems.iter().partition(|s| s.id.is_some());
+
+        let systems_to_update_ids = systems_to_update
+            .iter()
+            .filter_map(|s| s.id)
+            .collect::<Vec<_>>();
+
+        // delete obsolete emulator systems
+        // get the ids of emulator systems that should be deleted
+        let existing_systems = sqlx::query!(
+            "SELECT id 
+             FROM emulator_system 
+             WHERE emulator_id = ?",
+            emulator_id,
+        )
+        .fetch_all(&mut *transaction)
+        .await?;
+
+        let existing_system_ids: Vec<i64> =
+            existing_systems.iter().map(|system| system.id).collect();
+
+        let removable_system_ids = existing_system_ids
+            .into_iter()
+            .filter(|id| !systems_to_update_ids.contains(id))
+            .collect::<Vec<i64>>();
+
+        println!("removable_system_ids: {:?}", removable_system_ids);
+
+        let delete_query = format!(
+            "DELETE FROM emulator_system 
+             WHERE emulator_id = ? AND id IN ({})",
+            removable_system_ids
+                .iter()
+                .map(|_| "?")
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+
+        let mut query = sqlx::query(&delete_query).bind(emulator_id);
+        for id in &removable_system_ids {
+            query = query.bind(*id);
+        }
+        query.execute(&mut *transaction).await?;
+
+        // insert new emulator systems
+
+        for system in systems_to_insert {
+            sqlx::query!(
+                "INSERT INTO emulator_system (
+                    emulator_id, 
+                    system_id, 
+                    arguments
+                ) VALUES (?, ?, ?)",
+                emulator_id,
+                system.system_id,
+                system.arguments,
+            )
+            .execute(&mut *transaction)
+            .await?;
+        }
+
+        // update existing emulator systems
+        for system in systems_to_update {
+            sqlx::query!(
+                "UPDATE emulator_system 
+                 SET 
+                    arguments = ? 
+                 WHERE id = ?",
+                system.arguments,
+                system.id,
+            )
+            .execute(&mut *transaction)
+            .await?;
+        }
+
+        transaction.commit().await?;
+        Ok(emulator_id)
+    }
+
+    pub async fn delete_emulator(&self, id: i64) -> Result<i64, Error> {
         sqlx::query!("DELETE FROM emulator WHERE id = ?", id)
             .execute(&*self.pool)
             .await?;
-        Ok(())
+        Ok(id)
     }
 
     pub async fn update_emulator(&self, emulator: &Emulator) -> Result<i64, DatabaseError> {
@@ -94,27 +225,6 @@ impl EmulatorRepository {
             emulator.executable,
             emulator.extract_files,
             emulator.id
-        )
-        .execute(&*self.pool)
-        .await?;
-        Ok(result.last_insert_rowid())
-    }
-
-    pub async fn add_emulator_system(
-        &self,
-        emulator_id: i64,
-        system_id: i64,
-        arguments: String,
-    ) -> Result<i64, Error> {
-        let result = sqlx::query!(
-            "INSERT INTO emulator_system (
-                emulator_id, 
-                system_id, 
-                arguments
-            ) VALUES (?, ?, ?)",
-            emulator_id,
-            system_id,
-            arguments,
         )
         .execute(&*self.pool)
         .await?;
@@ -148,25 +258,42 @@ mod tests {
         let pool = setup_test_db().await;
         let pool = Arc::new(pool);
         let repo = EmulatorRepository::new(pool.clone());
+        let system_repo = SystemRepository::new(pool.clone());
+        let system_1_id = system_repo
+            .add_system("Test System 1".to_string())
+            .await
+            .unwrap();
+
+        let system_2_id = system_repo
+            .add_system("Test System 2".to_string())
+            .await
+            .unwrap();
+
+        let system_3_id = system_repo
+            .add_system("Test System 3".to_string())
+            .await
+            .unwrap();
+
+        let emulator_systems = vec![
+            EmulatorSystemUpdateModel {
+                id: None,
+                system_id: system_1_id,
+                arguments: "args".to_string(),
+            },
+            EmulatorSystemUpdateModel {
+                id: None,
+                system_id: system_2_id,
+                arguments: "args".to_string(),
+            },
+        ];
 
         let emulator_id = repo
-            .add_emulator(
+            .add_emulator_with_systems(
                 "Test Emulator".to_string(),
                 "test_executable".to_string(),
                 true,
+                emulator_systems,
             )
-            .await
-            .unwrap();
-
-        let system_repo = SystemRepository::new(pool.clone());
-
-        let system_id = system_repo
-            .add_system("Test System".to_string())
-            .await
-            .unwrap();
-
-        // Test add_emulator_system
-        repo.add_emulator_system(emulator_id, system_id, "args".to_string())
             .await
             .unwrap();
 
@@ -175,10 +302,20 @@ mod tests {
             repo.get_emulator_with_systems(emulator_id).await.unwrap();
         assert_eq!(emulator.name, "Test Emulator");
         assert_eq!(emulator.executable, "test_executable");
-        assert_eq!(emulator_systems.len(), 1);
-        assert_eq!(emulator_systems[0].system_id, system_id);
-        assert_eq!(emulator_systems[0].system_name, "Test System");
-        assert_eq!(emulator_systems[0].arguments, "args");
+        assert_eq!(emulator_systems.len(), 2);
+
+        let emulator_system_1 = &emulator_systems
+            .iter()
+            .find(|s| s.system_id == system_1_id)
+            .unwrap();
+
+        let emulator_system_2 = &emulator_systems
+            .iter()
+            .find(|s| s.system_id == system_2_id)
+            .unwrap();
+
+        assert_eq!(emulator_system_1.system_name, "Test System 1");
+        assert_eq!(emulator_system_2.system_name, "Test System 2");
 
         // Test get_emulators
         let emulators = repo.get_emulators().await.unwrap();
@@ -190,21 +327,69 @@ mod tests {
         let (updated_emulator, _) = repo.get_emulator_with_systems(emulator_id).await.unwrap();
         assert_eq!(updated_emulator.name, "Updated Emulator");
 
-        // try deleting the emulator before removing the system relation
-        let result = repo.delete_emulator(emulator_id).await;
-        assert!(result.is_err());
+        // Test update_emulator_with_systems
+        emulator.name = "Updated Emulator".to_string();
+        let updated_emulator_systems = vec![
+            // update system 1
+            EmulatorSystemUpdateModel {
+                id: Some(emulator_systems[0].id),
+                system_id: system_1_id,
+                arguments: "new_args".to_string(),
+            },
+            // add system 3
+            EmulatorSystemUpdateModel {
+                id: None,
+                system_id: system_3_id,
+                arguments: "another_system_args".to_string(),
+            },
+            // remove system 2 since it's not in collection
+        ];
+        repo.update_emulator_with_systems(
+            emulator.id,
+            emulator.name.clone(),
+            emulator.executable.clone(),
+            emulator.extract_files,
+            updated_emulator_systems,
+        )
+        .await
+        .unwrap();
 
-        repo.remove_emulator_system(emulator_id, system_id)
-            .await
+        let (updated_emulator, updated_emulator_systems) =
+            repo.get_emulator_with_systems(emulator_id).await.unwrap();
+        assert_eq!(updated_emulator.name, "Updated Emulator");
+        assert_eq!(updated_emulator_systems.len(), 2);
+        let updated_emulator_system_1 = &updated_emulator_systems
+            .iter()
+            .find(|s| s.system_id == system_1_id)
             .unwrap();
 
-        let (_, emulator_systems) = repo.get_emulator_with_systems(emulator_id).await.unwrap();
+        let updated_emulator_system_3 = &updated_emulator_systems
+            .iter()
+            .find(|s| s.system_id == system_3_id)
+            .unwrap();
 
-        assert_eq!(emulator_systems.len(), 0);
+        assert_eq!(updated_emulator_system_1.system_name, "Test System 1");
+        assert_eq!(updated_emulator_system_1.arguments, "new_args");
+        assert_eq!(updated_emulator_system_3.system_name, "Test System 3");
+        assert_eq!(updated_emulator_system_3.arguments, "another_system_args");
 
-        // Test delete_emulator
-        repo.delete_emulator(emulator_id).await.unwrap();
-        let emulators = repo.get_emulators().await.unwrap();
-        assert_eq!(emulators.len(), 0);
+        let result = repo.delete_emulator(emulator_id).await;
+        assert!(result.is_ok());
+
+        // try get emulator, should go to an error
+        let result = repo.get_emulator_with_systems(emulator_id).await;
+        assert!(result.is_err());
+        // try get emulator system 1, should go to an error
+        let result = sqlx::query!(
+            "SELECT id 
+             FROM emulator_system 
+             WHERE emulator_id = ? AND system_id = ?",
+            emulator_id,
+            system_1_id
+        )
+        .fetch_one(&*pool)
+        .await;
+
+        assert!(result.is_err());
     }
 }

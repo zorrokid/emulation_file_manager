@@ -21,6 +21,7 @@ pub struct SystemsWidget {
     system_select_widget: SystemSelectWidget,
     system_add_widget: SystemAddWidget,
     selected_system_ids: Vec<i64>,
+    adding_system: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -30,6 +31,8 @@ pub enum Message {
     SystemSelect(system_select_widget::Message),
     SystemAdded(Result<i64, DatabaseError>),
     RemoveSystem(i64),
+    StartAddSystem,
+    CancelAddSystem,
 }
 
 impl SystemsWidget {
@@ -51,6 +54,7 @@ impl SystemsWidget {
                 system_select_widget: SystemSelectWidget::new(),
                 system_add_widget: SystemAddWidget::new(),
                 selected_system_ids: vec![],
+                adding_system: false,
             },
             fetch_systems_task,
         )
@@ -106,17 +110,35 @@ impl SystemsWidget {
                     .retain(|&system_id| system_id != id);
                 Task::none()
             }
+            Message::StartAddSystem => {
+                self.adding_system = true;
+                Task::none()
+            }
+            Message::CancelAddSystem => {
+                self.adding_system = false;
+                Task::none()
+            }
         }
     }
 
-    pub fn view(&self) -> iced::Element<Message> {
-        let add_system_view = self.system_add_widget.view().map(Message::AddSystem);
-        let systems_view = self.system_select_widget.view().map(Message::SystemSelect);
+    pub fn view(&self) -> Element<Message> {
+        let add_system_view: Element<Message> = if self.adding_system {
+            let system_add_view = self.system_add_widget.view().map(Message::AddSystem);
+            let cancel_button = button("Cancel add system").on_press(Message::CancelAddSystem);
+            column![cancel_button, system_add_view].into()
+        } else {
+            button("Add System")
+                .on_press(Message::StartAddSystem)
+                .into()
+        };
+
+        let system_select_view: Element<Message> =
+            self.system_select_widget.view().map(Message::SystemSelect);
         let selected_systems_list = self.create_selected_systems_list();
-        column![add_system_view, systems_view, selected_systems_list].into()
+        column![system_select_view, selected_systems_list, add_system_view].into()
     }
 
-    fn create_selected_systems_list(&self) -> iced::Element<Message> {
+    fn create_selected_systems_list(&self) -> Element<Message> {
         let selected_systems = self
             .selected_system_ids
             .iter()
