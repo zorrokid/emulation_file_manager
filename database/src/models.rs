@@ -93,6 +93,15 @@ pub struct Release {
     pub name: String,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReleaseExtended {
+    pub id: i64,
+    pub name: String,
+    pub system_names: Vec<String>,
+    pub software_title_names: Vec<String>,
+    pub file_types: Vec<FileType>,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct System {
     pub id: i64,

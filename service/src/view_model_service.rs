@@ -5,8 +5,8 @@ use database::{database_error::DatabaseError, repository_manager::RepositoryMana
 use crate::{
     error::Error,
     view_models::{
-        EmulatorListModel, EmulatorSystemViewModel, EmulatorViewModel, FileSetListModel, Settings,
-        SoftwareTitleListModel, SystemListModel,
+        EmulatorListModel, EmulatorSystemViewModel, EmulatorViewModel, FileSetListModel,
+        ReleaseListModel, Settings, SoftwareTitleListModel, SystemListModel,
     },
 };
 
@@ -135,6 +135,17 @@ impl ViewModelService {
             file_sets.iter().map(FileSetListModel::from).collect();
 
         Ok(list_models)
+    }
+
+    pub async fn get_release_list_models(&self) -> Result<Vec<ReleaseListModel>, Error> {
+        let releases = self
+            .repository_manager
+            .get_release_repository()
+            .get_releases()
+            .await
+            .map_err(|err| Error::DbError(err.to_string()))?;
+        let release_models = releases.iter().map(ReleaseListModel::from).collect();
+        Ok(release_models)
     }
 }
 

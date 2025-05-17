@@ -275,8 +275,16 @@ mod tests {
             .unwrap();
 
         let emulator_systems = vec![
-            (system_1_id, "args".to_string()),
-            (system_2_id, "args".to_string()),
+            EmulatorSystemUpdateModel {
+                id: None,
+                system_id: system_1_id,
+                arguments: "args".to_string(),
+            },
+            EmulatorSystemUpdateModel {
+                id: None,
+                system_id: system_2_id,
+                arguments: "args".to_string(),
+            },
         ];
 
         let emulator_id = repo

@@ -24,6 +24,7 @@ impl PartialEq for DatabaseError {
 pub enum Error {
     InUse,
     DbError(String),
+    ParseError(String),
 }
 
 impl Display for Error {
@@ -31,6 +32,7 @@ impl Display for Error {
         match self {
             Error::InUse => write!(f, "Cannot delete because entity is in use"),
             Error::DbError(err) => write!(f, "Database error: {}", err),
+            Error::ParseError(err) => write!(f, "Parse error: {}", err),
         }
     }
 }

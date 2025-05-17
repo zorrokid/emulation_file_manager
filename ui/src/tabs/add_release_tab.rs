@@ -10,6 +10,7 @@ use service::view_model_service::ViewModelService;
 use crate::widgets::{
     file_select_widget,
     files_widget::{self, FilesWidget},
+    release_select_widget::{self, ReleaseSelectWidget},
     software_title_select_widget,
     software_titles_widget::{self, SoftwareTitlesWidget},
     system_select_widget,
@@ -25,6 +26,7 @@ pub struct AddReleaseTab {
     selected_software_title_ids: Vec<i64>,
     files_widget: FilesWidget,
     selected_file_ids: Vec<i64>,
+    release_select_widget: ReleaseSelectWidget,
 }
 
 #[derive(Debug, Clone)]
@@ -34,6 +36,7 @@ pub enum Message {
     Files(files_widget::Message),
     Submit,
     ReleaseSubmitted(Result<i64, Error>),
+    ReleaseSelect(release_select_widget::Message),
 }
 
 impl AddReleaseTab {
@@ -49,10 +52,14 @@ impl AddReleaseTab {
         let (files_widget, files_task) =
             FilesWidget::new(Arc::clone(&repositories), Arc::clone(&view_model_service));
 
+        let (release_select_widget, release_select_task) =
+            ReleaseSelectWidget::new(Arc::clone(&view_model_service));
+
         let combined_task = Task::batch(vec![
             systems_task.map(Message::Systems),
             software_titles_task.map(Message::SoftwareTitles),
             files_task.map(Message::Files),
+            release_select_task.map(Message::ReleaseSelect),
         ]);
 
         (
@@ -65,6 +72,7 @@ impl AddReleaseTab {
                 selected_software_title_ids: vec![],
                 files_widget,
                 selected_file_ids: vec![],
+                release_select_widget,
             },
             combined_task,
         )
@@ -134,6 +142,7 @@ impl AddReleaseTab {
                 self.files_widget.update(message).map(Message::Files)
             }
             Message::Submit => {
+                println!("AddReleaseTab: Submit button pressed");
                 let repositories = Arc::clone(&self.repositories);
                 let software_title_ids = self.selected_software_title_ids.clone();
                 let file_set_ids = self.selected_file_ids.clone();
@@ -164,10 +173,18 @@ impl AddReleaseTab {
                     Task::none()
                 }
             },
+            Message::ReleaseSelect(message) => self
+                .release_select_widget
+                .update(message)
+                .map(Message::ReleaseSelect),
         }
     }
 
     pub fn view(&self) -> iced::Element<Message> {
+        let release_select_view = self
+            .release_select_widget
+            .view()
+            .map(Message::ReleaseSelect);
         let systems_view = self.systems_widget.view().map(Message::Systems);
         let software_titles_view = self
             .software_titles_widget
@@ -176,6 +193,7 @@ impl AddReleaseTab {
         let files_view = self.files_widget.view().map(Message::Files);
         let submit_button = button("Submit").on_press(Message::Submit);
         column![
+            release_select_view,
             software_titles_view,
             systems_view,
             files_view,
