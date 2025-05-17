@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
-use database::repository_manager::RepositoryManager;
-use iced::{widget::column, Task};
+use database::{database_error::Error, repository_manager::RepositoryManager};
+use iced::{
+    widget::{button, column},
+    Task,
+};
 use service::view_model_service::ViewModelService;
 
 use crate::widgets::{
@@ -29,6 +32,8 @@ pub enum Message {
     Systems(systems_widget::Message),
     SoftwareTitles(software_titles_widget::Message),
     Files(files_widget::Message),
+    Submit,
+    ReleaseSubmitted(Result<i64, Error>),
 }
 
 impl AddReleaseTab {
@@ -128,6 +133,37 @@ impl AddReleaseTab {
 
                 self.files_widget.update(message).map(Message::Files)
             }
+            Message::Submit => {
+                let repositories = Arc::clone(&self.repositories);
+                let software_title_ids = self.selected_software_title_ids.clone();
+                let file_set_ids = self.selected_file_ids.clone();
+                let system_ids = self.selected_system_ids.clone();
+                Task::perform(
+                    async move {
+                        repositories
+                            .get_release_repository()
+                            .add_release_full(
+                                "".to_string(),
+                                software_title_ids,
+                                file_set_ids,
+                                system_ids,
+                            )
+                            .await
+                    },
+                    Message::ReleaseSubmitted,
+                )
+            }
+            Message::ReleaseSubmitted(result) => match result {
+                Ok(id) => {
+                    // TODO
+                    print!("Release {} submitted", id);
+                    Task::none()
+                }
+                Err(err) => {
+                    eprintln!("Error submitting file: {}", err);
+                    Task::none()
+                }
+            },
         }
     }
 
@@ -138,6 +174,13 @@ impl AddReleaseTab {
             .view()
             .map(Message::SoftwareTitles);
         let files_view = self.files_widget.view().map(Message::Files);
-        column![systems_view, software_titles_view, files_view].into()
+        let submit_button = button("Submit").on_press(Message::Submit);
+        column![
+            software_titles_view,
+            systems_view,
+            files_view,
+            submit_button
+        ]
+        .into()
     }
 }

@@ -2,7 +2,10 @@ use std::sync::Arc;
 
 use sqlx::{Pool, Sqlite};
 
-use crate::{database_error::DatabaseError, models::Release};
+use crate::{
+    database_error::{DatabaseError, Error},
+    models::Release,
+};
 
 #[derive(Debug)]
 pub struct ReleaseRepository {
@@ -51,6 +54,56 @@ impl ReleaseRepository {
             .execute(&*self.pool)
             .await?;
         Ok(result.last_insert_rowid())
+    }
+
+    pub async fn add_release_full(
+        &self,
+        release_name: String,
+        software_title_ids: Vec<i64>,
+        file_set_ids: Vec<i64>,
+        system_ids: Vec<i64>,
+    ) -> Result<i64, Error> {
+        let mut transaction = self.pool.begin().await?;
+
+        let result = sqlx::query!("INSERT INTO release (name) VALUES (?)", release_name)
+            .execute(&*self.pool)
+            .await?;
+
+        let release_id = result.last_insert_rowid();
+
+        for software_title_id in software_title_ids {
+            sqlx::query!(
+                "INSERT INTO release_software_title (release_id, software_title_id) VALUES (?, ?)",
+                release_id,
+                software_title_id
+            )
+            .execute(&mut *transaction)
+            .await?;
+        }
+
+        for file_id in file_set_ids {
+            sqlx::query!(
+                "INSERT INTO release_file_set (release_id, file_set_id) VALUES (?, ?)",
+                release_id,
+                file_id
+            )
+            .execute(&mut *transaction)
+            .await?;
+        }
+
+        for system_id in system_ids {
+            sqlx::query!(
+                "INSERT INTO release_system (release_id, system_id) VALUES (?, ?)",
+                release_id,
+                system_id
+            )
+            .execute(&mut *transaction)
+            .await?;
+        }
+
+        transaction.commit().await?;
+
+        Ok(release_id)
     }
 
     pub async fn update_release(&self, release: &Release) -> Result<u64, DatabaseError> {
