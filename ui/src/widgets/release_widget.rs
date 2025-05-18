@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use database::{database_error::Error, repository_manager::RepositoryManager};
 use iced::{
-    widget::{button, column},
+    widget::{button, column, container, Column, Container},
     Element, Task,
 };
 use service::view_model_service::ViewModelService;
@@ -24,6 +24,8 @@ pub struct ReleaseWidget {
     files_widget: FilesWidget,
     selected_file_ids: Vec<i64>,
     repositories: Arc<RepositoryManager>,
+    selected_release_id: Option<i64>,
+    is_open: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -33,6 +35,7 @@ pub enum Message {
     Files(files_widget::Message),
     Submit,
     ReleaseSubmitted(Result<i64, Error>),
+    ToggleOpen,
 }
 
 impl ReleaseWidget {
@@ -63,6 +66,8 @@ impl ReleaseWidget {
                 files_widget,
                 selected_file_ids: vec![],
                 repositories,
+                is_open: false,
+                selected_release_id: None,
             },
             combined_task,
         )
@@ -132,7 +137,6 @@ impl ReleaseWidget {
                 self.files_widget.update(message).map(Message::Files)
             }
             Message::Submit => {
-                println!("AddReleaseTab: Submit button pressed");
                 let repositories = Arc::clone(&self.repositories);
                 let software_title_ids = self.selected_software_title_ids.clone();
                 let file_set_ids = self.selected_file_ids.clone();
@@ -163,10 +167,33 @@ impl ReleaseWidget {
                     Task::none()
                 }
             },
+            Message::ToggleOpen => {
+                self.is_open = !self.is_open;
+                Task::none()
+            }
         }
     }
 
     pub fn view(&self) -> Element<Message> {
+        let release_view = if self.is_open {
+            self.create_release_view()
+        } else {
+            Column::new().push(button("Add release").on_press(Message::ToggleOpen))
+        };
+        Container::new(release_view)
+            .style(container::bordered_box)
+            .into()
+    }
+
+    fn create_release_view(&self) -> Column<Message> {
+        let cancel_button_text = if self.selected_release_id.is_some() {
+            "Cancel edit release"
+        } else {
+            "Cancel add release"
+        };
+        let cancel_add_emulator_system_button =
+            button(cancel_button_text).on_press(Message::ToggleOpen);
+
         let systems_view = self.systems_widget.view().map(Message::Systems);
         let software_titles_view = self
             .software_titles_widget
@@ -175,11 +202,11 @@ impl ReleaseWidget {
         let files_view = self.files_widget.view().map(Message::Files);
         let submit_button = button("Submit").on_press(Message::Submit);
         column![
+            cancel_add_emulator_system_button,
             software_titles_view,
             systems_view,
             files_view,
             submit_button
         ]
-        .into()
     }
 }
