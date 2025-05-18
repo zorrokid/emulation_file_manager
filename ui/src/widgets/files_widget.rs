@@ -114,7 +114,9 @@ impl FilesWidget {
             }
             Message::FileSelect(message) => {
                 if let file_select_widget::Message::FileSelected(file) = &message {
-                    self.selected_file_ids.push(file.id);
+                    if !self.selected_file_ids.contains(&file.id) {
+                        self.selected_file_ids.push(file.id);
+                    }
                 }
                 self.files_widget.update(message).map(Message::FileSelect)
             }

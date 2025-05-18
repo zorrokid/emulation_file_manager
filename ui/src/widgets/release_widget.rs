@@ -88,8 +88,9 @@ impl ReleaseWidget {
                     systems_widget::Message::SystemSelect(
                         system_select_widget::Message::SystemSelected(system),
                     ) => {
-                        println!("AddReleaseTab: System selected: {:?}", system);
-                        self.selected_system_ids.push(system.id);
+                        if !self.selected_system_ids.contains(&system.id) {
+                            self.selected_system_ids.push(system.id);
+                        }
                     }
                     systems_widget::Message::RemoveSystem(system_id) => {
                         println!("AddReleaseTab: System removed: {:?}", system_id);
@@ -106,11 +107,12 @@ impl ReleaseWidget {
                             software_title,
                         ),
                     ) => {
-                        println!(
-                            "AddReleaseTab: Software title selected: {:?}",
-                            software_title
-                        );
-                        self.selected_software_title_ids.push(software_title.id);
+                        if !self
+                            .selected_software_title_ids
+                            .contains(&software_title.id)
+                        {
+                            self.selected_software_title_ids.push(software_title.id);
+                        }
                     }
                     software_titles_widget::Message::RemoveSoftwareTitle(software_title_id) => {
                         println!(
@@ -132,8 +134,9 @@ impl ReleaseWidget {
                     files_widget::Message::FileSelect(
                         file_select_widget::Message::FileSelected(file),
                     ) => {
-                        println!("AddReleaseTab: File selected: {:?}", file);
-                        self.selected_file_ids.push(file.id);
+                        if !self.selected_file_ids.contains(&file.id) {
+                            self.selected_file_ids.push(file.id);
+                        }
                     }
                     files_widget::Message::RemoveFile(file_id) => {
                         println!("AddReleaseTab: File removed: {:?}", file_id);

@@ -126,11 +126,14 @@ impl SoftwareTitlesWidget {
                     software_title,
                 ) = message
                 {
-                    self.selected_software_title_ids.push(software_title.id);
-                    Task::none()
-                } else {
-                    Task::none()
+                    if !self
+                        .selected_software_title_ids
+                        .contains(&software_title.id)
+                    {
+                        self.selected_software_title_ids.push(software_title.id);
+                    }
                 }
+                Task::none()
             }
             Message::SoftwareTitleAdded(result) => match result {
                 Ok(_) => {
