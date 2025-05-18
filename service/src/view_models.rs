@@ -163,3 +163,12 @@ impl Display for ReleaseListModel {
         write!(f, "{} [{}]", self.name, self.system_names.join(", "))
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct ReleaseViewModel {
+    pub id: i64,
+    pub name: String,
+    pub systems: Vec<System>,
+    pub software_titles: Vec<SoftwareTitle>,
+    pub file_sets: Vec<FileSet>,
+}

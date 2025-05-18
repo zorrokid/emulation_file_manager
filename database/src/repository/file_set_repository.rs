@@ -78,6 +78,23 @@ impl FileSetRepository {
         Ok(file_sets)
     }
 
+    pub async fn get_file_sets_by_release(
+        &self,
+        release_id: i64,
+    ) -> Result<Vec<FileSet>, DatabaseError> {
+        let file_sets = sqlx::query_as(
+            "SELECT c.id, c.file_name, c.file_type 
+             FROM file_set c 
+             INNER JOIN release_file_set rcf
+             ON c.id = rcf.file_set_id
+             WHERE rcf.release_id = ?",
+        )
+        .bind(release_id)
+        .fetch_all(&*self.pool)
+        .await?;
+        Ok(file_sets)
+    }
+
     pub async fn get_all_file_sets(&self) -> Result<Vec<FileSet>, DatabaseError> {
         let file_sets = sqlx::query_as(
             "SELECT id, file_name, file_type 

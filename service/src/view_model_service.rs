@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
-use database::{database_error::DatabaseError, repository_manager::RepositoryManager};
+use database::repository_manager::RepositoryManager;
 
 use crate::{
     error::Error,
     view_models::{
         EmulatorListModel, EmulatorSystemViewModel, EmulatorViewModel, FileSetListModel,
-        ReleaseListModel, Settings, SoftwareTitleListModel, SystemListModel,
+        ReleaseListModel, ReleaseViewModel, Settings, SoftwareTitleListModel, SystemListModel,
     },
 };
 
@@ -147,6 +147,46 @@ impl ViewModelService {
         let release_models = releases.iter().map(ReleaseListModel::from).collect();
         Ok(release_models)
     }
+
+    pub async fn get_release_view_model(&self, release_id: i64) -> Result<ReleaseViewModel, Error> {
+        let release = self
+            .repository_manager
+            .get_release_repository()
+            .get_release(release_id)
+            .await
+            .map_err(|err| Error::DbError(err.to_string()))?;
+
+        let software_titles = self
+            .repository_manager
+            .get_software_title_repository()
+            .get_software_titles_by_release(release_id)
+            .await
+            .map_err(|err| Error::DbError(err.to_string()))?;
+
+        let systems = self
+            .repository_manager
+            .get_system_repository()
+            .get_systems_by_release(release_id)
+            .await
+            .map_err(|err| Error::DbError(err.to_string()))?;
+
+        let file_sets = self
+            .repository_manager
+            .get_file_set_repository()
+            .get_file_sets_by_release(release_id)
+            .await
+            .map_err(|err| Error::DbError(err.to_string()))?;
+
+        let release_view_model = ReleaseViewModel {
+            id: release.id,
+            name: release.name.clone(),
+            systems,
+            software_titles,
+            file_sets,
+        };
+
+        Ok(release_view_model)
+    }
 }
 
 #[cfg(test)]
@@ -155,7 +195,10 @@ mod tests {
     use std::path::PathBuf;
 
     use super::*;
-    use database::{models::SettingName, setup_test_db};
+    use database::{
+        models::{EmulatorSystemUpdateModel, SettingName},
+        setup_test_db,
+    };
 
     #[async_std::test]
     async fn test_get_emulator_view_model() {
@@ -168,7 +211,11 @@ mod tests {
             .add_system("Test System".to_string())
             .await
             .unwrap();
-        let emulator_systems = vec![(system_id, "args".to_string())];
+        let emulator_systems = vec![EmulatorSystemUpdateModel {
+            id: None,
+            system_id,
+            arguments: "args".to_string(),
+        }];
 
         let emulator_id = repository_manager
             .get_emulator_repository()

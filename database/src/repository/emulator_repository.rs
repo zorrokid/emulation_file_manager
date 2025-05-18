@@ -137,17 +137,17 @@ impl EmulatorRepository {
 
         // delete obsolete emulator systems
         // get the ids of emulator systems that should be deleted
-        let existing_systems = sqlx::query!(
+        let existing_system_ids: Vec<i64> = sqlx::query!(
             "SELECT id 
              FROM emulator_system 
              WHERE emulator_id = ?",
             emulator_id,
         )
         .fetch_all(&mut *transaction)
-        .await?;
-
-        let existing_system_ids: Vec<i64> =
-            existing_systems.iter().map(|system| system.id).collect();
+        .await?
+        .iter()
+        .map(|system| system.id)
+        .collect();
 
         let removable_system_ids = existing_system_ids
             .into_iter()
@@ -156,21 +156,16 @@ impl EmulatorRepository {
 
         println!("removable_system_ids: {:?}", removable_system_ids);
 
-        let delete_query = format!(
-            "DELETE FROM emulator_system 
-             WHERE emulator_id = ? AND id IN ({})",
-            removable_system_ids
-                .iter()
-                .map(|_| "?")
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
-
-        let mut query = sqlx::query(&delete_query).bind(emulator_id);
         for id in &removable_system_ids {
-            query = query.bind(*id);
+            sqlx::query!(
+                "DELETE FROM emulator_system 
+                 WHERE emulator_id = ? AND id = ?",
+                emulator_id,
+                id
+            )
+            .execute(&mut *transaction)
+            .await?;
         }
-        query.execute(&mut *transaction).await?;
 
         // insert new emulator systems
 

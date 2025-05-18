@@ -20,6 +20,7 @@ pub enum Message {
     ReleaseSelected(ReleaseListModel),
     SetReleases(Vec<ReleaseListModel>),
     ReleasesFetched(Result<Vec<ReleaseListModel>, Error>),
+    SetReleaseSelected(i64),
 }
 
 impl ReleaseSelectWidget {
@@ -43,7 +44,8 @@ impl ReleaseSelectWidget {
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::ReleaseSelected(release) => {
-                Task::done(Message::ReleaseSelected(release.clone()))
+                self.selected_release = Some(release.clone());
+                Task::done(Message::SetReleaseSelected(release.id))
             }
             Message::SetReleases(releases) => {
                 self.releases = releases;
@@ -60,6 +62,7 @@ impl ReleaseSelectWidget {
                     Task::none()
                 }
             },
+            _ => Task::none(),
         }
     }
 

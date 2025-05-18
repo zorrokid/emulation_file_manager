@@ -31,6 +31,20 @@ impl SystemRepository {
         Ok(systems)
     }
 
+    pub async fn get_systems_by_release(&self, release_id: i64) -> Result<Vec<System>, Error> {
+        let systems = sqlx::query_as!(
+            System,
+            "SELECT s.id, s.name 
+             FROM system s
+             INNER JOIN release_system rs ON s.id = rs.system_id
+             WHERE rs.release_id = ?",
+            release_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+        Ok(systems)
+    }
+
     pub async fn is_system_in_use(&self, system_id: i64) -> Result<bool, Error> {
         let releases_count = sqlx::query_scalar!(
             "SELECT COUNT(*) 
