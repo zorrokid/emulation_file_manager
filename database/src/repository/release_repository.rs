@@ -12,7 +12,7 @@ pub struct ReleaseRepository {
     pool: Arc<Pool<Sqlite>>,
 }
 
-#[derive(sqlx::FromRow)]
+#[derive(sqlx::FromRow, Debug)]
 struct ReleaseExtendedRaw {
     id: i64,
     name: String,
@@ -69,6 +69,7 @@ impl ReleaseRepository {
         let mut releases: Vec<ReleaseExtended> = Vec::new();
 
         for raw in raw_releases {
+            dbg!("Raw release: {}", &raw);
             let system_names = raw
                 .system_names
                 .unwrap_or_default()

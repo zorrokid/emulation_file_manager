@@ -5,7 +5,10 @@ use iced::{
     widget::{button, column, container, text_input, Column, Container},
     Element, Task,
 };
-use service::{view_model_service::ViewModelService, view_models::ReleaseViewModel};
+use service::{
+    view_model_service::ViewModelService,
+    view_models::{ReleaseListModel, ReleaseViewModel},
+};
 
 use super::{
     file_select_widget,
@@ -39,6 +42,7 @@ pub enum Message {
     ToggleOpen,
     SetSelectedRelease(ReleaseViewModel),
     ReleaseNameChanged(String),
+    ReleaseWasUpdated(ReleaseListModel),
 }
 
 impl ReleaseWidget {
@@ -184,7 +188,13 @@ impl ReleaseWidget {
                 Ok(id) => {
                     // TODO
                     print!("Release {} submitted", id);
-                    Task::none()
+                    self.is_open = false;
+                    Task::done(Message::ReleaseWasUpdated(ReleaseListModel {
+                        id,
+                        name: self.release_name.clone(),
+                        system_names: vec![],
+                        file_types: vec![],
+                    }))
                 }
                 Err(err) => {
                     eprintln!("Error submitting file: {}", err);
@@ -227,12 +237,15 @@ impl ReleaseWidget {
                     .update(systems_widget::Message::SetSelectedSystemIds(system_ids))
                     .map(Message::Systems);
 
+                self.release_name = release.name.clone();
+
                 Task::batch(vec![software_titles_task, systems_task, files_task])
             }
             Message::ReleaseNameChanged(name) => {
                 self.release_name = name;
                 Task::none()
             }
+            _ => Task::none(),
         }
     }
 

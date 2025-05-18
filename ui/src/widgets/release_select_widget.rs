@@ -54,6 +54,7 @@ impl ReleaseSelectWidget {
             }
             Message::ReleasesFetched(result) => match result {
                 Ok(releases) => {
+                    println!("Fetched releases: {:?}", releases);
                     self.releases = releases;
                     Task::none()
                 }

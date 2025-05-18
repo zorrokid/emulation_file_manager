@@ -107,7 +107,7 @@ impl AddReleaseTab {
                     .update(message.clone())
                     .map(Message::ReleaseWidget);
 
-                if let release_widget::Message::ReleaseSubmitted(_) = message {
+                if let release_widget::Message::ReleaseWasUpdated(release_list_model) = message {
                     // TODO: update selected release
                 }
 

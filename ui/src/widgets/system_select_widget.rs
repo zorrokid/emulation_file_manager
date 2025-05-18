@@ -27,6 +27,7 @@ impl SystemSelectWidget {
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
+        println!("SystemSelectWidget update: {:?}", message);
         match message {
             Message::SystemSelected(system) => Task::done(Message::SystemSelected(system.clone())),
             Message::SetSystems(systems) => {
