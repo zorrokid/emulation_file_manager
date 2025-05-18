@@ -39,6 +39,23 @@ impl SoftwareTitleRepository {
         Ok(software_titles)
     }
 
+    pub async fn get_software_titles_by_release(
+        &self,
+        release_id: i64,
+    ) -> Result<Vec<SoftwareTitle>, DatabaseError> {
+        let software_titles = sqlx::query_as!(
+            SoftwareTitle,
+            "SELECT st.id, st.name, st.franchise_id 
+             FROM software_title st
+             INNER JOIN release_software_title rst ON st.id = rst.software_title_id
+             WHERE rst.release_id = ?",
+            release_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+        Ok(software_titles)
+    }
+
     pub async fn add_software_title(
         &self,
         name: String,

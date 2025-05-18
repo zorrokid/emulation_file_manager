@@ -2,10 +2,13 @@ use std::sync::Arc;
 
 use database::{database_error::Error, repository_manager::RepositoryManager};
 use iced::{
-    widget::{button, column},
+    widget::{button, column, text},
     Task,
 };
-use service::view_model_service::ViewModelService;
+use service::{
+    error::Error as ServiceError, view_model_service::ViewModelService,
+    view_models::ReleaseViewModel,
+};
 
 use crate::widgets::{
     file_select_widget,
@@ -20,13 +23,17 @@ use crate::widgets::{
 pub struct AddReleaseTab {
     repositories: Arc<RepositoryManager>,
     view_model_service: Arc<ViewModelService>,
+
+    // TODO: move these to add_or_edit_release_widget >>
     systems_widget: SystemsWidget,
     selected_system_ids: Vec<i64>,
     software_titles_widget: SoftwareTitlesWidget,
     selected_software_title_ids: Vec<i64>,
     files_widget: FilesWidget,
     selected_file_ids: Vec<i64>,
+    // <<
     release_select_widget: ReleaseSelectWidget,
+    selected_release: Option<ReleaseViewModel>,
 }
 
 #[derive(Debug, Clone)]
@@ -37,6 +44,8 @@ pub enum Message {
     Submit,
     ReleaseSubmitted(Result<i64, Error>),
     ReleaseSelect(release_select_widget::Message),
+    ReleaseFetched(Result<ReleaseViewModel, ServiceError>),
+    StartEditRelease,
 }
 
 impl AddReleaseTab {
@@ -73,6 +82,7 @@ impl AddReleaseTab {
                 files_widget,
                 selected_file_ids: vec![],
                 release_select_widget,
+                selected_release: None,
             },
             combined_task,
         )
@@ -173,10 +183,41 @@ impl AddReleaseTab {
                     Task::none()
                 }
             },
-            Message::ReleaseSelect(message) => self
-                .release_select_widget
-                .update(message)
-                .map(Message::ReleaseSelect),
+            Message::ReleaseSelect(message) => {
+                let update_task = self
+                    .release_select_widget
+                    .update(message.clone())
+                    .map(Message::ReleaseSelect);
+
+                if let release_select_widget::Message::ReleaseSelected(release) = message.clone() {
+                    let view_model_service = Arc::clone(&self.view_model_service);
+                    let fetch_selected_release_task = Task::perform(
+                        async move { view_model_service.get_release_view_model(release.id).await },
+                        Message::ReleaseFetched,
+                    );
+                    let combined_task = Task::batch(vec![update_task, fetch_selected_release_task]);
+                    return combined_task;
+                }
+
+                update_task
+            }
+            Message::ReleaseFetched(result) => match result {
+                Ok(release_view_model) => {
+                    self.selected_release = Some(release_view_model);
+                    Task::none()
+                }
+                Err(err) => {
+                    eprintln!("Error fetching release: {}", err);
+                    Task::none()
+                }
+            },
+            Message::StartEditRelease => {
+                if let Some(release) = &self.selected_release {
+                    // TODO: set all the fields with the release data
+                    println!("Editing release: {:?}", release);
+                }
+                Task::none()
+            }
         }
     }
 
@@ -185,6 +226,7 @@ impl AddReleaseTab {
             .release_select_widget
             .view()
             .map(Message::ReleaseSelect);
+        let selected_release_view = self.create_selected_release_view();
         let systems_view = self.systems_widget.view().map(Message::Systems);
         let software_titles_view = self
             .software_titles_widget
@@ -194,11 +236,30 @@ impl AddReleaseTab {
         let submit_button = button("Submit").on_press(Message::Submit);
         column![
             release_select_view,
+            selected_release_view,
             software_titles_view,
             systems_view,
             files_view,
             submit_button
         ]
         .into()
+    }
+
+    fn create_selected_release_view(&self) -> iced::Element<Message> {
+        if let Some(release) = &self.selected_release {
+            let release_name_field = text!("Release Name: {}", release.name);
+            let software_titles_field = text!("Software Titles: {:?}", release.software_titles);
+            let system_names_field = text!("Systems: {:?}", release.systems);
+            let edit_button = button("Edit").on_press(Message::StartEditRelease);
+
+            return column![
+                release_name_field,
+                software_titles_field,
+                system_names_field,
+                edit_button,
+            ]
+            .into();
+        }
+        iced::widget::text("No release selected").into()
     }
 }
