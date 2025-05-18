@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use database::{database_error::DatabaseError, repository_manager::RepositoryManager};
+use database::repository_manager::RepositoryManager;
 
 use crate::{
     error::Error,
@@ -195,7 +195,10 @@ mod tests {
     use std::path::PathBuf;
 
     use super::*;
-    use database::{models::SettingName, setup_test_db};
+    use database::{
+        models::{EmulatorSystemUpdateModel, SettingName},
+        setup_test_db,
+    };
 
     #[async_std::test]
     async fn test_get_emulator_view_model() {
@@ -208,7 +211,11 @@ mod tests {
             .add_system("Test System".to_string())
             .await
             .unwrap();
-        let emulator_systems = vec![(system_id, "args".to_string())];
+        let emulator_systems = vec![EmulatorSystemUpdateModel {
+            id: None,
+            system_id,
+            arguments: "args".to_string(),
+        }];
 
         let emulator_id = repository_manager
             .get_emulator_repository()

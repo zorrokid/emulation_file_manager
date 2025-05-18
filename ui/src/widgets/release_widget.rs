@@ -24,7 +24,7 @@ pub struct ReleaseWidget {
     files_widget: FilesWidget,
     selected_file_ids: Vec<i64>,
     repositories: Arc<RepositoryManager>,
-    selected_release: Option<ReleaseViewModel>,
+    selected_release: Option<i64>,
     is_open: bool,
     release_name: String,
 }
@@ -146,15 +146,39 @@ impl ReleaseWidget {
                 let file_set_ids = self.selected_file_ids.clone();
                 let system_ids = self.selected_system_ids.clone();
                 let name = self.release_name.clone();
-                Task::perform(
-                    async move {
-                        repositories
-                            .get_release_repository()
-                            .add_release_full(name, software_title_ids, file_set_ids, system_ids)
-                            .await
-                    },
-                    Message::ReleaseSubmitted,
-                )
+
+                if let Some(release_id) = self.selected_release {
+                    Task::perform(
+                        async move {
+                            repositories
+                                .get_release_repository()
+                                .update_release_full(
+                                    release_id,
+                                    name,
+                                    software_title_ids,
+                                    file_set_ids,
+                                    system_ids,
+                                )
+                                .await
+                        },
+                        Message::ReleaseSubmitted,
+                    )
+                } else {
+                    Task::perform(
+                        async move {
+                            repositories
+                                .get_release_repository()
+                                .add_release_full(
+                                    name,
+                                    software_title_ids,
+                                    file_set_ids,
+                                    system_ids,
+                                )
+                                .await
+                        },
+                        Message::ReleaseSubmitted,
+                    )
+                }
             }
             Message::ReleaseSubmitted(result) => match result {
                 Ok(id) => {
@@ -173,7 +197,7 @@ impl ReleaseWidget {
             }
             Message::SetSelectedRelease(release) => {
                 self.is_open = true;
-                self.selected_release = Some(release.clone());
+                self.selected_release = Some(release.id);
                 let file_set_ids: Vec<i64> = release.file_sets.iter().map(|fs| fs.id).collect();
                 self.selected_file_ids = file_set_ids.clone();
                 let files_task = self
