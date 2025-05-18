@@ -32,6 +32,7 @@ pub enum Message {
     SoftwareTitleSelect(software_title_select_widget::Message),
     SoftwareTitleAdded(Result<i64, DatabaseError>),
     RemoveSoftwareTitle(i64),
+    SetSelectedSoftwareTitleIds(Vec<i64>),
 }
 
 impl SoftwareTitlesWidget {
@@ -121,6 +122,10 @@ impl SoftwareTitlesWidget {
             Message::RemoveSoftwareTitle(id) => {
                 self.selected_software_title_ids
                     .retain(|&software_title_id| software_title_id != id);
+                Task::none()
+            }
+            Message::SetSelectedSoftwareTitleIds(ids) => {
+                self.selected_software_title_ids = ids;
                 Task::none()
             }
         }

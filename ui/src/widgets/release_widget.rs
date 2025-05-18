@@ -2,10 +2,10 @@ use std::sync::Arc;
 
 use database::{database_error::Error, repository_manager::RepositoryManager};
 use iced::{
-    widget::{button, column, container, Column, Container},
+    widget::{button, column, container, text_input, Column, Container},
     Element, Task,
 };
-use service::view_model_service::ViewModelService;
+use service::{view_model_service::ViewModelService, view_models::ReleaseViewModel};
 
 use super::{
     file_select_widget,
@@ -24,8 +24,9 @@ pub struct ReleaseWidget {
     files_widget: FilesWidget,
     selected_file_ids: Vec<i64>,
     repositories: Arc<RepositoryManager>,
-    selected_release_id: Option<i64>,
+    selected_release: Option<ReleaseViewModel>,
     is_open: bool,
+    release_name: String,
 }
 
 #[derive(Debug, Clone)]
@@ -36,6 +37,8 @@ pub enum Message {
     Submit,
     ReleaseSubmitted(Result<i64, Error>),
     ToggleOpen,
+    SetSelectedRelease(ReleaseViewModel),
+    ReleaseNameChanged(String),
 }
 
 impl ReleaseWidget {
@@ -67,7 +70,8 @@ impl ReleaseWidget {
                 selected_file_ids: vec![],
                 repositories,
                 is_open: false,
-                selected_release_id: None,
+                selected_release: None,
+                release_name: "".to_string(),
             },
             combined_task,
         )
@@ -141,16 +145,12 @@ impl ReleaseWidget {
                 let software_title_ids = self.selected_software_title_ids.clone();
                 let file_set_ids = self.selected_file_ids.clone();
                 let system_ids = self.selected_system_ids.clone();
+                let name = self.release_name.clone();
                 Task::perform(
                     async move {
                         repositories
                             .get_release_repository()
-                            .add_release_full(
-                                "".to_string(),
-                                software_title_ids,
-                                file_set_ids,
-                                system_ids,
-                            )
+                            .add_release_full(name, software_title_ids, file_set_ids, system_ids)
                             .await
                     },
                     Message::ReleaseSubmitted,
@@ -171,6 +171,44 @@ impl ReleaseWidget {
                 self.is_open = !self.is_open;
                 Task::none()
             }
+            Message::SetSelectedRelease(release) => {
+                self.is_open = true;
+                self.selected_release = Some(release.clone());
+                let file_set_ids: Vec<i64> = release.file_sets.iter().map(|fs| fs.id).collect();
+                self.selected_file_ids = file_set_ids.clone();
+                let files_task = self
+                    .files_widget
+                    .update(files_widget::Message::SetSelectedFileIds(file_set_ids))
+                    .map(Message::Files);
+
+                let software_title_ids: Vec<i64> =
+                    release.software_titles.iter().map(|st| st.id).collect();
+                self.selected_software_title_ids = software_title_ids.clone();
+                let software_titles_task = self
+                    .software_titles_widget
+                    .update(
+                        software_titles_widget::Message::SetSelectedSoftwareTitleIds(
+                            software_title_ids,
+                        ),
+                    )
+                    .map(Message::SoftwareTitles);
+
+                let system_ids: Vec<i64> = release.systems.iter().map(|s| s.id).collect();
+                // TODO: what if systems widget would emit SystemSelected message for each system
+                // (or it could emit a new SystemsSelected message with all selected systems),
+                // so this wouldn't need to be set here?
+                self.selected_system_ids = system_ids.clone();
+                let systems_task = self
+                    .systems_widget
+                    .update(systems_widget::Message::SetSelectedSystemIds(system_ids))
+                    .map(Message::Systems);
+
+                Task::batch(vec![software_titles_task, systems_task, files_task])
+            }
+            Message::ReleaseNameChanged(name) => {
+                self.release_name = name;
+                Task::none()
+            }
         }
     }
 
@@ -186,7 +224,7 @@ impl ReleaseWidget {
     }
 
     fn create_release_view(&self) -> Column<Message> {
-        let cancel_button_text = if self.selected_release_id.is_some() {
+        let cancel_button_text = if self.selected_release.is_some() {
             "Cancel edit release"
         } else {
             "Cancel add release"
@@ -200,9 +238,14 @@ impl ReleaseWidget {
             .view()
             .map(Message::SoftwareTitles);
         let files_view = self.files_widget.view().map(Message::Files);
+
+        let name_input =
+            text_input("Release name", &self.release_name).on_input(Message::ReleaseNameChanged);
+
         let submit_button = button("Submit").on_press(Message::Submit);
         column![
             cancel_add_emulator_system_button,
+            name_input,
             software_titles_view,
             systems_view,
             files_view,

@@ -33,6 +33,7 @@ pub enum Message {
     RemoveSystem(i64),
     StartAddSystem,
     CancelAddSystem,
+    SetSelectedSystemIds(Vec<i64>),
 }
 
 impl SystemsWidget {
@@ -116,6 +117,13 @@ impl SystemsWidget {
             }
             Message::CancelAddSystem => {
                 self.adding_system = false;
+                Task::none()
+            }
+            Message::SetSelectedSystemIds(ids) => {
+                self.selected_system_ids = ids;
+                // TODO: should this emit SystemSelected message for each system? Then this
+                // wouldn't be needed to set explicitly in parent widget which maintains selected
+                // systems for the release.
                 Task::none()
             }
         }

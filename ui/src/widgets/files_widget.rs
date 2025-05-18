@@ -35,6 +35,7 @@ pub enum Message {
     FileAdded(Result<i64, DatabaseError>),
     RemoveFile(i64),
     SettingsFetched(Result<Settings, Error>),
+    SetSelectedFileIds(Vec<i64>),
 }
 
 impl FilesWidget {
@@ -133,6 +134,10 @@ impl FilesWidget {
             },
             Message::RemoveFile(id) => {
                 self.selected_file_ids.retain(|&file_id| file_id != id);
+                Task::none()
+            }
+            Message::SetSelectedFileIds(ids) => {
+                self.selected_file_ids = ids;
                 Task::none()
             }
         }

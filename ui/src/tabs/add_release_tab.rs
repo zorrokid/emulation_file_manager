@@ -59,15 +59,19 @@ impl AddReleaseTab {
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::ReleaseSelect(message) => {
+                println!("ReleaseSelect message");
                 let update_task = self
                     .release_select_widget
                     .update(message.clone())
                     .map(Message::ReleaseSelect);
 
-                if let release_select_widget::Message::ReleaseSelected(release) = message.clone() {
+                if let release_select_widget::Message::SetReleaseSelected(release_id) =
+                    message.clone()
+                {
+                    println!("Got ReleaseSelected message");
                     let view_model_service = Arc::clone(&self.view_model_service);
                     let fetch_selected_release_task = Task::perform(
-                        async move { view_model_service.get_release_view_model(release.id).await },
+                        async move { view_model_service.get_release_view_model(release_id).await },
                         Message::ReleaseFetched,
                     );
                     let combined_task = Task::batch(vec![update_task, fetch_selected_release_task]);
@@ -78,7 +82,8 @@ impl AddReleaseTab {
             }
             Message::ReleaseFetched(result) => match result {
                 Ok(release_view_model) => {
-                    self.selected_release = Some(release_view_model);
+                    println!("Got ReleaseFetched message.");
+                    self.selected_release = Some(release_view_model.clone());
                     Task::none()
                 }
                 Err(err) => {
@@ -87,9 +92,12 @@ impl AddReleaseTab {
                 }
             },
             Message::StartEditRelease => {
-                if let Some(release) = &self.selected_release {
-                    // TODO: set all the fields with the release data
+                if let Some(release) = self.selected_release.clone() {
                     println!("Editing release: {:?}", release);
+                    return self
+                        .release_widget
+                        .update(release_widget::Message::SetSelectedRelease(release))
+                        .map(Message::ReleaseWidget);
                 }
                 Task::none()
             }
