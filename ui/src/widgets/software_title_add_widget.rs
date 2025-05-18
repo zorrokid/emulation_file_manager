@@ -1,41 +1,52 @@
 use iced::{
     alignment,
     widget::{button, row, text_input},
+    Task,
 };
 
 use crate::defaults::{DEFAULT_PADDING, DEFAULT_SPACING};
 
 pub struct SoftwareTitleAddWidget {
     software_title_name: String,
+    software_title_id: Option<i64>,
 }
 
 #[derive(Debug, Clone)]
 pub enum Message {
     SoftwareTitleNameUpdated(String),
-    CancelAddSoftwareTitle,
     Submit,
-}
-
-pub enum Action {
+    SetEditSoftwareTitle(i64, String),
     AddSoftwareTitle(String),
-    None,
+    UpdateSoftwareTitle(i64, String),
 }
 
 impl SoftwareTitleAddWidget {
     pub fn new() -> Self {
         Self {
             software_title_name: "".to_string(),
+            software_title_id: None,
         }
     }
 
-    // TODO: maybe return Task<Message> instead of Action
-    pub fn update(&mut self, message: Message) -> Action {
+    pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::SoftwareTitleNameUpdated(name) => self.software_title_name = name,
-            Message::Submit => return Action::AddSoftwareTitle(self.software_title_name.clone()),
-            Message::CancelAddSoftwareTitle => println!("Cancel"),
+            Message::Submit => {
+                let task = if let Some(id) = self.software_title_id {
+                    Message::UpdateSoftwareTitle(id, self.software_title_name.clone())
+                } else {
+                    Message::AddSoftwareTitle(self.software_title_name.clone())
+                };
+                self.software_title_name = "".to_string();
+                return Task::done(task);
+            }
+            Message::SetEditSoftwareTitle(id, name) => {
+                self.software_title_id = Some(id);
+                self.software_title_name = name;
+            }
+            _ => {}
         }
-        Action::None
+        Task::none()
     }
 
     pub fn view(&self) -> iced::Element<Message> {
@@ -44,8 +55,7 @@ impl SoftwareTitleAddWidget {
 
         let submit_button = button("Submit software_title")
             .on_press_maybe((!self.software_title_name.is_empty()).then_some(Message::Submit));
-        let cancel_button = button("Cancel").on_press(Message::CancelAddSoftwareTitle);
-        row![name_input, submit_button, cancel_button]
+        row![name_input, submit_button]
             .spacing(DEFAULT_SPACING)
             .padding(DEFAULT_PADDING)
             .align_y(alignment::Vertical::Center)

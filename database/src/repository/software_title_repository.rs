@@ -71,10 +71,7 @@ impl SoftwareTitleRepository {
         Ok(result.last_insert_rowid())
     }
 
-    pub async fn update_software_title(
-        &self,
-        software_title: &SoftwareTitle,
-    ) -> Result<i64, DatabaseError> {
+    pub async fn update_software_title(&self, software_title: SoftwareTitle) -> Result<i64, Error> {
         let result = sqlx::query!(
             "UPDATE software_title SET name = ?, franchise_id = ? WHERE id = ?",
             software_title.name,
