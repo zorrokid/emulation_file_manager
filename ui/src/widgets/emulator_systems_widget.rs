@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use database::repository_manager::RepositoryManager;
-use iced::Task;
+use iced::{Element, Task};
 use service::{view_model_service::ViewModelService, view_models::SystemListModel};
 
-use super::systems_widget::{self, SystemsWidget};
+use super::systems_widget::{SystemWidgetMessage, SystemsWidget};
 
 pub struct EmulatorSystemsWidget {
     repositories: Arc<RepositoryManager>,
@@ -16,15 +16,15 @@ pub struct EmulatorSystemsWidget {
 }
 
 #[derive(Debug, Clone)]
-pub enum Message {
-    Systems(systems_widget::Message),
+pub enum EmulatorSystemsWidgetMessage {
+    SystemsWidget(SystemWidgetMessage),
 }
 
 impl EmulatorSystemsWidget {
     pub fn new(
         repositories: Arc<RepositoryManager>,
         view_model_service: Arc<ViewModelService>,
-    ) -> (Self, Task<Message>) {
+    ) -> (Self, Task<EmulatorSystemsWidgetMessage>) {
         let (systems_widget, task) =
             SystemsWidget::new(Arc::clone(&repositories), Arc::clone(&view_model_service));
         (
@@ -34,21 +34,27 @@ impl EmulatorSystemsWidget {
                 systems_widget,
                 selected_system_ids: vec![],
             },
-            task.map(Message::Systems),
+            task.map(EmulatorSystemsWidgetMessage::SystemsWidget),
         )
     }
 
-    pub fn update(&mut self, message: Message) -> Task<Message> {
+    pub fn update(
+        &mut self,
+        message: EmulatorSystemsWidgetMessage,
+    ) -> Task<EmulatorSystemsWidgetMessage> {
         match message {
-            Message::Systems(message) => {
+            EmulatorSystemsWidgetMessage::SystemsWidget(message) => {
                 let task = self.systems_widget.update(message);
-                task.map(Message::Systems)
+                task.map(EmulatorSystemsWidgetMessage::SystemsWidget)
             }
         }
     }
 
-    pub fn view(&self) -> iced::Element<Message> {
-        let systems_view = self.systems_widget.view().map(Message::Systems);
+    pub fn view(&self) -> Element<EmulatorSystemsWidgetMessage> {
+        let systems_view = self
+            .systems_widget
+            .view()
+            .map(EmulatorSystemsWidgetMessage::SystemsWidget);
         systems_view
     }
 }

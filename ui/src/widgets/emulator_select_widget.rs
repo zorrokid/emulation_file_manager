@@ -9,7 +9,7 @@ pub struct EmulatorSelectWidget {
 }
 
 #[derive(Debug, Clone)]
-pub enum Message {
+pub enum EmulatorSelectWidgetMessage {
     EmulatorSelected(EmulatorListModel),
     SetEmulators(Vec<EmulatorListModel>),
 }
@@ -22,13 +22,16 @@ impl EmulatorSelectWidget {
         }
     }
 
-    pub fn update(&mut self, message: Message) -> iced::Task<Message> {
+    pub fn update(
+        &mut self,
+        message: EmulatorSelectWidgetMessage,
+    ) -> iced::Task<EmulatorSelectWidgetMessage> {
         match message {
-            Message::EmulatorSelected(emulator) => {
+            EmulatorSelectWidgetMessage::EmulatorSelected(emulator) => {
                 self.selected_emulator = Some(emulator.clone());
                 iced::Task::none()
             }
-            Message::SetEmulators(emulators) => {
+            EmulatorSelectWidgetMessage::SetEmulators(emulators) => {
                 self.emulators = emulators;
                 self.selected_emulator = None;
                 iced::Task::none()
@@ -36,11 +39,11 @@ impl EmulatorSelectWidget {
         }
     }
 
-    pub fn view(&self) -> iced::Element<Message> {
+    pub fn view(&self) -> iced::Element<EmulatorSelectWidgetMessage> {
         let emulator_select = pick_list(
             self.emulators.as_slice(),
             self.selected_emulator.clone(),
-            Message::EmulatorSelected,
+            EmulatorSelectWidgetMessage::EmulatorSelected,
         );
         let label = iced::widget::text("Select emulator");
         iced::widget::row![label, emulator_select]

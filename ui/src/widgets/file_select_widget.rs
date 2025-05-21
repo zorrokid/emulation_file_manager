@@ -13,7 +13,7 @@ pub struct FileSelectWidget {
 }
 
 #[derive(Debug, Clone)]
-pub enum Message {
+pub enum FileSelectWidgetMessage {
     FileSelected(FileSetListModel),
     SetFiles(Vec<FileSetListModel>),
 }
@@ -26,10 +26,10 @@ impl FileSelectWidget {
         }
     }
 
-    pub fn update(&mut self, message: Message) -> Task<Message> {
+    pub fn update(&mut self, message: FileSelectWidgetMessage) -> Task<FileSelectWidgetMessage> {
         match message {
             //Message::FileSelected(file) => Task::done(Message::FileSelected(file.clone())),
-            Message::SetFiles(files) => {
+            FileSelectWidgetMessage::SetFiles(files) => {
                 self.files = files;
                 self.selected_file = None;
             }
@@ -38,11 +38,11 @@ impl FileSelectWidget {
         Task::none()
     }
 
-    pub fn view(&self) -> iced::Element<Message> {
+    pub fn view(&self) -> iced::Element<FileSelectWidgetMessage> {
         let file_select = pick_list(
             self.files.as_slice(),
             self.selected_file.clone(),
-            Message::FileSelected,
+            FileSelectWidgetMessage::FileSelected,
         );
         let label = text!("Select file");
         row![label, file_select]

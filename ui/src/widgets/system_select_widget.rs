@@ -13,7 +13,7 @@ pub struct SystemSelectWidget {
 }
 
 #[derive(Debug, Clone)]
-pub enum Message {
+pub enum SystemSelectWidgetMessage {
     SystemSelected(SystemListModel),
     SetSystems(Vec<SystemListModel>),
 }
@@ -26,11 +26,16 @@ impl SystemSelectWidget {
         }
     }
 
-    pub fn update(&mut self, message: Message) -> Task<Message> {
+    pub fn update(
+        &mut self,
+        message: SystemSelectWidgetMessage,
+    ) -> Task<SystemSelectWidgetMessage> {
         println!("SystemSelectWidget update: {:?}", message);
         match message {
-            Message::SystemSelected(system) => Task::done(Message::SystemSelected(system.clone())),
-            Message::SetSystems(systems) => {
+            SystemSelectWidgetMessage::SystemSelected(system) => {
+                Task::done(SystemSelectWidgetMessage::SystemSelected(system.clone()))
+            }
+            SystemSelectWidgetMessage::SetSystems(systems) => {
                 self.systems = systems;
                 self.selected_system = None;
                 Task::none()
@@ -38,11 +43,11 @@ impl SystemSelectWidget {
         }
     }
 
-    pub fn view(&self) -> iced::Element<Message> {
+    pub fn view(&self) -> iced::Element<SystemSelectWidgetMessage> {
         let system_select = pick_list(
             self.systems.as_slice(),
             self.selected_system.clone(),
-            Message::SystemSelected,
+            SystemSelectWidgetMessage::SystemSelected,
         );
         let label = text!("Select system");
         row![label, system_select]

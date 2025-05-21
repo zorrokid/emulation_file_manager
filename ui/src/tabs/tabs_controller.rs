@@ -4,7 +4,12 @@ use database::repository_manager::RepositoryManager;
 use iced::Task;
 use service::view_model_service::ViewModelService;
 
-use super::{add_release_tab, emulators_tab, home_tab, settings_tab};
+use super::{
+    add_release_tab::{self, AddReleaseTabMessage},
+    emulators_tab::{self, EmulatorsTabMessage},
+    home_tab::{self, HomeTabMessage},
+    settings_tab::{self, SettingsTabMessage},
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Tab {
@@ -15,11 +20,13 @@ pub enum Tab {
 }
 
 #[derive(Debug, Clone)]
-pub enum Message {
-    Home(home_tab::Message),
-    Settings(settings_tab::Message),
-    AddRelease(add_release_tab::Message),
-    Emulators(emulators_tab::Message),
+pub enum TabsControllerMessage {
+    // child messages
+    HomeTab(HomeTabMessage),
+    SettingsTab(SettingsTabMessage),
+    AddReleaseTab(AddReleaseTabMessage),
+    EmulatorsTab(EmulatorsTabMessage),
+    // local messages
 }
 
 pub struct TabsController {
@@ -35,7 +42,7 @@ impl TabsController {
         selected_tab: Option<Tab>,
         repositories: Arc<RepositoryManager>,
         view_model_service: Arc<ViewModelService>,
-    ) -> (Self, Task<Message>) {
+    ) -> (Self, Task<TabsControllerMessage>) {
         let settings_tab = settings_tab::SettingsTab::new();
         let home_tab = home_tab::HomeTab::new();
         let (add_release_tab, task) = add_release_tab::AddReleaseTab::new(
@@ -46,8 +53,8 @@ impl TabsController {
             emulators_tab::EmulatorsTab::new(repositories, view_model_service);
 
         let combined_task = Task::batch(vec![
-            task.map(Message::AddRelease),
-            emulators_task.map(Message::Emulators),
+            task.map(TabsControllerMessage::AddReleaseTab),
+            emulators_task.map(TabsControllerMessage::EmulatorsTab),
         ]);
 
         (
@@ -62,30 +69,46 @@ impl TabsController {
         )
     }
 
-    pub fn update(&mut self, message: Message) -> Task<Message> {
+    pub fn update(&mut self, message: TabsControllerMessage) -> Task<TabsControllerMessage> {
         match message {
-            Message::Home(message) => self.home_tab.update(message).map(Message::Home),
-            Message::Settings(message) => self.settings_tab.update(message).map(Message::Settings),
-            Message::AddRelease(message) => self
+            TabsControllerMessage::HomeTab(message) => self
+                .home_tab
+                .update(message)
+                .map(TabsControllerMessage::HomeTab),
+            TabsControllerMessage::SettingsTab(message) => self
+                .settings_tab
+                .update(message)
+                .map(TabsControllerMessage::SettingsTab),
+            TabsControllerMessage::AddReleaseTab(message) => self
                 .add_release_tab
                 .update(message)
-                .map(Message::AddRelease),
-            Message::Emulators(message) => {
-                self.emulators_tab.update(message).map(Message::Emulators)
-            }
+                .map(TabsControllerMessage::AddReleaseTab),
+            TabsControllerMessage::EmulatorsTab(message) => self
+                .emulators_tab
+                .update(message)
+                .map(TabsControllerMessage::EmulatorsTab),
         }
     }
 
-    pub fn view(&self) -> iced::Element<Message> {
+    pub fn view(&self) -> iced::Element<TabsControllerMessage> {
         match self.current_tab {
-            Tab::Home => self.home_tab.view().map(Message::Home),
-            Tab::Settings => self.settings_tab.view().map(Message::Settings),
-            Tab::AddRelease => self.add_release_tab.view().map(Message::AddRelease),
-            Tab::Emulators => self.emulators_tab.view().map(Message::Emulators),
+            Tab::Home => self.home_tab.view().map(TabsControllerMessage::HomeTab),
+            Tab::Settings => self
+                .settings_tab
+                .view()
+                .map(TabsControllerMessage::SettingsTab),
+            Tab::AddRelease => self
+                .add_release_tab
+                .view()
+                .map(TabsControllerMessage::AddReleaseTab),
+            Tab::Emulators => self
+                .emulators_tab
+                .view()
+                .map(TabsControllerMessage::EmulatorsTab),
         }
     }
 
-    pub fn switch_to_tab(&mut self, tab: Tab) -> Task<Message> {
+    pub fn switch_to_tab(&mut self, tab: Tab) -> Task<TabsControllerMessage> {
         self.current_tab = tab;
         Task::none()
     }

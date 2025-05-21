@@ -4,7 +4,7 @@ use database::repository_manager::RepositoryManager;
 use iced::Task;
 use service::view_model_service::ViewModelService;
 
-use crate::widgets::emulators_widget::{self, EmulatorsWidget};
+use crate::widgets::emulators_widget::{EmulatorsWidget, EmulatorsWidgetMessage};
 
 pub struct EmulatorsTab {
     repositories: Arc<RepositoryManager>,
@@ -13,15 +13,15 @@ pub struct EmulatorsTab {
 }
 
 #[derive(Debug, Clone)]
-pub enum Message {
-    Emulators(emulators_widget::Message),
+pub enum EmulatorsTabMessage {
+    EmulatorsWidget(EmulatorsWidgetMessage),
 }
 
 impl EmulatorsTab {
     pub fn new(
         repositories: Arc<RepositoryManager>,
         view_model_service: Arc<ViewModelService>,
-    ) -> (Self, Task<Message>) {
+    ) -> (Self, Task<EmulatorsTabMessage>) {
         let (emulators_widget, task) =
             EmulatorsWidget::new(Arc::clone(&repositories), Arc::clone(&view_model_service));
         (
@@ -30,21 +30,24 @@ impl EmulatorsTab {
                 view_model_service,
                 emulators_widget,
             },
-            task.map(Message::Emulators),
+            task.map(EmulatorsTabMessage::EmulatorsWidget),
         )
     }
 
-    pub fn update(&mut self, message: Message) -> Task<Message> {
+    pub fn update(&mut self, message: EmulatorsTabMessage) -> Task<EmulatorsTabMessage> {
         match message {
-            Message::Emulators(message) => {
+            EmulatorsTabMessage::EmulatorsWidget(message) => {
                 let task = self.emulators_widget.update(message);
-                task.map(Message::Emulators)
+                task.map(EmulatorsTabMessage::EmulatorsWidget)
             }
         }
     }
 
-    pub fn view(&self) -> iced::Element<Message> {
-        let emulators_view = self.emulators_widget.view().map(Message::Emulators);
+    pub fn view(&self) -> iced::Element<EmulatorsTabMessage> {
+        let emulators_view = self
+            .emulators_widget
+            .view()
+            .map(EmulatorsTabMessage::EmulatorsWidget);
         emulators_view
     }
 }

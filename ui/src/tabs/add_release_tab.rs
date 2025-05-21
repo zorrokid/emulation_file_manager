@@ -11,8 +11,8 @@ use service::{
 };
 
 use crate::widgets::{
-    release_select_widget::{self, ReleaseSelectWidget},
-    release_widget::{self, ReleaseWidget},
+    release_select_widget::{self, ReleaseSelectWidget, ReleaseSelectWidgetMessage},
+    release_widget::{self, ReleaseWidget, ReleaseWidgetMessage},
 };
 
 pub struct AddReleaseTab {
@@ -23,26 +23,28 @@ pub struct AddReleaseTab {
 }
 
 #[derive(Debug, Clone)]
-pub enum Message {
-    ReleaseSelect(release_select_widget::Message),
+pub enum AddReleaseTabMessage {
+    // child messages
+    ReleaseSelectWidget(ReleaseSelectWidgetMessage),
+    ReleaseWidget(ReleaseWidgetMessage),
+    // local messages
     ReleaseFetched(Result<ReleaseViewModel, ServiceError>),
     StartEditRelease,
-    ReleaseWidget(release_widget::Message),
 }
 
 impl AddReleaseTab {
     pub fn new(
         repositories: Arc<RepositoryManager>,
         view_model_service: Arc<ViewModelService>,
-    ) -> (Self, Task<Message>) {
+    ) -> (Self, Task<AddReleaseTabMessage>) {
         let (release_select_widget, release_select_task) =
             ReleaseSelectWidget::new(Arc::clone(&view_model_service));
 
         let (release_widget, release_widget_task) =
             ReleaseWidget::new(Arc::clone(&repositories), Arc::clone(&view_model_service));
         let combined_task = Task::batch(vec![
-            release_select_task.map(Message::ReleaseSelect),
-            release_widget_task.map(Message::ReleaseWidget),
+            release_select_task.map(AddReleaseTabMessage::ReleaseSelectWidget),
+            release_widget_task.map(AddReleaseTabMessage::ReleaseWidget),
         ]);
 
         (
@@ -56,23 +58,24 @@ impl AddReleaseTab {
         )
     }
 
-    pub fn update(&mut self, message: Message) -> Task<Message> {
+    pub fn update(&mut self, message: AddReleaseTabMessage) -> Task<AddReleaseTabMessage> {
         match message {
-            Message::ReleaseSelect(message) => {
+            AddReleaseTabMessage::ReleaseSelectWidget(message) => {
                 println!("ReleaseSelect message");
                 let update_task = self
                     .release_select_widget
                     .update(message.clone())
-                    .map(Message::ReleaseSelect);
+                    .map(AddReleaseTabMessage::ReleaseSelectWidget);
 
-                if let release_select_widget::Message::SetReleaseSelected(release_id) =
-                    message.clone()
+                if let release_select_widget::ReleaseSelectWidgetMessage::SetReleaseSelected(
+                    release_id,
+                ) = message.clone()
                 {
                     println!("Got ReleaseSelected message");
                     let view_model_service = Arc::clone(&self.view_model_service);
                     let fetch_selected_release_task = Task::perform(
                         async move { view_model_service.get_release_view_model(release_id).await },
-                        Message::ReleaseFetched,
+                        AddReleaseTabMessage::ReleaseFetched,
                     );
                     let combined_task = Task::batch(vec![update_task, fetch_selected_release_task]);
                     return combined_task;
@@ -80,7 +83,7 @@ impl AddReleaseTab {
 
                 update_task
             }
-            Message::ReleaseFetched(result) => match result {
+            AddReleaseTabMessage::ReleaseFetched(result) => match result {
                 Ok(release_view_model) => {
                     println!("Got ReleaseFetched message.");
                     self.selected_release = Some(release_view_model.clone());
@@ -91,23 +94,27 @@ impl AddReleaseTab {
                     Task::none()
                 }
             },
-            Message::StartEditRelease => {
+            AddReleaseTabMessage::StartEditRelease => {
                 if let Some(release) = self.selected_release.clone() {
                     println!("Editing release: {:?}", release);
                     return self
                         .release_widget
-                        .update(release_widget::Message::SetSelectedRelease(release))
-                        .map(Message::ReleaseWidget);
+                        .update(release_widget::ReleaseWidgetMessage::SetSelectedRelease(
+                            release,
+                        ))
+                        .map(AddReleaseTabMessage::ReleaseWidget);
                 }
                 Task::none()
             }
-            Message::ReleaseWidget(message) => {
+            AddReleaseTabMessage::ReleaseWidget(message) => {
                 let update_task = self
                     .release_widget
                     .update(message.clone())
-                    .map(Message::ReleaseWidget);
+                    .map(AddReleaseTabMessage::ReleaseWidget);
 
-                if let release_widget::Message::ReleaseWasUpdated(release_list_model) = message {
+                if let release_widget::ReleaseWidgetMessage::ReleaseWasUpdated(release_list_model) =
+                    message
+                {
                     // TODO: update selected release
                 }
 
@@ -116,22 +123,25 @@ impl AddReleaseTab {
         }
     }
 
-    pub fn view(&self) -> iced::Element<Message> {
+    pub fn view(&self) -> iced::Element<AddReleaseTabMessage> {
         let release_select_view = self
             .release_select_widget
             .view()
-            .map(Message::ReleaseSelect);
+            .map(AddReleaseTabMessage::ReleaseSelectWidget);
         let selected_release_view = self.create_selected_release_view();
-        let release_view = self.release_widget.view().map(Message::ReleaseWidget);
+        let release_view = self
+            .release_widget
+            .view()
+            .map(AddReleaseTabMessage::ReleaseWidget);
         column![release_select_view, selected_release_view, release_view].into()
     }
 
-    fn create_selected_release_view(&self) -> iced::Element<Message> {
+    fn create_selected_release_view(&self) -> iced::Element<AddReleaseTabMessage> {
         if let Some(release) = &self.selected_release {
             let release_name_field = text!("Release Name: {}", release.name);
             let software_titles_field = text!("Software Titles: {:?}", release.software_titles);
             let system_names_field = text!("Systems: {:?}", release.systems);
-            let edit_button = button("Edit").on_press(Message::StartEditRelease);
+            let edit_button = button("Edit").on_press(AddReleaseTabMessage::StartEditRelease);
 
             return column![
                 release_name_field,

@@ -15,7 +15,9 @@ use service::{
 
 use crate::defaults::{DEFAULT_PADDING, DEFAULT_SPACING};
 
-use super::emulator_systems_add_widget::{self, EmulatorSystemsAddWidget};
+use super::emulator_systems_add_widget::{
+    self, EmulatorSystemsAddWidget, EmulatorSystemsAddWidgetMessage,
+};
 
 #[derive(Debug, Clone)]
 pub struct EmulatorSystem {
@@ -38,14 +40,16 @@ pub struct EmulatorAddWidget {
 }
 
 #[derive(Debug, Clone)]
-pub enum Message {
+pub enum EmulatorAddWidgetMessage {
+    // child messages
+    EmulatorSystemsAddWidget(EmulatorSystemsAddWidgetMessage),
+    // local messages
     EmulatorNameChanged(String),
     EmulatorExecutableChanged(String),
     EmulatorExtractFilesChanged(bool),
     Submit,
     EmulatorSaved(Result<i64, Error>),
     EmulatorAdded(EmulatorListModel),
-    EmulatorSystemsAddWidget(emulator_systems_add_widget::Message),
     EmulatorSystemSaved(Result<i64, Error>),
     StartAddEmulator,
     CancelAddEmulator,
@@ -58,7 +62,7 @@ impl EmulatorAddWidget {
     pub fn new(
         repositories: Arc<RepositoryManager>,
         view_model_service: Arc<ViewModelService>,
-    ) -> (Self, Task<Message>) {
+    ) -> (Self, Task<EmulatorAddWidgetMessage>) {
         let (emulator_systems_widget, task) = EmulatorSystemsAddWidget::new(
             Arc::clone(&repositories),
             Arc::clone(&view_model_service),
@@ -75,19 +79,21 @@ impl EmulatorAddWidget {
                 is_adding_emulator: false,
                 view_model_service,
             },
-            task.map(Message::EmulatorSystemsAddWidget),
+            task.map(EmulatorAddWidgetMessage::EmulatorSystemsAddWidget),
         )
     }
 
-    pub fn update(&mut self, message: Message) -> Task<Message> {
+    pub fn update(&mut self, message: EmulatorAddWidgetMessage) -> Task<EmulatorAddWidgetMessage> {
         println!("EmulatorAddWidget update: {:?}", message);
         match message {
-            Message::EmulatorNameChanged(name) => self.emulator_name = name,
-            Message::EmulatorExecutableChanged(executable) => self.emulator_executable = executable,
-            Message::EmulatorExtractFilesChanged(extract_files) => {
+            EmulatorAddWidgetMessage::EmulatorNameChanged(name) => self.emulator_name = name,
+            EmulatorAddWidgetMessage::EmulatorExecutableChanged(executable) => {
+                self.emulator_executable = executable
+            }
+            EmulatorAddWidgetMessage::EmulatorExtractFilesChanged(extract_files) => {
                 self.emulator_extract_files = extract_files
             }
-            Message::Submit => {
+            EmulatorAddWidgetMessage::Submit => {
                 println!("Submitting emulator data...");
                 let repositories = Arc::clone(&self.repositories);
                 let emulator_name = self.emulator_name.clone();
@@ -116,7 +122,7 @@ impl EmulatorAddWidget {
                                 )
                                 .await
                         },
-                        Message::EmulatorSaved,
+                        EmulatorAddWidgetMessage::EmulatorSaved,
                     );
                 } else {
                     return Task::perform(
@@ -131,11 +137,11 @@ impl EmulatorAddWidget {
                                 )
                                 .await
                         },
-                        Message::EmulatorSaved,
+                        EmulatorAddWidgetMessage::EmulatorSaved,
                     );
                 }
             }
-            Message::EmulatorSaved(result) => match result {
+            EmulatorAddWidgetMessage::EmulatorSaved(result) => match result {
                 Ok(id) => {
                     println!("Emulator saved successfully with id: {:?}", id);
                     self.is_adding_emulator = false;
@@ -143,14 +149,14 @@ impl EmulatorAddWidget {
                         id,
                         name: self.emulator_name.clone(),
                     };
-                    return Task::done(Message::EmulatorAdded(emulator));
+                    return Task::done(EmulatorAddWidgetMessage::EmulatorAdded(emulator));
                 }
                 Err(error) => {
                     eprintln!("Error saving emulator: {:?}", error);
                 }
             },
-            Message::EmulatorSystemsAddWidget(message) => {
-                if let emulator_systems_add_widget::Message::AddEmulatorSystem(emulator_system) =
+            EmulatorAddWidgetMessage::EmulatorSystemsAddWidget(message) => {
+                if let emulator_systems_add_widget::EmulatorSystemsAddWidgetMessage::AddEmulatorSystem(emulator_system) =
                     &message
                 {
                     if emulator_system.id.is_none() {
@@ -166,10 +172,10 @@ impl EmulatorAddWidget {
                 return self
                     .emulator_systems_widget
                     .update(message.clone())
-                    .map(Message::EmulatorSystemsAddWidget);
+                    .map(EmulatorAddWidgetMessage::EmulatorSystemsAddWidget);
             }
 
-            Message::EmulatorSystemSaved(result) => match result {
+            EmulatorAddWidgetMessage::EmulatorSystemSaved(result) => match result {
                 Ok(id) => {
                     println!("Emulator system saved successfully with id: {:?}", id);
                     return Task::none();
@@ -178,22 +184,22 @@ impl EmulatorAddWidget {
                     eprintln!("Error saving emulator system: {:?}", error);
                 }
             },
-            Message::StartAddEmulator => {
+            EmulatorAddWidgetMessage::StartAddEmulator => {
                 self.is_adding_emulator = true;
             }
-            Message::CancelAddEmulator => {
+            EmulatorAddWidgetMessage::CancelAddEmulator => {
                 self.is_adding_emulator = false;
             }
-            Message::SetEmulatorId(id) => {
+            EmulatorAddWidgetMessage::SetEmulatorId(id) => {
                 self.emulator_id = Some(id);
                 let viewm_model_service = Arc::clone(&self.view_model_service);
                 self.is_adding_emulator = true;
                 return Task::perform(
                     async move { viewm_model_service.get_emulator_view_model(id).await },
-                    Message::EmulatorFetched,
+                    EmulatorAddWidgetMessage::EmulatorFetched,
                 );
             }
-            Message::EmulatorFetched(result) => match result {
+            EmulatorAddWidgetMessage::EmulatorFetched(result) => match result {
                 Ok(emulator) => {
                     println!("Emulator fetched successfully: {:?}", emulator);
                     self.emulator_name = emulator.name;
@@ -214,14 +220,14 @@ impl EmulatorAddWidget {
                     eprintln!("Error fetching emulator: {:?}", error);
                 }
             },
-            Message::EditEmulatorSystem(emulator_system) => {
-                return self
-                    .emulator_systems_widget
-                    .update(emulator_systems_add_widget::Message::SetEmulatorSystem(
+            EmulatorAddWidgetMessage::EditEmulatorSystem(emulator_system) => return self
+                .emulator_systems_widget
+                .update(
+                    emulator_systems_add_widget::EmulatorSystemsAddWidgetMessage::SetEmulatorSystem(
                         emulator_system,
-                    ))
-                    .map(Message::EmulatorSystemsAddWidget)
-            }
+                    ),
+                )
+                .map(EmulatorAddWidgetMessage::EmulatorSystemsAddWidget),
             _ => {
                 println!("Unhandled message in EmulatorAddWidget: {:?}", message);
             }
@@ -229,11 +235,12 @@ impl EmulatorAddWidget {
         Task::none()
     }
 
-    pub fn view(&self) -> Element<Message> {
+    pub fn view(&self) -> Element<EmulatorAddWidgetMessage> {
         let emulator_add_view = if self.is_adding_emulator {
             self.create_add_emulator_view_content()
         } else {
-            Column::new().push(button("Add Emulator").on_press(Message::StartAddEmulator))
+            Column::new()
+                .push(button("Add Emulator").on_press(EmulatorAddWidgetMessage::StartAddEmulator))
         };
         Container::new(
             emulator_add_view
@@ -244,27 +251,27 @@ impl EmulatorAddWidget {
         .into()
     }
 
-    fn create_add_emulator_view_content(&self) -> Column<Message> {
+    fn create_add_emulator_view_content(&self) -> Column<EmulatorAddWidgetMessage> {
         let cancel_button_text = if self.emulator_id.is_some() {
             "Cancel edit emulator"
         } else {
             "Cancel add emulator"
         };
         let cancel_add_emulator_button =
-            button(cancel_button_text).on_press(Message::CancelAddEmulator);
+            button(cancel_button_text).on_press(EmulatorAddWidgetMessage::CancelAddEmulator);
 
-        let name_input =
-            text_input("Emulator name", &self.emulator_name).on_input(Message::EmulatorNameChanged);
+        let name_input = text_input("Emulator name", &self.emulator_name)
+            .on_input(EmulatorAddWidgetMessage::EmulatorNameChanged);
         let executable_input =
             iced::widget::text_input("Emulator executable", &self.emulator_executable)
-                .on_input(Message::EmulatorExecutableChanged);
+                .on_input(EmulatorAddWidgetMessage::EmulatorExecutableChanged);
         let extract_files_checkbox = checkbox("Extract files", self.emulator_extract_files)
-            .on_toggle(Message::EmulatorExtractFilesChanged);
+            .on_toggle(EmulatorAddWidgetMessage::EmulatorExtractFilesChanged);
 
         let emulator_systems_view = self
             .emulator_systems_widget
             .view()
-            .map(Message::EmulatorSystemsAddWidget);
+            .map(EmulatorAddWidgetMessage::EmulatorSystemsAddWidget);
 
         let emulator_systems_list = self
             .emulator_systems
@@ -275,16 +282,16 @@ impl EmulatorAddWidget {
                     system.system_name,
                     system.arguments
                 );
-                let edit_button =
-                    button("Edit").on_press(Message::EditEmulatorSystem(system.clone()));
+                let edit_button = button("Edit")
+                    .on_press(EmulatorAddWidgetMessage::EditEmulatorSystem(system.clone()));
                 row![label, edit_button]
                     .spacing(DEFAULT_SPACING)
                     .padding(DEFAULT_PADDING)
                     .into()
             })
-            .collect::<Vec<Element<Message>>>();
+            .collect::<Vec<Element<EmulatorAddWidgetMessage>>>();
 
-        let submit_button = button("Submit").on_press(Message::Submit);
+        let submit_button = button("Submit").on_press(EmulatorAddWidgetMessage::Submit);
 
         let emulator_systems_list = Column::with_children(emulator_systems_list)
             .spacing(DEFAULT_SPACING)

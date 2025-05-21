@@ -9,6 +9,8 @@ use iced::widget::{column, text};
 use iced::Task;
 use service::error::Error;
 use service::view_model_service::ViewModelService;
+use tabs::tabs_controller::TabsControllerMessage;
+use tabs::title_bar::TitleBarMessage;
 use tabs::{
     tabs_controller::TabsController,
     title_bar::{self, TitleBar},
@@ -27,8 +29,10 @@ struct Ui {
 
 #[derive(Debug, Clone)]
 enum Message {
-    TabsController(tabs::tabs_controller::Message),
-    TitleBar(tabs::title_bar::Message),
+    // child messages
+    TabsController(TabsControllerMessage),
+    TitleBar(TitleBarMessage),
+    // local messages
     RepositoriesInitialized(Result<Arc<RepositoryManager>, Error>),
 }
 
@@ -105,7 +109,7 @@ impl Ui {
             Message::TitleBar(message) => {
                 self.title_bar.update(message.clone());
                 match message {
-                    title_bar::Message::TabSelected(tab) => self
+                    title_bar::TitleBarMessage::TabSelected(tab) => self
                         .tabs_controller
                         .get_mut()
                         .expect("TabsControler expected to be initialized by now.")

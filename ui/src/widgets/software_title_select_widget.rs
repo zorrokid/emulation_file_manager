@@ -13,7 +13,7 @@ pub struct SoftwareTitleSelectWidget {
 }
 
 #[derive(Debug, Clone)]
-pub enum Message {
+pub enum SoftwareTitleSelectWidgetMessage {
     SoftwareTitleSelected(SoftwareTitleListModel),
     SetSoftwareTitles(Vec<SoftwareTitleListModel>),
 }
@@ -26,12 +26,15 @@ impl SoftwareTitleSelectWidget {
         }
     }
 
-    pub fn update(&mut self, message: Message) -> Task<Message> {
+    pub fn update(
+        &mut self,
+        message: SoftwareTitleSelectWidgetMessage,
+    ) -> Task<SoftwareTitleSelectWidgetMessage> {
         match message {
-            Message::SoftwareTitleSelected(software_title) => {
-                Task::done(Message::SoftwareTitleSelected(software_title.clone()))
-            }
-            Message::SetSoftwareTitles(software_titles) => {
+            SoftwareTitleSelectWidgetMessage::SoftwareTitleSelected(software_title) => Task::done(
+                SoftwareTitleSelectWidgetMessage::SoftwareTitleSelected(software_title.clone()),
+            ),
+            SoftwareTitleSelectWidgetMessage::SetSoftwareTitles(software_titles) => {
                 self.software_titles = software_titles;
                 self.selected_software_title = None;
                 Task::none()
@@ -39,11 +42,11 @@ impl SoftwareTitleSelectWidget {
         }
     }
 
-    pub fn view(&self) -> iced::Element<Message> {
+    pub fn view(&self) -> iced::Element<SoftwareTitleSelectWidgetMessage> {
         let software_title_select = pick_list(
             self.software_titles.as_slice(),
             self.selected_software_title.clone(),
-            Message::SoftwareTitleSelected,
+            SoftwareTitleSelectWidgetMessage::SoftwareTitleSelected,
         );
         let label = text!("Select software title");
         row![label, software_title_select]

@@ -10,7 +10,7 @@ pub struct SystemAddWidget {
 }
 
 #[derive(Debug, Clone)]
-pub enum Message {
+pub enum SystemAddWidgetMessage {
     SystemNameUpdated(String),
     CancelAddSystem,
     Submit,
@@ -28,23 +28,23 @@ impl SystemAddWidget {
         }
     }
 
-    // TODO: maybe return Task<Message> instead of Action
-    pub fn update(&mut self, message: Message) -> Action {
+    pub fn update(&mut self, message: SystemAddWidgetMessage) -> Action {
         match message {
-            Message::SystemNameUpdated(name) => self.system_name = name,
-            Message::Submit => return Action::AddSystem(self.system_name.clone()),
-            Message::CancelAddSystem => println!("Cancel"),
+            SystemAddWidgetMessage::SystemNameUpdated(name) => self.system_name = name,
+            SystemAddWidgetMessage::Submit => return Action::AddSystem(self.system_name.clone()),
+            SystemAddWidgetMessage::CancelAddSystem => println!("Cancel"),
         }
         Action::None
     }
 
-    pub fn view(&self) -> iced::Element<Message> {
-        let name_input =
-            text_input("System name", &self.system_name).on_input(Message::SystemNameUpdated);
+    pub fn view(&self) -> iced::Element<SystemAddWidgetMessage> {
+        let name_input = text_input("System name", &self.system_name)
+            .on_input(SystemAddWidgetMessage::SystemNameUpdated);
 
-        let submit_button = button("Submit system")
-            .on_press_maybe((!self.system_name.is_empty()).then_some(Message::Submit));
-        let cancel_button = button("Cancel").on_press(Message::CancelAddSystem);
+        let submit_button = button("Submit system").on_press_maybe(
+            (!self.system_name.is_empty()).then_some(SystemAddWidgetMessage::Submit),
+        );
+        let cancel_button = button("Cancel").on_press(SystemAddWidgetMessage::CancelAddSystem);
         row![name_input, submit_button, cancel_button]
             .spacing(DEFAULT_SPACING)
             .padding(DEFAULT_PADDING)

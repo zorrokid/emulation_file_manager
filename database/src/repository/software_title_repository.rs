@@ -136,7 +136,7 @@ mod tests {
             franchise_id: None,
         };
         software_title_repository
-            .update_software_title(&updated_software_title)
+            .update_software_title(updated_software_title)
             .await
             .unwrap();
 

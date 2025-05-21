@@ -10,8 +10,8 @@ use service::{error::Error, view_model_service::ViewModelService, view_models::S
 use crate::defaults::DEFAULT_SPACING;
 
 use super::{
-    system_add_widget::{self, SystemAddWidget},
-    system_select_widget::{self, SystemSelectWidget},
+    system_add_widget::{self, SystemAddWidget, SystemAddWidgetMessage},
+    system_select_widget::{self, SystemSelectWidget, SystemSelectWidgetMessage},
 };
 
 pub struct SystemsWidget {
@@ -20,15 +20,18 @@ pub struct SystemsWidget {
     systems: Vec<SystemListModel>,
     system_select_widget: SystemSelectWidget,
     system_add_widget: SystemAddWidget,
+    // TODO: selected systems are also maintained in parent widget!
     selected_system_ids: Vec<i64>,
     adding_system: bool,
 }
 
 #[derive(Debug, Clone)]
-pub enum Message {
+pub enum SystemWidgetMessage {
+    // child messages
+    AddSystem(SystemAddWidgetMessage),
+    SystemSelect(SystemSelectWidgetMessage),
+    // local messages
     SystemsFetched(Result<Vec<SystemListModel>, Error>),
-    AddSystem(system_add_widget::Message),
-    SystemSelect(system_select_widget::Message),
     SystemAdded(Result<i64, DatabaseError>),
     RemoveSystem(i64),
     StartAddSystem,
@@ -40,11 +43,11 @@ impl SystemsWidget {
     pub fn new(
         repositories: Arc<RepositoryManager>,
         view_model_service: Arc<ViewModelService>,
-    ) -> (Self, Task<Message>) {
+    ) -> (Self, Task<SystemWidgetMessage>) {
         let view_model_service_clone = Arc::clone(&view_model_service);
         let fetch_systems_task = Task::perform(
             async move { view_model_service_clone.get_system_list_models().await },
-            Message::SystemsFetched,
+            SystemWidgetMessage::SystemsFetched,
         );
 
         (
@@ -61,46 +64,49 @@ impl SystemsWidget {
         )
     }
 
-    pub fn update(&mut self, message: Message) -> Task<Message> {
+    pub fn update(&mut self, message: SystemWidgetMessage) -> Task<SystemWidgetMessage> {
         match message {
-            Message::SystemsFetched(result) => match result {
+            SystemWidgetMessage::SystemsFetched(result) => match result {
                 Ok(systems) => {
                     self.systems = systems;
                     self.system_select_widget
-                        .update(system_select_widget::Message::SetSystems(
+                        .update(system_select_widget::SystemSelectWidgetMessage::SetSystems(
                             self.systems.clone(),
                         ))
-                        .map(Message::SystemSelect)
+                        .map(SystemWidgetMessage::SystemSelect)
                 }
                 Err(error) => {
                     eprint!("Error when fetching systems: {}", error);
                     Task::none()
                 }
             },
-            Message::AddSystem(message) => match self.system_add_widget.update(message) {
+            SystemWidgetMessage::AddSystem(message) => match self.system_add_widget.update(message)
+            {
                 system_add_widget::Action::AddSystem(name) => {
                     let repo = Arc::clone(&self.repositories);
                     Task::perform(
                         async move { repo.get_system_repository().add_system(name).await },
-                        Message::SystemAdded,
+                        SystemWidgetMessage::SystemAdded,
                     )
                 }
                 system_add_widget::Action::None => Task::none(),
             },
-            Message::SystemSelect(message) => {
-                if let system_select_widget::Message::SystemSelected(system) = message {
+            SystemWidgetMessage::SystemSelect(message) => {
+                if let system_select_widget::SystemSelectWidgetMessage::SystemSelected(system) =
+                    message
+                {
                     if !self.selected_system_ids.contains(&system.id) {
                         self.selected_system_ids.push(system.id);
                     }
                 }
                 Task::none()
             }
-            Message::SystemAdded(result) => match result {
+            SystemWidgetMessage::SystemAdded(result) => match result {
                 Ok(_) => {
                     let service = Arc::clone(&self.view_model_service);
                     Task::perform(
                         async move { service.get_system_list_models().await },
-                        Message::SystemsFetched,
+                        SystemWidgetMessage::SystemsFetched,
                     )
                 }
                 Err(error) => {
@@ -108,20 +114,20 @@ impl SystemsWidget {
                     Task::none()
                 }
             },
-            Message::RemoveSystem(id) => {
+            SystemWidgetMessage::RemoveSystem(id) => {
                 self.selected_system_ids
                     .retain(|&system_id| system_id != id);
                 Task::none()
             }
-            Message::StartAddSystem => {
+            SystemWidgetMessage::StartAddSystem => {
                 self.adding_system = true;
                 Task::none()
             }
-            Message::CancelAddSystem => {
+            SystemWidgetMessage::CancelAddSystem => {
                 self.adding_system = false;
                 Task::none()
             }
-            Message::SetSelectedSystemIds(ids) => {
+            SystemWidgetMessage::SetSelectedSystemIds(ids) => {
                 self.selected_system_ids = ids;
                 // TODO: should this emit SystemSelected message for each system? Then this
                 // wouldn't be needed to set explicitly in parent widget which maintains selected
@@ -131,24 +137,30 @@ impl SystemsWidget {
         }
     }
 
-    pub fn view(&self) -> Element<Message> {
-        let add_system_view: Element<Message> = if self.adding_system {
-            let system_add_view = self.system_add_widget.view().map(Message::AddSystem);
-            let cancel_button = button("Cancel add system").on_press(Message::CancelAddSystem);
+    pub fn view(&self) -> Element<SystemWidgetMessage> {
+        let add_system_view: Element<SystemWidgetMessage> = if self.adding_system {
+            let system_add_view = self
+                .system_add_widget
+                .view()
+                .map(SystemWidgetMessage::AddSystem);
+            let cancel_button =
+                button("Cancel add system").on_press(SystemWidgetMessage::CancelAddSystem);
             column![cancel_button, system_add_view].into()
         } else {
             button("Add System")
-                .on_press(Message::StartAddSystem)
+                .on_press(SystemWidgetMessage::StartAddSystem)
                 .into()
         };
 
-        let system_select_view: Element<Message> =
-            self.system_select_widget.view().map(Message::SystemSelect);
+        let system_select_view: Element<SystemWidgetMessage> = self
+            .system_select_widget
+            .view()
+            .map(SystemWidgetMessage::SystemSelect);
         let selected_systems_list = self.create_selected_systems_list();
         column![system_select_view, selected_systems_list, add_system_view].into()
     }
 
-    fn create_selected_systems_list(&self) -> Element<Message> {
+    fn create_selected_systems_list(&self) -> Element<SystemWidgetMessage> {
         let selected_systems = self
             .selected_system_ids
             .iter()
@@ -158,13 +170,14 @@ impl SystemsWidget {
                     .iter()
                     .find(|system| system.id == *id)
                     .unwrap_or_else(|| panic!("System with id {} not found", id));
-                let remove_button = button("Remove").on_press(Message::RemoveSystem(*id));
+                let remove_button =
+                    button("Remove").on_press(SystemWidgetMessage::RemoveSystem(*id));
                 row![text!("{}", system.name.clone()).width(200.0), remove_button]
                     .spacing(DEFAULT_SPACING)
                     .padding(crate::defaults::DEFAULT_PADDING / 2.0)
                     .into()
             })
-            .collect::<Vec<Element<Message>>>();
+            .collect::<Vec<Element<SystemWidgetMessage>>>();
 
         Column::with_children(selected_systems).into()
     }
