@@ -1,6 +1,7 @@
 use iced::{
     alignment,
     widget::{button, row, text_input},
+    Task,
 };
 
 use crate::defaults::{DEFAULT_PADDING, DEFAULT_SPACING};
@@ -14,11 +15,7 @@ pub enum SystemAddWidgetMessage {
     SystemNameUpdated(String),
     CancelAddSystem,
     Submit,
-}
-
-pub enum Action {
     AddSystem(String),
-    None,
 }
 
 impl SystemAddWidget {
@@ -28,13 +25,16 @@ impl SystemAddWidget {
         }
     }
 
-    pub fn update(&mut self, message: SystemAddWidgetMessage) -> Action {
+    pub fn update(&mut self, message: SystemAddWidgetMessage) -> Task<SystemAddWidgetMessage> {
         match message {
             SystemAddWidgetMessage::SystemNameUpdated(name) => self.system_name = name,
-            SystemAddWidgetMessage::Submit => return Action::AddSystem(self.system_name.clone()),
+            SystemAddWidgetMessage::Submit => {
+                return Task::done(SystemAddWidgetMessage::AddSystem(self.system_name.clone()))
+            }
             SystemAddWidgetMessage::CancelAddSystem => println!("Cancel"),
+            _ => {}
         }
-        Action::None
+        Task::none()
     }
 
     pub fn view(&self) -> iced::Element<SystemAddWidgetMessage> {

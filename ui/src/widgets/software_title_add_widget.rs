@@ -28,7 +28,6 @@ impl SoftwareTitleAddWidget {
         }
     }
 
-    // TODO: what would be better return type instead of Task<Message>
     pub fn update(
         &mut self,
         message: SoftwareTitleAddWidgetMessage,

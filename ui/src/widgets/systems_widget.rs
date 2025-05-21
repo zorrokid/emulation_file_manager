@@ -80,21 +80,18 @@ impl SystemsWidget {
                     Task::none()
                 }
             },
-            SystemWidgetMessage::AddSystem(message) => match self.system_add_widget.update(message)
-            {
-                system_add_widget::Action::AddSystem(name) => {
+            SystemWidgetMessage::AddSystem(message) => {
+                if let SystemAddWidgetMessage::AddSystem(name) = message {
                     let repo = Arc::clone(&self.repositories);
-                    Task::perform(
+                    return Task::perform(
                         async move { repo.get_system_repository().add_system(name).await },
                         SystemWidgetMessage::SystemAdded,
-                    )
+                    );
                 }
-                system_add_widget::Action::None => Task::none(),
-            },
+                Task::none()
+            }
             SystemWidgetMessage::SystemSelect(message) => {
-                if let system_select_widget::SystemSelectWidgetMessage::SystemSelected(system) =
-                    message
-                {
+                if let SystemSelectWidgetMessage::SystemSelected(system) = message {
                     if !self.selected_system_ids.contains(&system.id) {
                         self.selected_system_ids.push(system.id);
                     }
