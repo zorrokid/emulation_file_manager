@@ -1,0 +1,58 @@
+use iced::{
+    alignment::Vertical,
+    widget::{pick_list, row, text},
+    Task,
+};
+use service::view_models::SoftwareTitleListModel;
+
+use crate::defaults::{DEFAULT_PADDING, DEFAULT_SPACING};
+
+pub struct SoftwareTitleFilterWidget {
+    software_titles: Vec<SoftwareTitleListModel>,
+    selected_software_title: Option<SoftwareTitleListModel>,
+}
+
+#[derive(Debug, Clone)]
+pub enum SoftwareTitleFilterWidgetMessage {
+    SoftwareTitleSelected(SoftwareTitleListModel),
+    SetSoftwareTitles(Vec<SoftwareTitleListModel>),
+}
+
+impl SoftwareTitleFilterWidget {
+    pub fn new() -> Self {
+        Self {
+            software_titles: vec![],
+            selected_software_title: None,
+        }
+    }
+
+    pub fn update(
+        &mut self,
+        message: SoftwareTitleFilterWidgetMessage,
+    ) -> Task<SoftwareTitleFilterWidgetMessage> {
+        match message {
+            SoftwareTitleFilterWidgetMessage::SoftwareTitleSelected(software_title) => Task::done(
+                SoftwareTitleFilterWidgetMessage::SoftwareTitleSelected(software_title.clone()),
+            ),
+            SoftwareTitleFilterWidgetMessage::SetSoftwareTitles(software_titles) => {
+                self.software_titles = software_titles;
+                self.selected_software_title = None;
+                Task::none()
+            }
+        }
+    }
+
+    pub fn view(&self) -> iced::Element<SoftwareTitleFilterWidgetMessage> {
+        let software_title_select = pick_list(
+            self.software_titles.as_slice(),
+            self.selected_software_title.clone(),
+            SoftwareTitleFilterWidgetMessage::SoftwareTitleSelected,
+        );
+        let label = text!("Select software title");
+        row![label, software_title_select]
+            .spacing(DEFAULT_SPACING)
+            .padding(DEFAULT_PADDING)
+            .align_y(Vertical::Center)
+            .into()
+    }
+}

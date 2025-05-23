@@ -10,7 +10,7 @@ use service::{error::Error, view_model_service::ViewModelService, view_models::S
 use crate::defaults::DEFAULT_SPACING;
 
 use super::{
-    system_add_widget::{self, SystemAddWidget, SystemAddWidgetMessage},
+    system_add_widget::{SystemAddWidget, SystemAddWidgetMessage},
     system_select_widget::{self, SystemSelectWidget, SystemSelectWidgetMessage},
 };
 
