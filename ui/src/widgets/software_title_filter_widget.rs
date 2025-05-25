@@ -16,6 +16,7 @@ pub struct SoftwareTitleFilterWidget {
 pub enum SoftwareTitleFilterWidgetMessage {
     SoftwareTitleSelected(SoftwareTitleListModel),
     SetSoftwareTitles(Vec<SoftwareTitleListModel>),
+    SetSelectedSoftwareTitle(SoftwareTitleListModel),
 }
 
 impl SoftwareTitleFilterWidget {
@@ -31,14 +32,18 @@ impl SoftwareTitleFilterWidget {
         message: SoftwareTitleFilterWidgetMessage,
     ) -> Task<SoftwareTitleFilterWidgetMessage> {
         match message {
-            SoftwareTitleFilterWidgetMessage::SoftwareTitleSelected(software_title) => Task::done(
-                SoftwareTitleFilterWidgetMessage::SoftwareTitleSelected(software_title.clone()),
-            ),
+            SoftwareTitleFilterWidgetMessage::SoftwareTitleSelected(software_title) => {
+                self.selected_software_title = Some(software_title.clone());
+                Task::done(SoftwareTitleFilterWidgetMessage::SetSelectedSoftwareTitle(
+                    software_title.clone(),
+                ))
+            }
             SoftwareTitleFilterWidgetMessage::SetSoftwareTitles(software_titles) => {
                 self.software_titles = software_titles;
                 self.selected_software_title = None;
                 Task::none()
             }
+            _ => Task::none(),
         }
     }
 

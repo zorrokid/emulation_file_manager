@@ -6,7 +6,8 @@ use crate::{
     error::Error,
     view_models::{
         EmulatorListModel, EmulatorSystemViewModel, EmulatorViewModel, FileSetListModel,
-        ReleaseListModel, ReleaseViewModel, Settings, SoftwareTitleListModel, SystemListModel,
+        FileSetViewModel, ReleaseListModel, ReleaseViewModel, Settings, SoftwareTitleListModel,
+        SystemListModel,
     },
 };
 
@@ -177,12 +178,30 @@ impl ViewModelService {
             .await
             .map_err(|err| Error::DbError(err.to_string()))?;
 
+        let mut file_set_view_models: Vec<FileSetViewModel> = vec![];
+
+        for file_set in file_sets {
+            let files = self
+                .repository_manager
+                .get_file_set_repository()
+                .get_file_set_file_info(file_set.id)
+                .await
+                .map_err(|err| Error::DbError(err.to_string()))?;
+
+            file_set_view_models.push(FileSetViewModel {
+                id: file_set.id,
+                file_set_name: file_set.file_name.clone(),
+                file_type: file_set.file_type,
+                files,
+            });
+        }
+
         let release_view_model = ReleaseViewModel {
             id: release.id,
             name: release.name.clone(),
             systems,
             software_titles,
-            file_sets,
+            file_sets: file_set_view_models,
         };
 
         Ok(release_view_model)

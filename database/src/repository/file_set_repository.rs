@@ -5,7 +5,7 @@ use sqlx::{sqlite::SqliteRow, FromRow, Pool, Row, Sqlite};
 
 use crate::{
     database_error::{DatabaseError, Error},
-    models::{FileSet, FileType},
+    models::{FileSet, FileSetFileInfo, FileType},
 };
 
 #[derive(Debug)]
@@ -200,6 +200,23 @@ impl FileSetRepository {
 
         transaction.commit().await?;
         Ok(id)
+    }
+
+    pub async fn get_file_set_file_info(
+        &self,
+        file_set_id: i64,
+    ) -> Result<Vec<FileSetFileInfo>, DatabaseError> {
+        let file_infos = sqlx::query_as!(
+            FileSetFileInfo,
+            "SELECT fsfi.file_set_id, fsfi.file_info_id, fsfi.file_name, fi.sha1_checksum, fi.file_size 
+             FROM file_set_file_info fsfi
+             JOIN file_info fi ON fsfi.file_info_id = fi.id
+             WHERE fsfi.file_set_id = ?",
+            file_set_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+        Ok(file_infos)
     }
 }
 

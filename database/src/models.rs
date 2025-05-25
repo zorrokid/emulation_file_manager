@@ -1,4 +1,5 @@
-use std::fmt::Display;
+use core::fmt;
+use std::fmt::{Display, Formatter};
 
 use sqlx::FromRow;
 
@@ -85,6 +86,21 @@ pub struct FileSet {
     pub id: i64,
     pub file_name: String,
     pub file_type: FileType,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct FileSetFileInfo {
+    pub file_set_id: i64,
+    pub file_info_id: i64,
+    pub file_name: String,
+    pub sha1_checksum: Vec<u8>,
+    pub file_size: i64,
+}
+
+impl Display for FileSetFileInfo {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.file_name)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
