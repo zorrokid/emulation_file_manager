@@ -12,7 +12,7 @@ pub struct SoftwareTitleAddWidget {
 }
 
 #[derive(Debug, Clone)]
-pub enum Message {
+pub enum SoftwareTitleAddWidgetMessage {
     SoftwareTitleNameUpdated(String),
     Submit,
     SetEditSoftwareTitle(i64, String),
@@ -28,19 +28,29 @@ impl SoftwareTitleAddWidget {
         }
     }
 
-    pub fn update(&mut self, message: Message) -> Task<Message> {
+    pub fn update(
+        &mut self,
+        message: SoftwareTitleAddWidgetMessage,
+    ) -> Task<SoftwareTitleAddWidgetMessage> {
         match message {
-            Message::SoftwareTitleNameUpdated(name) => self.software_title_name = name,
-            Message::Submit => {
+            SoftwareTitleAddWidgetMessage::SoftwareTitleNameUpdated(name) => {
+                self.software_title_name = name
+            }
+            SoftwareTitleAddWidgetMessage::Submit => {
                 let task = if let Some(id) = self.software_title_id {
-                    Message::UpdateSoftwareTitle(id, self.software_title_name.clone())
+                    SoftwareTitleAddWidgetMessage::UpdateSoftwareTitle(
+                        id,
+                        self.software_title_name.clone(),
+                    )
                 } else {
-                    Message::AddSoftwareTitle(self.software_title_name.clone())
+                    SoftwareTitleAddWidgetMessage::AddSoftwareTitle(
+                        self.software_title_name.clone(),
+                    )
                 };
                 self.software_title_name = "".to_string();
                 return Task::done(task);
             }
-            Message::SetEditSoftwareTitle(id, name) => {
+            SoftwareTitleAddWidgetMessage::SetEditSoftwareTitle(id, name) => {
                 self.software_title_id = Some(id);
                 self.software_title_name = name;
             }
@@ -49,12 +59,13 @@ impl SoftwareTitleAddWidget {
         Task::none()
     }
 
-    pub fn view(&self) -> iced::Element<Message> {
+    pub fn view(&self) -> iced::Element<SoftwareTitleAddWidgetMessage> {
         let name_input = text_input("SoftwareTitle name", &self.software_title_name)
-            .on_input(Message::SoftwareTitleNameUpdated);
+            .on_input(SoftwareTitleAddWidgetMessage::SoftwareTitleNameUpdated);
 
-        let submit_button = button("Submit software_title")
-            .on_press_maybe((!self.software_title_name.is_empty()).then_some(Message::Submit));
+        let submit_button = button("Submit software_title").on_press_maybe(
+            (!self.software_title_name.is_empty()).then_some(SoftwareTitleAddWidgetMessage::Submit),
+        );
         row![name_input, submit_button]
             .spacing(DEFAULT_SPACING)
             .padding(DEFAULT_PADDING)

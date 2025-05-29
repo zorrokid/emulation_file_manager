@@ -152,6 +152,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "api"
+version = "0.1.0"
+
+[[package]]
 name = "approx"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1525,6 +1529,7 @@ dependencies = [
  "sha1",
  "tempfile",
  "utils",
+ "uuid",
  "zip",
  "zstd",
 ]
@@ -4712,6 +4717,8 @@ version = "0.1.0"
 dependencies = [
  "core_types",
  "database",
+ "emulator_runner",
+ "file_export",
  "file_import",
  "iced",
  "rfd",
@@ -4829,6 +4836,17 @@ version = "0.1.0"
 dependencies = [
  "core_types",
  "sha1",
+]
+
+[[package]]
+name = "uuid"
+version = "1.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3cf4199d1e5d15ddd86a694e4d0dffa9c323ce759fea589f00fef9d81cc1931d"
+dependencies = [
+ "getrandom 0.3.2",
+ "js-sys",
+ "wasm-bindgen",
 ]
 
 [[package]]

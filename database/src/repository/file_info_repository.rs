@@ -20,7 +20,7 @@ impl FileInfoRepository {
         checksums: Vec<Sha1Checksum>,
     ) -> Result<Vec<FileInfo>, Error> {
         let mut query_builder = QueryBuilder::<Sqlite>::new(
-            "SELECT id, sha1_checksum, file_size 
+            "SELECT id, sha1_checksum, file_size, archive_file_name
              FROM file_info WHERE sha1_checksum IN (",
         );
         let mut separated = query_builder.separated(", ");

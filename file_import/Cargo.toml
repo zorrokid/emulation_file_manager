@@ -10,3 +10,4 @@ zip = "2.6.0"
 zstd = "0.13.3"
 core_types = { path = "../core_types" }
 utils = { path = "../utils" }
+uuid = { version="1.17.0", features = ["v4"] }

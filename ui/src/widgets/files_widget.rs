@@ -14,8 +14,8 @@ use service::{
 use crate::defaults::DEFAULT_SPACING;
 
 use super::{
-    file_add_widget::{self, FileAddWidget},
-    file_select_widget::{self, FileSelectWidget},
+    file_add_widget::{self, FileAddWidget, FileAddWidgetMessage},
+    file_select_widget::{self, FileSelectWidget, FileSelectWidgetMessage},
 };
 
 pub struct FilesWidget {
@@ -24,14 +24,17 @@ pub struct FilesWidget {
     files: Vec<FileSetListModel>,
     files_widget: FileSelectWidget,
     add_file_widget: OnceCell<FileAddWidget>,
+    // TODO: selected files are also maintained in parent widget!
     selected_file_ids: Vec<i64>,
 }
 
 #[derive(Debug, Clone)]
-pub enum Message {
+pub enum FilesWidgetMessage {
+    // child messages
+    FileAddWidget(FileAddWidgetMessage),
+    FileSelectWidget(FileSelectWidgetMessage),
+    // local messages
     FilesFetched(Result<Vec<FileSetListModel>, Error>),
-    AddFile(file_add_widget::Message),
-    FileSelect(file_select_widget::Message),
     FileAdded(Result<i64, DatabaseError>),
     RemoveFile(i64),
     SettingsFetched(Result<Settings, Error>),
@@ -42,17 +45,17 @@ impl FilesWidget {
     pub fn new(
         repositories: Arc<RepositoryManager>,
         view_model_service: Arc<ViewModelService>,
-    ) -> (Self, Task<Message>) {
+    ) -> (Self, Task<FilesWidgetMessage>) {
         let view_model_service_clone = Arc::clone(&view_model_service);
         let fetch_files_task = Task::perform(
             async move { view_model_service_clone.get_file_set_list_models().await },
-            Message::FilesFetched,
+            FilesWidgetMessage::FilesFetched,
         );
 
         let view_model_service_clone = Arc::clone(&view_model_service);
         let fetch_settings_task = Task::perform(
             async move { view_model_service_clone.get_settings().await },
-            Message::SettingsFetched,
+            FilesWidgetMessage::SettingsFetched,
         );
 
         let combined_task = Task::batch(vec![fetch_files_task, fetch_settings_task]);
@@ -70,21 +73,23 @@ impl FilesWidget {
         )
     }
 
-    pub fn update(&mut self, message: Message) -> Task<Message> {
+    pub fn update(&mut self, message: FilesWidgetMessage) -> Task<FilesWidgetMessage> {
         match message {
-            Message::FilesFetched(result) => match result {
+            FilesWidgetMessage::FilesFetched(result) => match result {
                 Ok(files) => {
                     self.files = files;
                     self.files_widget
-                        .update(file_select_widget::Message::SetFiles(self.files.clone()))
-                        .map(Message::FileSelect)
+                        .update(file_select_widget::FileSelectWidgetMessage::SetFiles(
+                            self.files.clone(),
+                        ))
+                        .map(FilesWidgetMessage::FileSelectWidget)
                 }
                 Err(error) => {
                     eprint!("Error when fetching files: {}", error);
                     Task::none()
                 }
             },
-            Message::SettingsFetched(result) => match result {
+            FilesWidgetMessage::SettingsFetched(result) => match result {
                 Ok(settings) => {
                     let collection_root_dir = settings.collection_root_dir.clone();
                     let repositories = Arc::clone(&self.repositories);
@@ -101,8 +106,8 @@ impl FilesWidget {
                     Task::none()
                 }
             },
-            Message::AddFile(message) => {
-                if let file_add_widget::Message::FileSetAdded(list_model) = &message {
+            FilesWidgetMessage::FileAddWidget(message) => {
+                if let file_add_widget::FileAddWidgetMessage::FileSetAdded(list_model) = &message {
                     self.selected_file_ids.push(list_model.id);
                     self.files.push(list_model.clone());
                 }
@@ -110,21 +115,25 @@ impl FilesWidget {
                     .get_mut()
                     .expect("Add file widget not initialized")
                     .update(message)
-                    .map(Message::AddFile)
+                    .map(FilesWidgetMessage::FileAddWidget)
             }
-            Message::FileSelect(message) => {
-                if let file_select_widget::Message::FileSelected(file) = &message {
-                    self.selected_file_ids.push(file.id);
+            FilesWidgetMessage::FileSelectWidget(message) => {
+                if let file_select_widget::FileSelectWidgetMessage::FileSelected(file) = &message {
+                    if !self.selected_file_ids.contains(&file.id) {
+                        self.selected_file_ids.push(file.id);
+                    }
                 }
-                self.files_widget.update(message).map(Message::FileSelect)
+                self.files_widget
+                    .update(message)
+                    .map(FilesWidgetMessage::FileSelectWidget)
             }
-            Message::FileAdded(result) => match result {
+            FilesWidgetMessage::FileAdded(result) => match result {
                 Ok(_) => {
                     let service = Arc::clone(&self.view_model_service);
                     Task::perform(
                         // TODO: get filtered subset of file sets
                         async move { service.get_file_set_list_models().await },
-                        Message::FilesFetched,
+                        FilesWidgetMessage::FilesFetched,
                     )
                 }
                 Err(error) => {
@@ -132,30 +141,33 @@ impl FilesWidget {
                     Task::none()
                 }
             },
-            Message::RemoveFile(id) => {
+            FilesWidgetMessage::RemoveFile(id) => {
                 self.selected_file_ids.retain(|&file_id| file_id != id);
                 Task::none()
             }
-            Message::SetSelectedFileIds(ids) => {
+            FilesWidgetMessage::SetSelectedFileIds(ids) => {
                 self.selected_file_ids = ids;
                 Task::none()
             }
         }
     }
 
-    pub fn view(&self) -> iced::Element<Message> {
+    pub fn view(&self) -> iced::Element<FilesWidgetMessage> {
         let add_file_view = self
             .add_file_widget
             .get()
             .expect("AddFileWidget not initialized")
             .view()
-            .map(Message::AddFile);
-        let files_view = self.files_widget.view().map(Message::FileSelect);
+            .map(FilesWidgetMessage::FileAddWidget);
+        let files_view = self
+            .files_widget
+            .view()
+            .map(FilesWidgetMessage::FileSelectWidget);
         let selected_files_list = self.create_selected_files_list();
         column![add_file_view, files_view, selected_files_list].into()
     }
 
-    fn create_selected_files_list(&self) -> iced::Element<Message> {
+    fn create_selected_files_list(&self) -> iced::Element<FilesWidgetMessage> {
         let selected_files = self
             .selected_file_ids
             .iter()
@@ -166,7 +178,7 @@ impl FilesWidget {
                     .find(|file| file.id == *id)
                     .unwrap_or_else(|| panic!("File with id {} not found", id)); // <== TODO:
                                                                                  // handle error
-                let remove_button = button("Remove").on_press(Message::RemoveFile(*id));
+                let remove_button = button("Remove").on_press(FilesWidgetMessage::RemoveFile(*id));
                 row![
                     text!("{}", file.file_set_name.clone()).width(200.0),
                     remove_button
@@ -175,7 +187,7 @@ impl FilesWidget {
                 .padding(crate::defaults::DEFAULT_PADDING / 2.0)
                 .into()
             })
-            .collect::<Vec<Element<Message>>>();
+            .collect::<Vec<Element<FilesWidgetMessage>>>();
 
         Column::with_children(selected_files).into()
     }

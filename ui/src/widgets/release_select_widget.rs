@@ -16,7 +16,7 @@ pub struct ReleaseSelectWidget {
 }
 
 #[derive(Debug, Clone)]
-pub enum Message {
+pub enum ReleaseSelectWidgetMessage {
     ReleaseSelected(ReleaseListModel),
     SetReleases(Vec<ReleaseListModel>),
     ReleasesFetched(Result<Vec<ReleaseListModel>, Error>),
@@ -24,11 +24,13 @@ pub enum Message {
 }
 
 impl ReleaseSelectWidget {
-    pub fn new(view_model_service: Arc<ViewModelService>) -> (Self, Task<Message>) {
+    pub fn new(
+        view_model_service: Arc<ViewModelService>,
+    ) -> (Self, Task<ReleaseSelectWidgetMessage>) {
         let view_model_service_clone = Arc::clone(&view_model_service);
         let fetch_releases_task = Task::perform(
             async move { view_model_service_clone.get_release_list_models().await },
-            Message::ReleasesFetched,
+            ReleaseSelectWidgetMessage::ReleasesFetched,
         );
 
         (
@@ -41,18 +43,21 @@ impl ReleaseSelectWidget {
         )
     }
 
-    pub fn update(&mut self, message: Message) -> Task<Message> {
+    pub fn update(
+        &mut self,
+        message: ReleaseSelectWidgetMessage,
+    ) -> Task<ReleaseSelectWidgetMessage> {
         match message {
-            Message::ReleaseSelected(release) => {
+            ReleaseSelectWidgetMessage::ReleaseSelected(release) => {
                 self.selected_release = Some(release.clone());
-                Task::done(Message::SetReleaseSelected(release.id))
+                Task::done(ReleaseSelectWidgetMessage::SetReleaseSelected(release.id))
             }
-            Message::SetReleases(releases) => {
+            ReleaseSelectWidgetMessage::SetReleases(releases) => {
                 self.releases = releases;
                 self.selected_release = None;
                 Task::none()
             }
-            Message::ReleasesFetched(result) => match result {
+            ReleaseSelectWidgetMessage::ReleasesFetched(result) => match result {
                 Ok(releases) => {
                     println!("Fetched releases: {:?}", releases);
                     self.releases = releases;
@@ -67,11 +72,11 @@ impl ReleaseSelectWidget {
         }
     }
 
-    pub fn view(&self) -> iced::Element<Message> {
+    pub fn view(&self) -> iced::Element<ReleaseSelectWidgetMessage> {
         let release_select = pick_list(
             self.releases.as_slice(),
             self.selected_release.clone(),
-            Message::ReleaseSelected,
+            ReleaseSelectWidgetMessage::ReleaseSelected,
         );
         let label = text!("Select release");
         row![label, release_select]

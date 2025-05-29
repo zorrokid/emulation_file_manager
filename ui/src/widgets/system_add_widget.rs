@@ -1,6 +1,7 @@
 use iced::{
     alignment,
     widget::{button, row, text_input},
+    Task,
 };
 
 use crate::defaults::{DEFAULT_PADDING, DEFAULT_SPACING};
@@ -10,15 +11,10 @@ pub struct SystemAddWidget {
 }
 
 #[derive(Debug, Clone)]
-pub enum Message {
+pub enum SystemAddWidgetMessage {
     SystemNameUpdated(String),
-    CancelAddSystem,
     Submit,
-}
-
-pub enum Action {
     AddSystem(String),
-    None,
 }
 
 impl SystemAddWidget {
@@ -28,24 +24,29 @@ impl SystemAddWidget {
         }
     }
 
-    // TODO: maybe return Task<Message> instead of Action
-    pub fn update(&mut self, message: Message) -> Action {
+    pub fn update(&mut self, message: SystemAddWidgetMessage) -> Task<SystemAddWidgetMessage> {
         match message {
-            Message::SystemNameUpdated(name) => self.system_name = name,
-            Message::Submit => return Action::AddSystem(self.system_name.clone()),
-            Message::CancelAddSystem => println!("Cancel"),
+            SystemAddWidgetMessage::SystemNameUpdated(name) => {
+                println!("System name updated: {}", name);
+                self.system_name = name;
+            }
+            SystemAddWidgetMessage::Submit => {
+                println!("Submitting system: {}", self.system_name);
+                return Task::done(SystemAddWidgetMessage::AddSystem(self.system_name.clone()));
+            }
+            _ => {}
         }
-        Action::None
+        Task::none()
     }
 
-    pub fn view(&self) -> iced::Element<Message> {
-        let name_input =
-            text_input("System name", &self.system_name).on_input(Message::SystemNameUpdated);
+    pub fn view(&self) -> iced::Element<SystemAddWidgetMessage> {
+        let name_input = text_input("System name", &self.system_name)
+            .on_input(SystemAddWidgetMessage::SystemNameUpdated);
 
-        let submit_button = button("Submit system")
-            .on_press_maybe((!self.system_name.is_empty()).then_some(Message::Submit));
-        let cancel_button = button("Cancel").on_press(Message::CancelAddSystem);
-        row![name_input, submit_button, cancel_button]
+        let submit_button = button("Submit system").on_press_maybe(
+            (!self.system_name.is_empty()).then_some(SystemAddWidgetMessage::Submit),
+        );
+        row![name_input, submit_button]
             .spacing(DEFAULT_SPACING)
             .padding(DEFAULT_PADDING)
             .align_y(alignment::Vertical::Center)

@@ -6,9 +6,11 @@ use std::{cell::OnceCell, sync::Arc};
 
 use database::{get_db_pool, repository_manager::RepositoryManager};
 use iced::widget::{column, text};
-use iced::Task;
+use iced::{Element, Task};
 use service::error::Error;
 use service::view_model_service::ViewModelService;
+use tabs::tabs_controller::TabsControllerMessage;
+use tabs::title_bar::TitleBarMessage;
 use tabs::{
     tabs_controller::TabsController,
     title_bar::{self, TitleBar},
@@ -26,14 +28,16 @@ struct Ui {
 }
 
 #[derive(Debug, Clone)]
-enum Message {
-    TabsController(tabs::tabs_controller::Message),
-    TitleBar(tabs::title_bar::Message),
+enum MainMessage {
+    // child messages
+    TabsController(TabsControllerMessage),
+    TitleBar(TitleBarMessage),
+    // local messages
     RepositoriesInitialized(Result<Arc<RepositoryManager>, Error>),
 }
 
 impl Ui {
-    fn new() -> (Self, Task<Message>) {
+    fn new() -> (Self, Task<MainMessage>) {
         let initialize_task = Task::perform(
             async {
                 match get_db_pool().await {
@@ -47,7 +51,7 @@ impl Ui {
                     ))),
                 }
             },
-            Message::RepositoriesInitialized,
+            MainMessage::RepositoriesInitialized,
         );
         let title_bar = TitleBar::new();
         (
@@ -65,9 +69,9 @@ impl Ui {
         "Software Collection Manager".to_string()
     }
 
-    fn update(&mut self, message: Message) -> Task<Message> {
+    fn update(&mut self, message: MainMessage) -> Task<MainMessage> {
         match message {
-            Message::RepositoriesInitialized(result) => match result {
+            MainMessage::RepositoriesInitialized(result) => match result {
                 Ok(repositories) => {
                     let view_model_service =
                         Arc::new(ViewModelService::new(Arc::clone(&repositories)));
@@ -89,37 +93,37 @@ impl Ui {
                         .unwrap_or_else(|_| {
                             panic!("Failed to set view modelservice, already set?");
                         });
-                    task.map(Message::TabsController)
+                    task.map(MainMessage::TabsController)
                 }
                 Err(err) => {
                     eprintln!("Failed connecting to database: {}", err);
                     Task::none()
                 }
             },
-            Message::TabsController(message) => self
+            MainMessage::TabsController(message) => self
                 .tabs_controller
                 .get_mut()
                 .expect("TabsControler expected to be initialized by now.")
                 .update(message)
-                .map(Message::TabsController),
-            Message::TitleBar(message) => {
+                .map(MainMessage::TabsController),
+            MainMessage::TitleBar(message) => {
                 self.title_bar.update(message.clone());
                 match message {
-                    title_bar::Message::TabSelected(tab) => self
+                    title_bar::TitleBarMessage::TabSelected(tab) => self
                         .tabs_controller
                         .get_mut()
                         .expect("TabsControler expected to be initialized by now.")
                         .switch_to_tab(tab)
-                        .map(Message::TabsController),
+                        .map(MainMessage::TabsController),
                 }
             }
         }
     }
 
-    fn view(&self) -> iced::Element<Message> {
-        let title_bar_view = self.title_bar.view().map(Message::TitleBar);
+    fn view(&self) -> Element<MainMessage> {
+        let title_bar_view = self.title_bar.view().map(MainMessage::TitleBar);
         let tab_view = if let Some(tabs_controller) = self.tabs_controller.get() {
-            tabs_controller.view().map(Message::TabsController)
+            tabs_controller.view().map(MainMessage::TabsController)
         } else {
             text!("Initializing").into()
         };

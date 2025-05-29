@@ -1,18 +1,19 @@
 use std::sync::Arc;
 
 use database::repository_manager::RepositoryManager;
-use iced::{
-    widget::{button, column, text},
-    Task,
-};
+use iced::{widget::column, Task};
 use service::{
-    error::Error as ServiceError, view_model_service::ViewModelService,
-    view_models::ReleaseViewModel,
+    error::Error as ServiceError,
+    view_model_service::ViewModelService,
+    view_models::{ReleaseViewModel, SoftwareTitleListModel, SystemListModel},
 };
 
 use crate::widgets::{
-    release_select_widget::{self, ReleaseSelectWidget},
-    release_widget::{self, ReleaseWidget},
+    release_select_widget::{self, ReleaseSelectWidget, ReleaseSelectWidgetMessage},
+    release_view_widget::{ReleaseViewWidget, ReleaseViewWidgetMessage},
+    release_widget::{self, ReleaseWidget, ReleaseWidgetMessage},
+    software_title_filter_widget::{SoftwareTitleFilterWidget, SoftwareTitleFilterWidgetMessage},
+    systems_filter_widget::{SystemFilterWidget, SystemFilterWidgetMessage},
 };
 
 pub struct AddReleaseTab {
@@ -20,29 +21,65 @@ pub struct AddReleaseTab {
     release_select_widget: ReleaseSelectWidget,
     selected_release: Option<ReleaseViewModel>,
     release_widget: ReleaseWidget,
+    system_filter: SystemFilterWidget,
+    software_titles_filter: SoftwareTitleFilterWidget,
+    selected_software_title: Option<SoftwareTitleListModel>,
+    selected_system: Option<SystemListModel>,
+    release_view_widget: ReleaseViewWidget,
 }
 
 #[derive(Debug, Clone)]
-pub enum Message {
-    ReleaseSelect(release_select_widget::Message),
+pub enum AddReleaseTabMessage {
+    // child messages
+    ReleaseSelectWidget(ReleaseSelectWidgetMessage),
+    ReleaseWidget(ReleaseWidgetMessage),
+    SystemFilterWidget(SystemFilterWidgetMessage),
+    SoftwareTitleFilterWidget(SoftwareTitleFilterWidgetMessage),
+    ReleaseViewWidget(ReleaseViewWidgetMessage),
+    // local messages
     ReleaseFetched(Result<ReleaseViewModel, ServiceError>),
-    StartEditRelease,
-    ReleaseWidget(release_widget::Message),
+    SystemsFetched(Result<Vec<SystemListModel>, ServiceError>),
+    SoftwareTitlesFetched(Result<Vec<SoftwareTitleListModel>, ServiceError>),
+    SystemChanged(SystemListModel),
 }
 
 impl AddReleaseTab {
     pub fn new(
         repositories: Arc<RepositoryManager>,
         view_model_service: Arc<ViewModelService>,
-    ) -> (Self, Task<Message>) {
+    ) -> (Self, Task<AddReleaseTabMessage>) {
         let (release_select_widget, release_select_task) =
             ReleaseSelectWidget::new(Arc::clone(&view_model_service));
 
         let (release_widget, release_widget_task) =
             ReleaseWidget::new(Arc::clone(&repositories), Arc::clone(&view_model_service));
+
+        let view_model_service_clone = Arc::clone(&view_model_service);
+        let load_systems_task = Task::perform(
+            async move { view_model_service_clone.get_system_list_models().await },
+            AddReleaseTabMessage::SystemsFetched,
+        );
+
+        let view_model_service_clone = Arc::clone(&view_model_service);
+        let load_software_titles_task = Task::perform(
+            async move {
+                view_model_service_clone
+                    .get_software_title_list_models()
+                    .await
+            },
+            AddReleaseTabMessage::SoftwareTitlesFetched,
+        );
+
+        let view_model_service_clone = Arc::clone(&view_model_service);
+        let (release_view_widget, release_view_task) =
+            ReleaseViewWidget::new(view_model_service_clone);
+
         let combined_task = Task::batch(vec![
-            release_select_task.map(Message::ReleaseSelect),
-            release_widget_task.map(Message::ReleaseWidget),
+            release_select_task.map(AddReleaseTabMessage::ReleaseSelectWidget),
+            release_widget_task.map(AddReleaseTabMessage::ReleaseWidget),
+            load_systems_task,
+            load_software_titles_task,
+            release_view_task.map(AddReleaseTabMessage::ReleaseViewWidget),
         ]);
 
         (
@@ -51,28 +88,34 @@ impl AddReleaseTab {
                 release_select_widget,
                 selected_release: None,
                 release_widget,
+                system_filter: SystemFilterWidget::new(),
+                software_titles_filter: SoftwareTitleFilterWidget::new(),
+                selected_software_title: None,
+                selected_system: None,
+                release_view_widget,
             },
             combined_task,
         )
     }
 
-    pub fn update(&mut self, message: Message) -> Task<Message> {
+    pub fn update(&mut self, message: AddReleaseTabMessage) -> Task<AddReleaseTabMessage> {
         match message {
-            Message::ReleaseSelect(message) => {
+            AddReleaseTabMessage::ReleaseSelectWidget(message) => {
                 println!("ReleaseSelect message");
                 let update_task = self
                     .release_select_widget
                     .update(message.clone())
-                    .map(Message::ReleaseSelect);
+                    .map(AddReleaseTabMessage::ReleaseSelectWidget);
 
-                if let release_select_widget::Message::SetReleaseSelected(release_id) =
-                    message.clone()
+                if let release_select_widget::ReleaseSelectWidgetMessage::SetReleaseSelected(
+                    release_id,
+                ) = message.clone()
                 {
                     println!("Got ReleaseSelected message");
                     let view_model_service = Arc::clone(&self.view_model_service);
                     let fetch_selected_release_task = Task::perform(
                         async move { view_model_service.get_release_view_model(release_id).await },
-                        Message::ReleaseFetched,
+                        AddReleaseTabMessage::ReleaseFetched,
                     );
                     let combined_task = Task::batch(vec![update_task, fetch_selected_release_task]);
                     return combined_task;
@@ -80,67 +123,139 @@ impl AddReleaseTab {
 
                 update_task
             }
-            Message::ReleaseFetched(result) => match result {
+            AddReleaseTabMessage::ReleaseFetched(result) => match result {
                 Ok(release_view_model) => {
                     println!("Got ReleaseFetched message.");
                     self.selected_release = Some(release_view_model.clone());
-                    Task::none()
+                    self.release_view_widget
+                        .update(ReleaseViewWidgetMessage::SetRelease(release_view_model))
+                        .map(AddReleaseTabMessage::ReleaseViewWidget)
                 }
                 Err(err) => {
                     eprintln!("Error fetching release: {}", err);
                     Task::none()
                 }
             },
-            Message::StartEditRelease => {
-                if let Some(release) = self.selected_release.clone() {
-                    println!("Editing release: {:?}", release);
-                    return self
-                        .release_widget
-                        .update(release_widget::Message::SetSelectedRelease(release))
-                        .map(Message::ReleaseWidget);
-                }
-                Task::none()
-            }
-            Message::ReleaseWidget(message) => {
+            AddReleaseTabMessage::ReleaseWidget(message) => {
                 let update_task = self
                     .release_widget
                     .update(message.clone())
-                    .map(Message::ReleaseWidget);
+                    .map(AddReleaseTabMessage::ReleaseWidget);
 
-                if let release_widget::Message::ReleaseWasUpdated(release_list_model) = message {
+                if let release_widget::ReleaseWidgetMessage::ReleaseWasUpdated(release_list_model) =
+                    message
+                {
                     // TODO: update selected release
                 }
 
                 update_task
             }
+            AddReleaseTabMessage::SystemChanged(system) => {
+                println!("System changed: {:?}", system);
+                Task::none()
+            }
+            AddReleaseTabMessage::SystemsFetched(result) => match result {
+                Ok(systems) => {
+                    println!("Got systems: {:?}", systems);
+                    let task: Task<AddReleaseTabMessage> = self
+                        .system_filter
+                        .update(SystemFilterWidgetMessage::SetSystems(systems))
+                        .map(AddReleaseTabMessage::SystemFilterWidget);
+                    task
+                }
+                Err(err) => {
+                    eprintln!("Error fetching systems: {}", err);
+                    Task::none()
+                }
+            },
+            AddReleaseTabMessage::SoftwareTitlesFetched(result) => match result {
+                Ok(software_titles) => {
+                    println!("Got software titles: {:?}", software_titles);
+                    let task: Task<AddReleaseTabMessage> = self
+                        .software_titles_filter
+                        .update(SoftwareTitleFilterWidgetMessage::SetSoftwareTitles(
+                            software_titles,
+                        ))
+                        .map(AddReleaseTabMessage::SoftwareTitleFilterWidget);
+                    task
+                }
+                Err(err) => {
+                    eprintln!("Error fetching software titles: {}", err);
+                    Task::none()
+                }
+            },
+            AddReleaseTabMessage::SoftwareTitleFilterWidget(message) => {
+                let update_task = self
+                    .software_titles_filter
+                    .update(message.clone())
+                    .map(AddReleaseTabMessage::SoftwareTitleFilterWidget);
+                if let SoftwareTitleFilterWidgetMessage::SoftwareTitleSelected(software_title) =
+                    message
+                {
+                    println!("Software title selected: {:?}", software_title);
+                    self.selected_software_title = Some(software_title.clone());
+                }
+                update_task
+            }
+            AddReleaseTabMessage::SystemFilterWidget(message) => {
+                let update_task = self
+                    .system_filter
+                    .update(message.clone())
+                    .map(AddReleaseTabMessage::SystemFilterWidget);
+                if let SystemFilterWidgetMessage::SetSelectedSystem(system) = message {
+                    println!("System selected: {:?}", system);
+                    self.selected_system = Some(system.clone());
+                }
+                update_task
+            }
+            AddReleaseTabMessage::ReleaseViewWidget(message) => {
+                if let ReleaseViewWidgetMessage::SetEditRelease(release) = message {
+                    return self
+                        .release_widget
+                        .update(release_widget::ReleaseWidgetMessage::SetSelectedRelease(
+                            release,
+                        ))
+                        .map(AddReleaseTabMessage::ReleaseWidget);
+                }
+                self.release_view_widget
+                    .update(message.clone())
+                    .map(AddReleaseTabMessage::ReleaseViewWidget)
+            }
+            _ => {
+                println!("Unhandled message: {:?}", message);
+                Task::none()
+            }
         }
     }
 
-    pub fn view(&self) -> iced::Element<Message> {
+    pub fn view(&self) -> iced::Element<AddReleaseTabMessage> {
+        let system_filter_view = self
+            .system_filter
+            .view()
+            .map(AddReleaseTabMessage::SystemFilterWidget);
+        let software_title_filter_view = self
+            .software_titles_filter
+            .view()
+            .map(AddReleaseTabMessage::SoftwareTitleFilterWidget);
         let release_select_view = self
             .release_select_widget
             .view()
-            .map(Message::ReleaseSelect);
-        let selected_release_view = self.create_selected_release_view();
-        let release_view = self.release_widget.view().map(Message::ReleaseWidget);
-        column![release_select_view, selected_release_view, release_view].into()
-    }
-
-    fn create_selected_release_view(&self) -> iced::Element<Message> {
-        if let Some(release) = &self.selected_release {
-            let release_name_field = text!("Release Name: {}", release.name);
-            let software_titles_field = text!("Software Titles: {:?}", release.software_titles);
-            let system_names_field = text!("Systems: {:?}", release.systems);
-            let edit_button = button("Edit").on_press(Message::StartEditRelease);
-
-            return column![
-                release_name_field,
-                software_titles_field,
-                system_names_field,
-                edit_button,
-            ]
-            .into();
-        }
-        iced::widget::text("No release selected").into()
+            .map(AddReleaseTabMessage::ReleaseSelectWidget);
+        let release_view = self
+            .release_widget
+            .view()
+            .map(AddReleaseTabMessage::ReleaseWidget);
+        let selected_release_viewq = self
+            .release_view_widget
+            .view()
+            .map(AddReleaseTabMessage::ReleaseViewWidget);
+        column![
+            system_filter_view,
+            software_title_filter_view,
+            release_select_view,
+            selected_release_viewq,
+            release_view
+        ]
+        .into()
     }
 }

@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum EmulatorRunnerError {
     #[error("IO error: {0}")]
     IoError(String),

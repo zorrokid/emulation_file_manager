@@ -5,11 +5,12 @@ use std::{
 };
 
 use database::models::{
-    Emulator, FileSet, FileType, ReleaseExtended, SettingName, SoftwareTitle, System,
+    Emulator, FileSet, FileSetFileInfo, FileType, ReleaseExtended, SettingName, SoftwareTitle,
+    System,
 };
 use file_system::get_files_root_dir;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct EmulatorViewModel {
     pub id: i64,
     pub name: String,
@@ -18,7 +19,13 @@ pub struct EmulatorViewModel {
     pub systems: Vec<EmulatorSystemViewModel>,
 }
 
-#[derive(Debug, Clone)]
+impl Display for EmulatorViewModel {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct EmulatorSystemViewModel {
     pub id: i64,
     pub system_id: i64,
@@ -140,6 +147,27 @@ impl Display for FileSetListModel {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct FileSetViewModel {
+    pub id: i64,
+    pub file_set_name: String,
+    pub file_type: FileType,
+    pub files: Vec<FileSetFileInfo>,
+}
+
+impl Display for FileSetViewModel {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{} ({})", self.file_set_name, self.file_type)
+    }
+}
+
+pub struct FileSetFileViewModel {
+    pub id: i64,
+    pub file_name: String,
+    pub file_type: FileType,
+    pub file_path: PathBuf,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct ReleaseListModel {
     pub id: i64,
     pub name: String,
@@ -170,5 +198,5 @@ pub struct ReleaseViewModel {
     pub name: String,
     pub systems: Vec<System>,
     pub software_titles: Vec<SoftwareTitle>,
-    pub file_sets: Vec<FileSet>,
+    pub file_sets: Vec<FileSetViewModel>,
 }

@@ -5,7 +5,7 @@ use sqlx::{sqlite::SqliteRow, FromRow, Pool, Row, Sqlite};
 
 use crate::{
     database_error::{DatabaseError, Error},
-    models::{FileSet, FileType},
+    models::{FileSet, FileSetFileInfo, FileType},
 };
 
 #[derive(Debug)]
@@ -63,7 +63,7 @@ impl FileSetRepository {
     pub async fn get_file_sets(&self, ids: Vec<i64>) -> Result<Vec<FileSet>, DatabaseError> {
         let placeholders = ids.iter().map(|_| "?").collect::<Vec<&str>>().join(",");
         let query = format!(
-            "SELECT id, file_name,  file_type 
+            "SELECT id, file_name, file_type 
              FROM file_set
              WHERE id IN ({})",
             placeholders
@@ -107,9 +107,9 @@ impl FileSetRepository {
 
     pub async fn add_file_set(
         &self,
-        file_name: String,
+        file_set_name: String,
         file_type: FileType,
-        files: Vec<ImportedFile>,
+        files_in_fileset: Vec<ImportedFile>,
     ) -> Result<i64, Error> {
         let file_type = file_type as i64;
 
@@ -120,15 +120,16 @@ impl FileSetRepository {
                 file_name, 
                 file_type) 
              VALUES (?, ?)",
-            file_name,
+            file_set_name,
             file_type
         )
         .execute(&mut *transaction)
         .await?;
         let collection_file_id = result.last_insert_rowid();
 
-        for file in files {
+        for file in files_in_fileset {
             let checksum = file.sha1_checksum.to_vec();
+            // if file_info exists, use its id, otherwise insert new file_info
             let existing_file_info = sqlx::query_scalar!(
                 "SELECT id 
                  FROM file_info 
@@ -138,14 +139,21 @@ impl FileSetRepository {
             .fetch_optional(&mut *transaction)
             .await?;
 
+            let archive_file_name = file.archive_file_name;
+
             let file_info_id = match existing_file_info {
                 Some(id) => id,
                 None => {
                     let file_size = file.file_size as i64;
                     let file_info_result = sqlx::query!(
-                        "INSERT INTO file_info (sha1_checksum, file_size) VALUES (?, ?)",
+                        "INSERT INTO file_info (
+                            sha1_checksum, 
+                            file_size, 
+                            archive_file_name
+                        ) VALUES (?, ?, ?)",
                         checksum,
-                        file_size
+                        file_size,
+                        archive_file_name
                     )
                     .execute(&mut *transaction)
                     .await?;
@@ -155,11 +163,14 @@ impl FileSetRepository {
             };
 
             sqlx::query!(
-                "INSERT INTO file_set_file_info (file_set_id, file_info_id, file_name) 
-                 VALUES (?, ?, ?)",
+                "INSERT INTO file_set_file_info (
+                    file_set_id, 
+                    file_info_id, 
+                    file_name
+                 ) VALUES (?, ?, ?)",
                 collection_file_id,
                 file_info_id,
-                file.file_name
+                file.original_file_name
             )
             .execute(&mut *transaction)
             .await?;
@@ -200,6 +211,29 @@ impl FileSetRepository {
 
         transaction.commit().await?;
         Ok(id)
+    }
+
+    pub async fn get_file_set_file_info(
+        &self,
+        file_set_id: i64,
+    ) -> Result<Vec<FileSetFileInfo>, DatabaseError> {
+        let file_infos = sqlx::query_as!(
+            FileSetFileInfo,
+            "SELECT 
+                fsfi.file_set_id, 
+                fsfi.file_info_id, 
+                fsfi.file_name, 
+                fi.sha1_checksum, 
+                fi.file_size, 
+                fi.archive_file_name
+             FROM file_set_file_info fsfi
+             JOIN file_info fi ON fsfi.file_info_id = fi.id
+             WHERE fsfi.file_set_id = ?",
+            file_set_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+        Ok(file_infos)
     }
 }
 
@@ -294,6 +328,9 @@ mod tests {
     async fn test_add_file_set() {
         let pool = Arc::new(setup_test_db().await);
         let file_name = "test file".to_string();
+        // create some guid for archive file name
+        let archive_file_name_1 = "123e4567-e89b-12d3-a456-426614174001";
+        let archive_file_name_2 = "123e4567-e89b-12d3-a456-426614174002";
         let file_type = FileType::Rom;
         let checksum_1: [u8; 20] = [0; 20];
         let checksum_2: [u8; 20] = [1; 20];
@@ -301,12 +338,14 @@ mod tests {
             ImportedFile {
                 sha1_checksum: checksum_1,
                 file_size: 123,
-                file_name: "test".to_string(),
+                original_file_name: "test".to_string(),
+                archive_file_name: archive_file_name_1.to_string(),
             },
             ImportedFile {
                 sha1_checksum: checksum_2,
                 file_size: 123,
-                file_name: "test2".to_string(),
+                original_file_name: "test2".to_string(),
+                archive_file_name: archive_file_name_2.to_string(),
             },
         ];
         let file_set_id = FileSetRepository { pool: pool.clone() }
@@ -342,17 +381,17 @@ mod tests {
             ImportedFile {
                 sha1_checksum: checksum_1,
                 file_size: 123,
-                file_name: "file 1".to_string(),
+                original_file_name: "file 1".to_string(),
             },
             ImportedFile {
                 sha1_checksum: checksum_2,
                 file_size: 123,
-                file_name: "file 2".to_string(),
+                original_file_name: "file 2".to_string(),
             },
             ImportedFile {
                 sha1_checksum: checksum_3,
                 file_size: 123,
-                file_name: "file 3".to_string(),
+                original_file_name: "file 3".to_string(),
             },
         ];
 

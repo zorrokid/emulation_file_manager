@@ -27,6 +27,31 @@ impl EmulatorRepository {
         Ok(emulators)
     }
 
+    pub async fn get_emulators_for_systems(
+        &self,
+        system_ids: Vec<i64>,
+    ) -> Result<Vec<Emulator>, DatabaseError> {
+        if system_ids.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let mut query_builder = sqlx::QueryBuilder::<Sqlite>::new(
+            "SELECT DISTINCT e.id, e.name, e.executable, e.extract_files 
+             FROM emulator e 
+             JOIN emulator_system es ON e.id = es.emulator_id 
+             WHERE es.system_id IN (",
+        );
+        let mut separated = query_builder.separated(", ");
+        for id in &system_ids {
+            separated.push_bind(*id);
+        }
+        separated.push_unseparated(")");
+
+        let query = query_builder.build_query_as::<Emulator>();
+        let emulators = query.fetch_all(&*self.pool).await?;
+        Ok(emulators)
+    }
+
     pub async fn get_emulator_with_systems(
         &self,
         id: i64,

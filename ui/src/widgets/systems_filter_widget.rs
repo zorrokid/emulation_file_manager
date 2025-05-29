@@ -7,18 +7,19 @@ use service::view_models::SystemListModel;
 
 use crate::defaults::{DEFAULT_PADDING, DEFAULT_SPACING};
 
-pub struct SystemSelectWidget {
+pub struct SystemFilterWidget {
     systems: Vec<SystemListModel>,
     selected_system: Option<SystemListModel>,
 }
 
 #[derive(Debug, Clone)]
-pub enum SystemSelectWidgetMessage {
+pub enum SystemFilterWidgetMessage {
     SystemSelected(SystemListModel),
     SetSystems(Vec<SystemListModel>),
+    SetSelectedSystem(SystemListModel),
 }
 
-impl SystemSelectWidget {
+impl SystemFilterWidget {
     pub fn new() -> Self {
         Self {
             systems: vec![],
@@ -28,26 +29,27 @@ impl SystemSelectWidget {
 
     pub fn update(
         &mut self,
-        message: SystemSelectWidgetMessage,
-    ) -> Task<SystemSelectWidgetMessage> {
-        println!("SystemSelectWidget update: {:?}", message);
+        message: SystemFilterWidgetMessage,
+    ) -> Task<SystemFilterWidgetMessage> {
         match message {
-            SystemSelectWidgetMessage::SystemSelected(system) => {
-                Task::done(SystemSelectWidgetMessage::SystemSelected(system.clone()))
+            SystemFilterWidgetMessage::SystemSelected(system) => {
+                self.selected_system = Some(system.clone());
+                Task::done(SystemFilterWidgetMessage::SetSelectedSystem(system.clone()))
             }
-            SystemSelectWidgetMessage::SetSystems(systems) => {
+            SystemFilterWidgetMessage::SetSystems(systems) => {
                 self.systems = systems;
                 self.selected_system = None;
                 Task::none()
             }
+            _ => Task::none(),
         }
     }
 
-    pub fn view(&self) -> iced::Element<SystemSelectWidgetMessage> {
+    pub fn view(&self) -> iced::Element<SystemFilterWidgetMessage> {
         let system_select = pick_list(
             self.systems.as_slice(),
             self.selected_system.clone(),
-            SystemSelectWidgetMessage::SystemSelected,
+            SystemFilterWidgetMessage::SystemSelected,
         );
         let label = text!("Select system");
         row![label, system_select]

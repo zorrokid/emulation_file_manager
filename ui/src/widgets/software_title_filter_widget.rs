@@ -7,18 +7,19 @@ use service::view_models::SoftwareTitleListModel;
 
 use crate::defaults::{DEFAULT_PADDING, DEFAULT_SPACING};
 
-pub struct SoftwareTitleSelectWidget {
+pub struct SoftwareTitleFilterWidget {
     software_titles: Vec<SoftwareTitleListModel>,
     selected_software_title: Option<SoftwareTitleListModel>,
 }
 
 #[derive(Debug, Clone)]
-pub enum SoftwareTitleSelectWidgetMessage {
+pub enum SoftwareTitleFilterWidgetMessage {
     SoftwareTitleSelected(SoftwareTitleListModel),
     SetSoftwareTitles(Vec<SoftwareTitleListModel>),
+    SetSelectedSoftwareTitle(SoftwareTitleListModel),
 }
 
-impl SoftwareTitleSelectWidget {
+impl SoftwareTitleFilterWidget {
     pub fn new() -> Self {
         Self {
             software_titles: vec![],
@@ -28,25 +29,29 @@ impl SoftwareTitleSelectWidget {
 
     pub fn update(
         &mut self,
-        message: SoftwareTitleSelectWidgetMessage,
-    ) -> Task<SoftwareTitleSelectWidgetMessage> {
+        message: SoftwareTitleFilterWidgetMessage,
+    ) -> Task<SoftwareTitleFilterWidgetMessage> {
         match message {
-            SoftwareTitleSelectWidgetMessage::SoftwareTitleSelected(software_title) => Task::done(
-                SoftwareTitleSelectWidgetMessage::SoftwareTitleSelected(software_title.clone()),
-            ),
-            SoftwareTitleSelectWidgetMessage::SetSoftwareTitles(software_titles) => {
+            SoftwareTitleFilterWidgetMessage::SoftwareTitleSelected(software_title) => {
+                self.selected_software_title = Some(software_title.clone());
+                Task::done(SoftwareTitleFilterWidgetMessage::SetSelectedSoftwareTitle(
+                    software_title.clone(),
+                ))
+            }
+            SoftwareTitleFilterWidgetMessage::SetSoftwareTitles(software_titles) => {
                 self.software_titles = software_titles;
                 self.selected_software_title = None;
                 Task::none()
             }
+            _ => Task::none(),
         }
     }
 
-    pub fn view(&self) -> iced::Element<SoftwareTitleSelectWidgetMessage> {
+    pub fn view(&self) -> iced::Element<SoftwareTitleFilterWidgetMessage> {
         let software_title_select = pick_list(
             self.software_titles.as_slice(),
             self.selected_software_title.clone(),
-            SoftwareTitleSelectWidgetMessage::SoftwareTitleSelected,
+            SoftwareTitleFilterWidgetMessage::SoftwareTitleSelected,
         );
         let label = text!("Select software title");
         row![label, software_title_select]
