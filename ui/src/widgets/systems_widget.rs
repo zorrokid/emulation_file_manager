@@ -82,13 +82,16 @@ impl SystemsWidget {
             },
             SystemWidgetMessage::AddSystem(message) => {
                 if let SystemAddWidgetMessage::AddSystem(name) = message {
+                    println!("Adding system: {}", name);
                     let repo = Arc::clone(&self.repositories);
                     return Task::perform(
                         async move { repo.get_system_repository().add_system(name).await },
                         SystemWidgetMessage::SystemAdded,
                     );
                 }
-                Task::none()
+                self.system_add_widget
+                    .update(message)
+                    .map(SystemWidgetMessage::AddSystem)
             }
             SystemWidgetMessage::SystemSelect(message) => {
                 if let SystemSelectWidgetMessage::SystemSelected(system) = message {

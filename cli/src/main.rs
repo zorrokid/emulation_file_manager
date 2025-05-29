@@ -53,7 +53,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let picked_files = hash_map
                     .values()
                     .map(|v| ImportedFile {
-                        file_name: v.file_name.clone(),
+                        original_file_name: v.original_file_name.clone(),
+                        archive_file_name: v.archive_file_name.clone(),
                         sha1_checksum: v.sha1_checksum,
                         file_size: v.file_size,
                     })
@@ -84,31 +85,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("File info: {:?}", file_info);
 
                 // let's try exporting the files...
-                let input_path = Path::new(&output_directory);
-                let output_path = Path::new(&output_directory).join("export");
+                let input_path = PathBuf::from(&output_directory);
+                let output_path = PathBuf::from(&output_directory).join("export");
                 let output_filename_mapping = hash_map
                     .values()
                     .map(|v| {
                         (
-                            v.file_name.clone(),
-                            format!("{}-exported", v.file_name.clone()),
+                            v.original_file_name.clone(),
+                            format!("{}-exported", v.original_file_name.clone()),
                         )
                     })
                     .collect::<HashMap<_, _>>();
                 let filename_checksum_mapping = hash_map
                     .values()
-                    .map(|v| (v.file_name.clone(), v.sha1_checksum))
+                    .map(|v| (v.original_file_name.clone(), v.sha1_checksum))
                     .collect::<HashMap<_, _>>();
                 export_files(
-                    input_path,
-                    &output_path,
+                    input_path.clone(),
+                    output_path.clone(),
                     output_filename_mapping.clone(),
                     filename_checksum_mapping.clone(),
                 )
                 .expect("Failed to export files");
                 export_files_zipped(
                     input_path,
-                    &output_path,
+                    output_path,
                     output_filename_mapping,
                     filename_checksum_mapping,
                     "exported_files.zip".to_string(),

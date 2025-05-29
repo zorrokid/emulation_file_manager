@@ -70,11 +70,16 @@ impl AddReleaseTab {
             AddReleaseTabMessage::SoftwareTitlesFetched,
         );
 
+        let view_model_service_clone = Arc::clone(&view_model_service);
+        let (release_view_widget, release_view_task) =
+            ReleaseViewWidget::new(view_model_service_clone);
+
         let combined_task = Task::batch(vec![
             release_select_task.map(AddReleaseTabMessage::ReleaseSelectWidget),
             release_widget_task.map(AddReleaseTabMessage::ReleaseWidget),
             load_systems_task,
             load_software_titles_task,
+            release_view_task.map(AddReleaseTabMessage::ReleaseViewWidget),
         ]);
 
         (
@@ -87,7 +92,7 @@ impl AddReleaseTab {
                 software_titles_filter: SoftwareTitleFilterWidget::new(),
                 selected_software_title: None,
                 selected_system: None,
-                release_view_widget: ReleaseViewWidget::new(),
+                release_view_widget,
             },
             combined_task,
         )

@@ -5,12 +5,12 @@ use std::{
 };
 
 use database::models::{
-    Emulator, FileInfo, FileSet, FileSetFileInfo, FileType, ReleaseExtended, SettingName,
-    SoftwareTitle, System,
+    Emulator, FileSet, FileSetFileInfo, FileType, ReleaseExtended, SettingName, SoftwareTitle,
+    System,
 };
 use file_system::get_files_root_dir;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct EmulatorViewModel {
     pub id: i64,
     pub name: String,
@@ -19,7 +19,13 @@ pub struct EmulatorViewModel {
     pub systems: Vec<EmulatorSystemViewModel>,
 }
 
-#[derive(Debug, Clone)]
+impl Display for EmulatorViewModel {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct EmulatorSystemViewModel {
     pub id: i64,
     pub system_id: i64,

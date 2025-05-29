@@ -39,6 +39,7 @@ pub trait FileOutputter {
         &self,
         output_dir: &Path,
         file: &mut ZipFile<'_, File>,
+        archive_file_name: &str,
     ) -> Result<(Sha1Checksum, FileSize), Box<dyn std::error::Error>>;
 }
 
@@ -47,11 +48,14 @@ impl FileOutputter for CompressionMethod {
         &self,
         output_path: &Path,
         file: &mut ZipFile<'_, File>,
+        archive_file_name: &str,
     ) -> Result<(Sha1Checksum, FileSize), Box<dyn std::error::Error>> {
         match self {
-            CompressionMethod::Zip => output_zip_compressed(output_path, file),
-            CompressionMethod::Zstd => output_zstd_compressed(output_path, file),
-            CompressionMethod::None => output_without_compression(output_path, file),
+            CompressionMethod::Zip => output_zip_compressed(output_path, file, archive_file_name),
+            CompressionMethod::Zstd => output_zstd_compressed(output_path, file, archive_file_name),
+            CompressionMethod::None => {
+                output_without_compression(output_path, file, archive_file_name)
+            }
         }
     }
 }
@@ -59,11 +63,12 @@ impl FileOutputter for CompressionMethod {
 fn output_without_compression(
     output_dir: &Path,
     file: &mut ZipFile<'_, File>,
+    archive_file_name: &str,
 ) -> Result<(Sha1Checksum, FileSize), Box<dyn std::error::Error>> {
     if let Some(parent) = output_dir.parent() {
         create_dir_all(parent)?;
     }
-    let mut output_file = File::create(output_dir.join(file.name()))?;
+    let mut output_file = File::create(output_dir.join(archive_file_name))?;
     let mut buffer = [0u8; 8192]; // 8 KB buffer
     let mut hasher = Sha1::new();
     let mut size: u64 = 0;
@@ -84,8 +89,9 @@ fn output_without_compression(
 fn output_zstd_compressed(
     output_dir: &Path,
     file: &mut ZipFile<'_, File>,
+    archive_file_name: &str,
 ) -> Result<(Sha1Checksum, FileSize), Box<dyn std::error::Error>> {
-    let zstd_file_path = output_dir.join(file.name()).with_extension("zst");
+    let zstd_file_path = output_dir.join(archive_file_name).with_extension("zst");
     if let Some(parent) = zstd_file_path.parent() {
         create_dir_all(parent)?;
     }
@@ -112,8 +118,9 @@ fn output_zstd_compressed(
 fn output_zip_compressed(
     output_dir: &Path,
     file: &mut ZipFile<'_, File>,
+    archive_file_name: &str,
 ) -> Result<(Sha1Checksum, FileSize), Box<dyn std::error::Error>> {
-    let zip_file_path = output_dir.join(file.name()).with_extension("zip");
+    let zip_file_path = output_dir.join(archive_file_name).with_extension("zip");
     if let Some(parent) = zip_file_path.parent() {
         create_dir_all(parent)?;
     }
@@ -151,6 +158,7 @@ mod tests {
     const TEST_FILE_NAME: &str = "test_file";
     const TEST_ZIP_ARCHIVE_NAME: &str = "test_archive";
     const TEST_FILE_CONTENT: &str = "Hello, world!";
+    const TEST_ARCHIVE_FILE_NAME: &str = "test_123";
 
     fn create_test_zip_file(
         output_path: &Path,
@@ -187,12 +195,13 @@ mod tests {
         let (expected_checksum, expected_size) = get_sha1_and_size(TEST_FILE_CONTENT);
 
         let (checksum, size) = method
-            .output(output_path, &mut zip_file)
+            .output(output_path, &mut zip_file, TEST_ARCHIVE_FILE_NAME)
             .expect("Failed to write file");
         assert_eq!(checksum, expected_checksum);
         assert_eq!(size, expected_size);
 
-        let output_data = fs::read(output_path.join(TEST_FILE_NAME)).expect("Failed to read file");
+        let output_data =
+            fs::read(output_path.join(TEST_ARCHIVE_FILE_NAME)).expect("Failed to read file");
         assert_eq!(output_data, buffer);
     }
 
@@ -216,13 +225,17 @@ mod tests {
         let (expected_checksum, expected_size) = get_sha1_and_size(TEST_FILE_CONTENT);
 
         let (checksum, size) = method
-            .output(output_path, &mut zip_file)
+            .output(output_path, &mut zip_file, TEST_ARCHIVE_FILE_NAME)
             .expect("Failed to write file");
         assert_eq!(checksum, expected_checksum);
         assert_eq!(size, expected_size);
 
-        let output_data = fs::read(output_path.join(TEST_FILE_NAME).with_extension("zst"))
-            .expect("Failed to read file");
+        let output_data = fs::read(
+            output_path
+                .join(TEST_ARCHIVE_FILE_NAME)
+                .with_extension("zst"),
+        )
+        .expect("Failed to read file");
         assert!(!output_data.is_empty());
     }
 
@@ -245,13 +258,21 @@ mod tests {
         let (expected_checksum, expected_size) = get_sha1_and_size(TEST_FILE_CONTENT);
 
         let (checksum, size) = method
-            .output(tempdir_path, &mut first_file_in_zip_archive)
+            .output(
+                tempdir_path,
+                &mut first_file_in_zip_archive,
+                TEST_ARCHIVE_FILE_NAME,
+            )
             .expect("Failed to write file");
         assert_eq!(checksum, expected_checksum);
         assert_eq!(size, expected_size);
 
-        let output_data = fs::read(tempdir_path.join(TEST_FILE_NAME).with_extension("zip"))
-            .expect("Failed to read file");
+        let output_data = fs::read(
+            tempdir_path
+                .join(TEST_ARCHIVE_FILE_NAME)
+                .with_extension("zip"),
+        )
+        .expect("Failed to read file");
         assert!(!output_data.is_empty());
     }
 }

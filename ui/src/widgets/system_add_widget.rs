@@ -13,7 +13,6 @@ pub struct SystemAddWidget {
 #[derive(Debug, Clone)]
 pub enum SystemAddWidgetMessage {
     SystemNameUpdated(String),
-    CancelAddSystem,
     Submit,
     AddSystem(String),
 }
@@ -27,11 +26,14 @@ impl SystemAddWidget {
 
     pub fn update(&mut self, message: SystemAddWidgetMessage) -> Task<SystemAddWidgetMessage> {
         match message {
-            SystemAddWidgetMessage::SystemNameUpdated(name) => self.system_name = name,
-            SystemAddWidgetMessage::Submit => {
-                return Task::done(SystemAddWidgetMessage::AddSystem(self.system_name.clone()))
+            SystemAddWidgetMessage::SystemNameUpdated(name) => {
+                println!("System name updated: {}", name);
+                self.system_name = name;
             }
-            SystemAddWidgetMessage::CancelAddSystem => println!("Cancel"),
+            SystemAddWidgetMessage::Submit => {
+                println!("Submitting system: {}", self.system_name);
+                return Task::done(SystemAddWidgetMessage::AddSystem(self.system_name.clone()));
+            }
             _ => {}
         }
         Task::none()
@@ -44,8 +46,7 @@ impl SystemAddWidget {
         let submit_button = button("Submit system").on_press_maybe(
             (!self.system_name.is_empty()).then_some(SystemAddWidgetMessage::Submit),
         );
-        let cancel_button = button("Cancel").on_press(SystemAddWidgetMessage::CancelAddSystem);
-        row![name_input, submit_button, cancel_button]
+        row![name_input, submit_button]
             .spacing(DEFAULT_SPACING)
             .padding(DEFAULT_PADDING)
             .align_y(alignment::Vertical::Center)

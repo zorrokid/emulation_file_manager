@@ -64,6 +64,49 @@ impl ViewModelService {
         Ok(list_models)
     }
 
+    pub async fn get_emulator_view_models_for_systems(
+        &self,
+        system_ids: Vec<i64>,
+    ) -> Result<Vec<EmulatorViewModel>, Error> {
+        let emulators = self
+            .repository_manager
+            .get_emulator_repository()
+            .get_emulators_for_systems(system_ids)
+            .await
+            .map_err(|err| Error::DbError(err.to_string()))?;
+
+        let mut emulator_view_models: Vec<EmulatorViewModel> = vec![];
+
+        for emulator in emulators {
+            let (emulator, emulator_systems) = self
+                .repository_manager
+                .get_emulator_repository()
+                .get_emulator_with_systems(emulator.id)
+                .await
+                .map_err(|err| Error::DbError(err.to_string()))?;
+
+            let view_model = EmulatorViewModel {
+                id: emulator.id,
+                name: emulator.name,
+                executable: emulator.executable,
+                extract_files: emulator.extract_files,
+                systems: emulator_systems
+                    .into_iter()
+                    .map(|es| EmulatorSystemViewModel {
+                        id: es.id,
+                        system_id: es.system_id,
+                        system_name: es.system_name,
+                        arguments: es.arguments,
+                    })
+                    .collect(),
+            };
+
+            emulator_view_models.push(view_model);
+        }
+
+        Ok(emulator_view_models)
+    }
+
     pub async fn get_settings(&self) -> Result<Settings, Error> {
         let settings_map = self
             .repository_manager

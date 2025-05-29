@@ -68,7 +68,8 @@ impl Display for FileType {
 pub struct FileInfo {
     pub id: i64,
     pub sha1_checksum: Vec<u8>,
-    pub file_size: i64,
+    pub file_size: u64,
+    pub archive_file_name: String,
 }
 
 /// FileSet is a container of files related to a single software title release.
@@ -95,6 +96,7 @@ pub struct FileSetFileInfo {
     pub file_name: String,
     pub sha1_checksum: Vec<u8>,
     pub file_size: i64,
+    pub archive_file_name: String,
 }
 
 impl Display for FileSetFileInfo {
@@ -122,6 +124,12 @@ pub struct ReleaseExtended {
 pub struct System {
     pub id: i64,
     pub name: String,
+}
+
+impl Display for System {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow)]
