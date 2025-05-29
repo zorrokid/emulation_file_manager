@@ -41,25 +41,25 @@ impl ReleaseRepository {
 
     pub async fn get_releases(&self) -> Result<Vec<ReleaseExtended>, Error> {
         let query = r#"
-            SELECT 
-                r.id as id, 
+            SELECT
+                r.id as id,
                 r.name as name,
                 GROUP_CONCAT(DISTINCT s.name) as system_names,
                 GROUP_CONCAT(DISTINCT st.name) as software_title_names,
                 GROUP_CONCAT(DISTINCT fs.file_type) as file_types
-             FROM 
+             FROM
                 release r
-             INNER JOIN 
+             INNER JOIN
                 release_software_title rst ON r.id = rst.release_id
-             INNER JOIN 
+             INNER JOIN
                 software_title st ON rst.software_title_id = st.id
-             INNER JOIN 
+             INNER JOIN
                 release_system rs ON r.id = rs.release_id
-             INNER JOIN 
+             INNER JOIN
                 system s ON rs.system_id = s.id
-             INNER JOIN 
+             INNER JOIN
                 release_file_set rfs ON r.id = rfs.release_id
-             INNER JOIN 
+             INNER JOIN
                 file_set fs ON rfs.file_set_id = fs.id
              GROUP BY
                 r.id, r.name;
@@ -527,7 +527,7 @@ mod tests {
                 "File Set 1".to_string(),
                 FileType::Rom,
                 vec![ImportedFile {
-                    file_name: "File1.bin".to_string(),
+                    original_file_name: "File1.bin".to_string(),
                     file_size: 1024,
                     sha1_checksum: [0; 20],
                 }],
@@ -540,7 +540,7 @@ mod tests {
                 "File Set 2".to_string(),
                 FileType::Rom,
                 vec![ImportedFile {
-                    file_name: "File2.bin".to_string(),
+                    original_file_name: "File2.bin".to_string(),
                     file_size: 1024,
                     sha1_checksum: [1; 20],
                 }],
@@ -553,7 +553,7 @@ mod tests {
                 "File Set 3".to_string(),
                 FileType::Rom,
                 vec![ImportedFile {
-                    file_name: "File3.bin".to_string(),
+                    original_file_name: "File3.bin".to_string(),
                     file_size: 1024,
                     sha1_checksum: [2; 20],
                 }],
