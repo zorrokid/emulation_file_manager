@@ -298,7 +298,12 @@ impl ReleaseWidget {
         let name_input = text_input("Release name", &self.release_name)
             .on_input(ReleaseWidgetMessage::ReleaseNameChanged);
 
-        let submit_button = button("Submit").on_press(ReleaseWidgetMessage::Submit);
+        let submit_button = button("Submit").on_press_maybe(
+            (!self.selected_system_ids.is_empty()
+                && !self.selected_software_title_ids.is_empty()
+                && !self.selected_file_ids.is_empty())
+            .then_some(ReleaseWidgetMessage::Submit),
+        );
         column![
             cancel_add_emulator_system_button,
             name_input,
