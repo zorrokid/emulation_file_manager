@@ -5,7 +5,7 @@ use database::models::{FileSetFileInfo, System};
 use emulator_runner::{error::EmulatorRunnerError, run_with_emulator};
 use file_export::{export_files, export_files_zipped};
 use iced::{
-    widget::{button, column, pick_list, text},
+    widget::{button, column, pick_list, row, text},
     Element, Task,
 };
 use service::{
@@ -13,6 +13,10 @@ use service::{
     view_model_service::ViewModelService,
     view_models::{EmulatorViewModel, FileSetViewModel, ReleaseViewModel, Settings},
 };
+
+use crate::defaults::{DEFAULT_PADDING, DEFAULT_SPACING};
+
+const LABEL_COLUMN_WIDTH: u16 = 150;
 
 pub struct EmulatorRunnerWidget {
     selected_file_set: Option<FileSetViewModel>,
@@ -122,8 +126,6 @@ impl EmulatorRunnerWidget {
                 }
             },
             EmulatorRunnerWidgetMessage::RunWithEmulator => {
-                // TODO: first need to export files using export_files or export_files_zipped
-                // depending on the emulator extract setting
                 if let (Some(file), Some(file_set), Some(emulator), Some(system), Some(root_dir)) = (
                     &self.selected_file,
                     &self.selected_file_set,
@@ -237,51 +239,56 @@ impl EmulatorRunnerWidget {
     }
 
     pub fn view(&self) -> Element<EmulatorRunnerWidgetMessage> {
-        let file_sets_select: Element<EmulatorRunnerWidgetMessage> = pick_list(
-            self.file_sets.as_slice(),
-            self.selected_file_set.clone(),
-            EmulatorRunnerWidgetMessage::SetSelectedFileSet,
-        )
-        .into();
+        let file_set_select_row = row![
+            text("File Sets:").width(LABEL_COLUMN_WIDTH),
+            pick_list(
+                self.file_sets.as_slice(),
+                self.selected_file_set.clone(),
+                EmulatorRunnerWidgetMessage::SetSelectedFileSet,
+            )
+        ];
 
-        let file_select: Element<EmulatorRunnerWidgetMessage> =
-            if let Some(selected_file_set) = &self.selected_file_set {
-                pick_list(
-                    selected_file_set.files.as_slice(),
-                    self.selected_file.clone(),
-                    EmulatorRunnerWidgetMessage::SetSelectedFile,
-                )
-                .into()
-            } else {
-                text("No file set selected").into()
-            };
+        let file_select_row = row![
+            text("Files:").width(LABEL_COLUMN_WIDTH),
+            pick_list(
+                self.selected_file_set
+                    .as_ref()
+                    .map_or_else(Vec::new, |fs| fs.files.clone()),
+                self.selected_file.clone(),
+                EmulatorRunnerWidgetMessage::SetSelectedFile,
+            )
+        ];
 
-        let emulator_select: Element<EmulatorRunnerWidgetMessage> = pick_list(
-            self.emulators.as_slice(),
-            self.selected_emulator.clone(),
-            EmulatorRunnerWidgetMessage::SetSelectedEmulator,
-        )
-        .into();
+        let system_select_row = row![
+            text("Systems:").width(LABEL_COLUMN_WIDTH),
+            pick_list(
+                self.systems.as_slice(),
+                self.selected_system.clone(),
+                EmulatorRunnerWidgetMessage::SetSelectedSystem,
+            )
+        ];
 
-        let system_select: Element<EmulatorRunnerWidgetMessage> = pick_list(
-            self.systems.as_slice(),
-            self.selected_system.clone(),
-            EmulatorRunnerWidgetMessage::SetSelectedSystem,
-        )
-        .into();
-
-        let run_with_emulator_button = button("Run with Emulator").on_press_maybe(
-            (self.selected_file.is_some() && self.selected_file_set.is_some())
-                .then_some(EmulatorRunnerWidgetMessage::RunWithEmulator),
-        );
+        let emulator_select_row = row![
+            text("Emulators:").width(LABEL_COLUMN_WIDTH),
+            pick_list(
+                self.emulators.as_slice(),
+                self.selected_emulator.clone(),
+                EmulatorRunnerWidgetMessage::SetSelectedEmulator,
+            ),
+            button("Run with Emulator").on_press_maybe(
+                (self.selected_file.is_some() && self.selected_file_set.is_some())
+                    .then_some(EmulatorRunnerWidgetMessage::RunWithEmulator),
+            )
+        ];
 
         column![
-            file_sets_select,
-            file_select,
-            system_select,
-            emulator_select,
-            run_with_emulator_button,
+            file_set_select_row,
+            file_select_row,
+            system_select_row,
+            emulator_select_row,
         ]
+        .padding(DEFAULT_PADDING)
+        .spacing(DEFAULT_SPACING)
         .into()
     }
 }
