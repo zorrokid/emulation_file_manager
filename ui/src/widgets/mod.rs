@@ -1,4 +1,5 @@
 pub mod emulator_add_widget;
+pub mod emulator_runner_widget;
 pub mod emulator_select_widget;
 pub mod emulator_systems_add_widget;
 pub mod emulator_systems_select_widget;
