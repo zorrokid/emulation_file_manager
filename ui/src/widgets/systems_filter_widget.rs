@@ -5,7 +5,7 @@ use iced::{
 };
 use service::view_models::SystemListModel;
 
-use crate::defaults::{DEFAULT_PADDING, DEFAULT_SPACING};
+use crate::defaults::{DEFAULT_LABEL_WIDTH, DEFAULT_PADDING, DEFAULT_SPACING};
 
 pub struct SystemFilterWidget {
     systems: Vec<SystemListModel>,
@@ -51,7 +51,7 @@ impl SystemFilterWidget {
             self.selected_system.clone(),
             SystemFilterWidgetMessage::SystemSelected,
         );
-        let label = text!("Select system");
+        let label = text!("Select system").width(DEFAULT_LABEL_WIDTH);
         row![label, system_select]
             .spacing(DEFAULT_SPACING)
             .padding(DEFAULT_PADDING)

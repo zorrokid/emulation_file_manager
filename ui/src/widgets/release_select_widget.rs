@@ -2,12 +2,12 @@ use std::sync::Arc;
 
 use iced::{
     alignment::Vertical,
-    widget::{pick_list, row, text},
+    widget::{button, pick_list, row, text},
     Task,
 };
 use service::{error::Error, view_model_service::ViewModelService, view_models::ReleaseListModel};
 
-use crate::defaults::{DEFAULT_PADDING, DEFAULT_SPACING};
+use crate::defaults::{DEFAULT_LABEL_WIDTH, DEFAULT_PADDING, DEFAULT_SPACING};
 
 pub struct ReleaseSelectWidget {
     releases: Vec<ReleaseListModel>,
@@ -17,10 +17,13 @@ pub struct ReleaseSelectWidget {
 
 #[derive(Debug, Clone)]
 pub enum ReleaseSelectWidgetMessage {
+    SetReleaseSelected(i64),
+    ClearSelectedRelease,
+    // local messages
     ReleaseSelected(ReleaseListModel),
     SetReleases(Vec<ReleaseListModel>),
     ReleasesFetched(Result<Vec<ReleaseListModel>, Error>),
-    SetReleaseSelected(i64),
+    ClearSelection,
 }
 
 impl ReleaseSelectWidget {
@@ -50,7 +53,11 @@ impl ReleaseSelectWidget {
         match message {
             ReleaseSelectWidgetMessage::ReleaseSelected(release) => {
                 self.selected_release = Some(release.clone());
-                Task::done(ReleaseSelectWidgetMessage::SetReleaseSelected(release.id))
+                if let Some(release) = &self.selected_release {
+                    Task::done(ReleaseSelectWidgetMessage::SetReleaseSelected(release.id))
+                } else {
+                    Task::none()
+                }
             }
             ReleaseSelectWidgetMessage::SetReleases(releases) => {
                 self.releases = releases;
@@ -68,6 +75,10 @@ impl ReleaseSelectWidget {
                     Task::none()
                 }
             },
+            ReleaseSelectWidgetMessage::ClearSelection => {
+                self.selected_release = None;
+                Task::done(ReleaseSelectWidgetMessage::ClearSelectedRelease)
+            }
             _ => Task::none(),
         }
     }
@@ -78,8 +89,11 @@ impl ReleaseSelectWidget {
             self.selected_release.clone(),
             ReleaseSelectWidgetMessage::ReleaseSelected,
         );
-        let label = text!("Select release");
-        row![label, release_select]
+        let label = text!("Select release").width(DEFAULT_LABEL_WIDTH);
+        let clear_filter_button = button("Clear")
+            .on_press(ReleaseSelectWidgetMessage::ClearSelection)
+            .width(iced::Length::Shrink);
+        row![label, release_select, clear_filter_button]
             .spacing(DEFAULT_SPACING)
             .padding(DEFAULT_PADDING)
             .align_y(Vertical::Center)

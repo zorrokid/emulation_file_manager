@@ -10,7 +10,6 @@ use super::emulator_runner_widget::{EmulatorRunnerWidget, EmulatorRunnerWidgetMe
 
 pub struct ReleaseViewWidget {
     release: Option<ReleaseViewModel>,
-    view_model_service: Arc<ViewModelService>,
     emulator_runner_widget: EmulatorRunnerWidget,
 }
 
@@ -19,6 +18,7 @@ pub enum ReleaseViewWidgetMessage {
     EmulatorRunnerWidget(EmulatorRunnerWidgetMessage),
     SetEditRelease(ReleaseViewModel),
     SetRelease(ReleaseViewModel),
+    ClearRelease,
     // Local messages
     StartEditRelease,
 }
@@ -33,7 +33,6 @@ impl ReleaseViewWidget {
         (
             ReleaseViewWidget {
                 release: None,
-                view_model_service,
                 emulator_runner_widget,
             },
             emulator_runner_task.map(ReleaseViewWidgetMessage::EmulatorRunnerWidget),
@@ -60,6 +59,12 @@ impl ReleaseViewWidget {
                 .emulator_runner_widget
                 .update(emulator_runner_message)
                 .map(ReleaseViewWidgetMessage::EmulatorRunnerWidget),
+            ReleaseViewWidgetMessage::ClearRelease => {
+                self.release = None;
+                self.emulator_runner_widget
+                    .update(EmulatorRunnerWidgetMessage::Reset)
+                    .map(ReleaseViewWidgetMessage::EmulatorRunnerWidget)
+            }
             _ => Task::none(),
         }
     }

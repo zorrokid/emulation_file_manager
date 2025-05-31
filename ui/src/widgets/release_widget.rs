@@ -38,6 +38,7 @@ pub enum ReleaseWidgetMessage {
     SoftwareTitlesWidget(SoftwareTitlesWidgetMessage),
     Systems(SystemWidgetMessage),
     FilesWidget(FilesWidgetMessage),
+    ClearRelease,
     // local messages
     Submit,
     ReleaseSubmitted(Result<i64, Error>),
@@ -256,6 +257,18 @@ impl ReleaseWidget {
             }
             ReleaseWidgetMessage::ReleaseNameChanged(name) => {
                 self.release_name = name;
+                Task::none()
+            }
+            ReleaseWidgetMessage::ClearRelease => {
+                self.is_open = false;
+                self.selected_release = None;
+                self.selected_system_ids.clear();
+                self.selected_software_title_ids.clear();
+                self.selected_file_ids.clear();
+                self.release_name.clear();
+                /*self.systems_widget
+                .update(SystemWidgetMessage::ClearSelection)
+                .map(ReleaseWidgetMessage::Systems)*/
                 Task::none()
             }
             _ => Task::none(),

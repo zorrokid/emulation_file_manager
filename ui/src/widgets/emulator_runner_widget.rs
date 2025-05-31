@@ -32,6 +32,7 @@ pub struct EmulatorRunnerWidget {
 
 #[derive(Debug, Clone)]
 pub enum EmulatorRunnerWidgetMessage {
+    Reset,
     SettingsFetched(Result<Settings, Error>),
     SetSelectedFileSet(FileSetViewModel),
     SetSelectedFile(FileSetFileInfo),
@@ -89,11 +90,7 @@ impl EmulatorRunnerWidget {
             },
             EmulatorRunnerWidgetMessage::ReleaseChanged(release) => {
                 let system_ids = release.systems.iter().map(|s| s.id).collect::<Vec<_>>();
-                self.selected_file = None;
-                self.selected_file_set = None;
-                self.selected_emulator = None;
-                self.selected_system = None;
-
+                self.reset();
                 self.systems = release.systems.clone();
                 if self.systems.len() == 1 {
                     self.selected_system = self.systems.first().cloned();
@@ -251,8 +248,18 @@ impl EmulatorRunnerWidget {
                     Task::none()
                 }
             },
+            EmulatorRunnerWidgetMessage::Reset => {
+                self.reset();
+                Task::none()
+            }
         }
-        // Handle messages here
+    }
+
+    fn reset(&mut self) {
+        self.selected_file_set = None;
+        self.selected_file = None;
+        self.selected_emulator = None;
+        self.selected_system = None;
     }
 
     pub fn view(&self) -> Element<EmulatorRunnerWidgetMessage> {

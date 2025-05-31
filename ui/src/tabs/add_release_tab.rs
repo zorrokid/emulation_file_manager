@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use database::repository_manager::RepositoryManager;
-use iced::{widget::column, Task};
+use iced::{
+    widget::{column, container, Container},
+    Task,
+};
 use service::{
     error::Error as ServiceError,
     view_model_service::ViewModelService,
@@ -101,7 +104,6 @@ impl AddReleaseTab {
     pub fn update(&mut self, message: AddReleaseTabMessage) -> Task<AddReleaseTabMessage> {
         match message {
             AddReleaseTabMessage::ReleaseSelectWidget(message) => {
-                println!("ReleaseSelect message");
                 let update_task = self
                     .release_select_widget
                     .update(message.clone())
@@ -111,7 +113,6 @@ impl AddReleaseTab {
                     release_id,
                 ) = message.clone()
                 {
-                    println!("Got ReleaseSelected message");
                     let view_model_service = Arc::clone(&self.view_model_service);
                     let fetch_selected_release_task = Task::perform(
                         async move { view_model_service.get_release_view_model(release_id).await },
@@ -119,6 +120,23 @@ impl AddReleaseTab {
                     );
                     let combined_task = Task::batch(vec![update_task, fetch_selected_release_task]);
                     return combined_task;
+                }
+                if let release_select_widget::ReleaseSelectWidgetMessage::ClearSelectedRelease =
+                    message
+                {
+                    self.selected_release = None;
+
+                    let clear_release_task = self
+                        .release_widget
+                        .update(ReleaseWidgetMessage::ClearRelease)
+                        .map(AddReleaseTabMessage::ReleaseWidget);
+
+                    let clear_view_release_task = self
+                        .release_view_widget
+                        .update(ReleaseViewWidgetMessage::ClearRelease)
+                        .map(AddReleaseTabMessage::ReleaseViewWidget);
+
+                    return Task::batch(vec![clear_release_task, clear_view_release_task]);
                 }
 
                 update_task
@@ -229,6 +247,23 @@ impl AddReleaseTab {
     }
 
     pub fn view(&self) -> iced::Element<AddReleaseTabMessage> {
+        let release_view = self
+            .release_widget
+            .view()
+            .map(AddReleaseTabMessage::ReleaseWidget);
+        let selected_release_view = self
+            .release_view_widget
+            .view()
+            .map(AddReleaseTabMessage::ReleaseViewWidget);
+        column![
+            self.create_filter_pane(),
+            selected_release_view,
+            release_view
+        ]
+        .into()
+    }
+
+    fn create_filter_pane(&self) -> Container<AddReleaseTabMessage> {
         let system_filter_view = self
             .system_filter
             .view()
@@ -241,21 +276,12 @@ impl AddReleaseTab {
             .release_select_widget
             .view()
             .map(AddReleaseTabMessage::ReleaseSelectWidget);
-        let release_view = self
-            .release_widget
-            .view()
-            .map(AddReleaseTabMessage::ReleaseWidget);
-        let selected_release_viewq = self
-            .release_view_widget
-            .view()
-            .map(AddReleaseTabMessage::ReleaseViewWidget);
-        column![
+
+        Container::new(column![
             system_filter_view,
             software_title_filter_view,
             release_select_view,
-            selected_release_viewq,
-            release_view
-        ]
-        .into()
+        ])
+        .style(container::bordered_box)
     }
 }

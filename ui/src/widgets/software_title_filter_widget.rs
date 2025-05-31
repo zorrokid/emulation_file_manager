@@ -5,7 +5,7 @@ use iced::{
 };
 use service::view_models::SoftwareTitleListModel;
 
-use crate::defaults::{DEFAULT_PADDING, DEFAULT_SPACING};
+use crate::defaults::{DEFAULT_LABEL_WIDTH, DEFAULT_PADDING, DEFAULT_SPACING};
 
 pub struct SoftwareTitleFilterWidget {
     software_titles: Vec<SoftwareTitleListModel>,
@@ -53,7 +53,7 @@ impl SoftwareTitleFilterWidget {
             self.selected_software_title.clone(),
             SoftwareTitleFilterWidgetMessage::SoftwareTitleSelected,
         );
-        let label = text!("Select software title");
+        let label = text!("Select software title").width(DEFAULT_LABEL_WIDTH);
         row![label, software_title_select]
             .spacing(DEFAULT_SPACING)
             .padding(DEFAULT_PADDING)
