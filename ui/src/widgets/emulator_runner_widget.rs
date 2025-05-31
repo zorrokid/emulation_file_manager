@@ -93,6 +93,7 @@ impl EmulatorRunnerWidget {
                 self.selected_file_set = None;
                 self.selected_emulator = None;
                 self.selected_system = None;
+
                 self.systems = release.systems.clone();
                 if self.systems.len() == 1 {
                     self.selected_system = self.systems.first().cloned();
@@ -103,11 +104,7 @@ impl EmulatorRunnerWidget {
                     if let Some(file_set) = &self.selected_file_set {
                         if file_set.files.len() == 1 {
                             self.selected_file = file_set.files.first().cloned();
-                        } else {
-                            self.selected_file = None;
                         }
-                    } else {
-                        self.selected_file = None;
                     }
                 }
                 let view_model_service = Arc::clone(&self.view_model_service);
