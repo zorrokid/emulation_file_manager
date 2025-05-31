@@ -94,7 +94,22 @@ impl EmulatorRunnerWidget {
                 self.selected_emulator = None;
                 self.selected_system = None;
                 self.systems = release.systems.clone();
+                if self.systems.len() == 1 {
+                    self.selected_system = self.systems.first().cloned();
+                }
                 self.file_sets = release.file_sets.clone();
+                if self.file_sets.len() == 1 {
+                    self.selected_file_set = self.file_sets.first().cloned();
+                    if let Some(file_set) = &self.selected_file_set {
+                        if file_set.files.len() == 1 {
+                            self.selected_file = file_set.files.first().cloned();
+                        } else {
+                            self.selected_file = None;
+                        }
+                    } else {
+                        self.selected_file = None;
+                    }
+                }
                 let view_model_service = Arc::clone(&self.view_model_service);
                 Task::perform(
                     async move {
@@ -117,6 +132,11 @@ impl EmulatorRunnerWidget {
             EmulatorRunnerWidgetMessage::EmulatorsLoaded(result) => match result {
                 Ok(emulators) => {
                     self.emulators = emulators;
+                    if self.emulators.len() == 1 {
+                        self.selected_emulator = self.emulators.first().cloned();
+                    } else {
+                        self.selected_emulator = None;
+                    }
                     Task::none()
                 }
                 Err(err) => {
