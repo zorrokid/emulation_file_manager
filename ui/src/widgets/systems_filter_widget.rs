@@ -1,6 +1,6 @@
 use iced::{
     alignment::Vertical,
-    widget::{pick_list, row, text},
+    widget::{button, pick_list, row, text},
     Task,
 };
 use service::view_models::SystemListModel;
@@ -16,7 +16,8 @@ pub struct SystemFilterWidget {
 pub enum SystemFilterWidgetMessage {
     SystemSelected(SystemListModel),
     SetSystems(Vec<SystemListModel>),
-    SetSelectedSystem(SystemListModel),
+    SetSelectedSystem(Option<i64>),
+    ClearSelection,
 }
 
 impl SystemFilterWidget {
@@ -34,12 +35,18 @@ impl SystemFilterWidget {
         match message {
             SystemFilterWidgetMessage::SystemSelected(system) => {
                 self.selected_system = Some(system.clone());
-                Task::done(SystemFilterWidgetMessage::SetSelectedSystem(system.clone()))
+                Task::done(SystemFilterWidgetMessage::SetSelectedSystem(Some(
+                    system.id,
+                )))
             }
             SystemFilterWidgetMessage::SetSystems(systems) => {
                 self.systems = systems;
                 self.selected_system = None;
                 Task::none()
+            }
+            SystemFilterWidgetMessage::ClearSelection => {
+                self.selected_system = None;
+                Task::done(SystemFilterWidgetMessage::SetSelectedSystem(None))
             }
             _ => Task::none(),
         }
@@ -52,7 +59,8 @@ impl SystemFilterWidget {
             SystemFilterWidgetMessage::SystemSelected,
         );
         let label = text!("Select system").width(DEFAULT_LABEL_WIDTH);
-        row![label, system_select]
+        let clear_button = button("Clear").on_press(SystemFilterWidgetMessage::ClearSelection);
+        row![label, system_select, clear_button]
             .spacing(DEFAULT_SPACING)
             .padding(DEFAULT_PADDING)
             .align_y(Vertical::Center)

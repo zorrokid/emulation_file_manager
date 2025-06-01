@@ -5,7 +5,11 @@ use iced::{
     widget::{button, pick_list, row, text},
     Task,
 };
-use service::{error::Error, view_model_service::ViewModelService, view_models::ReleaseListModel};
+use service::{
+    error::Error,
+    view_model_service::{ReleaseFilter, ViewModelService},
+    view_models::ReleaseListModel,
+};
 
 use crate::defaults::{DEFAULT_LABEL_WIDTH, DEFAULT_PADDING, DEFAULT_SPACING};
 
@@ -24,26 +28,26 @@ pub enum ReleaseSelectWidgetMessage {
     SetReleases(Vec<ReleaseListModel>),
     ReleasesFetched(Result<Vec<ReleaseListModel>, Error>),
     ClearSelection,
+    SetFilters(ReleaseFilter),
 }
 
 impl ReleaseSelectWidget {
-    pub fn new(
-        view_model_service: Arc<ViewModelService>,
-    ) -> (Self, Task<ReleaseSelectWidgetMessage>) {
-        let view_model_service_clone = Arc::clone(&view_model_service);
-        let fetch_releases_task = Task::perform(
+    pub fn new(view_model_service: Arc<ViewModelService>) -> Self {
+        //let view_model_service_clone = Arc::clone(&view_model_service);
+
+        // TODO: initially do not fetch releases, only when parent filter sets the filters, fetch
+        // based on those filters
+        // - add SetFilters message with filters struct
+        /*let fetch_releases_task = Task::perform(
             async move { view_model_service_clone.get_release_list_models().await },
             ReleaseSelectWidgetMessage::ReleasesFetched,
-        );
+        );*/
 
-        (
-            Self {
-                releases: vec![],
-                selected_release: None,
-                view_model_service,
-            },
-            fetch_releases_task,
-        )
+        Self {
+            releases: vec![],
+            selected_release: None,
+            view_model_service,
+        }
     }
 
     pub fn update(
@@ -78,6 +82,19 @@ impl ReleaseSelectWidget {
             ReleaseSelectWidgetMessage::ClearSelection => {
                 self.selected_release = None;
                 Task::done(ReleaseSelectWidgetMessage::ClearSelectedRelease)
+            }
+            ReleaseSelectWidgetMessage::SetFilters(filters) => {
+                println!("Setting filters: {:?}", filters);
+                let view_model_service_clone = Arc::clone(&self.view_model_service);
+                let filters = filters.clone();
+                Task::perform(
+                    async move {
+                        view_model_service_clone
+                            .get_release_list_models(filters)
+                            .await
+                    },
+                    ReleaseSelectWidgetMessage::ReleasesFetched,
+                )
             }
             _ => Task::none(),
         }

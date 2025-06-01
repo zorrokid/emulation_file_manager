@@ -11,6 +11,12 @@ use crate::{
     },
 };
 
+#[derive(Debug, Clone)]
+pub struct ReleaseFilter {
+    pub system_id: Option<i64>,
+    pub software_title_id: Option<i64>,
+}
+
 pub struct ViewModelService {
     repository_manager: Arc<RepositoryManager>,
 }
@@ -181,13 +187,17 @@ impl ViewModelService {
         Ok(list_models)
     }
 
-    pub async fn get_release_list_models(&self) -> Result<Vec<ReleaseListModel>, Error> {
+    pub async fn get_release_list_models(
+        &self,
+        filters: ReleaseFilter,
+    ) -> Result<Vec<ReleaseListModel>, Error> {
         let releases = self
             .repository_manager
             .get_release_repository()
-            .get_releases()
+            .get_releases(filters.system_id, filters.software_title_id)
             .await
             .map_err(|err| Error::DbError(err.to_string()))?;
+
         let release_models = releases.iter().map(ReleaseListModel::from).collect();
         Ok(release_models)
     }

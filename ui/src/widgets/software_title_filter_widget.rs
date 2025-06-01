@@ -1,6 +1,6 @@
 use iced::{
     alignment::Vertical,
-    widget::{pick_list, row, text},
+    widget::{button, pick_list, row, text},
     Task,
 };
 use service::view_models::SoftwareTitleListModel;
@@ -14,9 +14,11 @@ pub struct SoftwareTitleFilterWidget {
 
 #[derive(Debug, Clone)]
 pub enum SoftwareTitleFilterWidgetMessage {
-    SoftwareTitleSelected(SoftwareTitleListModel),
     SetSoftwareTitles(Vec<SoftwareTitleListModel>),
-    SetSelectedSoftwareTitle(SoftwareTitleListModel),
+    SetSelectedSoftwareTitle(Option<i64>),
+    // local messages
+    SoftwareTitleSelected(SoftwareTitleListModel),
+    ClearSelection,
 }
 
 impl SoftwareTitleFilterWidget {
@@ -35,13 +37,19 @@ impl SoftwareTitleFilterWidget {
             SoftwareTitleFilterWidgetMessage::SoftwareTitleSelected(software_title) => {
                 self.selected_software_title = Some(software_title.clone());
                 Task::done(SoftwareTitleFilterWidgetMessage::SetSelectedSoftwareTitle(
-                    software_title.clone(),
+                    Some(software_title.id),
                 ))
             }
             SoftwareTitleFilterWidgetMessage::SetSoftwareTitles(software_titles) => {
                 self.software_titles = software_titles;
                 self.selected_software_title = None;
                 Task::none()
+            }
+            SoftwareTitleFilterWidgetMessage::ClearSelection => {
+                self.selected_software_title = None;
+                Task::done(SoftwareTitleFilterWidgetMessage::SetSelectedSoftwareTitle(
+                    None,
+                ))
             }
             _ => Task::none(),
         }
@@ -54,7 +62,9 @@ impl SoftwareTitleFilterWidget {
             SoftwareTitleFilterWidgetMessage::SoftwareTitleSelected,
         );
         let label = text!("Select software title").width(DEFAULT_LABEL_WIDTH);
-        row![label, software_title_select]
+        let clear_button =
+            button("Clear").on_press(SoftwareTitleFilterWidgetMessage::ClearSelection);
+        row![label, software_title_select, clear_button]
             .spacing(DEFAULT_SPACING)
             .padding(DEFAULT_PADDING)
             .align_y(Vertical::Center)
