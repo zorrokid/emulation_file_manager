@@ -8,6 +8,7 @@ use crate::defaults::{DEFAULT_PADDING, DEFAULT_SPACING};
 
 pub struct SystemAddWidget {
     system_name: String,
+    system_id: Option<i64>,
 }
 
 #[derive(Debug, Clone)]
@@ -15,28 +16,42 @@ pub enum SystemAddWidgetMessage {
     SystemNameUpdated(String),
     Submit,
     AddSystem(String),
+    UpdateSystem(i64, String),
+    SetEditSystem(i64, String),
 }
 
 impl SystemAddWidget {
     pub fn new() -> Self {
         Self {
             system_name: "".to_string(),
+            system_id: None,
         }
     }
 
     pub fn update(&mut self, message: SystemAddWidgetMessage) -> Task<SystemAddWidgetMessage> {
         match message {
             SystemAddWidgetMessage::SystemNameUpdated(name) => {
-                println!("System name updated: {}", name);
                 self.system_name = name;
+                Task::none()
             }
             SystemAddWidgetMessage::Submit => {
-                println!("Submitting system: {}", self.system_name);
-                return Task::done(SystemAddWidgetMessage::AddSystem(self.system_name.clone()));
+                let system_name = self.system_name.clone();
+                let task = if let Some(id) = self.system_id {
+                    SystemAddWidgetMessage::UpdateSystem(id, system_name)
+                } else {
+                    SystemAddWidgetMessage::AddSystem(system_name)
+                };
+
+                self.system_name.clear();
+                Task::done(task)
             }
-            _ => {}
+            SystemAddWidgetMessage::SetEditSystem(id, name) => {
+                self.system_id = Some(id);
+                self.system_name = name;
+                Task::none()
+            }
+            _ => Task::none(),
         }
-        Task::none()
     }
 
     pub fn view(&self) -> iced::Element<SystemAddWidgetMessage> {
