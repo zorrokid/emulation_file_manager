@@ -39,7 +39,11 @@ impl ReleaseRepository {
         Ok(release)
     }
 
-    pub async fn get_releases(&self) -> Result<Vec<ReleaseExtended>, Error> {
+    pub async fn get_releases(
+        &self,
+        system_id: Option<i64>,
+        software_title_id: Option<i64>,
+    ) -> Result<Vec<ReleaseExtended>, Error> {
         let query = r#"
             SELECT
                 r.id as id,
@@ -61,10 +65,20 @@ impl ReleaseRepository {
                 release_file_set rfs ON r.id = rfs.release_id
              INNER JOIN
                 file_set fs ON rfs.file_set_id = fs.id
+            WHERE
+                (? IS NULL OR s.id = ?)
+                AND (? IS NULL OR st.id = ?)
              GROUP BY
                 r.id, r.name;
         "#;
-        let raw_releases: Vec<ReleaseExtendedRaw> = query_as(query).fetch_all(&*self.pool).await?;
+
+        let raw_releases: Vec<ReleaseExtendedRaw> = query_as(query)
+            .bind(system_id)
+            .bind(system_id)
+            .bind(software_title_id)
+            .bind(software_title_id)
+            .fetch_all(&*self.pool)
+            .await?;
 
         let mut releases: Vec<ReleaseExtended> = Vec::new();
 
@@ -92,8 +106,9 @@ impl ReleaseRepository {
                             Error::ParseError(format!("Failed to parse '{}' as i64: {}", ft, e))
                         })
                         .and_then(|ft| {
-                            FileType::try_from(ft)
-                                .map_err(|e| Error::ParseError(format!("Invalid file type {}", ft)))
+                            FileType::try_from(ft).map_err(|e| {
+                                Error::ParseError(format!("Invalid file type {}, {}", ft, e))
+                            })
                         })
                 })
                 .collect::<Result<Vec<FileType>, Error>>()?;

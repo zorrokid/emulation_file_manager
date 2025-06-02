@@ -7,7 +7,7 @@ use iced::{
 };
 use service::{
     error::Error as ServiceError,
-    view_model_service::ViewModelService,
+    view_model_service::{ReleaseFilter, ViewModelService},
     view_models::{ReleaseViewModel, SoftwareTitleListModel, SystemListModel},
 };
 
@@ -26,9 +26,8 @@ pub struct AddReleaseTab {
     release_widget: ReleaseWidget,
     system_filter: SystemFilterWidget,
     software_titles_filter: SoftwareTitleFilterWidget,
-    selected_software_title: Option<SoftwareTitleListModel>,
-    selected_system: Option<SystemListModel>,
     release_view_widget: ReleaseViewWidget,
+    filters: ReleaseFilter,
 }
 
 #[derive(Debug, Clone)]
@@ -43,7 +42,6 @@ pub enum AddReleaseTabMessage {
     ReleaseFetched(Result<ReleaseViewModel, ServiceError>),
     SystemsFetched(Result<Vec<SystemListModel>, ServiceError>),
     SoftwareTitlesFetched(Result<Vec<SoftwareTitleListModel>, ServiceError>),
-    SystemChanged(SystemListModel),
 }
 
 impl AddReleaseTab {
@@ -51,8 +49,7 @@ impl AddReleaseTab {
         repositories: Arc<RepositoryManager>,
         view_model_service: Arc<ViewModelService>,
     ) -> (Self, Task<AddReleaseTabMessage>) {
-        let (release_select_widget, release_select_task) =
-            ReleaseSelectWidget::new(Arc::clone(&view_model_service));
+        let release_select_widget = ReleaseSelectWidget::new(Arc::clone(&view_model_service));
 
         let (release_widget, release_widget_task) =
             ReleaseWidget::new(Arc::clone(&repositories), Arc::clone(&view_model_service));
@@ -78,7 +75,6 @@ impl AddReleaseTab {
             ReleaseViewWidget::new(view_model_service_clone);
 
         let combined_task = Task::batch(vec![
-            release_select_task.map(AddReleaseTabMessage::ReleaseSelectWidget),
             release_widget_task.map(AddReleaseTabMessage::ReleaseWidget),
             load_systems_task,
             load_software_titles_task,
@@ -93,9 +89,11 @@ impl AddReleaseTab {
                 release_widget,
                 system_filter: SystemFilterWidget::new(),
                 software_titles_filter: SoftwareTitleFilterWidget::new(),
-                selected_software_title: None,
-                selected_system: None,
                 release_view_widget,
+                filters: ReleaseFilter {
+                    system_id: None,
+                    software_title_id: None,
+                },
             },
             combined_task,
         )
@@ -168,10 +166,6 @@ impl AddReleaseTab {
 
                 update_task
             }
-            AddReleaseTabMessage::SystemChanged(system) => {
-                println!("System changed: {:?}", system);
-                Task::none()
-            }
             AddReleaseTabMessage::SystemsFetched(result) => match result {
                 Ok(systems) => {
                     println!("Got systems: {:?}", systems);
@@ -207,11 +201,19 @@ impl AddReleaseTab {
                     .software_titles_filter
                     .update(message.clone())
                     .map(AddReleaseTabMessage::SoftwareTitleFilterWidget);
-                if let SoftwareTitleFilterWidgetMessage::SoftwareTitleSelected(software_title) =
-                    message
+                if let SoftwareTitleFilterWidgetMessage::SetSelectedSoftwareTitle(
+                    software_title_id,
+                ) = message
                 {
-                    println!("Software title selected: {:?}", software_title);
-                    self.selected_software_title = Some(software_title.clone());
+                    self.filters.software_title_id = software_title_id;
+                    return self
+                        .release_select_widget
+                        .update(
+                            release_select_widget::ReleaseSelectWidgetMessage::SetFilters(
+                                self.filters.clone(),
+                            ),
+                        )
+                        .map(AddReleaseTabMessage::ReleaseSelectWidget);
                 }
                 update_task
             }
@@ -220,9 +222,16 @@ impl AddReleaseTab {
                     .system_filter
                     .update(message.clone())
                     .map(AddReleaseTabMessage::SystemFilterWidget);
-                if let SystemFilterWidgetMessage::SetSelectedSystem(system) = message {
-                    println!("System selected: {:?}", system);
-                    self.selected_system = Some(system.clone());
+                if let SystemFilterWidgetMessage::SetSelectedSystem(system_id) = message {
+                    self.filters.system_id = system_id;
+                    return self
+                        .release_select_widget
+                        .update(
+                            release_select_widget::ReleaseSelectWidgetMessage::SetFilters(
+                                self.filters.clone(),
+                            ),
+                        )
+                        .map(AddReleaseTabMessage::ReleaseSelectWidget);
                 }
                 update_task
             }
