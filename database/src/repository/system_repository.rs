@@ -73,6 +73,13 @@ impl SystemRepository {
             .await?;
         Ok(result.last_insert_rowid())
     }
+
+    pub async fn update_system(&self, id: i64, name: String) -> Result<i64, Error> {
+        sqlx::query!("UPDATE system SET name = ? WHERE id = ?", name, id)
+            .execute(&*self.pool)
+            .await?;
+        Ok(id)
+    }
 }
 
 #[cfg(test)]

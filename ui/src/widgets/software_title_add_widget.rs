@@ -34,29 +34,26 @@ impl SoftwareTitleAddWidget {
     ) -> Task<SoftwareTitleAddWidgetMessage> {
         match message {
             SoftwareTitleAddWidgetMessage::SoftwareTitleNameUpdated(name) => {
-                self.software_title_name = name
+                self.software_title_name = name;
+                Task::none()
             }
             SoftwareTitleAddWidgetMessage::Submit => {
+                let software_title_name = self.software_title_name.clone();
                 let task = if let Some(id) = self.software_title_id {
-                    SoftwareTitleAddWidgetMessage::UpdateSoftwareTitle(
-                        id,
-                        self.software_title_name.clone(),
-                    )
+                    SoftwareTitleAddWidgetMessage::UpdateSoftwareTitle(id, software_title_name)
                 } else {
-                    SoftwareTitleAddWidgetMessage::AddSoftwareTitle(
-                        self.software_title_name.clone(),
-                    )
+                    SoftwareTitleAddWidgetMessage::AddSoftwareTitle(software_title_name)
                 };
-                self.software_title_name = "".to_string();
-                return Task::done(task);
+                self.software_title_name.clear();
+                Task::done(task)
             }
             SoftwareTitleAddWidgetMessage::SetEditSoftwareTitle(id, name) => {
                 self.software_title_id = Some(id);
                 self.software_title_name = name;
+                Task::none()
             }
-            _ => {}
+            _ => Task::none(),
         }
-        Task::none()
     }
 
     pub fn view(&self) -> iced::Element<SoftwareTitleAddWidgetMessage> {

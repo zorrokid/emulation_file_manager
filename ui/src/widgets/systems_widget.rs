@@ -22,20 +22,20 @@ pub struct SystemsWidget {
     system_add_widget: SystemAddWidget,
     // TODO: selected systems are also maintained in parent widget!
     selected_system_ids: Vec<i64>,
-    adding_system: bool,
+    is_edit_mode: bool,
 }
 
 #[derive(Debug, Clone)]
 pub enum SystemWidgetMessage {
     // child messages
-    AddSystem(SystemAddWidgetMessage),
+    SystemAddWidget(SystemAddWidgetMessage),
     SystemSelect(SystemSelectWidgetMessage),
     // local messages
     SystemsFetched(Result<Vec<SystemListModel>, Error>),
     SystemAdded(Result<i64, DatabaseError>),
     RemoveSystem(i64),
-    StartAddSystem,
-    CancelAddSystem,
+    StartEditSystem(i64),
+    ToggleEditMode,
     SetSelectedSystemIds(Vec<i64>),
 }
 
@@ -58,7 +58,7 @@ impl SystemsWidget {
                 system_select_widget: SystemSelectWidget::new(),
                 system_add_widget: SystemAddWidget::new(),
                 selected_system_ids: vec![],
-                adding_system: false,
+                is_edit_mode: false,
             },
             fetch_systems_task,
         )
@@ -80,19 +80,26 @@ impl SystemsWidget {
                     Task::none()
                 }
             },
-            SystemWidgetMessage::AddSystem(message) => {
-                if let SystemAddWidgetMessage::AddSystem(name) = message {
-                    println!("Adding system: {}", name);
+            SystemWidgetMessage::SystemAddWidget(message) => match message {
+                SystemAddWidgetMessage::AddSystem(name) => {
                     let repo = Arc::clone(&self.repositories);
-                    return Task::perform(
+                    Task::perform(
                         async move { repo.get_system_repository().add_system(name).await },
                         SystemWidgetMessage::SystemAdded,
-                    );
+                    )
                 }
-                self.system_add_widget
+                SystemAddWidgetMessage::UpdateSystem(id, name) => {
+                    let repo = Arc::clone(&self.repositories);
+                    Task::perform(
+                        async move { repo.get_system_repository().update_system(id, name).await },
+                        SystemWidgetMessage::SystemAdded,
+                    )
+                }
+                _ => self
+                    .system_add_widget
                     .update(message)
-                    .map(SystemWidgetMessage::AddSystem)
-            }
+                    .map(SystemWidgetMessage::SystemAddWidget),
+            },
             SystemWidgetMessage::SystemSelect(message) => {
                 if let SystemSelectWidgetMessage::SystemSelected(system) = message {
                     if !self.selected_system_ids.contains(&system.id) {
@@ -119,12 +126,8 @@ impl SystemsWidget {
                     .retain(|&system_id| system_id != id);
                 Task::none()
             }
-            SystemWidgetMessage::StartAddSystem => {
-                self.adding_system = true;
-                Task::none()
-            }
-            SystemWidgetMessage::CancelAddSystem => {
-                self.adding_system = false;
+            SystemWidgetMessage::ToggleEditMode => {
+                self.is_edit_mode = !self.is_edit_mode;
                 Task::none()
             }
             SystemWidgetMessage::SetSelectedSystemIds(ids) => {
@@ -134,21 +137,34 @@ impl SystemsWidget {
                 // systems for the release.
                 Task::none()
             }
+            SystemWidgetMessage::StartEditSystem(id) => {
+                if let Some(system) = self.systems.iter().find(|s| s.id == id) {
+                    self.is_edit_mode = true;
+                    self.system_add_widget
+                        .update(SystemAddWidgetMessage::SetEditSystem(
+                            system.id,
+                            system.name.clone(),
+                        ))
+                        .map(SystemWidgetMessage::SystemAddWidget)
+                } else {
+                    eprintln!("System with id {} not found for editing", id);
+                    Task::none()
+                }
+            }
         }
     }
 
     pub fn view(&self) -> Element<SystemWidgetMessage> {
-        let add_system_view: Element<SystemWidgetMessage> = if self.adding_system {
+        let add_system_view: Element<SystemWidgetMessage> = if self.is_edit_mode {
             let system_add_view = self
                 .system_add_widget
                 .view()
-                .map(SystemWidgetMessage::AddSystem);
-            let cancel_button =
-                button("Cancel add system").on_press(SystemWidgetMessage::CancelAddSystem);
+                .map(SystemWidgetMessage::SystemAddWidget);
+            let cancel_button = button("Cancel").on_press(SystemWidgetMessage::ToggleEditMode);
             column![cancel_button, system_add_view].into()
         } else {
             button("Add System")
-                .on_press(SystemWidgetMessage::StartAddSystem)
+                .on_press(SystemWidgetMessage::ToggleEditMode)
                 .into()
         };
 
@@ -172,10 +188,16 @@ impl SystemsWidget {
                     .unwrap_or_else(|| panic!("System with id {} not found", id));
                 let remove_button =
                     button("Remove").on_press(SystemWidgetMessage::RemoveSystem(*id));
-                row![text!("{}", system.name.clone()).width(200.0), remove_button]
-                    .spacing(DEFAULT_SPACING)
-                    .padding(crate::defaults::DEFAULT_PADDING / 2.0)
-                    .into()
+                let edit_button =
+                    button("Edit").on_press(SystemWidgetMessage::StartEditSystem(*id));
+                row![
+                    text!("{}", system.name.clone()).width(200.0),
+                    edit_button,
+                    remove_button
+                ]
+                .spacing(DEFAULT_SPACING)
+                .padding(crate::defaults::DEFAULT_PADDING / 2.0)
+                .into()
             })
             .collect::<Vec<Element<SystemWidgetMessage>>>();
 

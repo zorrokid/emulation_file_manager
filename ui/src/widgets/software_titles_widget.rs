@@ -29,7 +29,7 @@ pub struct SoftwareTitlesWidget {
     add_software_title_widget: SoftwareTitleAddWidget,
     // TODO: selected software titles are also maintained in parent widget!
     selected_software_title_ids: Vec<i64>,
-    is_adding_software_title: bool,
+    is_edit_mode: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -44,7 +44,7 @@ pub enum SoftwareTitlesWidgetMessage {
     RemoveSoftwareTitle(i64),
     StartEditSoftwareTitle(i64),
     SetSelectedSoftwareTitleIds(Vec<i64>),
-    ToggleIsAddingSoftwareTitle,
+    ToggleEditMode,
 }
 
 impl SoftwareTitlesWidget {
@@ -70,7 +70,7 @@ impl SoftwareTitlesWidget {
                 software_titles_widget: SoftwareTitleSelectWidget::new(),
                 add_software_title_widget: SoftwareTitleAddWidget::new(),
                 selected_software_title_ids: vec![],
-                is_adding_software_title: false,
+                is_edit_mode: false,
             },
             fetch_software_titles_task,
         )
@@ -96,9 +96,7 @@ impl SoftwareTitlesWidget {
                 }
             },
             SoftwareTitlesWidgetMessage::SoftwareTitleAddWidget(message) => match message {
-                software_title_add_widget::SoftwareTitleAddWidgetMessage::AddSoftwareTitle(
-                    name,
-                ) => {
+                SoftwareTitleAddWidgetMessage::AddSoftwareTitle(name) => {
                     let repo = Arc::clone(&self.repositories);
                     Task::perform(
                         async move {
@@ -109,10 +107,7 @@ impl SoftwareTitlesWidget {
                         SoftwareTitlesWidgetMessage::SoftwareTitleAdded,
                     )
                 }
-                software_title_add_widget::SoftwareTitleAddWidgetMessage::UpdateSoftwareTitle(
-                    id,
-                    name,
-                ) => {
+                SoftwareTitleAddWidgetMessage::UpdateSoftwareTitle(id, name) => {
                     let repo = Arc::clone(&self.repositories);
                     let software_title = SoftwareTitle {
                         id,
@@ -151,7 +146,7 @@ impl SoftwareTitlesWidget {
             SoftwareTitlesWidgetMessage::SoftwareTitleAdded(result) => match result {
                 Ok(_) => {
                     let service = Arc::clone(&self.view_model_service);
-                    self.is_adding_software_title = false;
+                    self.is_edit_mode = false;
                     // TODO no need to fetch is we update the newly added software title with list
                     // model
                     Task::perform(
@@ -167,7 +162,7 @@ impl SoftwareTitlesWidget {
             SoftwareTitlesWidgetMessage::SoftwareTitleUpdated(result) => match result {
                 Ok(_) => {
                     let service = Arc::clone(&self.view_model_service);
-                    self.is_adding_software_title = false;
+                    self.is_edit_mode = false;
                     // TODO no need to fetch is we update the newly added software title with list
                     // model
                     Task::perform(
@@ -189,8 +184,8 @@ impl SoftwareTitlesWidget {
                 self.selected_software_title_ids = ids;
                 Task::none()
             }
-            SoftwareTitlesWidgetMessage::ToggleIsAddingSoftwareTitle => {
-                self.is_adding_software_title = !self.is_adding_software_title;
+            SoftwareTitlesWidgetMessage::ToggleEditMode => {
+                self.is_edit_mode = !self.is_edit_mode;
                 Task::none()
             }
             SoftwareTitlesWidgetMessage::StartEditSoftwareTitle(id) => {
@@ -199,7 +194,7 @@ impl SoftwareTitlesWidget {
                     .iter()
                     .find(|software_title| software_title.id == id)
                     .unwrap_or_else(|| panic!("SoftwareTitle with id {} not found", id));
-                self.is_adding_software_title = true;
+                self.is_edit_mode = true;
                 let name = software_title.name.clone();
                 self.add_software_title_widget
                     .update(software_title_add_widget::SoftwareTitleAddWidgetMessage::SetEditSoftwareTitle(
@@ -211,17 +206,17 @@ impl SoftwareTitlesWidget {
     }
 
     pub fn view(&self) -> iced::Element<SoftwareTitlesWidgetMessage> {
-        let add_view: Element<SoftwareTitlesWidgetMessage> = if self.is_adding_software_title {
+        let add_view: Element<SoftwareTitlesWidgetMessage> = if self.is_edit_mode {
             let add_software_title_view = self
                 .add_software_title_widget
                 .view()
                 .map(SoftwareTitlesWidgetMessage::SoftwareTitleAddWidget);
             let cancel_button =
-                button("Cancel").on_press(SoftwareTitlesWidgetMessage::ToggleIsAddingSoftwareTitle);
+                button("Cancel").on_press(SoftwareTitlesWidgetMessage::ToggleEditMode);
             column![cancel_button, add_software_title_view].into()
         } else {
             button("Add Software Title")
-                .on_press(SoftwareTitlesWidgetMessage::ToggleIsAddingSoftwareTitle)
+                .on_press(SoftwareTitlesWidgetMessage::ToggleEditMode)
                 .into()
         };
 
