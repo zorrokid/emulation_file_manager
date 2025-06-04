@@ -11,7 +11,8 @@ use service::{
 };
 
 use super::{
-    file_select_widget,
+    file_add_widget::FileAddWidgetMessage,
+    file_select_widget::{self, FileSelectWidgetMessage},
     files_widget::{self, FilesWidget, FilesWidgetMessage},
     software_title_select_widget,
     software_titles_widget::{self, SoftwareTitlesWidget, SoftwareTitlesWidgetMessage},
@@ -138,16 +139,23 @@ impl ReleaseWidget {
             }
             ReleaseWidgetMessage::FilesWidget(message) => {
                 match &message {
-                    files_widget::FilesWidgetMessage::FileSelectWidget(
-                        file_select_widget::FileSelectWidgetMessage::FileSelected(file),
+                    FilesWidgetMessage::FileSelectWidget(
+                        FileSelectWidgetMessage::FileSelected(file),
                     ) => {
                         if !self.selected_file_ids.contains(&file.id) {
                             self.selected_file_ids.push(file.id);
                         }
                     }
-                    files_widget::FilesWidgetMessage::RemoveFile(file_id) => {
-                        println!("AddReleaseTab: File removed: {:?}", file_id);
+                    FilesWidgetMessage::RemoveFile(file_id) => {
                         self.selected_file_ids.retain(|&id| id != *file_id);
+                    }
+                    // TODO: do this also for software titles and systems
+                    FilesWidgetMessage::FileAddWidget(FileAddWidgetMessage::FileSetAdded(
+                        list_model,
+                    )) => {
+                        if !self.selected_file_ids.contains(&list_model.id) {
+                            self.selected_file_ids.push(list_model.id);
+                        }
                     }
                     _ => {}
                 }
@@ -343,7 +351,7 @@ impl ReleaseWidget {
             .map(ReleaseWidgetMessage::SoftwareTitlesWidget);
         let files_view = self
             .files_widget
-            .view()
+            .view(&self.selected_file_ids)
             .map(ReleaseWidgetMessage::FilesWidget);
 
         let name_input = text_input("Release name", &self.release_name)

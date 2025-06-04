@@ -24,8 +24,6 @@ pub struct FilesWidget {
     files: Vec<FileSetListModel>,
     files_widget: FileSelectWidget,
     add_file_widget: OnceCell<FileAddWidget>,
-    // TODO: selected files are also maintained in parent widget!
-    selected_file_ids: Vec<i64>,
 }
 
 #[derive(Debug, Clone)]
@@ -69,8 +67,7 @@ impl FilesWidget {
                 view_model_service,
                 files: vec![],
                 files_widget: FileSelectWidget::new(),
-                add_file_widget: OnceCell::new(), // FileAddWidget::new(),
-                selected_file_ids: vec![],
+                add_file_widget: OnceCell::new(),
             },
             combined_task,
         )
@@ -111,7 +108,6 @@ impl FilesWidget {
             },
             FilesWidgetMessage::FileAddWidget(message) => {
                 if let file_add_widget::FileAddWidgetMessage::FileSetAdded(list_model) = &message {
-                    self.selected_file_ids.push(list_model.id);
                     self.files.push(list_model.clone());
                 }
                 self.add_file_widget
@@ -120,16 +116,10 @@ impl FilesWidget {
                     .update(message)
                     .map(FilesWidgetMessage::FileAddWidget)
             }
-            FilesWidgetMessage::FileSelectWidget(message) => {
-                if let file_select_widget::FileSelectWidgetMessage::FileSelected(file) = &message {
-                    if !self.selected_file_ids.contains(&file.id) {
-                        self.selected_file_ids.push(file.id);
-                    }
-                }
-                self.files_widget
-                    .update(message)
-                    .map(FilesWidgetMessage::FileSelectWidget)
-            }
+            FilesWidgetMessage::FileSelectWidget(message) => self
+                .files_widget
+                .update(message)
+                .map(FilesWidgetMessage::FileSelectWidget),
             FilesWidgetMessage::FileAdded(result) => match result {
                 Ok(_) => {
                     let service = Arc::clone(&self.view_model_service);
@@ -144,17 +134,8 @@ impl FilesWidget {
                     Task::none()
                 }
             },
-            FilesWidgetMessage::RemoveFile(id) => {
-                self.selected_file_ids.retain(|&file_id| file_id != id);
-                Task::none()
-            }
-            FilesWidgetMessage::SetSelectedFileIds(ids) => {
-                self.selected_file_ids = ids;
-                Task::none()
-            }
             FilesWidgetMessage::Reset => {
                 self.files.clear();
-                self.selected_file_ids.clear();
                 self.files_widget
                     .update(file_select_widget::FileSelectWidgetMessage::Reset)
                     .map(FilesWidgetMessage::FileSelectWidget)
@@ -166,10 +147,11 @@ impl FilesWidget {
                     FilesWidgetMessage::FilesFetched,
                 )
             }
+            _ => Task::none(),
         }
     }
 
-    pub fn view(&self) -> iced::Element<FilesWidgetMessage> {
+    pub fn view(&self, selected_file_ids: &[i64]) -> iced::Element<FilesWidgetMessage> {
         let add_file_view = self
             .add_file_widget
             .get()
@@ -180,13 +162,15 @@ impl FilesWidget {
             .files_widget
             .view()
             .map(FilesWidgetMessage::FileSelectWidget);
-        let selected_files_list = self.create_selected_files_list();
+        let selected_files_list = self.create_selected_files_list(selected_file_ids);
         column![add_file_view, files_view, selected_files_list].into()
     }
 
-    fn create_selected_files_list(&self) -> iced::Element<FilesWidgetMessage> {
-        let selected_files = self
-            .selected_file_ids
+    fn create_selected_files_list(
+        &self,
+        selected_file_ids: &[i64],
+    ) -> iced::Element<FilesWidgetMessage> {
+        let selected_files = selected_file_ids
             .iter()
             .map(|id| {
                 let file = self
