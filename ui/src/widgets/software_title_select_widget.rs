@@ -5,15 +5,19 @@ use iced::{
 };
 use service::view_models::SoftwareTitleListModel;
 
-use crate::defaults::{DEFAULT_PADDING, DEFAULT_SPACING};
+use crate::defaults::{DEFAULT_LABEL_WIDTH, DEFAULT_PADDING, DEFAULT_SPACING};
 
 pub struct SoftwareTitleSelectWidget {
+    // TODO: software_titles are also in the parent widget
+    // - here we need them for the pick list
     software_titles: Vec<SoftwareTitleListModel>,
+    // The currently selected software title for the pick list
     selected_software_title: Option<SoftwareTitleListModel>,
 }
 
 #[derive(Debug, Clone)]
 pub enum SoftwareTitleSelectWidgetMessage {
+    Reset,
     SoftwareTitleSelected(SoftwareTitleListModel),
     SetSoftwareTitles(Vec<SoftwareTitleListModel>),
 }
@@ -39,6 +43,11 @@ impl SoftwareTitleSelectWidget {
                 self.selected_software_title = None;
                 Task::none()
             }
+            SoftwareTitleSelectWidgetMessage::Reset => {
+                self.software_titles.clear();
+                self.selected_software_title = None;
+                Task::none()
+            }
         }
     }
 
@@ -48,7 +57,7 @@ impl SoftwareTitleSelectWidget {
             self.selected_software_title.clone(),
             SoftwareTitleSelectWidgetMessage::SoftwareTitleSelected,
         );
-        let label = text!("Select software title");
+        let label = text!("Select software title").width(DEFAULT_LABEL_WIDTH);
         row![label, software_title_select]
             .spacing(DEFAULT_SPACING)
             .padding(DEFAULT_PADDING)

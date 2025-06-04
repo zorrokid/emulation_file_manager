@@ -24,16 +24,19 @@ use super::{
 pub struct SoftwareTitlesWidget {
     repositories: Arc<RepositoryManager>,
     view_model_service: Arc<ViewModelService>,
+    // TODO: software_titles are also in the SoftwareTitleSelectWidget
+    // - here we need them for rendering the selected software titles
+    // - maybe the selected software titles list should be also in the SoftwareTitleSelectWidget?
     software_titles: Vec<SoftwareTitleListModel>,
-    software_titles_widget: SoftwareTitleSelectWidget,
+    software_titles_select_widget: SoftwareTitleSelectWidget,
     add_software_title_widget: SoftwareTitleAddWidget,
-    // TODO: selected software titles are also maintained in parent widget!
-    selected_software_title_ids: Vec<i64>,
     is_edit_mode: bool,
 }
 
 #[derive(Debug, Clone)]
 pub enum SoftwareTitlesWidgetMessage {
+    Reset,
+    StartEditMode,
     // child messages
     SoftwareTitleAddWidget(SoftwareTitleAddWidgetMessage),
     SoftwareTitleSelectWidget(SoftwareTitleSelectWidgetMessage),
@@ -67,9 +70,8 @@ impl SoftwareTitlesWidget {
                 repositories,
                 view_model_service,
                 software_titles: vec![],
-                software_titles_widget: SoftwareTitleSelectWidget::new(),
+                software_titles_select_widget: SoftwareTitleSelectWidget::new(),
                 add_software_title_widget: SoftwareTitleAddWidget::new(),
-                selected_software_title_ids: vec![],
                 is_edit_mode: false,
             },
             fetch_software_titles_task,
@@ -84,7 +86,7 @@ impl SoftwareTitlesWidget {
             SoftwareTitlesWidgetMessage::SoftwareTitlesFetched(result) => match result {
                 Ok(software_titles) => {
                     self.software_titles = software_titles;
-                    self.software_titles_widget
+                    self.software_titles_select_widget
                         .update(software_title_select_widget::SoftwareTitleSelectWidgetMessage::SetSoftwareTitles(
                             self.software_titles.clone(),
                         ))
@@ -129,25 +131,11 @@ impl SoftwareTitlesWidget {
                     .update(message)
                     .map(SoftwareTitlesWidgetMessage::SoftwareTitleAddWidget),
             },
-            SoftwareTitlesWidgetMessage::SoftwareTitleSelectWidget(message) => {
-                if let software_title_select_widget::SoftwareTitleSelectWidgetMessage::SoftwareTitleSelected(
-                    software_title,
-                ) = message
-                {
-                    if !self
-                        .selected_software_title_ids
-                        .contains(&software_title.id)
-                    {
-                        self.selected_software_title_ids.push(software_title.id);
-                    }
-                }
-                Task::none()
-            }
             SoftwareTitlesWidgetMessage::SoftwareTitleAdded(result) => match result {
                 Ok(_) => {
                     let service = Arc::clone(&self.view_model_service);
                     self.is_edit_mode = false;
-                    // TODO no need to fetch is we update the newly added software title with list
+                    // TODO no need to fetch if we update the newly added software title with list
                     // model
                     Task::perform(
                         async move { service.get_software_title_list_models().await },
@@ -163,7 +151,7 @@ impl SoftwareTitlesWidget {
                 Ok(_) => {
                     let service = Arc::clone(&self.view_model_service);
                     self.is_edit_mode = false;
-                    // TODO no need to fetch is we update the newly added software title with list
+                    // TODO no need to fetch if we update the newly added software title with list
                     // model
                     Task::perform(
                         async move { service.get_software_title_list_models().await },
@@ -175,15 +163,6 @@ impl SoftwareTitlesWidget {
                     Task::none()
                 }
             },
-            SoftwareTitlesWidgetMessage::RemoveSoftwareTitle(id) => {
-                self.selected_software_title_ids
-                    .retain(|&software_title_id| software_title_id != id);
-                Task::none()
-            }
-            SoftwareTitlesWidgetMessage::SetSelectedSoftwareTitleIds(ids) => {
-                self.selected_software_title_ids = ids;
-                Task::none()
-            }
             SoftwareTitlesWidgetMessage::ToggleEditMode => {
                 self.is_edit_mode = !self.is_edit_mode;
                 Task::none()
@@ -202,10 +181,31 @@ impl SoftwareTitlesWidget {
                     ))
                     .map(SoftwareTitlesWidgetMessage::SoftwareTitleAddWidget)
             }
+            SoftwareTitlesWidgetMessage::Reset => {
+                self.software_titles.clear();
+                self.software_titles_select_widget
+                    .update(software_title_select_widget::SoftwareTitleSelectWidgetMessage::Reset)
+                    .map(SoftwareTitlesWidgetMessage::SoftwareTitleSelectWidget)
+            }
+            SoftwareTitlesWidgetMessage::StartEditMode => {
+                let view_model_service_clone = Arc::clone(&self.view_model_service);
+                Task::perform(
+                    async move {
+                        view_model_service_clone
+                            .get_software_title_list_models()
+                            .await
+                    },
+                    SoftwareTitlesWidgetMessage::SoftwareTitlesFetched,
+                )
+            }
+            _ => Task::none(),
         }
     }
 
-    pub fn view(&self) -> iced::Element<SoftwareTitlesWidgetMessage> {
+    pub fn view(
+        &self,
+        selected_software_title_ids: &[i64],
+    ) -> iced::Element<SoftwareTitlesWidgetMessage> {
         let add_view: Element<SoftwareTitlesWidgetMessage> = if self.is_edit_mode {
             let add_software_title_view = self
                 .add_software_title_widget
@@ -221,10 +221,11 @@ impl SoftwareTitlesWidget {
         };
 
         let software_titles_view = self
-            .software_titles_widget
+            .software_titles_select_widget
             .view()
             .map(SoftwareTitlesWidgetMessage::SoftwareTitleSelectWidget);
-        let selected_software_titles_list = self.create_selected_software_titles_list();
+        let selected_software_titles_list =
+            self.create_selected_software_titles_list(selected_software_title_ids);
         column![
             software_titles_view,
             selected_software_titles_list,
@@ -233,9 +234,11 @@ impl SoftwareTitlesWidget {
         .into()
     }
 
-    fn create_selected_software_titles_list(&self) -> iced::Element<SoftwareTitlesWidgetMessage> {
-        let selected_software_titles = self
-            .selected_software_title_ids
+    fn create_selected_software_titles_list(
+        &self,
+        selected_software_title_ids: &[i64],
+    ) -> iced::Element<SoftwareTitlesWidgetMessage> {
+        let selected_software_titles = selected_software_title_ids
             .iter()
             .map(|id| {
                 let software_title = self

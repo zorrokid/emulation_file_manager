@@ -5,7 +5,7 @@ use iced::{
 };
 use service::view_models::FileSetListModel;
 
-use crate::defaults::{DEFAULT_PADDING, DEFAULT_SPACING};
+use crate::defaults::{DEFAULT_LABEL_WIDTH, DEFAULT_PADDING, DEFAULT_SPACING};
 
 pub struct FileSelectWidget {
     files: Vec<FileSetListModel>,
@@ -14,6 +14,7 @@ pub struct FileSelectWidget {
 
 #[derive(Debug, Clone)]
 pub enum FileSelectWidgetMessage {
+    Reset,
     FileSelected(FileSetListModel),
     SetFiles(Vec<FileSetListModel>),
 }
@@ -28,9 +29,12 @@ impl FileSelectWidget {
 
     pub fn update(&mut self, message: FileSelectWidgetMessage) -> Task<FileSelectWidgetMessage> {
         match message {
-            //Message::FileSelected(file) => Task::done(Message::FileSelected(file.clone())),
             FileSelectWidgetMessage::SetFiles(files) => {
                 self.files = files;
+                self.selected_file = None;
+            }
+            FileSelectWidgetMessage::Reset => {
+                self.files.clear();
                 self.selected_file = None;
             }
             _ => (),
@@ -44,7 +48,7 @@ impl FileSelectWidget {
             self.selected_file.clone(),
             FileSelectWidgetMessage::FileSelected,
         );
-        let label = text!("Select file");
+        let label = text!("Select file").width(DEFAULT_LABEL_WIDTH);
         row![label, file_select]
             .spacing(DEFAULT_SPACING)
             .padding(DEFAULT_PADDING)

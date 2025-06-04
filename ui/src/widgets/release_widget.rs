@@ -11,7 +11,8 @@ use service::{
 };
 
 use super::{
-    file_select_widget,
+    file_add_widget::FileAddWidgetMessage,
+    file_select_widget::{self, FileSelectWidgetMessage},
     files_widget::{self, FilesWidget, FilesWidgetMessage},
     software_title_select_widget,
     software_titles_widget::{self, SoftwareTitlesWidget, SoftwareTitlesWidgetMessage},
@@ -42,7 +43,8 @@ pub enum ReleaseWidgetMessage {
     // local messages
     Submit,
     ReleaseSubmitted(Result<i64, Error>),
-    ToggleOpen,
+    SetEditMode,
+    Cancel,
     SetSelectedRelease(ReleaseViewModel),
     ReleaseNameChanged(String),
     ReleaseWasUpdated(ReleaseListModel),
@@ -53,6 +55,7 @@ impl ReleaseWidget {
         repositories: Arc<RepositoryManager>,
         view_model_service: Arc<ViewModelService>,
     ) -> (Self, Task<ReleaseWidgetMessage>) {
+        // TODO fetch data once opened
         let (systems_widget, systems_task) =
             SystemsWidget::new(Arc::clone(&repositories), Arc::clone(&view_model_service));
         let (software_titles_widget, software_titles_task) =
@@ -136,16 +139,23 @@ impl ReleaseWidget {
             }
             ReleaseWidgetMessage::FilesWidget(message) => {
                 match &message {
-                    files_widget::FilesWidgetMessage::FileSelectWidget(
-                        file_select_widget::FileSelectWidgetMessage::FileSelected(file),
+                    FilesWidgetMessage::FileSelectWidget(
+                        FileSelectWidgetMessage::FileSelected(file),
                     ) => {
                         if !self.selected_file_ids.contains(&file.id) {
                             self.selected_file_ids.push(file.id);
                         }
                     }
-                    files_widget::FilesWidgetMessage::RemoveFile(file_id) => {
-                        println!("AddReleaseTab: File removed: {:?}", file_id);
+                    FilesWidgetMessage::RemoveFile(file_id) => {
                         self.selected_file_ids.retain(|&id| id != *file_id);
+                    }
+                    // TODO: do this also for software titles and systems
+                    FilesWidgetMessage::FileAddWidget(FileAddWidgetMessage::FileSetAdded(
+                        list_model,
+                    )) => {
+                        if !self.selected_file_ids.contains(&list_model.id) {
+                            self.selected_file_ids.push(list_model.id);
+                        }
                     }
                     _ => {}
                 }
@@ -211,9 +221,38 @@ impl ReleaseWidget {
                     Task::none()
                 }
             },
-            ReleaseWidgetMessage::ToggleOpen => {
-                self.is_open = !self.is_open;
-                Task::none()
+            ReleaseWidgetMessage::SetEditMode => {
+                self.is_open = true;
+                Task::batch(vec![
+                    self.systems_widget
+                        .update(systems_widget::SystemWidgetMessage::StartEditMode(None))
+                        .map(ReleaseWidgetMessage::Systems),
+                    self.software_titles_widget
+                        .update(software_titles_widget::SoftwareTitlesWidgetMessage::StartEditMode)
+                        .map(ReleaseWidgetMessage::SoftwareTitlesWidget),
+                    self.files_widget
+                        .update(files_widget::FilesWidgetMessage::StartEditMode)
+                        .map(ReleaseWidgetMessage::FilesWidget),
+                ])
+            }
+            ReleaseWidgetMessage::Cancel => {
+                self.is_open = false;
+                self.selected_release = None;
+                self.selected_system_ids.clear();
+                self.selected_software_title_ids.clear();
+                self.selected_file_ids.clear();
+                self.release_name.clear();
+                Task::batch(vec![
+                    self.systems_widget
+                        .update(systems_widget::SystemWidgetMessage::Reset)
+                        .map(ReleaseWidgetMessage::Systems),
+                    self.software_titles_widget
+                        .update(software_titles_widget::SoftwareTitlesWidgetMessage::Reset)
+                        .map(ReleaseWidgetMessage::SoftwareTitlesWidget),
+                    self.files_widget
+                        .update(files_widget::FilesWidgetMessage::Reset)
+                        .map(ReleaseWidgetMessage::FilesWidget),
+                ])
             }
             ReleaseWidgetMessage::SetSelectedRelease(release) => {
                 self.is_open = true;
@@ -266,10 +305,17 @@ impl ReleaseWidget {
                 self.selected_software_title_ids.clear();
                 self.selected_file_ids.clear();
                 self.release_name.clear();
-                /*self.systems_widget
-                .update(SystemWidgetMessage::ClearSelection)
-                .map(ReleaseWidgetMessage::Systems)*/
-                Task::none()
+                Task::batch(vec![
+                    self.systems_widget
+                        .update(systems_widget::SystemWidgetMessage::Reset)
+                        .map(ReleaseWidgetMessage::Systems),
+                    self.software_titles_widget
+                        .update(software_titles_widget::SoftwareTitlesWidgetMessage::Reset)
+                        .map(ReleaseWidgetMessage::SoftwareTitlesWidget),
+                    self.files_widget
+                        .update(files_widget::FilesWidgetMessage::Reset)
+                        .map(ReleaseWidgetMessage::FilesWidget),
+                ])
             }
             _ => Task::none(),
         }
@@ -279,7 +325,7 @@ impl ReleaseWidget {
         let release_view = if self.is_open {
             self.create_release_view()
         } else {
-            Column::new().push(button("Add release").on_press(ReleaseWidgetMessage::ToggleOpen))
+            Column::new().push(button("Add release").on_press(ReleaseWidgetMessage::SetEditMode))
         };
         Container::new(release_view)
             .style(container::bordered_box)
@@ -293,19 +339,19 @@ impl ReleaseWidget {
             "Cancel add release"
         };
         let cancel_add_emulator_system_button =
-            button(cancel_button_text).on_press(ReleaseWidgetMessage::ToggleOpen);
+            button(cancel_button_text).on_press(ReleaseWidgetMessage::Cancel);
 
         let systems_view = self
             .systems_widget
-            .view()
+            .view(&self.selected_system_ids)
             .map(ReleaseWidgetMessage::Systems);
         let software_titles_view = self
             .software_titles_widget
-            .view()
+            .view(&self.selected_software_title_ids)
             .map(ReleaseWidgetMessage::SoftwareTitlesWidget);
         let files_view = self
             .files_widget
-            .view()
+            .view(&self.selected_file_ids)
             .map(ReleaseWidgetMessage::FilesWidget);
 
         let name_input = text_input("Release name", &self.release_name)

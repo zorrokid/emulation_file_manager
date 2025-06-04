@@ -5,7 +5,7 @@ use iced::{
 };
 use service::view_models::SystemListModel;
 
-use crate::defaults::{DEFAULT_PADDING, DEFAULT_SPACING};
+use crate::defaults::{DEFAULT_LABEL_WIDTH, DEFAULT_PADDING, DEFAULT_SPACING};
 
 pub struct SystemSelectWidget {
     systems: Vec<SystemListModel>,
@@ -14,6 +14,7 @@ pub struct SystemSelectWidget {
 
 #[derive(Debug, Clone)]
 pub enum SystemSelectWidgetMessage {
+    Reset,
     SystemSelected(SystemListModel),
     SetSystems(Vec<SystemListModel>),
 }
@@ -30,13 +31,17 @@ impl SystemSelectWidget {
         &mut self,
         message: SystemSelectWidgetMessage,
     ) -> Task<SystemSelectWidgetMessage> {
-        println!("SystemSelectWidget update: {:?}", message);
         match message {
             SystemSelectWidgetMessage::SystemSelected(system) => {
                 Task::done(SystemSelectWidgetMessage::SystemSelected(system.clone()))
             }
             SystemSelectWidgetMessage::SetSystems(systems) => {
                 self.systems = systems;
+                self.selected_system = None;
+                Task::none()
+            }
+            SystemSelectWidgetMessage::Reset => {
+                self.systems.clear();
                 self.selected_system = None;
                 Task::none()
             }
@@ -49,7 +54,7 @@ impl SystemSelectWidget {
             self.selected_system.clone(),
             SystemSelectWidgetMessage::SystemSelected,
         );
-        let label = text!("Select system");
+        let label = text!("Select system").width(DEFAULT_LABEL_WIDTH);
         row![label, system_select]
             .spacing(DEFAULT_SPACING)
             .padding(DEFAULT_PADDING)
