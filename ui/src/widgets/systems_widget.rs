@@ -20,8 +20,6 @@ pub struct SystemsWidget {
     systems: Vec<SystemListModel>,
     system_select_widget: SystemSelectWidget,
     system_add_widget: SystemAddWidget,
-    // TODO: selected systems are also maintained in parent widget!
-    selected_system_ids: Vec<i64>,
     is_edit_mode: bool,
 }
 
@@ -59,7 +57,6 @@ impl SystemsWidget {
                 systems: vec![],
                 system_select_widget: SystemSelectWidget::new(),
                 system_add_widget: SystemAddWidget::new(),
-                selected_system_ids: vec![],
                 is_edit_mode: false,
             },
             fetch_systems_task,
@@ -109,14 +106,6 @@ impl SystemsWidget {
                     .update(message)
                     .map(SystemWidgetMessage::SystemAddWidget),
             },
-            SystemWidgetMessage::SystemSelect(message) => {
-                if let SystemSelectWidgetMessage::SystemSelected(system) = message {
-                    if !self.selected_system_ids.contains(&system.id) {
-                        self.selected_system_ids.push(system.id);
-                    }
-                }
-                Task::none()
-            }
             SystemWidgetMessage::SystemAdded(result) => match result {
                 Ok(_) => {
                     let service = Arc::clone(&self.view_model_service);
@@ -130,20 +119,8 @@ impl SystemsWidget {
                     Task::none()
                 }
             },
-            SystemWidgetMessage::RemoveSystem(id) => {
-                self.selected_system_ids
-                    .retain(|&system_id| system_id != id);
-                Task::none()
-            }
             SystemWidgetMessage::ToggleEditMode => {
                 self.is_edit_mode = !self.is_edit_mode;
-                Task::none()
-            }
-            SystemWidgetMessage::SetSelectedSystemIds(ids) => {
-                self.selected_system_ids = ids;
-                // TODO: should this emit SystemSelected message for each system? Then this
-                // wouldn't be needed to set explicitly in parent widget which maintains selected
-                // systems for the release.
                 Task::none()
             }
             SystemWidgetMessage::StartEditSystem(id) => {
@@ -162,7 +139,6 @@ impl SystemsWidget {
             }
             SystemWidgetMessage::Reset => {
                 self.systems.clear();
-                self.selected_system_ids.clear();
 
                 self.system_select_widget
                     .update(system_select_widget::SystemSelectWidgetMessage::Reset)
@@ -175,10 +151,11 @@ impl SystemsWidget {
                     move |result| SystemWidgetMessage::SystemsFetched(result, optional_id),
                 )
             }
+            _ => Task::none(),
         }
     }
 
-    pub fn view(&self) -> Element<SystemWidgetMessage> {
+    pub fn view(&self, selected_system_ids: &[i64]) -> Element<SystemWidgetMessage> {
         let add_system_view: Element<SystemWidgetMessage> = if self.is_edit_mode {
             let system_add_view = self
                 .system_add_widget
@@ -196,13 +173,15 @@ impl SystemsWidget {
             .system_select_widget
             .view()
             .map(SystemWidgetMessage::SystemSelect);
-        let selected_systems_list = self.create_selected_systems_list();
+        let selected_systems_list = self.create_selected_systems_list(selected_system_ids);
         column![system_select_view, selected_systems_list, add_system_view].into()
     }
 
-    fn create_selected_systems_list(&self) -> Element<SystemWidgetMessage> {
-        let selected_systems = self
-            .selected_system_ids
+    fn create_selected_systems_list(
+        &self,
+        selected_system_ids: &[i64],
+    ) -> Element<SystemWidgetMessage> {
+        let selected_systems = selected_system_ids
             .iter()
             .map(|id| {
                 let system = self

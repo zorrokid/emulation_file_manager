@@ -335,7 +335,7 @@ impl ReleaseWidget {
 
         let systems_view = self
             .systems_widget
-            .view()
+            .view(&self.selected_system_ids)
             .map(ReleaseWidgetMessage::Systems);
         let software_titles_view = self
             .software_titles_widget

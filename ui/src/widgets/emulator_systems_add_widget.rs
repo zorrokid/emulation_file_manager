@@ -138,9 +138,15 @@ impl EmulatorSystemsAddWidget {
         let cancel_add_emulator_system_button =
             button(cancel_button_text).on_press(EmulatorSystemsAddWidgetMessage::ToggleOpen);
 
+        let selected_system_id = self.selected_system.as_ref().map(|s| s.id);
+        let ids: &[i64] = if let Some(id) = selected_system_id {
+            &[id]
+        } else {
+            &[]
+        };
         let systems_view = self
             .systems_widget
-            .view()
+            .view(ids)
             .map(EmulatorSystemsAddWidgetMessage::SystemsWidget);
         let selected_system_name = self.selected_system.as_ref().map_or("None", |s| &s.name);
         let selected_system_text = text!("Selected System: {}", &selected_system_name);
