@@ -30,6 +30,9 @@ pub struct FilesWidget {
 
 #[derive(Debug, Clone)]
 pub enum FilesWidgetMessage {
+    // parent messages
+    Reset,
+    StartEditMode,
     // child messages
     FileAddWidget(FileAddWidgetMessage),
     FileSelectWidget(FileSelectWidgetMessage),
@@ -148,6 +151,20 @@ impl FilesWidget {
             FilesWidgetMessage::SetSelectedFileIds(ids) => {
                 self.selected_file_ids = ids;
                 Task::none()
+            }
+            FilesWidgetMessage::Reset => {
+                self.files.clear();
+                self.selected_file_ids.clear();
+                self.files_widget
+                    .update(file_select_widget::FileSelectWidgetMessage::Reset)
+                    .map(FilesWidgetMessage::FileSelectWidget)
+            }
+            FilesWidgetMessage::StartEditMode => {
+                let view_model_service_clone = Arc::clone(&self.view_model_service);
+                Task::perform(
+                    async move { view_model_service_clone.get_file_set_list_models().await },
+                    FilesWidgetMessage::FilesFetched,
+                )
             }
         }
     }

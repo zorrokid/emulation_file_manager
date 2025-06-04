@@ -27,11 +27,13 @@ pub struct SystemsWidget {
 
 #[derive(Debug, Clone)]
 pub enum SystemWidgetMessage {
+    Reset,
+    StartEditMode(Option<i64>),
     // child messages
     SystemAddWidget(SystemAddWidgetMessage),
     SystemSelect(SystemSelectWidgetMessage),
     // local messages
-    SystemsFetched(Result<Vec<SystemListModel>, Error>),
+    SystemsFetched(Result<Vec<SystemListModel>, Error>, Option<i64>),
     SystemAdded(Result<i64, DatabaseError>),
     RemoveSystem(i64),
     StartEditSystem(i64),
@@ -47,7 +49,7 @@ impl SystemsWidget {
         let view_model_service_clone = Arc::clone(&view_model_service);
         let fetch_systems_task = Task::perform(
             async move { view_model_service_clone.get_system_list_models().await },
-            SystemWidgetMessage::SystemsFetched,
+            |result| SystemWidgetMessage::SystemsFetched(result, None),
         );
 
         (
@@ -66,14 +68,21 @@ impl SystemsWidget {
 
     pub fn update(&mut self, message: SystemWidgetMessage) -> Task<SystemWidgetMessage> {
         match message {
-            SystemWidgetMessage::SystemsFetched(result) => match result {
+            SystemWidgetMessage::SystemsFetched(result, optional_id) => match result {
                 Ok(systems) => {
                     self.systems = systems;
-                    self.system_select_widget
-                        .update(system_select_widget::SystemSelectWidgetMessage::SetSystems(
-                            self.systems.clone(),
-                        ))
-                        .map(SystemWidgetMessage::SystemSelect)
+                    Task::batch([
+                        self.system_select_widget
+                            .update(system_select_widget::SystemSelectWidgetMessage::SetSystems(
+                                self.systems.clone(),
+                            ))
+                            .map(SystemWidgetMessage::SystemSelect),
+                        if let Some(id) = optional_id {
+                            Task::done(SystemWidgetMessage::StartEditSystem(id))
+                        } else {
+                            Task::none()
+                        },
+                    ])
                 }
                 Err(error) => {
                     eprint!("Error when fetching systems: {}", error);
@@ -113,7 +122,7 @@ impl SystemsWidget {
                     let service = Arc::clone(&self.view_model_service);
                     Task::perform(
                         async move { service.get_system_list_models().await },
-                        SystemWidgetMessage::SystemsFetched,
+                        |result| SystemWidgetMessage::SystemsFetched(result, None),
                     )
                 }
                 Err(error) => {
@@ -150,6 +159,21 @@ impl SystemsWidget {
                     eprintln!("System with id {} not found for editing", id);
                     Task::none()
                 }
+            }
+            SystemWidgetMessage::Reset => {
+                self.systems.clear();
+                self.selected_system_ids.clear();
+
+                self.system_select_widget
+                    .update(system_select_widget::SystemSelectWidgetMessage::Reset)
+                    .map(SystemWidgetMessage::SystemSelect)
+            }
+            SystemWidgetMessage::StartEditMode(optional_id) => {
+                let view_model_service_clone = Arc::clone(&self.view_model_service);
+                Task::perform(
+                    async move { view_model_service_clone.get_system_list_models().await },
+                    move |result| SystemWidgetMessage::SystemsFetched(result, optional_id),
+                )
             }
         }
     }
