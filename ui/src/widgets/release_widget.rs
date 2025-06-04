@@ -339,7 +339,7 @@ impl ReleaseWidget {
             .map(ReleaseWidgetMessage::Systems);
         let software_titles_view = self
             .software_titles_widget
-            .view()
+            .view(&self.selected_software_title_ids)
             .map(ReleaseWidgetMessage::SoftwareTitlesWidget);
         let files_view = self
             .files_widget
