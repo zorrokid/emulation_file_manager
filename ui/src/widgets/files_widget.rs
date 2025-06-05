@@ -134,12 +134,10 @@ impl FilesWidget {
                     Task::none()
                 }
             },
-            FilesWidgetMessage::Reset => {
-                self.files.clear();
-                self.files_widget
-                    .update(file_select_widget::FileSelectWidgetMessage::Reset)
-                    .map(FilesWidgetMessage::FileSelectWidget)
-            }
+            FilesWidgetMessage::Reset => self
+                .files_widget
+                .update(file_select_widget::FileSelectWidgetMessage::Reset)
+                .map(FilesWidgetMessage::FileSelectWidget),
             FilesWidgetMessage::StartEditMode => {
                 let view_model_service_clone = Arc::clone(&self.view_model_service);
                 Task::perform(

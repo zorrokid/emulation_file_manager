@@ -41,13 +41,14 @@ impl SystemSelectWidget {
                 Task::none()
             }
             SystemSelectWidgetMessage::Reset => {
-                self.systems.clear();
                 self.selected_system = None;
                 Task::none()
             }
         }
     }
 
+    // TODO: pass systems to view from parent widget
+    // [&SystemListModel]
     pub fn view(&self) -> iced::Element<SystemSelectWidgetMessage> {
         let system_select = pick_list(
             self.systems.as_slice(),

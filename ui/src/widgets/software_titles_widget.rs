@@ -181,12 +181,10 @@ impl SoftwareTitlesWidget {
                     ))
                     .map(SoftwareTitlesWidgetMessage::SoftwareTitleAddWidget)
             }
-            SoftwareTitlesWidgetMessage::Reset => {
-                self.software_titles.clear();
-                self.software_titles_select_widget
-                    .update(software_title_select_widget::SoftwareTitleSelectWidgetMessage::Reset)
-                    .map(SoftwareTitlesWidgetMessage::SoftwareTitleSelectWidget)
-            }
+            SoftwareTitlesWidgetMessage::Reset => self
+                .software_titles_select_widget
+                .update(software_title_select_widget::SoftwareTitleSelectWidgetMessage::Reset)
+                .map(SoftwareTitlesWidgetMessage::SoftwareTitleSelectWidget),
             SoftwareTitlesWidgetMessage::StartEditMode => {
                 let view_model_service_clone = Arc::clone(&self.view_model_service);
                 Task::perform(
