@@ -14,6 +14,20 @@ pub enum FileType {
     MemorySnapshot = 7,
 }
 
+impl FileType {
+    pub fn dir_name(&self) -> &'static str {
+        match self {
+            FileType::Rom => "rom",
+            FileType::DiskImage => "disk_image",
+            FileType::TapeImage => "tape_image",
+            FileType::Screenshot => "screenshot",
+            FileType::Manual => "manual",
+            FileType::CoverScan => "cover_scan",
+            FileType::MemorySnapshot => "memory_snapshot",
+        }
+    }
+}
+
 impl From<FileType> for i64 {
     fn from(value: FileType) -> Self {
         match value {

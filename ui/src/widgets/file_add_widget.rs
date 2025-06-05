@@ -19,7 +19,10 @@ use iced::{
 use rfd::FileHandle;
 use service::view_models::FileSetListModel;
 
-use crate::defaults::{DEFAULT_PADDING, DEFAULT_SPACING};
+use crate::{
+    defaults::{DEFAULT_PADDING, DEFAULT_SPACING},
+    util::file_paths::resolve_file_type_path,
+};
 
 pub struct FileImporter {
     current_picked_file: Option<FileHandle>,
@@ -45,9 +48,6 @@ impl FileImporter {
     pub fn get_current_picked_file_content(&self) -> &HashMap<Sha1Checksum, ReadFile> {
         &self.current_picked_file_content
     }
-    pub fn get_selected_files_from_current_picked_file(&self) -> &HashSet<Sha1Checksum> {
-        &self.selected_files_from_current_picked_file
-    }
     pub fn get_selected_files_from_current_picked_file_that_are_new(&self) -> Vec<ReadFile> {
         let existing_files_checksums: HashSet<Sha1Checksum> =
             self.existing_files.keys().cloned().collect();
@@ -72,11 +72,6 @@ impl FileImporter {
             .extend(content.keys());
         self.current_picked_file_content = content;
     }
-    // TODO: --existing files are not used currently!--
-    // --they should be filtered out when importing files--
-    // --but they should be used as part of the file set when they are selected--
-    // TODO: also take care of storing existing files to file set file info with the file name used
-    // in this particular file set
     pub fn set_existing_files(&mut self, files: Vec<FileInfo>) {
         let mut file_map: HashMap<Sha1Checksum, ImportedFile> = HashMap::new();
         for file in files {
@@ -134,21 +129,6 @@ impl FileImporter {
         } else {
             self.select_file(&sha1_checksum);
         }
-    }
-
-    pub fn get_filtered_picked_file_content(&self) -> Vec<ReadFile> {
-        self.current_picked_file_content
-            .values()
-            .filter(|file| {
-                self.selected_files_from_current_picked_file
-                    .contains(&file.sha1_checksum)
-            })
-            .map(|file| ReadFile {
-                file_name: file.file_name.clone(),
-                sha1_checksum: file.sha1_checksum,
-                file_size: file.file_size,
-            })
-            .collect::<Vec<ReadFile>>()
     }
 }
 
@@ -266,9 +246,12 @@ impl FileAddWidget {
             }
             // This starts the actual import process
             FileAddWidgetMessage::Submit => {
-                if let Some(handle) = &self.file_importer.get_current_picked_file() {
+                if let (Some(handle), Some(file_type)) = (
+                    &self.file_importer.get_current_picked_file(),
+                    self.selected_file_type,
+                ) {
                     let file_path = handle.path().to_path_buf().clone();
-                    let collection_root_dir = self.collection_root_dir.clone();
+                    let target_path = resolve_file_type_path(&self.collection_root_dir, &file_type);
                     let file_filter = self
                         .file_importer
                         .get_selected_files_from_current_picked_file_that_are_new()
@@ -279,7 +262,7 @@ impl FileAddWidget {
                         async move {
                             file_import::import_files_from_zip(
                                 file_path,
-                                collection_root_dir,
+                                target_path,
                                 CompressionMethod::Zstd,
                                 file_filter,
                             )
