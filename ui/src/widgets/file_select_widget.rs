@@ -8,7 +8,6 @@ use service::view_models::FileSetListModel;
 use crate::defaults::{DEFAULT_LABEL_WIDTH, DEFAULT_PADDING, DEFAULT_SPACING};
 
 pub struct FileSelectWidget {
-    files: Vec<FileSetListModel>,
     selected_file: Option<FileSetListModel>,
 }
 
@@ -16,36 +15,34 @@ pub struct FileSelectWidget {
 pub enum FileSelectWidgetMessage {
     Reset,
     FileSelected(FileSetListModel),
-    SetFiles(Vec<FileSetListModel>),
 }
 
 impl FileSelectWidget {
     pub fn new() -> Self {
         Self {
-            files: vec![],
             selected_file: None,
         }
     }
 
     pub fn update(&mut self, message: FileSelectWidgetMessage) -> Task<FileSelectWidgetMessage> {
         match message {
-            FileSelectWidgetMessage::SetFiles(files) => {
-                self.files = files;
-                self.selected_file = None;
+            FileSelectWidgetMessage::FileSelected(file) => {
+                self.selected_file = Some(file.clone());
+                Task::none()
             }
             FileSelectWidgetMessage::Reset => {
                 self.selected_file = None;
+                Task::none()
             }
-            _ => (),
         }
-        Task::none()
     }
 
-    // TODO: pass files to view from parent widget
-    // [&FileSetListModel]
-    pub fn view(&self) -> iced::Element<FileSelectWidgetMessage> {
+    pub fn view<'a>(
+        &self,
+        files: &'a [FileSetListModel],
+    ) -> iced::Element<'a, FileSelectWidgetMessage> {
         let file_select = pick_list(
-            self.files.as_slice(),
+            files,
             self.selected_file.clone(),
             FileSelectWidgetMessage::FileSelected,
         );

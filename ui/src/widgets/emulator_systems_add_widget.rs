@@ -11,7 +11,7 @@ use crate::defaults::{DEFAULT_PADDING, DEFAULT_SPACING};
 
 use super::{
     emulator_add_widget::EmulatorSystem,
-    system_select_widget,
+    system_select_widget::{self, SystemSelectWidgetMessage},
     systems_widget::{self, SystemWidgetMessage, SystemsWidget},
 };
 
@@ -60,8 +60,8 @@ impl EmulatorSystemsAddWidget {
     ) -> Task<EmulatorSystemsAddWidgetMessage> {
         match message {
             EmulatorSystemsAddWidgetMessage::SystemsWidget(message) => {
-                if let systems_widget::SystemWidgetMessage::SystemSelect(
-                    system_select_widget::SystemSelectWidgetMessage::SystemSelected(system),
+                if let SystemWidgetMessage::SystemSelectWidget(
+                    SystemSelectWidgetMessage::SystemSelected(system),
                 ) = &message
                 {
                     self.selected_system = Some(system.clone());

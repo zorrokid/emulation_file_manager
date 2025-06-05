@@ -8,7 +8,6 @@ use service::view_models::SystemListModel;
 use crate::defaults::{DEFAULT_LABEL_WIDTH, DEFAULT_PADDING, DEFAULT_SPACING};
 
 pub struct SystemSelectWidget {
-    systems: Vec<SystemListModel>,
     selected_system: Option<SystemListModel>,
 }
 
@@ -16,13 +15,11 @@ pub struct SystemSelectWidget {
 pub enum SystemSelectWidgetMessage {
     Reset,
     SystemSelected(SystemListModel),
-    SetSystems(Vec<SystemListModel>),
 }
 
 impl SystemSelectWidget {
     pub fn new() -> Self {
         Self {
-            systems: vec![],
             selected_system: None,
         }
     }
@@ -33,11 +30,7 @@ impl SystemSelectWidget {
     ) -> Task<SystemSelectWidgetMessage> {
         match message {
             SystemSelectWidgetMessage::SystemSelected(system) => {
-                Task::done(SystemSelectWidgetMessage::SystemSelected(system.clone()))
-            }
-            SystemSelectWidgetMessage::SetSystems(systems) => {
-                self.systems = systems;
-                self.selected_system = None;
+                self.selected_system = Some(system.clone());
                 Task::none()
             }
             SystemSelectWidgetMessage::Reset => {
@@ -47,11 +40,12 @@ impl SystemSelectWidget {
         }
     }
 
-    // TODO: pass systems to view from parent widget
-    // [&SystemListModel]
-    pub fn view(&self) -> iced::Element<SystemSelectWidgetMessage> {
+    pub fn view<'a>(
+        &self,
+        systems: &'a [SystemListModel],
+    ) -> iced::Element<'a, SystemSelectWidgetMessage> {
         let system_select = pick_list(
-            self.systems.as_slice(),
+            systems,
             self.selected_system.clone(),
             SystemSelectWidgetMessage::SystemSelected,
         );
