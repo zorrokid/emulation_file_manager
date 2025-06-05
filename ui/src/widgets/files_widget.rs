@@ -78,11 +78,7 @@ impl FilesWidget {
             FilesWidgetMessage::FilesFetched(result) => match result {
                 Ok(files) => {
                     self.files = files;
-                    self.files_widget
-                        .update(file_select_widget::FileSelectWidgetMessage::SetFiles(
-                            self.files.clone(),
-                        ))
-                        .map(FilesWidgetMessage::FileSelectWidget)
+                    Task::none()
                 }
                 Err(error) => {
                     eprint!("Error when fetching files: {}", error);
@@ -158,7 +154,7 @@ impl FilesWidget {
             .map(FilesWidgetMessage::FileAddWidget);
         let files_view = self
             .files_widget
-            .view()
+            .view(&self.files)
             .map(FilesWidgetMessage::FileSelectWidget);
         let selected_files_list = self.create_selected_files_list(selected_file_ids);
         column![add_file_view, files_view, selected_files_list].into()

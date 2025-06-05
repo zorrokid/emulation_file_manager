@@ -91,15 +91,14 @@ impl ReleaseWidget {
         match message {
             ReleaseWidgetMessage::Systems(message) => {
                 match &message {
-                    systems_widget::SystemWidgetMessage::SystemSelect(
+                    SystemWidgetMessage::SystemSelectWidget(
                         system_select_widget::SystemSelectWidgetMessage::SystemSelected(system),
                     ) => {
                         if !self.selected_system_ids.contains(&system.id) {
                             self.selected_system_ids.push(system.id);
                         }
                     }
-                    systems_widget::SystemWidgetMessage::RemoveSystem(system_id) => {
-                        println!("AddReleaseTab: System removed: {:?}", system_id);
+                    SystemWidgetMessage::RemoveSystem(system_id) => {
                         self.selected_system_ids.retain(|&id| id != *system_id);
                     }
                     _ => {}

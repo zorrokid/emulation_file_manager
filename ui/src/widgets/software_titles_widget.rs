@@ -86,11 +86,7 @@ impl SoftwareTitlesWidget {
             SoftwareTitlesWidgetMessage::SoftwareTitlesFetched(result) => match result {
                 Ok(software_titles) => {
                     self.software_titles = software_titles;
-                    self.software_titles_select_widget
-                        .update(software_title_select_widget::SoftwareTitleSelectWidgetMessage::SetSoftwareTitles(
-                            self.software_titles.clone(),
-                        ))
-                        .map(SoftwareTitlesWidgetMessage::SoftwareTitleSelectWidget)
+                    Task::none()
                 }
                 Err(error) => {
                     eprint!("Error when fetching software_titlejk {}", error);
@@ -196,6 +192,10 @@ impl SoftwareTitlesWidget {
                     SoftwareTitlesWidgetMessage::SoftwareTitlesFetched,
                 )
             }
+            SoftwareTitlesWidgetMessage::SoftwareTitleSelectWidget(message) => self
+                .software_titles_select_widget
+                .update(message)
+                .map(SoftwareTitlesWidgetMessage::SoftwareTitleSelectWidget),
             _ => Task::none(),
         }
     }
@@ -220,7 +220,7 @@ impl SoftwareTitlesWidget {
 
         let software_titles_view = self
             .software_titles_select_widget
-            .view()
+            .view(&self.software_titles)
             .map(SoftwareTitlesWidgetMessage::SoftwareTitleSelectWidget);
         let selected_software_titles_list =
             self.create_selected_software_titles_list(selected_software_title_ids);

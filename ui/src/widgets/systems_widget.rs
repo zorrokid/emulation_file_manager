@@ -29,7 +29,7 @@ pub enum SystemWidgetMessage {
     StartEditMode(Option<i64>),
     // child messages
     SystemAddWidget(SystemAddWidgetMessage),
-    SystemSelect(SystemSelectWidgetMessage),
+    SystemSelectWidget(SystemSelectWidgetMessage),
     // local messages
     SystemsFetched(Result<Vec<SystemListModel>, Error>, Option<i64>),
     SystemAdded(Result<i64, DatabaseError>),
@@ -68,18 +68,11 @@ impl SystemsWidget {
             SystemWidgetMessage::SystemsFetched(result, optional_id) => match result {
                 Ok(systems) => {
                     self.systems = systems;
-                    Task::batch([
-                        self.system_select_widget
-                            .update(system_select_widget::SystemSelectWidgetMessage::SetSystems(
-                                self.systems.clone(),
-                            ))
-                            .map(SystemWidgetMessage::SystemSelect),
-                        if let Some(id) = optional_id {
-                            Task::done(SystemWidgetMessage::StartEditSystem(id))
-                        } else {
-                            Task::none()
-                        },
-                    ])
+                    Task::batch([if let Some(id) = optional_id {
+                        Task::done(SystemWidgetMessage::StartEditSystem(id))
+                    } else {
+                        Task::none()
+                    }])
                 }
                 Err(error) => {
                     eprint!("Error when fetching systems: {}", error);
@@ -140,7 +133,7 @@ impl SystemsWidget {
             SystemWidgetMessage::Reset => self
                 .system_select_widget
                 .update(system_select_widget::SystemSelectWidgetMessage::Reset)
-                .map(SystemWidgetMessage::SystemSelect),
+                .map(SystemWidgetMessage::SystemSelectWidget),
             SystemWidgetMessage::StartEditMode(optional_id) => {
                 let view_model_service_clone = Arc::clone(&self.view_model_service);
                 Task::perform(
@@ -148,6 +141,10 @@ impl SystemsWidget {
                     move |result| SystemWidgetMessage::SystemsFetched(result, optional_id),
                 )
             }
+            SystemWidgetMessage::SystemSelectWidget(message) => self
+                .system_select_widget
+                .update(message)
+                .map(SystemWidgetMessage::SystemSelectWidget),
             _ => Task::none(),
         }
     }
@@ -168,8 +165,8 @@ impl SystemsWidget {
 
         let system_select_view: Element<SystemWidgetMessage> = self
             .system_select_widget
-            .view()
-            .map(SystemWidgetMessage::SystemSelect);
+            .view(&self.systems)
+            .map(SystemWidgetMessage::SystemSelectWidget);
         let selected_systems_list = self.create_selected_systems_list(selected_system_ids);
         column![system_select_view, selected_systems_list, add_system_view].into()
     }
