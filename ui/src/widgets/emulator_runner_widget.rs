@@ -14,7 +14,10 @@ use service::{
     view_models::{EmulatorViewModel, FileSetViewModel, ReleaseViewModel, Settings},
 };
 
-use crate::defaults::{DEFAULT_PADDING, DEFAULT_SPACING};
+use crate::{
+    defaults::{DEFAULT_PADDING, DEFAULT_SPACING},
+    util::file_paths::resolve_file_type_path,
+};
 
 const LABEL_COLUMN_WIDTH: u16 = 150;
 
@@ -160,7 +163,7 @@ impl EmulatorRunnerWidget {
 
                         let root_dir = PathBuf::from(root_dir);
                         let temp_dir = std::env::temp_dir();
-                        let root_path = PathBuf::from(&root_dir);
+                        let source_path = resolve_file_type_path(&root_dir, &file_set.file_type);
                         let temp_path = PathBuf::from(&temp_dir);
                         let output_file_name_mapping = file_set
                             .files
@@ -187,14 +190,14 @@ impl EmulatorRunnerWidget {
                             async move {
                                 let result = if extract_files {
                                     export_files(
-                                        root_path,
+                                        source_path,
                                         temp_path.clone(),
                                         output_file_name_mapping,
                                         filename_checksum_mapping,
                                     )
                                 } else {
                                     export_files_zipped(
-                                        root_path,
+                                        source_path,
                                         temp_path.clone(),
                                         output_file_name_mapping,
                                         filename_checksum_mapping,

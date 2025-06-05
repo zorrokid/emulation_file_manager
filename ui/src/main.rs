@@ -1,5 +1,6 @@
 mod defaults;
 mod tabs;
+mod util;
 mod widgets;
 
 use std::{cell::OnceCell, sync::Arc};
