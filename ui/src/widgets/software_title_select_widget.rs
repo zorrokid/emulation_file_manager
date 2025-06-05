@@ -44,13 +44,14 @@ impl SoftwareTitleSelectWidget {
                 Task::none()
             }
             SoftwareTitleSelectWidgetMessage::Reset => {
-                self.software_titles.clear();
                 self.selected_software_title = None;
                 Task::none()
             }
         }
     }
 
+    // TODO: pass software titles to view from parent widget
+    // [&SoftwareTitleListModel]
     pub fn view(&self) -> iced::Element<SoftwareTitleSelectWidgetMessage> {
         let software_title_select = pick_list(
             self.software_titles.as_slice(),

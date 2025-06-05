@@ -137,13 +137,10 @@ impl SystemsWidget {
                     Task::none()
                 }
             }
-            SystemWidgetMessage::Reset => {
-                self.systems.clear();
-
-                self.system_select_widget
-                    .update(system_select_widget::SystemSelectWidgetMessage::Reset)
-                    .map(SystemWidgetMessage::SystemSelect)
-            }
+            SystemWidgetMessage::Reset => self
+                .system_select_widget
+                .update(system_select_widget::SystemSelectWidgetMessage::Reset)
+                .map(SystemWidgetMessage::SystemSelect),
             SystemWidgetMessage::StartEditMode(optional_id) => {
                 let view_model_service_clone = Arc::clone(&self.view_model_service);
                 Task::perform(

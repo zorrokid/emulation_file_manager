@@ -34,7 +34,6 @@ impl FileSelectWidget {
                 self.selected_file = None;
             }
             FileSelectWidgetMessage::Reset => {
-                self.files.clear();
                 self.selected_file = None;
             }
             _ => (),
@@ -42,6 +41,8 @@ impl FileSelectWidget {
         Task::none()
     }
 
+    // TODO: pass files to view from parent widget
+    // [&FileSetListModel]
     pub fn view(&self) -> iced::Element<FileSelectWidgetMessage> {
         let file_select = pick_list(
             self.files.as_slice(),
