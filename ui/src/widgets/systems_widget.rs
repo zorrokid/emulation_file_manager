@@ -161,6 +161,12 @@ impl SystemsWidget {
                 self.is_edit_mode = true;
                 Task::none()
             }
+            SystemWidgetMessage::CancelAddSystem => {
+                self.is_edit_mode = false;
+                self.system_add_widget
+                    .update(SystemAddWidgetMessage::Reset)
+                    .map(SystemWidgetMessage::SystemAddWidget)
+            }
             SystemWidgetMessage::StartEditSystem(id) => {
                 if let Some(system) = self.systems.iter().find(|s| s.id == id) {
                     self.is_edit_mode = true;

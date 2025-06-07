@@ -35,7 +35,7 @@ impl TitleBar {
         let settings_button =
             button("Settings").on_press(TitleBarMessage::TabSelected(Tab::Settings));
         let add_release_button =
-            button("Add release").on_press(TitleBarMessage::TabSelected(Tab::AddRelease));
+            button("Releases").on_press(TitleBarMessage::TabSelected(Tab::Releases));
         let emulators_button =
             button("Emulators").on_press(TitleBarMessage::TabSelected(Tab::Emulators));
         row![
