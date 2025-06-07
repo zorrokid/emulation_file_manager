@@ -63,6 +63,11 @@ impl FileImporter {
             .map(|(_, read_file)| read_file.clone())
             .collect()
     }
+    pub fn is_selected_files(&self) -> bool {
+        self.current_picked_file.is_some()
+            && !self.selected_files_from_current_picked_file.is_empty()
+    }
+
     pub fn set_current_picked_file(&mut self, file: FileHandle) {
         self.clear();
         self.current_picked_file = Some(file);
@@ -336,8 +341,12 @@ impl FileAddWidget {
         let name_input = text_input("File name", &self.file_name)
             .on_input(FileAddWidgetMessage::FileNameUpdated);
 
-        let submit_button = button("Submit file")
-            .on_press_maybe((!self.file_name.is_empty()).then_some(FileAddWidgetMessage::Submit));
+        let submit_button = button("Submit file").on_press_maybe(
+            (!self.file_name.is_empty()
+                && self.selected_file_type.is_some()
+                && self.file_importer.is_selected_files())
+            .then_some(FileAddWidgetMessage::Submit),
+        );
         let file_picker = self.create_file_picker();
         let picked_file_contents = self.create_picked_file_contents();
         column![

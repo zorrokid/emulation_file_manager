@@ -5,9 +5,9 @@ use iced::Task;
 use service::view_model_service::ViewModelService;
 
 use super::{
-    add_release_tab::{self, AddReleaseTabMessage},
     emulators_tab::{self, EmulatorsTabMessage},
     home_tab::{self, HomeTabMessage},
+    releases_tab::{self, ReleasesTabMessage},
     settings_tab::{self, SettingsTabMessage},
 };
 
@@ -15,7 +15,7 @@ use super::{
 pub enum Tab {
     Home,
     Settings,
-    AddRelease,
+    Releases,
     Emulators,
 }
 
@@ -24,7 +24,7 @@ pub enum TabsControllerMessage {
     // child messages
     Home(HomeTabMessage),
     Settings(SettingsTabMessage),
-    AddRelease(AddReleaseTabMessage),
+    AddRelease(ReleasesTabMessage),
     Emulators(EmulatorsTabMessage),
     // local messages
 }
@@ -33,7 +33,7 @@ pub struct TabsController {
     current_tab: Tab,
     home_tab: home_tab::HomeTab,
     settings_tab: settings_tab::SettingsTab,
-    add_release_tab: add_release_tab::AddReleaseTab,
+    releases_tab: releases_tab::ReleasesTab,
     emulators_tab: emulators_tab::EmulatorsTab,
 }
 
@@ -45,7 +45,7 @@ impl TabsController {
     ) -> (Self, Task<TabsControllerMessage>) {
         let settings_tab = settings_tab::SettingsTab::new();
         let home_tab = home_tab::HomeTab::new();
-        let (add_release_tab, task) = add_release_tab::AddReleaseTab::new(
+        let (add_release_tab, task) = releases_tab::ReleasesTab::new(
             Arc::clone(&repositories),
             Arc::clone(&view_model_service),
         );
@@ -62,7 +62,7 @@ impl TabsController {
                 home_tab,
                 settings_tab,
                 current_tab: selected_tab.unwrap_or(Tab::Home),
-                add_release_tab,
+                releases_tab: add_release_tab,
                 emulators_tab,
             },
             combined_task,
@@ -80,7 +80,7 @@ impl TabsController {
                 .update(message)
                 .map(TabsControllerMessage::Settings),
             TabsControllerMessage::AddRelease(message) => self
-                .add_release_tab
+                .releases_tab
                 .update(message)
                 .map(TabsControllerMessage::AddRelease),
             TabsControllerMessage::Emulators(message) => self
@@ -97,8 +97,8 @@ impl TabsController {
                 .settings_tab
                 .view()
                 .map(TabsControllerMessage::Settings),
-            Tab::AddRelease => self
-                .add_release_tab
+            Tab::Releases => self
+                .releases_tab
                 .view()
                 .map(TabsControllerMessage::AddRelease),
             Tab::Emulators => self
