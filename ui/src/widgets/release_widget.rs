@@ -14,12 +14,10 @@ use crate::defaults::{DEFAULT_PADDING, DEFAULT_SPACING};
 
 use super::{
     file_add_widget::FileAddWidgetMessage,
-    file_select_widget::{self, FileSelectWidgetMessage},
+    file_select_widget::FileSelectWidgetMessage,
     files_widget::{self, FilesWidget, FilesWidgetMessage},
-    software_title_add_widget::SoftwareTitleAddWidgetMessage,
-    software_title_select_widget::{self, SoftwareTitleSelectWidgetMessage},
+    software_title_select_widget::SoftwareTitleSelectWidgetMessage,
     software_titles_widget::{self, SoftwareTitlesWidget, SoftwareTitlesWidgetMessage},
-    system_add_widget::SystemAddWidgetMessage,
     system_select_widget,
     systems_widget::{self, SystemWidgetMessage, SystemsWidget},
 };
@@ -352,8 +350,7 @@ impl ReleaseWidget {
         } else {
             "Cancel add release"
         };
-        let cancel_add_emulator_system_button =
-            button(cancel_button_text).on_press(ReleaseWidgetMessage::Cancel);
+        let cancel_button = button(cancel_button_text).on_press(ReleaseWidgetMessage::Cancel);
 
         let systems_view = self
             .systems_widget
@@ -378,7 +375,7 @@ impl ReleaseWidget {
             .then_some(ReleaseWidgetMessage::Submit),
         );
         column![
-            cancel_add_emulator_system_button,
+            cancel_button,
             name_input,
             software_titles_view,
             systems_view,
