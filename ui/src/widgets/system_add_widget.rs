@@ -18,6 +18,7 @@ pub enum SystemAddWidgetMessage {
     AddSystem(String),
     UpdateSystem(i64, String),
     SetEditSystem(i64, String),
+    Reset,
 }
 
 impl SystemAddWidget {
@@ -48,6 +49,11 @@ impl SystemAddWidget {
             SystemAddWidgetMessage::SetEditSystem(id, name) => {
                 self.system_id = Some(id);
                 self.system_name = name;
+                Task::none()
+            }
+            SystemAddWidgetMessage::Reset => {
+                self.system_name.clear();
+                self.system_id = None;
                 Task::none()
             }
             _ => Task::none(),

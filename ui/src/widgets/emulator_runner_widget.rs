@@ -1,4 +1,4 @@
-use std::{cell::OnceCell, path::PathBuf, sync::Arc};
+use std::{cell::OnceCell, collections::HashMap, path::PathBuf, sync::Arc};
 
 use core_types::Sha1Checksum;
 use database::models::{FileSetFileInfo, System};
@@ -15,11 +15,9 @@ use service::{
 };
 
 use crate::{
-    defaults::{DEFAULT_PADDING, DEFAULT_SPACING},
+    defaults::{DEFAULT_LABEL_WIDTH, DEFAULT_PADDING, DEFAULT_SPACING},
     util::file_paths::resolve_file_type_path,
 };
-
-const LABEL_COLUMN_WIDTH: u16 = 150;
 
 pub struct EmulatorRunnerWidget {
     selected_file_set: Option<FileSetViewModel>,
@@ -169,7 +167,7 @@ impl EmulatorRunnerWidget {
                             .files
                             .iter()
                             .map(|f| (f.archive_file_name.clone(), f.file_name.clone()))
-                            .collect::<std::collections::HashMap<_, _>>();
+                            .collect::<HashMap<_, _>>();
 
                         let filename_checksum_mapping = file_set
                             .files
@@ -182,7 +180,7 @@ impl EmulatorRunnerWidget {
                                     .expect("Failed to convert to Sha1Checksum");
                                 (f.archive_file_name.clone(), checksum)
                             })
-                            .collect::<std::collections::HashMap<String, Sha1Checksum>>();
+                            .collect::<HashMap<String, Sha1Checksum>>();
                         let exported_zip_file_name = file_set.file_set_name.clone();
 
                         let extract_files = emulator.extract_files;
@@ -267,7 +265,7 @@ impl EmulatorRunnerWidget {
 
     pub fn view(&self) -> Element<EmulatorRunnerWidgetMessage> {
         let file_set_select_row = row![
-            text("File Sets:").width(LABEL_COLUMN_WIDTH),
+            text("File Sets:").width(DEFAULT_LABEL_WIDTH),
             pick_list(
                 self.file_sets.as_slice(),
                 self.selected_file_set.clone(),
@@ -276,7 +274,7 @@ impl EmulatorRunnerWidget {
         ];
 
         let file_select_row = row![
-            text("Files:").width(LABEL_COLUMN_WIDTH),
+            text("Files:").width(DEFAULT_LABEL_WIDTH),
             pick_list(
                 self.selected_file_set
                     .as_ref()
@@ -287,7 +285,7 @@ impl EmulatorRunnerWidget {
         ];
 
         let system_select_row = row![
-            text("Systems:").width(LABEL_COLUMN_WIDTH),
+            text("Systems:").width(DEFAULT_LABEL_WIDTH),
             pick_list(
                 self.systems.as_slice(),
                 self.selected_system.clone(),
@@ -296,7 +294,7 @@ impl EmulatorRunnerWidget {
         ];
 
         let emulator_select_row = row![
-            text("Emulators:").width(LABEL_COLUMN_WIDTH),
+            text("Emulators:").width(DEFAULT_LABEL_WIDTH),
             pick_list(
                 self.emulators.as_slice(),
                 self.selected_emulator.clone(),

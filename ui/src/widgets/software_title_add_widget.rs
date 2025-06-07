@@ -3,6 +3,7 @@ use iced::{
     widget::{button, row, text_input},
     Task,
 };
+use service::view_models::SoftwareTitleListModel;
 
 use crate::defaults::{DEFAULT_PADDING, DEFAULT_SPACING};
 
@@ -18,6 +19,7 @@ pub enum SoftwareTitleAddWidgetMessage {
     SetEditSoftwareTitle(i64, String),
     AddSoftwareTitle(String),
     UpdateSoftwareTitle(i64, String),
+    Reset,
 }
 
 impl SoftwareTitleAddWidget {
@@ -52,15 +54,20 @@ impl SoftwareTitleAddWidget {
                 self.software_title_name = name;
                 Task::none()
             }
+            SoftwareTitleAddWidgetMessage::Reset => {
+                self.software_title_name.clear();
+                self.software_title_id = None;
+                Task::none()
+            }
             _ => Task::none(),
         }
     }
 
     pub fn view(&self) -> iced::Element<SoftwareTitleAddWidgetMessage> {
-        let name_input = text_input("SoftwareTitle name", &self.software_title_name)
+        let name_input = text_input("Software title name", &self.software_title_name)
             .on_input(SoftwareTitleAddWidgetMessage::SoftwareTitleNameUpdated);
 
-        let submit_button = button("Submit software_title").on_press_maybe(
+        let submit_button = button("Submit").on_press_maybe(
             (!self.software_title_name.is_empty()).then_some(SoftwareTitleAddWidgetMessage::Submit),
         );
         row![name_input, submit_button]

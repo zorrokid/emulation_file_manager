@@ -13,14 +13,14 @@ use database::{
 use file_import::{CompressionMethod, FileImportError};
 use iced::{
     alignment,
-    widget::{button, checkbox, column, pick_list, row, scrollable, text_input, Column},
+    widget::{button, checkbox, column, pick_list, row, scrollable, text, text_input, Column},
     Element, Task,
 };
 use rfd::FileHandle;
 use service::view_models::FileSetListModel;
 
 use crate::{
-    defaults::{DEFAULT_PADDING, DEFAULT_SPACING},
+    defaults::{DEFAULT_LABEL_WIDTH, DEFAULT_PADDING, DEFAULT_PICKER_WIDTH, DEFAULT_SPACING},
     util::file_paths::resolve_file_type_path,
 };
 
@@ -143,7 +143,6 @@ pub struct FileAddWidget {
 #[derive(Debug, Clone)]
 pub enum FileAddWidgetMessage {
     FileNameUpdated(String),
-    CancelAddFile,
     Submit,
     StartFileSelection,
     FileTypeSelected(FileType),
@@ -154,6 +153,7 @@ pub enum FileAddWidgetMessage {
     FilesSavedToDatabase(Result<i64, Error>),
     ExistingFilesRead(Result<Vec<FileInfo>, Error>),
     FileSetAdded(FileSetListModel),
+    Reset,
 }
 
 impl FileAddWidget {
@@ -239,11 +239,6 @@ impl FileAddWidget {
             FileAddWidgetMessage::FileNameUpdated(name) => {
                 self.file_name = name;
             }
-            FileAddWidgetMessage::CancelAddFile => {
-                self.file_name = "".to_string();
-                self.selected_file_type = None;
-                self.file_importer.clear();
-            }
             // This starts the actual import process
             FileAddWidgetMessage::Submit => {
                 if let (Some(handle), Some(file_type)) = (
@@ -327,6 +322,11 @@ impl FileAddWidget {
                     // TODO: delete imported files and show error message
                 }
             },
+            FileAddWidgetMessage::Reset => {
+                self.file_name = "".to_string();
+                self.selected_file_type = None;
+                self.file_importer.clear();
+            }
             _ => (),
         }
         Task::none()
@@ -338,11 +338,10 @@ impl FileAddWidget {
 
         let submit_button = button("Submit file")
             .on_press_maybe((!self.file_name.is_empty()).then_some(FileAddWidgetMessage::Submit));
-        let cancel_button = button("Cancel").on_press(FileAddWidgetMessage::CancelAddFile);
         let file_picker = self.create_file_picker();
         let picked_file_contents = self.create_picked_file_contents();
         column![
-            row![file_picker, name_input, submit_button, cancel_button]
+            row![file_picker, name_input, submit_button]
                 .spacing(DEFAULT_SPACING)
                 .padding(DEFAULT_PADDING)
                 .align_y(alignment::Vertical::Center),
@@ -363,11 +362,20 @@ impl FileAddWidget {
             ],
             self.selected_file_type,
             FileAddWidgetMessage::FileTypeSelected,
-        );
-        let add_file_button = button("Add File").on_press_maybe(
+        )
+        .width(DEFAULT_PICKER_WIDTH)
+        .placeholder("Select file type");
+        let file_type_label = text("File type").width(DEFAULT_LABEL_WIDTH);
+        let add_file_button = button("Select file").on_press_maybe(
             (self.selected_file_type.is_some()).then_some(FileAddWidgetMessage::StartFileSelection),
         );
-        row![collection_file_type_picker, add_file_button].into()
+        row![
+            file_type_label,
+            collection_file_type_picker,
+            add_file_button
+        ]
+        .spacing(DEFAULT_SPACING)
+        .into()
     }
 
     fn create_picked_file_contents(&self) -> Element<FileAddWidgetMessage> {

@@ -2,8 +2,8 @@ use std::{cell::OnceCell, sync::Arc};
 
 use database::{database_error::Error as DatabaseError, repository_manager::RepositoryManager};
 use iced::{
-    widget::{button, column, row, text, Column},
-    Element, Task,
+    widget::{button, column, container, row, text, Column, Container},
+    Element, Length, Task,
 };
 use service::{
     error::Error,
@@ -11,7 +11,7 @@ use service::{
     view_models::{FileSetListModel, Settings},
 };
 
-use crate::defaults::DEFAULT_SPACING;
+use crate::defaults::{DEFAULT_PADDING, DEFAULT_SPACING};
 
 use super::{
     file_add_widget::{self, FileAddWidget, FileAddWidgetMessage},
@@ -22,8 +22,9 @@ pub struct FilesWidget {
     repositories: Arc<RepositoryManager>,
     view_model_service: Arc<ViewModelService>,
     files: Vec<FileSetListModel>,
-    files_widget: FileSelectWidget,
+    file_select_widget: FileSelectWidget,
     add_file_widget: OnceCell<FileAddWidget>,
+    is_edit_mode: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -40,6 +41,8 @@ pub enum FilesWidgetMessage {
     RemoveFile(i64),
     SettingsFetched(Result<Settings, Error>),
     SetSelectedFileIds(Vec<i64>),
+    StartAddFile,
+    CancelAddFile,
 }
 
 impl FilesWidget {
@@ -66,8 +69,9 @@ impl FilesWidget {
                 repositories,
                 view_model_service,
                 files: vec![],
-                files_widget: FileSelectWidget::new(),
+                file_select_widget: FileSelectWidget::new(),
                 add_file_widget: OnceCell::new(),
+                is_edit_mode: false,
             },
             combined_task,
         )
@@ -113,7 +117,7 @@ impl FilesWidget {
                     .map(FilesWidgetMessage::FileAddWidget)
             }
             FilesWidgetMessage::FileSelectWidget(message) => self
-                .files_widget
+                .file_select_widget
                 .update(message)
                 .map(FilesWidgetMessage::FileSelectWidget),
             FilesWidgetMessage::FileAdded(result) => match result {
@@ -131,7 +135,7 @@ impl FilesWidget {
                 }
             },
             FilesWidgetMessage::Reset => self
-                .files_widget
+                .file_select_widget
                 .update(file_select_widget::FileSelectWidgetMessage::Reset)
                 .map(FilesWidgetMessage::FileSelectWidget),
             FilesWidgetMessage::StartEditMode => {
@@ -141,23 +145,48 @@ impl FilesWidget {
                     FilesWidgetMessage::FilesFetched,
                 )
             }
+            FilesWidgetMessage::StartAddFile => {
+                self.is_edit_mode = true;
+                Task::none()
+            }
+            FilesWidgetMessage::CancelAddFile => {
+                self.is_edit_mode = false;
+                self.add_file_widget
+                    .get_mut()
+                    .expect("Add file widget not initialized")
+                    .update(file_add_widget::FileAddWidgetMessage::Reset)
+                    .map(FilesWidgetMessage::FileAddWidget)
+            }
             _ => Task::none(),
         }
     }
 
     pub fn view(&self, selected_file_ids: &[i64]) -> iced::Element<FilesWidgetMessage> {
-        let add_file_view = self
-            .add_file_widget
-            .get()
-            .expect("AddFileWidget not initialized")
-            .view()
-            .map(FilesWidgetMessage::FileAddWidget);
-        let files_view = self
-            .files_widget
+        let add_file_view: Element<FilesWidgetMessage> = if self.is_edit_mode {
+            let add_file_view = self
+                .add_file_widget
+                .get()
+                .expect("AddFileWidget not initialized")
+                .view()
+                .map(FilesWidgetMessage::FileAddWidget);
+            let cancel_button = button("Cancel").on_press(FilesWidgetMessage::CancelAddFile);
+            column![cancel_button, add_file_view].into()
+        } else {
+            button("Add File")
+                .on_press(FilesWidgetMessage::StartAddFile)
+                .into()
+        };
+        let files_select_view = self
+            .file_select_widget
             .view(&self.files)
             .map(FilesWidgetMessage::FileSelectWidget);
         let selected_files_list = self.create_selected_files_list(selected_file_ids);
-        column![add_file_view, files_view, selected_files_list].into()
+        let content = column![files_select_view, add_file_view, selected_files_list];
+        Container::new(content)
+            .style(container::bordered_box)
+            .padding(DEFAULT_PADDING)
+            .width(Length::Fill)
+            .into()
     }
 
     fn create_selected_files_list(

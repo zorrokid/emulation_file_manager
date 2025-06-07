@@ -5,7 +5,9 @@ use iced::{
 };
 use service::view_models::SystemListModel;
 
-use crate::defaults::{DEFAULT_LABEL_WIDTH, DEFAULT_PADDING, DEFAULT_SPACING};
+use crate::defaults::{
+    DEFAULT_LABEL_WIDTH, DEFAULT_PADDING, DEFAULT_PICKER_WIDTH, DEFAULT_SPACING,
+};
 
 pub struct SystemSelectWidget {
     selected_system: Option<SystemListModel>,
@@ -48,8 +50,10 @@ impl SystemSelectWidget {
             systems,
             self.selected_system.clone(),
             SystemSelectWidgetMessage::SystemSelected,
-        );
-        let label = text!("Select system").width(DEFAULT_LABEL_WIDTH);
+        )
+        .width(DEFAULT_PICKER_WIDTH)
+        .placeholder("Select system");
+        let label = text!("System").width(DEFAULT_LABEL_WIDTH);
         row![label, system_select]
             .spacing(DEFAULT_SPACING)
             .padding(DEFAULT_PADDING)

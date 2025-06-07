@@ -5,7 +5,9 @@ use iced::{
 };
 use service::view_models::FileSetListModel;
 
-use crate::defaults::{DEFAULT_LABEL_WIDTH, DEFAULT_PADDING, DEFAULT_SPACING};
+use crate::defaults::{
+    DEFAULT_LABEL_WIDTH, DEFAULT_PADDING, DEFAULT_PICKER_WIDTH, DEFAULT_SPACING,
+};
 
 pub struct FileSelectWidget {
     selected_file: Option<FileSetListModel>,
@@ -45,8 +47,10 @@ impl FileSelectWidget {
             files,
             self.selected_file.clone(),
             FileSelectWidgetMessage::FileSelected,
-        );
-        let label = text!("Select file").width(DEFAULT_LABEL_WIDTH);
+        )
+        .width(DEFAULT_PICKER_WIDTH)
+        .placeholder("Select file set");
+        let label = text!("File set").width(DEFAULT_LABEL_WIDTH);
         row![label, file_select]
             .spacing(DEFAULT_SPACING)
             .padding(DEFAULT_PADDING)

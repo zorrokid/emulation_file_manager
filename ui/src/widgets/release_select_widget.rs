@@ -11,7 +11,9 @@ use service::{
     view_models::ReleaseListModel,
 };
 
-use crate::defaults::{DEFAULT_LABEL_WIDTH, DEFAULT_PADDING, DEFAULT_SPACING};
+use crate::defaults::{
+    DEFAULT_LABEL_WIDTH, DEFAULT_PADDING, DEFAULT_PICKER_WIDTH, DEFAULT_SPACING,
+};
 
 pub struct ReleaseSelectWidget {
     releases: Vec<ReleaseListModel>,
@@ -105,8 +107,10 @@ impl ReleaseSelectWidget {
             self.releases.as_slice(),
             self.selected_release.clone(),
             ReleaseSelectWidgetMessage::ReleaseSelected,
-        );
-        let label = text!("Select release").width(DEFAULT_LABEL_WIDTH);
+        )
+        .width(DEFAULT_PICKER_WIDTH)
+        .placeholder("Select Release");
+        let label = text!("Release").width(DEFAULT_LABEL_WIDTH);
         let clear_filter_button = button("Clear")
             .on_press(ReleaseSelectWidgetMessage::ClearSelection)
             .width(iced::Length::Shrink);

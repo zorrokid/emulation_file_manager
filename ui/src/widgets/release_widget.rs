@@ -10,12 +10,16 @@ use service::{
     view_models::{ReleaseListModel, ReleaseViewModel},
 };
 
+use crate::defaults::{DEFAULT_PADDING, DEFAULT_SPACING};
+
 use super::{
     file_add_widget::FileAddWidgetMessage,
     file_select_widget::{self, FileSelectWidgetMessage},
     files_widget::{self, FilesWidget, FilesWidgetMessage},
-    software_title_select_widget,
+    software_title_add_widget::SoftwareTitleAddWidgetMessage,
+    software_title_select_widget::{self, SoftwareTitleSelectWidgetMessage},
     software_titles_widget::{self, SoftwareTitlesWidget, SoftwareTitlesWidgetMessage},
+    system_add_widget::SystemAddWidgetMessage,
     system_select_widget,
     systems_widget::{self, SystemWidgetMessage, SystemsWidget},
 };
@@ -37,7 +41,7 @@ pub struct ReleaseWidget {
 pub enum ReleaseWidgetMessage {
     // child messages
     SoftwareTitlesWidget(SoftwareTitlesWidgetMessage),
-    Systems(SystemWidgetMessage),
+    SystemsWidget(SystemWidgetMessage),
     FilesWidget(FilesWidgetMessage),
     ClearRelease,
     // local messages
@@ -65,7 +69,7 @@ impl ReleaseWidget {
             FilesWidget::new(Arc::clone(&repositories), Arc::clone(&view_model_service));
 
         let combined_task = Task::batch(vec![
-            systems_task.map(ReleaseWidgetMessage::Systems),
+            systems_task.map(ReleaseWidgetMessage::SystemsWidget),
             software_titles_task.map(ReleaseWidgetMessage::SoftwareTitlesWidget),
             files_task.map(ReleaseWidgetMessage::FilesWidget),
         ]);
@@ -89,7 +93,7 @@ impl ReleaseWidget {
 
     pub fn update(&mut self, message: ReleaseWidgetMessage) -> Task<ReleaseWidgetMessage> {
         match message {
-            ReleaseWidgetMessage::Systems(message) => {
+            ReleaseWidgetMessage::SystemsWidget(message) => {
                 match &message {
                     SystemWidgetMessage::SystemSelectWidget(
                         system_select_widget::SystemSelectWidgetMessage::SystemSelected(system),
@@ -101,18 +105,21 @@ impl ReleaseWidget {
                     SystemWidgetMessage::RemoveSystem(system_id) => {
                         self.selected_system_ids.retain(|&id| id != *system_id);
                     }
+                    SystemWidgetMessage::SystemAdded(Ok(system)) => {
+                        if !self.selected_system_ids.contains(&system.id) {
+                            self.selected_system_ids.push(system.id);
+                        }
+                    }
                     _ => {}
                 }
                 self.systems_widget
                     .update(message)
-                    .map(ReleaseWidgetMessage::Systems)
+                    .map(ReleaseWidgetMessage::SystemsWidget)
             }
             ReleaseWidgetMessage::SoftwareTitlesWidget(message) => {
                 match &message {
-                    software_titles_widget::SoftwareTitlesWidgetMessage::SoftwareTitleSelectWidget(
-                        software_title_select_widget::SoftwareTitleSelectWidgetMessage::SoftwareTitleSelected(
-                            software_title,
-                        ),
+                    SoftwareTitlesWidgetMessage::SoftwareTitleSelectWidget(
+                        SoftwareTitleSelectWidgetMessage::SoftwareTitleSelected(software_title),
                     ) => {
                         if !self
                             .selected_software_title_ids
@@ -121,7 +128,7 @@ impl ReleaseWidget {
                             self.selected_software_title_ids.push(software_title.id);
                         }
                     }
-                    software_titles_widget::SoftwareTitlesWidgetMessage::RemoveSoftwareTitle(software_title_id) => {
+                    SoftwareTitlesWidgetMessage::RemoveSoftwareTitle(software_title_id) => {
                         println!(
                             "AddReleaseTab: Software title removed: {:?}",
                             software_title_id
@@ -129,9 +136,16 @@ impl ReleaseWidget {
                         self.selected_software_title_ids
                             .retain(|&id| id != *software_title_id);
                     }
+                    SoftwareTitlesWidgetMessage::SoftwareTitleAdded(Ok(software_title)) => {
+                        if !self
+                            .selected_software_title_ids
+                            .contains(&software_title.id)
+                        {
+                            self.selected_software_title_ids.push(software_title.id);
+                        }
+                    }
                     _ => {}
                 }
-
                 self.software_titles_widget
                     .update(message)
                     .map(ReleaseWidgetMessage::SoftwareTitlesWidget)
@@ -148,7 +162,6 @@ impl ReleaseWidget {
                     FilesWidgetMessage::RemoveFile(file_id) => {
                         self.selected_file_ids.retain(|&id| id != *file_id);
                     }
-                    // TODO: do this also for software titles and systems
                     FilesWidgetMessage::FileAddWidget(FileAddWidgetMessage::FileSetAdded(
                         list_model,
                     )) => {
@@ -225,7 +238,7 @@ impl ReleaseWidget {
                 Task::batch(vec![
                     self.systems_widget
                         .update(systems_widget::SystemWidgetMessage::StartEditMode(None))
-                        .map(ReleaseWidgetMessage::Systems),
+                        .map(ReleaseWidgetMessage::SystemsWidget),
                     self.software_titles_widget
                         .update(software_titles_widget::SoftwareTitlesWidgetMessage::StartEditMode)
                         .map(ReleaseWidgetMessage::SoftwareTitlesWidget),
@@ -244,7 +257,7 @@ impl ReleaseWidget {
                 Task::batch(vec![
                     self.systems_widget
                         .update(systems_widget::SystemWidgetMessage::Reset)
-                        .map(ReleaseWidgetMessage::Systems),
+                        .map(ReleaseWidgetMessage::SystemsWidget),
                     self.software_titles_widget
                         .update(software_titles_widget::SoftwareTitlesWidgetMessage::Reset)
                         .map(ReleaseWidgetMessage::SoftwareTitlesWidget),
@@ -287,7 +300,7 @@ impl ReleaseWidget {
                     .update(systems_widget::SystemWidgetMessage::SetSelectedSystemIds(
                         system_ids,
                     ))
-                    .map(ReleaseWidgetMessage::Systems);
+                    .map(ReleaseWidgetMessage::SystemsWidget);
 
                 self.release_name = release.name.clone();
 
@@ -307,7 +320,7 @@ impl ReleaseWidget {
                 Task::batch(vec![
                     self.systems_widget
                         .update(systems_widget::SystemWidgetMessage::Reset)
-                        .map(ReleaseWidgetMessage::Systems),
+                        .map(ReleaseWidgetMessage::SystemsWidget),
                     self.software_titles_widget
                         .update(software_titles_widget::SoftwareTitlesWidgetMessage::Reset)
                         .map(ReleaseWidgetMessage::SoftwareTitlesWidget),
@@ -328,6 +341,8 @@ impl ReleaseWidget {
         };
         Container::new(release_view)
             .style(container::bordered_box)
+            .width(800.0)
+            .padding(DEFAULT_PADDING)
             .into()
     }
 
@@ -343,7 +358,7 @@ impl ReleaseWidget {
         let systems_view = self
             .systems_widget
             .view(&self.selected_system_ids)
-            .map(ReleaseWidgetMessage::Systems);
+            .map(ReleaseWidgetMessage::SystemsWidget);
         let software_titles_view = self
             .software_titles_widget
             .view(&self.selected_software_title_ids)
@@ -370,5 +385,6 @@ impl ReleaseWidget {
             files_view,
             submit_button
         ]
+        .spacing(DEFAULT_SPACING)
     }
 }
