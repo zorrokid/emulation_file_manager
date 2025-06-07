@@ -5,7 +5,9 @@ use iced::{
 };
 use service::view_models::SoftwareTitleListModel;
 
-use crate::defaults::{DEFAULT_LABEL_WIDTH, DEFAULT_PADDING, DEFAULT_SPACING};
+use crate::defaults::{
+    DEFAULT_LABEL_WIDTH, DEFAULT_PADDING, DEFAULT_PICKER_WIDTH, DEFAULT_SPACING,
+};
 
 pub struct SoftwareTitleSelectWidget {
     // The currently selected software title for the pick list
@@ -48,8 +50,11 @@ impl SoftwareTitleSelectWidget {
             software_titles,
             self.selected_software_title.clone(),
             SoftwareTitleSelectWidgetMessage::SoftwareTitleSelected,
-        );
-        let label = text!("Select software title").width(DEFAULT_LABEL_WIDTH);
+        )
+        .width(DEFAULT_PICKER_WIDTH)
+        .placeholder("Select software title");
+
+        let label = text!("Software title").width(DEFAULT_LABEL_WIDTH);
         row![label, software_title_select]
             .spacing(DEFAULT_SPACING)
             .padding(DEFAULT_PADDING)

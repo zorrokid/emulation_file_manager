@@ -58,7 +58,7 @@ impl SoftwareTitleRepository {
 
     pub async fn add_software_title(
         &self,
-        name: String,
+        name: &String,
         franchise_id: Option<i64>,
     ) -> Result<i64, Error> {
         let result = sqlx::query!(
@@ -71,7 +71,10 @@ impl SoftwareTitleRepository {
         Ok(result.last_insert_rowid())
     }
 
-    pub async fn update_software_title(&self, software_title: SoftwareTitle) -> Result<i64, Error> {
+    pub async fn update_software_title(
+        &self,
+        software_title: &SoftwareTitle,
+    ) -> Result<i64, Error> {
         sqlx::query!(
             "UPDATE software_title SET name = ?, franchise_id = ? WHERE id = ?",
             software_title.name,

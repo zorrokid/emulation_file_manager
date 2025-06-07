@@ -1,13 +1,15 @@
 use std::sync::Arc;
 
-use database::{database_error::Error as DatabaseError, repository_manager::RepositoryManager};
+use database::{
+    database_error::Error as DatabaseError, models::System, repository_manager::RepositoryManager,
+};
 use iced::{
-    widget::{button, column, row, text, Column},
-    Element, Task,
+    widget::{button, column, container, row, text, Column, Container},
+    Element, Length, Task,
 };
 use service::{error::Error, view_model_service::ViewModelService, view_models::SystemListModel};
 
-use crate::defaults::DEFAULT_SPACING;
+use crate::defaults::{DEFAULT_PADDING, DEFAULT_SPACING};
 
 use super::{
     system_add_widget::{SystemAddWidget, SystemAddWidgetMessage},
@@ -32,11 +34,13 @@ pub enum SystemWidgetMessage {
     SystemSelectWidget(SystemSelectWidgetMessage),
     // local messages
     SystemsFetched(Result<Vec<SystemListModel>, Error>, Option<i64>),
-    SystemAdded(Result<i64, DatabaseError>),
+    SystemAdded(Result<System, DatabaseError>),
+    SystemUpdated(Result<System, DatabaseError>),
     RemoveSystem(i64),
     StartEditSystem(i64),
-    ToggleEditMode,
     SetSelectedSystemIds(Vec<i64>),
+    StartAddSystem,
+    CancelAddSystem,
 }
 
 impl SystemsWidget {
@@ -83,14 +87,36 @@ impl SystemsWidget {
                 SystemAddWidgetMessage::AddSystem(name) => {
                     let repo = Arc::clone(&self.repositories);
                     Task::perform(
-                        async move { repo.get_system_repository().add_system(name).await },
+                        async move {
+                            let result = repo.get_system_repository().add_system(&name).await;
+                            match result {
+                                Ok(system_id) => {
+                                    let system = System {
+                                        id: system_id,
+                                        name,
+                                    };
+                                    Ok(system)
+                                }
+                                Err(e) => Err(e),
+                            }
+                        },
                         SystemWidgetMessage::SystemAdded,
                     )
                 }
                 SystemAddWidgetMessage::UpdateSystem(id, name) => {
                     let repo = Arc::clone(&self.repositories);
                     Task::perform(
-                        async move { repo.get_system_repository().update_system(id, name).await },
+                        async move {
+                            let result =
+                                repo.get_system_repository().update_system(id, &name).await;
+                            match result {
+                                Ok(id) => {
+                                    let system = System { id, name };
+                                    Ok(system)
+                                }
+                                Err(e) => Err(e),
+                            }
+                        },
                         SystemWidgetMessage::SystemAdded,
                     )
                 }
@@ -99,21 +125,40 @@ impl SystemsWidget {
                     .update(message)
                     .map(SystemWidgetMessage::SystemAddWidget),
             },
-            SystemWidgetMessage::SystemAdded(result) => match result {
-                Ok(_) => {
-                    let service = Arc::clone(&self.view_model_service);
-                    Task::perform(
-                        async move { service.get_system_list_models().await },
-                        |result| SystemWidgetMessage::SystemsFetched(result, None),
-                    )
+            SystemWidgetMessage::SystemAdded(result) => {
+                match result {
+                    Ok(system) => {
+                        self.systems.push(SystemListModel {
+                            id: system.id,
+                            name: system.name.clone(),
+                            can_delete: true, // newly added systems can be deleted
+                        });
+                    }
+                    Err(error) => {
+                        eprint!("Error when adding system: {}", error);
+                    }
                 }
-                Err(error) => {
-                    eprint!("Error when adding system: {}", error);
-                    Task::none()
+                Task::none()
+            }
+            SystemWidgetMessage::SystemUpdated(result) => {
+                match result {
+                    Ok(system) => {
+                        if let Some(existing_system) =
+                            self.systems.iter_mut().find(|s| s.id == system.id)
+                        {
+                            existing_system.name = system.name.clone();
+                        } else {
+                            eprintln!("System with id {} not found for update", system.id);
+                        }
+                    }
+                    Err(error) => {
+                        eprint!("Error when updating system: {}", error);
+                    }
                 }
-            },
-            SystemWidgetMessage::ToggleEditMode => {
-                self.is_edit_mode = !self.is_edit_mode;
+                Task::none()
+            }
+            SystemWidgetMessage::StartAddSystem => {
+                self.is_edit_mode = true;
                 Task::none()
             }
             SystemWidgetMessage::StartEditSystem(id) => {
@@ -155,11 +200,11 @@ impl SystemsWidget {
                 .system_add_widget
                 .view()
                 .map(SystemWidgetMessage::SystemAddWidget);
-            let cancel_button = button("Cancel").on_press(SystemWidgetMessage::ToggleEditMode);
+            let cancel_button = button("Cancel").on_press(SystemWidgetMessage::CancelAddSystem);
             column![cancel_button, system_add_view].into()
         } else {
             button("Add System")
-                .on_press(SystemWidgetMessage::ToggleEditMode)
+                .on_press(SystemWidgetMessage::StartAddSystem)
                 .into()
         };
 
@@ -168,7 +213,12 @@ impl SystemsWidget {
             .view(&self.systems)
             .map(SystemWidgetMessage::SystemSelectWidget);
         let selected_systems_list = self.create_selected_systems_list(selected_system_ids);
-        column![system_select_view, selected_systems_list, add_system_view].into()
+        let content = column![system_select_view, selected_systems_list, add_system_view];
+        Container::new(content)
+            .style(container::bordered_box)
+            .padding(DEFAULT_PADDING)
+            .width(Length::Fill)
+            .into()
     }
 
     fn create_selected_systems_list(

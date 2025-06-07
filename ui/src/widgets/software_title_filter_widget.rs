@@ -5,7 +5,9 @@ use iced::{
 };
 use service::view_models::SoftwareTitleListModel;
 
-use crate::defaults::{DEFAULT_LABEL_WIDTH, DEFAULT_PADDING, DEFAULT_SPACING};
+use crate::defaults::{
+    DEFAULT_LABEL_WIDTH, DEFAULT_PADDING, DEFAULT_PICKER_WIDTH, DEFAULT_SPACING,
+};
 
 pub struct SoftwareTitleFilterWidget {
     software_titles: Vec<SoftwareTitleListModel>,
@@ -60,8 +62,10 @@ impl SoftwareTitleFilterWidget {
             self.software_titles.as_slice(),
             self.selected_software_title.clone(),
             SoftwareTitleFilterWidgetMessage::SoftwareTitleSelected,
-        );
-        let label = text!("Select software title").width(DEFAULT_LABEL_WIDTH);
+        )
+        .width(DEFAULT_PICKER_WIDTH)
+        .placeholder("Select software title");
+        let label = text!("Software title").width(DEFAULT_LABEL_WIDTH);
         let clear_button =
             button("Clear").on_press(SoftwareTitleFilterWidgetMessage::ClearSelection);
         row![label, software_title_select, clear_button]
