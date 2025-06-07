@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use iced::{
-    widget::{button, column, text},
+    widget::{button, column, row, text},
     Element, Task,
 };
 use service::{view_model_service::ViewModelService, view_models::ReleaseViewModel};
@@ -19,6 +19,7 @@ pub enum ReleaseViewWidgetMessage {
     SetEditRelease(ReleaseViewModel),
     SetRelease(ReleaseViewModel),
     ClearRelease,
+    CloseReleaseView,
     // Local messages
     StartEditRelease,
 }
@@ -65,6 +66,12 @@ impl ReleaseViewWidget {
                     .update(EmulatorRunnerWidgetMessage::Reset)
                     .map(ReleaseViewWidgetMessage::EmulatorRunnerWidget)
             }
+            ReleaseViewWidgetMessage::CloseReleaseView => {
+                self.release = None;
+                self.emulator_runner_widget
+                    .update(EmulatorRunnerWidgetMessage::Reset)
+                    .map(ReleaseViewWidgetMessage::EmulatorRunnerWidget)
+            }
             _ => Task::none(),
         }
     }
@@ -75,6 +82,8 @@ impl ReleaseViewWidget {
             let software_titles_field = text!("Software Titles: {:?}", release.software_titles);
             let system_names_field = text!("Systems: {:?}", release.systems);
             let edit_button = button("Edit").on_press(ReleaseViewWidgetMessage::StartEditRelease);
+            let close_button = button("Close").on_press(ReleaseViewWidgetMessage::CloseReleaseView);
+            let button_row = row![edit_button, close_button].spacing(10);
 
             let emulator_runner_view = self
                 .emulator_runner_widget
@@ -85,7 +94,7 @@ impl ReleaseViewWidget {
                 release_name_field,
                 software_titles_field,
                 system_names_field,
-                edit_button,
+                button_row,
                 emulator_runner_view,
             ]
             .into()
