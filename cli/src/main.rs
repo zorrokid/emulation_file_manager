@@ -57,6 +57,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         archive_file_name: v.archive_file_name.clone(),
                         sha1_checksum: v.sha1_checksum,
                         file_size: v.file_size,
+                        is_compressed: v.is_compressed,
                     })
                     .collect::<Vec<ImportedFile>>();
 

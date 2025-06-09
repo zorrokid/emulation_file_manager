@@ -447,7 +447,7 @@ mod tests {
         let software_title_repository = SoftwareTitleRepository::new(pool.clone());
 
         let software_title_id = software_title_repository
-            .add_software_title("Test Software Title".to_string(), None)
+            .add_software_title(&"Test Software Title".to_string(), None)
             .await
             .unwrap();
 
@@ -508,31 +508,31 @@ mod tests {
         let software_title_repository = SoftwareTitleRepository::new(pool.clone());
 
         let software_title_1_id = software_title_repository
-            .add_software_title("Software 1".to_string(), None)
+            .add_software_title(&"Software 1".to_string(), None)
             .await
             .unwrap();
 
         let software_title_2_id = software_title_repository
-            .add_software_title("Software 1".to_string(), None)
+            .add_software_title(&"Software 1".to_string(), None)
             .await
             .unwrap();
 
         let software_title_3_id = software_title_repository
-            .add_software_title("Software 3".to_string(), None)
+            .add_software_title(&"Software 3".to_string(), None)
             .await
             .unwrap();
 
         let system_repository = SystemRepository::new(pool.clone());
         let system_1_id = system_repository
-            .add_system("System 1".to_string())
+            .add_system(&"System 1".to_string())
             .await
             .unwrap();
         let system_2_id = system_repository
-            .add_system("System 2".to_string())
+            .add_system(&"System 2".to_string())
             .await
             .unwrap();
         let system_3_id = system_repository
-            .add_system("System 3".to_string())
+            .add_system(&"System 3".to_string())
             .await
             .unwrap();
 
@@ -543,8 +543,10 @@ mod tests {
                 FileType::Rom,
                 vec![ImportedFile {
                     original_file_name: "File1.bin".to_string(),
+                    archive_file_name: "File1.zst".to_string(),
                     file_size: 1024,
                     sha1_checksum: [0; 20],
+                    is_compressed: true,
                 }],
             )
             .await
@@ -556,8 +558,10 @@ mod tests {
                 FileType::Rom,
                 vec![ImportedFile {
                     original_file_name: "File2.bin".to_string(),
+                    archive_file_name: "File1.zst".to_string(),
                     file_size: 1024,
                     sha1_checksum: [1; 20],
+                    is_compressed: true,
                 }],
             )
             .await
@@ -569,8 +573,10 @@ mod tests {
                 FileType::Rom,
                 vec![ImportedFile {
                     original_file_name: "File3.bin".to_string(),
+                    archive_file_name: "File1.zst".to_string(),
                     file_size: 1024,
                     sha1_checksum: [2; 20],
+                    is_compressed: true,
                 }],
             )
             .await

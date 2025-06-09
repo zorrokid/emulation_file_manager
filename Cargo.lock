@@ -6006,14 +6006,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "zpk"
-version = "0.1.0"
-dependencies = [
- "core_types",
- "zstd",
-]
-
-[[package]]
 name = "zstd"
 version = "0.13.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"

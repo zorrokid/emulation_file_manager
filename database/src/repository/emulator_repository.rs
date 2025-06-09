@@ -280,17 +280,17 @@ mod tests {
         let repo = EmulatorRepository::new(pool.clone());
         let system_repo = SystemRepository::new(pool.clone());
         let system_1_id = system_repo
-            .add_system("Test System 1".to_string())
+            .add_system(&"Test System 1".to_string())
             .await
             .unwrap();
 
         let system_2_id = system_repo
-            .add_system("Test System 2".to_string())
+            .add_system(&"Test System 2".to_string())
             .await
             .unwrap();
 
         let system_3_id = system_repo
-            .add_system("Test System 3".to_string())
+            .add_system(&"Test System 3".to_string())
             .await
             .unwrap();
 

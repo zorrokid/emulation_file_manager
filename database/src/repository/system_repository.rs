@@ -97,7 +97,10 @@ mod tests {
         let repo = SystemRepository {
             pool: Arc::new(pool),
         };
-        let id = repo.add_system(TEST_SYSTEM_NAME.to_string()).await.unwrap();
+        let id = repo
+            .add_system(&TEST_SYSTEM_NAME.to_string())
+            .await
+            .unwrap();
         let result = repo.get_system(id).await.unwrap();
         assert_eq!(result.id, id);
         assert_eq!(result.name, TEST_SYSTEM_NAME);
@@ -109,7 +112,10 @@ mod tests {
         let repo = SystemRepository {
             pool: Arc::new(pool),
         };
-        let id = repo.add_system(TEST_SYSTEM_NAME.to_string()).await.unwrap();
+        let id = repo
+            .add_system(&TEST_SYSTEM_NAME.to_string())
+            .await
+            .unwrap();
 
         let result = repo.get_systems().await.unwrap();
         let result = &result[0];
@@ -145,7 +151,10 @@ mod tests {
         let emulator_id = insert_test_emulator(&pool.clone()).await;
 
         let repo = SystemRepository { pool: pool.clone() };
-        let system_id = repo.add_system(TEST_SYSTEM_NAME.to_string()).await.unwrap();
+        let system_id = repo
+            .add_system(&TEST_SYSTEM_NAME.to_string())
+            .await
+            .unwrap();
 
         let result = repo.is_system_in_use(system_id).await.unwrap();
         assert!(!result);

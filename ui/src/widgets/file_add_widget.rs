@@ -97,6 +97,7 @@ impl FileImporter {
                     archive_file_name: file.archive_file_name.clone(),
                     sha1_checksum: checksum,
                     file_size: file.file_size,
+                    is_compressed: file.is_compressed,
                 },
             );
         }

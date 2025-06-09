@@ -59,7 +59,8 @@ CREATE TABLE file_info (
     id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
     sha1_checksum BLOB NOT NULL,
     file_size INTEGER NOT NULL,
-    archive_file_name TEXT NOT NULL
+    archive_file_name TEXT NOT NULL,
+    is_compressed INTEGER NOT NULL
 );
 
 CREATE TABLE file_set (

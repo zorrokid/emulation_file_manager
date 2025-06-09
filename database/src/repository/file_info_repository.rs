@@ -20,7 +20,7 @@ impl FileInfoRepository {
         checksums: Vec<Sha1Checksum>,
     ) -> Result<Vec<FileInfo>, Error> {
         let mut query_builder = QueryBuilder::<Sqlite>::new(
-            "SELECT id, sha1_checksum, file_size, archive_file_name
+            "SELECT id, sha1_checksum, file_size, archive_file_name, is_compressed 
              FROM file_info WHERE sha1_checksum IN (",
         );
         let mut separated = query_builder.separated(", ");
@@ -38,7 +38,7 @@ impl FileInfoRepository {
         file_set_id: i64,
     ) -> Result<Vec<FileInfo>, Error> {
         let query = sqlx::query_as::<_, FileInfo>(
-            "SELECT id, sha1_checksum, file_size 
+            "SELECT id, sha1_checksum, file_size, archive_file_name, is_compressed
              FROM file_info fi
              JOIN file_set_file_info fsfi ON fi.id = fsfi.file_info_id
              WHERE fsfi.file_set_id = ?",
@@ -63,19 +63,37 @@ mod tests {
         let checksum_1 = Sha1Checksum::from([0; 20]);
         let checksum_2 = Sha1Checksum::from([1; 20]);
 
-        query("INSERT INTO file_info (sha1_checksum, file_size) VALUES (?, ?)")
-            .bind(checksum_1.to_vec())
-            .bind(1234)
-            .execute(&*pool)
-            .await
-            .unwrap();
+        query(
+            "INSERT INTO file_info (
+                sha1_checksum, 
+                file_size, 
+                archive_file_name, 
+                is_compressed
+              ) VALUES (?, ?, ?, ?)",
+        )
+        .bind(checksum_1.to_vec())
+        .bind(1234)
+        .bind("test_archive_name_1")
+        .bind(false)
+        .execute(&*pool)
+        .await
+        .unwrap();
 
-        query("INSERT INTO file_info (sha1_checksum, file_size) VALUES (?, ?)")
-            .bind(checksum_2.to_vec())
-            .bind(5678)
-            .execute(&*pool)
-            .await
-            .unwrap();
+        query(
+            "INSERT INTO file_info (
+                sha1_checksum, 
+                file_size, 
+                archive_file_name, 
+                is_compressed
+                ) VALUES (?, ?, ? , ?)",
+        )
+        .bind(checksum_2.to_vec())
+        .bind(5678)
+        .bind("test_archive_name_2")
+        .bind(false)
+        .execute(&*pool)
+        .await
+        .unwrap();
 
         let checksums: Vec<Sha1Checksum> = vec![checksum_1, checksum_2];
         let file_infos = file_info_repository
@@ -96,10 +114,14 @@ mod tests {
         let result = query!(
             "INSERT INTO file_info (
                 sha1_checksum, 
-                file_size
-                ) VALUES (?, ?)",
+                file_size,
+                archive_file_name,
+                is_compressed
+                ) VALUES (?, ?, ?, ?)",
             checksum_1,
-            1234
+            1234,
+            "test_archive_name_1",
+            false
         )
         .execute(&*pool)
         .await
@@ -111,10 +133,14 @@ mod tests {
         let result = query!(
             "INSERT INTO file_info (
                 sha1_checksum, 
-                file_size
-                ) VALUES (?, ?)",
+                file_size,
+                archive_file_name,
+                is_compressed
+                ) VALUES (?, ?, ?, ?)",
             checksum_2,
-            5678
+            5678,
+            "test_archive_name_2",
+            false
         )
         .execute(&*pool)
         .await

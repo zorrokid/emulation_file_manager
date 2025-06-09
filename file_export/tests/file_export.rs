@@ -27,15 +27,15 @@ fn test_export_files() {
     create_sample_compressed_file(&input_dir, TEST_FILE_NAME);
     let (filename_checksum_mapping, output_file_name_mapping) = prepare_file_mappings();
 
+    let output_file_path = output_dir.join(TEST_OUTPUT_FILE_NAME);
     export_files(
-        &input_dir,
-        &output_dir,
+        input_dir,
+        output_dir,
         output_file_name_mapping,
         filename_checksum_mapping,
     )
     .unwrap();
 
-    let output_file_path = output_dir.join(TEST_OUTPUT_FILE_NAME);
     assert!(output_file_path.exists());
     let content = fs::read_to_string(output_file_path).unwrap();
     assert_eq!(content, TEST_FILE_CONTENT);
@@ -53,10 +53,11 @@ fn test_export_files_zipped() {
     create_sample_compressed_file(&input_dir, TEST_FILE_NAME);
 
     let (filename_checksum_mapping, output_file_name_mapping) = prepare_file_mappings();
+    let zip_file_path = output_dir.join("exported_files.zip");
 
     export_files_zipped(
-        &input_dir,
-        &output_dir,
+        input_dir,
+        output_dir,
         output_file_name_mapping,
         filename_checksum_mapping,
         "exported_files.zip".to_string(),
@@ -64,7 +65,6 @@ fn test_export_files_zipped() {
     .unwrap();
 
     // Check if the zip file was created
-    let zip_file_path = output_dir.join("exported_files.zip");
     assert!(zip_file_path.exists());
     // Check if the zip file contains the expected file
     let mut zip_reader = zip::ZipArchive::new(File::open(zip_file_path).unwrap()).unwrap();
