@@ -1,7 +1,6 @@
 pub mod file_outputter;
-use core_types::{FileSize, ImportedFile, ReadFile, Sha1Checksum};
-pub use file_outputter::CompressionMethod;
-use file_outputter::FileOutputter;
+use core_types::{FileSize, FileType, ImportedFile, ReadFile, Sha1Checksum};
+use file_outputter::{output_zstd_compressed, CompressionLevel};
 use sha1::{
     digest::{consts::U20, generic_array::GenericArray},
     Digest, Sha1,
@@ -13,9 +12,9 @@ use std::{
     io::Read,
     path::PathBuf,
 };
+use zip::ZipArchive;
 
 use uuid::Uuid;
-use zip::ZipArchive;
 
 #[derive(Debug, Clone)]
 pub enum FileImportError {
@@ -32,21 +31,39 @@ impl Display for FileImportError {
     }
 }
 
+pub fn get_compression_level(file_type: FileType) -> CompressionLevel {
+    match file_type {
+        FileType::Rom | FileType::DiskImage | FileType::TapeImage | FileType::MemorySnapshot => {
+            CompressionLevel::Good
+        }
+        FileType::Screenshot
+        | FileType::Manual
+        | FileType::CoverScan
+        | FileType::TitleScreen
+        | FileType::LoadingScreen => CompressionLevel::Fast,
+        _ => CompressionLevel::Default,
+    }
+}
+
 /// Import single-non zipped file.
 pub fn import_file(
     file_path: PathBuf,
     output_dir: PathBuf,
-    compression_type: CompressionMethod,
     file_name: String,
+    file_type: FileType,
 ) -> Result<ImportedFile, FileImportError> {
     let mut file = File::open(file_path)
         .map_err(|e| FileImportError::FileIoError(format!("Failed opening file: {}", e)))?;
     let archive_file_name = generate_archive_file_name();
-    let (sha1_checksum, file_size) = compression_type
-        .output(&output_dir, &mut file, &archive_file_name)
-        .map_err(|e| {
-            FileImportError::FileIoError(format!("Failed writing file to output directory: {}", e))
-        })?;
+    let (sha1_checksum, file_size) = output_zstd_compressed(
+        &output_dir,
+        &mut file,
+        &archive_file_name,
+        get_compression_level(file_type),
+    )
+    .map_err(|e| {
+        FileImportError::FileIoError(format!("Failed writing file to output directory: {}", e))
+    })?;
     let imported_file = ImportedFile {
         original_file_name: file_name,
         archive_file_name: archive_file_name.to_string(),
@@ -74,8 +91,8 @@ pub fn import_file(
 pub fn import_files_from_zip(
     file_path: PathBuf,
     output_dir: PathBuf,
-    compression_type: CompressionMethod,
     file_name_filter: HashSet<String>,
+    file_type: FileType,
 ) -> Result<HashMap<Sha1Checksum, ImportedFile>, FileImportError> {
     let file = File::open(file_path)
         .map_err(|e| FileImportError::FileIoError(format!("Failed opening file: {}", e)))?;
@@ -89,14 +106,18 @@ pub fn import_files_from_zip(
             .map_err(|e| FileImportError::ZipError(format!("Failed reading Zip file: {}", e)))?;
         let archive_file_name = generate_archive_file_name();
         if file.is_file() && file_name_filter.contains(file.name()) {
-            let (sha1_checksum, file_size) = compression_type
-                .output(&output_dir, &mut file, &archive_file_name)
-                .map_err(|e| {
-                    FileImportError::FileIoError(format!(
-                        "Failed writing file to output directory: {}",
-                        e
-                    ))
-                })?;
+            let (sha1_checksum, file_size) = output_zstd_compressed(
+                &output_dir,
+                &mut file,
+                &archive_file_name,
+                get_compression_level(file_type),
+            )
+            .map_err(|e| {
+                FileImportError::FileIoError(format!(
+                    "Failed writing file to output directory: {}",
+                    e
+                ))
+            })?;
             let imported_file = ImportedFile {
                 original_file_name: file.name().to_string(),
                 archive_file_name: archive_file_name.to_string(),
@@ -202,14 +223,12 @@ mod tests {
 
     const TEST_FILE_CONTENT: &str = "Hello, world!";
     const TEST_FILE_NAME: &str = "test_file";
-    const TEST_ARCHIVE_FILE_NAME: &str = "test_123";
     const TEST_ZIP_ARCHIVE_NAME: &str = "test.zip";
 
     #[test]
     fn test_import_files_from_zip() {
         let temp_dir = tempdir().unwrap();
         let output_path = temp_dir.into_path();
-        let method = CompressionMethod::Zstd;
 
         let zip_file_path = output_path.join(TEST_ZIP_ARCHIVE_NAME);
         let zip_file = File::create(&zip_file_path).unwrap();
@@ -220,7 +239,8 @@ mod tests {
         zip_writer.finish().unwrap();
         let mut file_name_filter = HashSet::new();
         file_name_filter.insert(TEST_FILE_NAME.to_string());
-        let result = import_files_from_zip(zip_file_path, output_path, method, file_name_filter);
+        let result =
+            import_files_from_zip(zip_file_path, output_path, file_name_filter, FileType::Rom);
         let (checksum, size) = get_sha1_and_size(TEST_FILE_CONTENT);
         assert!(result.is_ok());
         let hash_map = result.unwrap();

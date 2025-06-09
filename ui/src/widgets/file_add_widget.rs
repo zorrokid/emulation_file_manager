@@ -10,7 +10,7 @@ use database::{
     models::{FileInfo, FileType},
     repository_manager::RepositoryManager,
 };
-use file_import::{CompressionMethod, FileImportError};
+use file_import::FileImportError;
 use iced::{
     alignment,
     widget::{button, checkbox, column, pick_list, row, scrollable, text, text_input, Column},
@@ -139,7 +139,7 @@ impl FileImporter {
 
 pub struct FileAddWidget {
     file_name: String,
-    selected_file_type: Option<FileType>,
+    selected_file_type: Option<FileType>, // TODO: use core FileType?
     file_importer: FileImporter,
     collection_root_dir: PathBuf,
     repositories: Arc<RepositoryManager>,
@@ -264,8 +264,8 @@ impl FileAddWidget {
                             file_import::import_files_from_zip(
                                 file_path,
                                 target_path,
-                                CompressionMethod::Zstd,
                                 file_filter,
+                                file_type.into(),
                             )
                         },
                         FileAddWidgetMessage::FilesImported,

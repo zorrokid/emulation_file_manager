@@ -15,3 +15,17 @@ pub struct ReadFile {
     pub sha1_checksum: Sha1Checksum,
     pub file_size: FileSize,
 }
+
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub enum FileType {
+    Rom = 1,
+    DiskImage = 2,
+    TapeImage = 3,
+    Screenshot = 4,
+    Manual = 5,
+    CoverScan = 6,
+    MemorySnapshot = 7,
+    LoadingScreen = 8,
+    TitleScreen = 9,
+    ManualScan = 10,
+}

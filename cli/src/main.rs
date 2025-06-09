@@ -1,8 +1,4 @@
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use async_std::task;
 use clap::Parser;
@@ -10,7 +6,7 @@ use core_types::ImportedFile;
 use database::{get_db_pool, models::FileType, repository_manager::RepositoryManager};
 use emulator_runner::run_with_emulator;
 use file_export::{export_files, export_files_zipped};
-use file_import::{import_files_from_zip, read_zip_contents, CompressionMethod};
+use file_import::{import_files_from_zip, read_zip_contents};
 
 #[derive(Parser, Debug)]
 struct Cli {
@@ -19,10 +15,6 @@ struct Cli {
 
     /// Output directory, where files are outputted individually using selected compression method
     output_directory: String,
-
-    /// Compression method (zip, zstd or none)
-    #[arg(value_enum)]
-    compression_method: CompressionMethod,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -44,8 +36,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         match import_files_from_zip(
             file_path.clone(),
             output_directory.clone(),
-            args.compression_method,
             file_name_filter,
+            FileType::Rom.into(),
         ) {
             Ok(hash_map) => {
                 // let't try inserting file set to database

@@ -6,92 +6,39 @@ use std::{
     fs::{create_dir_all, File},
     io::{Read, Write},
     path::Path,
-    str::FromStr,
 };
 use zstd::Encoder;
 
 use crate::{FileSize, Sha1Checksum};
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum CompressionMethod {
-    Zstd,
-    None,
+pub enum CompressionLevel {
+    Default,
+    Fast,
+    Good,
 }
 
-impl FromStr for CompressionMethod {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "zstd" => Ok(CompressionMethod::Zstd),
-            "none" => Ok(CompressionMethod::None),
-            _ => Err(format!("Invalid compression method: {}", s)),
-        }
-    }
-}
-
-pub trait FileOutputter {
-    fn output<R: Read>(
-        &self,
-        output_dir: &Path,
-        file: &mut R,
-        archive_file_name: &str,
-    ) -> Result<(Sha1Checksum, FileSize), Box<dyn std::error::Error>>;
-}
-
-impl FileOutputter for CompressionMethod {
-    fn output<R: Read>(
-        &self,
-        output_path: &Path,
-        file: &mut R,
-        archive_file_name: &str,
-    ) -> Result<(Sha1Checksum, FileSize), Box<dyn std::error::Error>> {
+impl CompressionLevel {
+    fn to_zstd_level(&self) -> i32 {
         match self {
-            CompressionMethod::Zstd => output_zstd_compressed(output_path, file, archive_file_name),
-            CompressionMethod::None => {
-                output_without_compression(output_path, file, archive_file_name)
-            }
+            CompressionLevel::Fast => 1,
+            CompressionLevel::Default => 3,
+            CompressionLevel::Good => 6,
         }
     }
 }
 
-fn output_without_compression<R: Read>(
+pub fn output_zstd_compressed<R: Read>(
     output_dir: &Path,
     file: &mut R,
     archive_file_name: &str,
-) -> Result<(Sha1Checksum, FileSize), Box<dyn std::error::Error>> {
-    if let Some(parent) = output_dir.parent() {
-        create_dir_all(parent)?;
-    }
-    let mut output_file = File::create(output_dir.join(archive_file_name))?;
-    let mut buffer = [0u8; 8192]; // 8 KB buffer
-    let mut hasher = Sha1::new();
-    let mut size: u64 = 0;
-    loop {
-        let bytes_read = file.read(&mut buffer)?;
-        if bytes_read == 0 {
-            break; // EOF
-        }
-        size += bytes_read as u64;
-        hasher.update(&buffer[..bytes_read]);
-        output_file.write_all(&buffer[..bytes_read])?;
-    }
-    let checksum: GenericArray<u8, U20> = hasher.finalize();
-    let checksum: Sha1Checksum = checksum.into();
-    Ok((checksum, size))
-}
-
-fn output_zstd_compressed<R: Read>(
-    output_dir: &Path,
-    file: &mut R,
-    archive_file_name: &str,
+    compression_level: CompressionLevel,
 ) -> Result<(Sha1Checksum, FileSize), Box<dyn std::error::Error>> {
     let zstd_file_path = output_dir.join(archive_file_name).with_extension("zst");
     if let Some(parent) = zstd_file_path.parent() {
         create_dir_all(parent)?;
     }
     let zstd_file = File::create(zstd_file_path)?;
-    let mut encoder = Encoder::new(zstd_file, 0)?;
+    let mut encoder = Encoder::new(zstd_file, compression_level.to_zstd_level())?;
     let mut buffer = [0u8; 8192]; // 8 KB buffer
     let mut hasher = Sha1::new();
     let mut size: u64 = 0;
@@ -142,40 +89,10 @@ mod tests {
     }
 
     #[test]
-    fn test_output_without_compression() {
-        let temp_dir = tempdir().unwrap();
-        let output_path = temp_dir.path();
-        let buffer = TEST_FILE_CONTENT.as_bytes();
-
-        let zip_output_path = output_path
-            .join(TEST_ZIP_ARCHIVE_NAME)
-            .with_extension("zip");
-        let file = create_test_zip_file(&zip_output_path, TEST_FILE_NAME, buffer).unwrap();
-        let mut zip_archive = zip::ZipArchive::new(file).expect("Failed to read zip file");
-        let mut zip_file = zip_archive
-            .by_name(TEST_FILE_NAME)
-            .expect("Failed to find file in zip archive");
-
-        let method = CompressionMethod::None;
-
-        let (expected_checksum, expected_size) = get_sha1_and_size(TEST_FILE_CONTENT);
-
-        let (checksum, size) = method
-            .output(output_path, &mut zip_file, TEST_ARCHIVE_FILE_NAME)
-            .expect("Failed to write file");
-        assert_eq!(checksum, expected_checksum);
-        assert_eq!(size, expected_size);
-
-        let output_data =
-            fs::read(output_path.join(TEST_ARCHIVE_FILE_NAME)).expect("Failed to read file");
-        assert_eq!(output_data, buffer);
-    }
-
-    #[test]
     fn test_output_zstd_compressed() {
         let temp_dir = tempdir().unwrap();
         let output_path = temp_dir.path();
-        let method = CompressionMethod::Zstd;
+        //let method = CompressionMethod::Zstd;
         let file_content_buffer = TEST_FILE_CONTENT.as_bytes();
 
         let zip_output_path = output_path
@@ -190,9 +107,13 @@ mod tests {
 
         let (expected_checksum, expected_size) = get_sha1_and_size(TEST_FILE_CONTENT);
 
-        let (checksum, size) = method
-            .output(output_path, &mut zip_file, TEST_ARCHIVE_FILE_NAME)
-            .expect("Failed to write file");
+        let (checksum, size) = output_zstd_compressed(
+            output_path,
+            &mut zip_file,
+            TEST_ARCHIVE_FILE_NAME,
+            CompressionLevel::Default,
+        )
+        .expect("Failed to write file");
         assert_eq!(checksum, expected_checksum);
         assert_eq!(size, expected_size);
 
