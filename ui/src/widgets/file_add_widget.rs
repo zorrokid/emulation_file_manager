@@ -186,8 +186,7 @@ impl FileAddWidget {
                     async {
                         rfd::AsyncFileDialog::new()
                             .set_title("Choose a file")
-                            // TODO: support other archive formats and non archived files
-                            .add_filter("Zip archive", &["zip"])
+                            // TODO: filter supported file types based on selected file type
                             .pick_file()
                             .await
                     },
@@ -202,6 +201,8 @@ impl FileAddWidget {
                     self.file_importer.set_current_picked_file(handle.clone());
 
                     return Task::perform(
+                        // TODO: create new method in file_import to handle either single file or
+                        // zip archive and use that instead
                         async move { file_import::read_zip_contents_with_checksums(file_path) },
                         FileAddWidgetMessage::FileContentsRead,
                     );

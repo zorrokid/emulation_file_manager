@@ -1,6 +1,7 @@
 pub mod file_outputter;
 use core_types::{FileSize, ImportedFile, ReadFile, Sha1Checksum};
-pub use file_outputter::{CompressionMethod, FileOutputter};
+pub use file_outputter::CompressionMethod;
+use file_outputter::FileOutputter;
 use sha1::{
     digest::{consts::U20, generic_array::GenericArray},
     Digest, Sha1,
@@ -29,6 +30,31 @@ impl Display for FileImportError {
             FileImportError::FileIoError(err) => write!(f, "File IO error: {}", err),
         }
     }
+}
+
+/// Import single-non zipped file.
+pub fn import_file(
+    file_path: PathBuf,
+    output_dir: PathBuf,
+    compression_type: CompressionMethod,
+    file_name: String,
+) -> Result<ImportedFile, FileImportError> {
+    let mut file = File::open(file_path)
+        .map_err(|e| FileImportError::FileIoError(format!("Failed opening file: {}", e)))?;
+    let archive_file_name = generate_archive_file_name();
+    let (sha1_checksum, file_size) = compression_type
+        .output(&output_dir, &mut file, &archive_file_name)
+        .map_err(|e| {
+            FileImportError::FileIoError(format!("Failed writing file to output directory: {}", e))
+        })?;
+    let imported_file = ImportedFile {
+        original_file_name: file_name,
+        archive_file_name: archive_file_name.to_string(),
+        sha1_checksum,
+        file_size,
+        is_compressed: compression_type != CompressionMethod::None,
+    };
+    Ok(imported_file)
 }
 
 /// Reads the give zip file and imports the files listed in filter to the output directory in given compression method.
@@ -77,6 +103,7 @@ pub fn import_files_from_zip(
                 archive_file_name: archive_file_name.to_string(),
                 sha1_checksum,
                 file_size,
+                is_compressed: compression_type != CompressionMethod::None,
             };
 
             file_name_to_checksum_map.insert(sha1_checksum, imported_file);
@@ -84,6 +111,10 @@ pub fn import_files_from_zip(
     }
     Ok(file_name_to_checksum_map)
 }
+
+// Import given file and store to interal file format.
+// If file is zipped, import each file individually. If also single non zipped files individually.
+// Checks file type, if file type is jpg or png,
 
 fn generate_archive_file_name() -> String {
     Uuid::new_v4().to_string()
