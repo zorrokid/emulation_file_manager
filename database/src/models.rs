@@ -99,7 +99,6 @@ pub struct FileInfo {
     pub sha1_checksum: Vec<u8>,
     pub file_size: u64,
     pub archive_file_name: String,
-    pub is_compressed: bool,
 }
 
 /// FileSet is a container of files related to a single software title release.

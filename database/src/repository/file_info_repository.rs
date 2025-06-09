@@ -20,7 +20,7 @@ impl FileInfoRepository {
         checksums: Vec<Sha1Checksum>,
     ) -> Result<Vec<FileInfo>, Error> {
         let mut query_builder = QueryBuilder::<Sqlite>::new(
-            "SELECT id, sha1_checksum, file_size, archive_file_name, is_compressed 
+            "SELECT id, sha1_checksum, file_size, archive_file_name 
              FROM file_info WHERE sha1_checksum IN (",
         );
         let mut separated = query_builder.separated(", ");
@@ -38,7 +38,7 @@ impl FileInfoRepository {
         file_set_id: i64,
     ) -> Result<Vec<FileInfo>, Error> {
         let query = sqlx::query_as::<_, FileInfo>(
-            "SELECT id, sha1_checksum, file_size, archive_file_name, is_compressed
+            "SELECT id, sha1_checksum, file_size, archive_file_name
              FROM file_info fi
              JOIN file_set_file_info fsfi ON fi.id = fsfi.file_info_id
              WHERE fsfi.file_set_id = ?",
@@ -67,14 +67,12 @@ mod tests {
             "INSERT INTO file_info (
                 sha1_checksum, 
                 file_size, 
-                archive_file_name, 
-                is_compressed
-              ) VALUES (?, ?, ?, ?)",
+                archive_file_name
+                ) VALUES (?, ?, ?)",
         )
         .bind(checksum_1.to_vec())
         .bind(1234)
         .bind("test_archive_name_1")
-        .bind(false)
         .execute(&*pool)
         .await
         .unwrap();
@@ -83,9 +81,8 @@ mod tests {
             "INSERT INTO file_info (
                 sha1_checksum, 
                 file_size, 
-                archive_file_name, 
-                is_compressed
-                ) VALUES (?, ?, ? , ?)",
+                archive_file_name
+                ) VALUES (?, ?, ?)",
         )
         .bind(checksum_2.to_vec())
         .bind(5678)
@@ -115,13 +112,11 @@ mod tests {
             "INSERT INTO file_info (
                 sha1_checksum, 
                 file_size,
-                archive_file_name,
-                is_compressed
-                ) VALUES (?, ?, ?, ?)",
+                archive_file_name
+                ) VALUES (?, ?, ?)",
             checksum_1,
             1234,
             "test_archive_name_1",
-            false
         )
         .execute(&*pool)
         .await
@@ -134,13 +129,11 @@ mod tests {
             "INSERT INTO file_info (
                 sha1_checksum, 
                 file_size,
-                archive_file_name,
-                is_compressed
-                ) VALUES (?, ?, ?, ?)",
+                archive_file_name
+                ) VALUES (?, ?, ?)",
             checksum_2,
             5678,
             "test_archive_name_2",
-            false
         )
         .execute(&*pool)
         .await

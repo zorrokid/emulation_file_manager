@@ -546,7 +546,6 @@ mod tests {
                     archive_file_name: "File1.zst".to_string(),
                     file_size: 1024,
                     sha1_checksum: [0; 20],
-                    is_compressed: true,
                 }],
             )
             .await
@@ -561,7 +560,6 @@ mod tests {
                     archive_file_name: "File1.zst".to_string(),
                     file_size: 1024,
                     sha1_checksum: [1; 20],
-                    is_compressed: true,
                 }],
             )
             .await
@@ -576,7 +574,6 @@ mod tests {
                     archive_file_name: "File1.zst".to_string(),
                     file_size: 1024,
                     sha1_checksum: [2; 20],
-                    is_compressed: true,
                 }],
             )
             .await

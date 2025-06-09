@@ -149,13 +149,11 @@ impl FileSetRepository {
                         "INSERT INTO file_info (
                             sha1_checksum, 
                             file_size, 
-                            archive_file_name,
-                            is_compressed
-                        ) VALUES (?, ?, ?, ?)",
+                            archive_file_name
+                        ) VALUES (?, ?, ?)",
                         checksum,
                         file_size,
-                        archive_file_name,
-                        file.is_compressed
+                        archive_file_name
                     )
                     .execute(&mut *transaction)
                     .await?;
@@ -342,14 +340,12 @@ mod tests {
                 file_size: 123,
                 original_file_name: "test".to_string(),
                 archive_file_name: archive_file_name_1.to_string(),
-                is_compressed: true,
             },
             ImportedFile {
                 sha1_checksum: checksum_2,
                 file_size: 123,
                 original_file_name: "test2".to_string(),
                 archive_file_name: archive_file_name_2.to_string(),
-                is_compressed: true,
             },
         ];
         let file_set_id = FileSetRepository { pool: pool.clone() }
@@ -387,21 +383,18 @@ mod tests {
                 file_size: 123,
                 original_file_name: "file 1".to_string(),
                 archive_file_name: "file_1.zip".to_string(),
-                is_compressed: true,
             },
             ImportedFile {
                 sha1_checksum: checksum_2,
                 file_size: 123,
                 original_file_name: "file 2".to_string(),
                 archive_file_name: "file_2.zip".to_string(),
-                is_compressed: true,
             },
             ImportedFile {
                 sha1_checksum: checksum_3,
                 file_size: 123,
                 original_file_name: "file 3".to_string(),
                 archive_file_name: "file_3.zip".to_string(),
-                is_compressed: true,
             },
         ];
 

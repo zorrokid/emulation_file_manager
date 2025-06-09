@@ -7,7 +7,6 @@ pub struct ImportedFile {
     pub archive_file_name: String,
     pub sha1_checksum: Sha1Checksum,
     pub file_size: FileSize,
-    pub is_compressed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
