@@ -18,6 +18,7 @@ use iced::{
 };
 use rfd::FileHandle;
 use service::view_models::FileSetListModel;
+use utils::file_util;
 
 use crate::{
     defaults::{DEFAULT_LABEL_WIDTH, DEFAULT_PADDING, DEFAULT_PICKER_WIDTH, DEFAULT_SPACING},
@@ -135,6 +136,13 @@ impl FileImporter {
             self.select_file(&sha1_checksum);
         }
     }
+    pub fn is_zip_file(&self) -> bool {
+        if let Some(file_handle) = self.get_current_picked_file() {
+            let file_path = file_handle.path();
+            return file_util::is_zip_file(file_path).unwrap_or(false);
+        }
+        false
+    }
 }
 
 pub struct FileAddWidget {
@@ -200,10 +208,17 @@ impl FileAddWidget {
                     let file_path = handle.path().to_path_buf();
                     self.file_importer.set_current_picked_file(handle.clone());
 
+                    let is_zip = self.file_importer.is_zip_file();
                     return Task::perform(
-                        // TODO: create new method in file_import to handle either single file or
-                        // zip archive and use that instead
-                        async move { file_import::read_zip_contents_with_checksums(file_path) },
+                        async move {
+                            // TODO: combine these two methods into one and check if the file is a
+                            // zip or not in the method itself?
+                            if is_zip {
+                                file_import::read_zip_contents_with_checksums(file_path)
+                            } else {
+                                file_import::read_file_checksum(file_path)
+                            }
+                        },
                         FileAddWidgetMessage::FileContentsRead,
                     );
                 } else {
@@ -259,14 +274,30 @@ impl FileAddWidget {
                         .iter()
                         .map(|file| file.file_name.clone())
                         .collect::<HashSet<String>>();
+                    let Ok(is_zip) = file_util::is_zip_file(&file_path) else {
+                        eprintln!("Error checking if file is a zip: {}", file_path.display());
+                        return Task::none();
+                    };
+                    let file_name = self.file_name.clone();
                     return Task::perform(
                         async move {
-                            file_import::import_files_from_zip(
-                                file_path,
-                                target_path,
-                                file_filter,
-                                file_type.into(),
-                            )
+                            // TODO: maybe combine these two methods into one and check if the file
+                            // is a zip or not in the method itself?
+                            if is_zip {
+                                file_import::import_files_from_zip(
+                                    file_path,
+                                    target_path,
+                                    file_filter,
+                                    file_type.into(),
+                                )
+                            } else {
+                                file_import::import_file(
+                                    file_path,
+                                    target_path,
+                                    file_name,
+                                    file_type.into(),
+                                )
+                            }
                         },
                         FileAddWidgetMessage::FilesImported,
                     );

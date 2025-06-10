@@ -12,6 +12,7 @@ use std::{
     io::Read,
     path::PathBuf,
 };
+use utils::file_util;
 use zip::ZipArchive;
 
 use uuid::Uuid;
@@ -51,7 +52,7 @@ pub fn import_file(
     output_dir: PathBuf,
     file_name: String,
     file_type: FileType,
-) -> Result<ImportedFile, FileImportError> {
+) -> Result<HashMap<Sha1Checksum, ImportedFile>, FileImportError> {
     let mut file = File::open(file_path)
         .map_err(|e| FileImportError::FileIoError(format!("Failed opening file: {}", e)))?;
     let archive_file_name = generate_archive_file_name();
@@ -70,7 +71,11 @@ pub fn import_file(
         sha1_checksum,
         file_size,
     };
-    Ok(imported_file)
+
+    let mut file_name_to_checksum_map: HashMap<Sha1Checksum, ImportedFile> = HashMap::new();
+    file_name_to_checksum_map.insert(sha1_checksum, imported_file);
+
+    Ok(file_name_to_checksum_map)
 }
 
 /// Reads the give zip file and imports the files listed in filter to the output directory in given compression method.
@@ -210,6 +215,37 @@ pub fn read_zip_contents_with_checksums(
     }
 
     Ok(sha1_to_file_name_map)
+}
+
+pub fn read_file_checksum(
+    file_path: PathBuf,
+) -> Result<HashMap<Sha1Checksum, ReadFile>, FileImportError> {
+    let sha1 = file_util::get_file_sha1(&file_path);
+    match sha1 {
+        Ok(checksum) => {
+            let file_size = std::fs::metadata(&file_path)
+                .map_err(|e| {
+                    FileImportError::FileIoError(format!("Failed getting file size: {}", e))
+                })?
+                .len();
+            let read_file = ReadFile {
+                file_name: file_path
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string(),
+                sha1_checksum: checksum,
+                file_size,
+            };
+            let mut map = HashMap::new();
+            map.insert(checksum, read_file);
+            Ok(map)
+        }
+        Err(e) => Err(FileImportError::FileIoError(format!(
+            "Failed calculating SHA1 checksum: {}",
+            e
+        ))),
+    }
 }
 
 #[cfg(test)]
