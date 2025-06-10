@@ -46,6 +46,7 @@ pub fn export_files(
     // key is the archive file name, value is the checksum
     filename_checksum_mapping: HashMap<String, Sha1Checksum>,
 ) -> Result<(), FileExportError> {
+    dbg!("Exporting files with mapping {}", &output_file_name_mapping);
     let mut output_file_names: Vec<String> = Vec::new();
     for (archive_file_name, output_file_name) in output_file_name_mapping {
         output_file_names.push(output_file_name.clone());

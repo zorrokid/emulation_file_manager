@@ -34,6 +34,7 @@ pub async fn run_with_emulator(
         return Err(EmulatorRunnerError::NoFileSelected);
     }
     let file_path = Path::new(&source_path).join(&selected_file_name);
+    println!("Running emulator with file: {}", file_path.display());
     if !file_path.exists() {
         return Err(EmulatorRunnerError::FileNotFound);
     }
