@@ -17,12 +17,21 @@ use iced::{
     Element, Task,
 };
 use rfd::FileHandle;
-use service::view_models::FileSetListModel;
+use service::{
+    error::Error as ServiceError,
+    view_model_service::ViewModelService,
+    view_models::{FileSetListModel, SystemListModel},
+};
 use utils::file_util;
 
 use crate::{
     defaults::{DEFAULT_LABEL_WIDTH, DEFAULT_PADDING, DEFAULT_PICKER_WIDTH, DEFAULT_SPACING},
     util::file_paths::resolve_file_type_path,
+};
+
+use super::{
+    system_select_widget::{SystemSelectWidget, SystemSelectWidgetMessage},
+    systems_widget::{SystemWidgetMessage, SystemsWidget},
 };
 
 pub struct FileImporter {
@@ -151,10 +160,16 @@ pub struct FileAddWidget {
     file_importer: FileImporter,
     collection_root_dir: PathBuf,
     repositories: Arc<RepositoryManager>,
+    selected_system_ids: Vec<i64>,
+    systems_widget: SystemsWidget,
+    systems: Vec<SystemListModel>,
 }
 
 #[derive(Debug, Clone)]
 pub enum FileAddWidgetMessage {
+    // child messages
+    SystemsWidget(SystemWidgetMessage),
+    // local messages
     FileNameUpdated(String),
     Submit,
     StartFileSelection,
@@ -167,17 +182,30 @@ pub enum FileAddWidgetMessage {
     ExistingFilesRead(Result<Vec<FileInfo>, Error>),
     FileSetAdded(FileSetListModel),
     Reset,
+    SystemsFetched(Result<Vec<SystemListModel>, ServiceError>),
 }
 
 impl FileAddWidget {
-    pub fn new(collection_root_dir: PathBuf, repositories: Arc<RepositoryManager>) -> Self {
-        Self {
-            file_name: "".to_string(),
-            selected_file_type: None,
-            collection_root_dir,
-            repositories,
-            file_importer: FileImporter::new(),
-        }
+    pub fn new(
+        collection_root_dir: PathBuf,
+        repositories: Arc<RepositoryManager>,
+        view_model_service: Arc<ViewModelService>,
+    ) -> (Self, Task<FileAddWidgetMessage>) {
+        let (systems_widget, systems_widget_task) =
+            SystemsWidget::new(Arc::clone(&repositories), Arc::clone(&view_model_service));
+        (
+            Self {
+                file_name: "".to_string(),
+                selected_file_type: None,
+                collection_root_dir,
+                repositories,
+                file_importer: FileImporter::new(),
+                selected_system_ids: Vec::new(),
+                systems_widget,
+                systems: Vec::new(),
+            },
+            systems_widget_task.map(FileAddWidgetMessage::SystemsWidget),
+        )
     }
 
     pub fn update(&mut self, message: FileAddWidgetMessage) -> Task<FileAddWidgetMessage> {
@@ -187,7 +215,7 @@ impl FileAddWidget {
             }
             // 1. Start file selection by opening a file dialog
             FileAddWidgetMessage::StartFileSelection => {
-                if self.selected_file_type.is_none() {
+                if self.selected_file_type.is_none() || self.selected_system_ids.is_empty() {
                     return Task::none();
                 }
                 return Task::perform(
@@ -324,10 +352,11 @@ impl FileAddWidget {
                             .collect::<Vec<ImportedFile>>();
 
                         imported_files.extend(self.file_importer.existing_files.values().cloned());
+                        let system_ids = self.selected_system_ids.clone();
                         return Task::perform(
                             async move {
                                 repo.get_file_set_repository()
-                                    .add_file_set(file_name, file_type, imported_files)
+                                    .add_file_set(file_name, file_type, imported_files, &system_ids)
                                     .await
                             },
                             FileAddWidgetMessage::FilesSavedToDatabase,
@@ -364,6 +393,26 @@ impl FileAddWidget {
                 self.selected_file_type = None;
                 self.file_importer.clear();
             }
+            FileAddWidgetMessage::SystemsWidget(message) => {
+                if let SystemWidgetMessage::SystemSelectWidget(
+                    SystemSelectWidgetMessage::SystemSelected(system_list_model),
+                ) = &message
+                {
+                    self.selected_system_ids.push(system_list_model.id);
+                }
+                return self
+                    .systems_widget
+                    .update(message)
+                    .map(FileAddWidgetMessage::SystemsWidget);
+            }
+            FileAddWidgetMessage::SystemsFetched(result) => match result {
+                Ok(systems) => {
+                    self.systems = systems;
+                }
+                Err(err) => {
+                    eprintln!("Error fetching systems: {}", err);
+                }
+            },
             _ => (),
         }
         Task::none()
@@ -380,9 +429,13 @@ impl FileAddWidget {
             .then_some(FileAddWidgetMessage::Submit),
         );
         let file_picker = self.create_file_picker();
+        let systems_widget_view = self
+            .systems_widget
+            .view(&self.selected_system_ids)
+            .map(FileAddWidgetMessage::SystemsWidget);
         let picked_file_contents = self.create_picked_file_contents();
         column![
-            row![file_picker, name_input, submit_button]
+            row![file_picker, name_input, systems_widget_view, submit_button]
                 .spacing(DEFAULT_SPACING)
                 .padding(DEFAULT_PADDING)
                 .align_y(alignment::Vertical::Center),
@@ -408,7 +461,8 @@ impl FileAddWidget {
         .placeholder("Select file type");
         let file_type_label = text("File type").width(DEFAULT_LABEL_WIDTH);
         let add_file_button = button("Select file").on_press_maybe(
-            (self.selected_file_type.is_some()).then_some(FileAddWidgetMessage::StartFileSelection),
+            (self.selected_file_type.is_some() && !self.selected_system_ids.is_empty())
+                .then_some(FileAddWidgetMessage::StartFileSelection),
         );
         row![
             file_type_label,

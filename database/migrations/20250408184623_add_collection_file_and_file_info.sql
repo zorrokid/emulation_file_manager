@@ -61,6 +61,13 @@ CREATE TABLE file_info (
     archive_file_name TEXT NOT NULL
 );
 
+CREATE TABLE file_info_system (
+    file_info_id INTEGER NOT NULL,
+    system_id INTEGER NOT NULL,
+    PRIMARY KEY (file_info_id, system_id),
+    FOREIGN KEY (file_info_id) REFERENCES file_info(id),
+    FOREIGN KEY (system_id) REFERENCES system(id)
+);
 
 CREATE TABLE file_set (
     id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,

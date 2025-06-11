@@ -23,5 +23,3 @@ Run migrations: `sqlx migrate run`
 # Check 
 
 cargo sqlx prepare --check
-
-

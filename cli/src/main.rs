@@ -52,9 +52,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     })
                     .collect::<Vec<ImportedFile>>();
 
+                let system_id = repository_manager
+                    .get_system_repository()
+                    .add_system(&"Commodore 64".to_string())
+                    .await
+                    .expect("Failed to fetch system from database");
+
                 let file_set_id = repository_manager
                     .get_file_set_repository()
-                    .add_file_set(file_name, file_type, picked_files)
+                    .add_file_set(file_name, file_type, picked_files, &[system_id])
                     .await
                     .expect("Failed to insert file set to database");
 

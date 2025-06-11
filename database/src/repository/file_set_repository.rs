@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use core_types::ImportedFile;
 use sqlx::{sqlite::SqliteRow, FromRow, Pool, Row, Sqlite};
@@ -105,11 +105,13 @@ impl FileSetRepository {
         Ok(file_sets)
     }
 
+    // TODO: update file set
     pub async fn add_file_set(
         &self,
         file_set_name: String,
         file_type: FileType,
         files_in_fileset: Vec<ImportedFile>,
+        system_ids: &[i64],
     ) -> Result<i64, Error> {
         let file_type = file_type as i64;
 
@@ -161,6 +163,36 @@ impl FileSetRepository {
                     file_info_result.last_insert_rowid()
                 }
             };
+
+            // insert new systems for file_info
+
+            let file_info_systems = sqlx::query!(
+                "SELECT system_id FROM file_info_system 
+                 WHERE file_info_id = ?",
+                file_info_id
+            )
+            .fetch_all(&mut *transaction)
+            .await?
+            .into_iter()
+            .map(|row| row.system_id)
+            .collect::<HashSet<_>>();
+
+            let system_ids: HashSet<i64> = system_ids.iter().copied().collect();
+
+            let new_system_ids = system_ids.difference(&file_info_systems);
+
+            for system_id in new_system_ids {
+                sqlx::query!(
+                    "INSERT INTO file_info_system (file_info_id, system_id) 
+                     VALUES (?, ?)",
+                    file_info_id,
+                    system_id
+                )
+                .execute(&mut *transaction)
+                .await?;
+            }
+
+            // insert file_set_file_info
 
             sqlx::query!(
                 "INSERT INTO file_set_file_info (
