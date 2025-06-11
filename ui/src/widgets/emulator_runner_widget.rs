@@ -158,6 +158,7 @@ impl EmulatorRunnerWidget {
                             .map(|f| f.file_name.clone())
                             .collect::<Vec<_>>();
                         let selected_file = file.file_name.clone();
+                        let file_set_name = file_set.file_set_name.clone();
 
                         let root_dir = PathBuf::from(root_dir);
                         let temp_dir = std::env::temp_dir();
@@ -184,6 +185,11 @@ impl EmulatorRunnerWidget {
                         let exported_zip_file_name = file_set.file_set_name.clone();
 
                         let extract_files = emulator.extract_files;
+                        let starting_file = if extract_files {
+                            file.file_name.clone()
+                        } else {
+                            exported_zip_file_name.clone()
+                        };
                         Task::perform(
                             async move {
                                 let result = if extract_files {
@@ -209,7 +215,7 @@ impl EmulatorRunnerWidget {
                                             executable,
                                             arguments,
                                             files,
-                                            selected_file,
+                                            starting_file,
                                             temp_path,
                                         )
                                         .await

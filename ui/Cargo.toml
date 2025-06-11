@@ -11,5 +11,6 @@ file_export = { path = "../file_export" }
 file_import = { path = "../file_import" }
 core_types = { path = "../core_types" }
 emulator_runner = { path = "../emulator_runner" }
+utils = { path = "../utils" }
 rfd = "0.15.3"
 

@@ -32,6 +32,7 @@ pub enum FilesWidgetMessage {
     // parent messages
     Reset,
     StartEditMode,
+    SystemsUpdated,
     // child messages
     FileAddWidget(FileAddWidgetMessage),
     FileSelectWidget(FileSelectWidgetMessage),
@@ -93,12 +94,15 @@ impl FilesWidget {
                 Ok(settings) => {
                     let collection_root_dir = settings.collection_root_dir.clone();
                     let repositories = Arc::clone(&self.repositories);
+                    let view_model_service = Arc::clone(&self.view_model_service);
+                    let (file_add_widget, file_add_widget_task) =
+                        FileAddWidget::new(collection_root_dir, repositories, view_model_service);
                     self.add_file_widget
-                        .set(FileAddWidget::new(collection_root_dir, repositories))
+                        .set(file_add_widget)
                         .unwrap_or_else(|_| {
                             panic!("Failed to set add file widget, already set?");
                         });
-                    Task::none()
+                    file_add_widget_task.map(FilesWidgetMessage::FileAddWidget)
                 }
 
                 Err(error) => {

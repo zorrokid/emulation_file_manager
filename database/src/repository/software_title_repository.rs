@@ -121,7 +121,7 @@ mod tests {
 
         // Add a new software title
         let software_title_id = software_title_repository
-            .add_software_title("Test Software Title".to_string(), None)
+            .add_software_title(&"Test Software Title".to_string(), None)
             .await
             .unwrap();
 
@@ -139,7 +139,7 @@ mod tests {
             franchise_id: None,
         };
         software_title_repository
-            .update_software_title(updated_software_title)
+            .update_software_title(&updated_software_title)
             .await
             .unwrap();
 

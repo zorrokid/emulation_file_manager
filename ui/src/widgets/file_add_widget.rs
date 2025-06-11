@@ -10,18 +10,28 @@ use database::{
     models::{FileInfo, FileType},
     repository_manager::RepositoryManager,
 };
-use file_import::{CompressionMethod, FileImportError};
+use file_import::FileImportError;
 use iced::{
     alignment,
     widget::{button, checkbox, column, pick_list, row, scrollable, text, text_input, Column},
     Element, Task,
 };
 use rfd::FileHandle;
-use service::view_models::FileSetListModel;
+use service::{
+    error::Error as ServiceError,
+    view_model_service::ViewModelService,
+    view_models::{FileSetListModel, SystemListModel},
+};
+use utils::file_util;
 
 use crate::{
     defaults::{DEFAULT_LABEL_WIDTH, DEFAULT_PADDING, DEFAULT_PICKER_WIDTH, DEFAULT_SPACING},
     util::file_paths::resolve_file_type_path,
+};
+
+use super::{
+    system_select_widget::{SystemSelectWidget, SystemSelectWidgetMessage},
+    systems_widget::{SystemWidgetMessage, SystemsWidget},
 };
 
 pub struct FileImporter {
@@ -135,18 +145,31 @@ impl FileImporter {
             self.select_file(&sha1_checksum);
         }
     }
+    pub fn is_zip_file(&self) -> bool {
+        if let Some(file_handle) = self.get_current_picked_file() {
+            let file_path = file_handle.path();
+            return file_util::is_zip_file(file_path).unwrap_or(false);
+        }
+        false
+    }
 }
 
 pub struct FileAddWidget {
     file_name: String,
-    selected_file_type: Option<FileType>,
+    selected_file_type: Option<FileType>, // TODO: use core FileType?
     file_importer: FileImporter,
     collection_root_dir: PathBuf,
     repositories: Arc<RepositoryManager>,
+    selected_system_ids: Vec<i64>,
+    systems_widget: SystemsWidget,
+    systems: Vec<SystemListModel>,
 }
 
 #[derive(Debug, Clone)]
 pub enum FileAddWidgetMessage {
+    // child messages
+    SystemsWidget(SystemWidgetMessage),
+    // local messages
     FileNameUpdated(String),
     Submit,
     StartFileSelection,
@@ -159,17 +182,30 @@ pub enum FileAddWidgetMessage {
     ExistingFilesRead(Result<Vec<FileInfo>, Error>),
     FileSetAdded(FileSetListModel),
     Reset,
+    SystemsFetched(Result<Vec<SystemListModel>, ServiceError>),
 }
 
 impl FileAddWidget {
-    pub fn new(collection_root_dir: PathBuf, repositories: Arc<RepositoryManager>) -> Self {
-        Self {
-            file_name: "".to_string(),
-            selected_file_type: None,
-            collection_root_dir,
-            repositories,
-            file_importer: FileImporter::new(),
-        }
+    pub fn new(
+        collection_root_dir: PathBuf,
+        repositories: Arc<RepositoryManager>,
+        view_model_service: Arc<ViewModelService>,
+    ) -> (Self, Task<FileAddWidgetMessage>) {
+        let (systems_widget, systems_widget_task) =
+            SystemsWidget::new(Arc::clone(&repositories), Arc::clone(&view_model_service));
+        (
+            Self {
+                file_name: "".to_string(),
+                selected_file_type: None,
+                collection_root_dir,
+                repositories,
+                file_importer: FileImporter::new(),
+                selected_system_ids: Vec::new(),
+                systems_widget,
+                systems: Vec::new(),
+            },
+            systems_widget_task.map(FileAddWidgetMessage::SystemsWidget),
+        )
     }
 
     pub fn update(&mut self, message: FileAddWidgetMessage) -> Task<FileAddWidgetMessage> {
@@ -179,15 +215,14 @@ impl FileAddWidget {
             }
             // 1. Start file selection by opening a file dialog
             FileAddWidgetMessage::StartFileSelection => {
-                if self.selected_file_type.is_none() {
+                if self.selected_file_type.is_none() || self.selected_system_ids.is_empty() {
                     return Task::none();
                 }
                 return Task::perform(
                     async {
                         rfd::AsyncFileDialog::new()
                             .set_title("Choose a file")
-                            // TODO: support other archive formats and non archived files
-                            .add_filter("Zip archive", &["zip"])
+                            // TODO: filter supported file types based on selected file type
                             .pick_file()
                             .await
                     },
@@ -201,8 +236,17 @@ impl FileAddWidget {
                     let file_path = handle.path().to_path_buf();
                     self.file_importer.set_current_picked_file(handle.clone());
 
+                    let is_zip = self.file_importer.is_zip_file();
                     return Task::perform(
-                        async move { file_import::read_zip_contents_with_checksums(file_path) },
+                        async move {
+                            // TODO: combine these two methods into one and check if the file is a
+                            // zip or not in the method itself?
+                            if is_zip {
+                                file_import::read_zip_contents_with_checksums(file_path)
+                            } else {
+                                file_import::read_file_checksum(file_path)
+                            }
+                        },
                         FileAddWidgetMessage::FileContentsRead,
                     );
                 } else {
@@ -258,14 +302,30 @@ impl FileAddWidget {
                         .iter()
                         .map(|file| file.file_name.clone())
                         .collect::<HashSet<String>>();
+                    let Ok(is_zip) = file_util::is_zip_file(&file_path) else {
+                        eprintln!("Error checking if file is a zip: {}", file_path.display());
+                        return Task::none();
+                    };
+                    let file_name = self.file_name.clone();
                     return Task::perform(
                         async move {
-                            file_import::import_files_from_zip(
-                                file_path,
-                                target_path,
-                                CompressionMethod::Zstd,
-                                file_filter,
-                            )
+                            // TODO: maybe combine these two methods into one and check if the file
+                            // is a zip or not in the method itself?
+                            if is_zip {
+                                file_import::import_files_from_zip(
+                                    file_path,
+                                    target_path,
+                                    file_filter,
+                                    file_type.into(),
+                                )
+                            } else {
+                                file_import::import_file(
+                                    file_path,
+                                    target_path,
+                                    file_name,
+                                    file_type.into(),
+                                )
+                            }
                         },
                         FileAddWidgetMessage::FilesImported,
                     );
@@ -292,10 +352,11 @@ impl FileAddWidget {
                             .collect::<Vec<ImportedFile>>();
 
                         imported_files.extend(self.file_importer.existing_files.values().cloned());
+                        let system_ids = self.selected_system_ids.clone();
                         return Task::perform(
                             async move {
                                 repo.get_file_set_repository()
-                                    .add_file_set(file_name, file_type, imported_files)
+                                    .add_file_set(file_name, file_type, imported_files, &system_ids)
                                     .await
                             },
                             FileAddWidgetMessage::FilesSavedToDatabase,
@@ -332,6 +393,26 @@ impl FileAddWidget {
                 self.selected_file_type = None;
                 self.file_importer.clear();
             }
+            FileAddWidgetMessage::SystemsWidget(message) => {
+                if let SystemWidgetMessage::SystemSelectWidget(
+                    SystemSelectWidgetMessage::SystemSelected(system_list_model),
+                ) = &message
+                {
+                    self.selected_system_ids.push(system_list_model.id);
+                }
+                return self
+                    .systems_widget
+                    .update(message)
+                    .map(FileAddWidgetMessage::SystemsWidget);
+            }
+            FileAddWidgetMessage::SystemsFetched(result) => match result {
+                Ok(systems) => {
+                    self.systems = systems;
+                }
+                Err(err) => {
+                    eprintln!("Error fetching systems: {}", err);
+                }
+            },
             _ => (),
         }
         Task::none()
@@ -348,8 +429,13 @@ impl FileAddWidget {
             .then_some(FileAddWidgetMessage::Submit),
         );
         let file_picker = self.create_file_picker();
+        let systems_widget_view = self
+            .systems_widget
+            .view(&self.selected_system_ids)
+            .map(FileAddWidgetMessage::SystemsWidget);
         let picked_file_contents = self.create_picked_file_contents();
         column![
+            systems_widget_view,
             row![file_picker, name_input, submit_button]
                 .spacing(DEFAULT_SPACING)
                 .padding(DEFAULT_PADDING)
@@ -376,7 +462,8 @@ impl FileAddWidget {
         .placeholder("Select file type");
         let file_type_label = text("File type").width(DEFAULT_LABEL_WIDTH);
         let add_file_button = button("Select file").on_press_maybe(
-            (self.selected_file_type.is_some()).then_some(FileAddWidgetMessage::StartFileSelection),
+            (self.selected_file_type.is_some() && !self.selected_system_ids.is_empty())
+                .then_some(FileAddWidgetMessage::StartFileSelection),
         );
         row![
             file_type_label,

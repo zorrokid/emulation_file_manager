@@ -1,4 +1,5 @@
 use core::fmt;
+use core_types::FileType as CoreFileType;
 use std::fmt::{Display, Formatter};
 
 use sqlx::FromRow;
@@ -12,6 +13,26 @@ pub enum FileType {
     Manual = 5,
     CoverScan = 6,
     MemorySnapshot = 7,
+    LoadingScreen = 8,
+    TitleScreen = 9,
+    ManualScan = 10,
+}
+
+impl From<FileType> for CoreFileType {
+    fn from(value: FileType) -> Self {
+        match value {
+            FileType::Rom => CoreFileType::Rom,
+            FileType::DiskImage => CoreFileType::DiskImage,
+            FileType::TapeImage => CoreFileType::TapeImage,
+            FileType::Screenshot => CoreFileType::Screenshot,
+            FileType::Manual => CoreFileType::Manual,
+            FileType::CoverScan => CoreFileType::CoverScan,
+            FileType::MemorySnapshot => CoreFileType::MemorySnapshot,
+            FileType::LoadingScreen => CoreFileType::LoadingScreen,
+            FileType::TitleScreen => CoreFileType::TitleScreen,
+            FileType::ManualScan => CoreFileType::ManualScan,
+        }
+    }
 }
 
 impl FileType {
@@ -24,6 +45,9 @@ impl FileType {
             FileType::Manual => "manual",
             FileType::CoverScan => "cover_scan",
             FileType::MemorySnapshot => "memory_snapshot",
+            FileType::LoadingScreen => "loading_screen",
+            FileType::TitleScreen => "title_screen",
+            FileType::ManualScan => "manual_scan",
         }
     }
 }
@@ -38,6 +62,9 @@ impl From<FileType> for i64 {
             FileType::Manual => 5,
             FileType::CoverScan => 6,
             FileType::MemorySnapshot => 7,
+            FileType::LoadingScreen => 8,
+            FileType::TitleScreen => 9,
+            FileType::ManualScan => 10,
         }
     }
 }
@@ -53,6 +80,9 @@ impl TryFrom<i64> for FileType {
             5 => Ok(FileType::Manual),
             6 => Ok(FileType::CoverScan),
             7 => Ok(FileType::MemorySnapshot),
+            8 => Ok(FileType::LoadingScreen),
+            9 => Ok(FileType::TitleScreen),
+            10 => Ok(FileType::ManualScan),
             _ => Err(sqlx::Error::ColumnDecode {
                 index: "file_type".into(),
                 source: Box::new(std::io::Error::new(
@@ -74,6 +104,9 @@ impl Display for FileType {
             FileType::Manual => write!(f, "Manual"),
             FileType::CoverScan => write!(f, "Cover Scan"),
             FileType::MemorySnapshot => write!(f, "Memory Snapshot"),
+            FileType::LoadingScreen => write!(f, "Loading Screen"),
+            FileType::TitleScreen => write!(f, "Title Screen"),
+            FileType::ManualScan => write!(f, "Manual Scan"),
         }
     }
 }

@@ -280,7 +280,7 @@ mod tests {
         let view_model_service = ViewModelService::new(repository_manager.clone());
         let system_id = repository_manager
             .get_system_repository()
-            .add_system("Test System".to_string())
+            .add_system(&"Test System".to_string())
             .await
             .unwrap();
         let emulator_systems = vec![EmulatorSystemUpdateModel {
