@@ -435,7 +435,8 @@ impl FileAddWidget {
             .map(FileAddWidgetMessage::SystemsWidget);
         let picked_file_contents = self.create_picked_file_contents();
         column![
-            row![file_picker, name_input, systems_widget_view, submit_button]
+            systems_widget_view,
+            row![file_picker, name_input, submit_button]
                 .spacing(DEFAULT_SPACING)
                 .padding(DEFAULT_PADDING)
                 .align_y(alignment::Vertical::Center),
