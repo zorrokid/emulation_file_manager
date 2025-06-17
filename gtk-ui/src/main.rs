@@ -1,3 +1,5 @@
+use std::cell::Cell;
+
 use gtk::prelude::*;
 use gtk::{glib, Application, Button};
 
@@ -18,8 +20,10 @@ fn build_ui(app: &Application) {
         .margin_end(50)
         .build();
 
-    button.connect_clicked(|button| {
-        button.set_label("Clicked!");
+    let number = Cell::new(0);
+
+    button.connect_clicked(move |_| {
+        number.set(number.get() + 1);
     });
 
     let window = gtk::ApplicationWindow::builder()
