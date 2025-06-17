@@ -1,4 +1,5 @@
 use std::cell::Cell;
+use std::rc::Rc;
 
 use gtk::prelude::*;
 use gtk::{glib, Application, Button};
@@ -20,10 +21,14 @@ fn build_ui(app: &Application) {
         .margin_end(50)
         .build();
 
-    let number = Cell::new(0);
+    let number = Rc::new(Cell::new(0));
 
+    let number_clone = Rc::clone(&number);
     button.connect_clicked(move |_| {
-        number.set(number.get() + 1);
+        number_clone.set(number_clone.get() + 1);
+    });
+    button.connect_clicked(move |_| {
+        number.set(number.get() - 1);
     });
 
     let window = gtk::ApplicationWindow::builder()
