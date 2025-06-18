@@ -1,10 +1,12 @@
+pub mod custom_button;
+use custom_button::CustomButton;
 use glib::clone;
 use gtk::prelude::*;
 use gtk::{glib, Application, Button};
 use std::cell::Cell;
 use std::rc::Rc;
 
-const APP_ID: &str = "org.zorrokid.scm";
+const APP_ID: &str = "org.zorrokid.efm";
 
 fn main() -> glib::ExitCode {
     let app = Application::builder().application_id(APP_ID).build();
@@ -13,13 +15,11 @@ fn main() -> glib::ExitCode {
 }
 
 fn build_ui(app: &Application) {
-    let button_increase = Button::builder()
-        .label("Increase")
-        .margin_top(50)
-        .margin_bottom(50)
-        .margin_start(50)
-        .margin_end(50)
-        .build();
+    let button_increase = CustomButton::with_label("Increase");
+    button_increase.set_margin_top(50);
+    button_increase.set_margin_bottom(50);
+    button_increase.set_margin_start(50);
+    button_increase.set_margin_end(50);
 
     let button_decrease = Button::builder()
         .label("Decrease")
