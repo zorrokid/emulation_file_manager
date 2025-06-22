@@ -19,7 +19,7 @@ fn main() -> glib::ExitCode {
 }
 
 fn build_ui(app: &Application) {
-    // Button with sync blocking action
+    // 1. sync blocking action
     let button_sync = Button::builder()
         .label("Press me (sync)!")
         .margin_top(12)
@@ -33,7 +33,7 @@ fn build_ui(app: &Application) {
     // Connect to "clicked" signal of `button`
     button_sync.connect_clicked(move |_| {
         let sender = sender.clone();
-        // The long running operation runs now in a separate thread
+        // The long running operation runs now in a _separate thread_
         gio::spawn_blocking(move || {
             // Deactivate the button until the operation is done
             sender
@@ -59,7 +59,7 @@ fn build_ui(app: &Application) {
         }
     ));
 
-    // Button with async action
+    // 2. async action
     let button_async = Button::builder()
         .label("Press me (async)!")
         .margin_top(12)
@@ -80,6 +80,37 @@ fn build_ui(app: &Application) {
         ));
     });
 
+    // 3. embed blocking sync call in async context
+    let button_embed_sync = Button::builder()
+        .label("Press me (embedded sync)!")
+        .margin_top(12)
+        .margin_bottom(12)
+        .margin_start(12)
+        .margin_end(12)
+        .build();
+
+    // Connect to "clicked" signal of `button`
+    button_embed_sync.connect_clicked(move |button_embed_sync| {
+        // The main loop executes the asynchronous block
+        glib::spawn_future_local(clone!(
+            #[weak]
+            button_embed_sync,
+            async move {
+                // Deactivate the button until the operation is done
+                button_embed_sync.set_sensitive(false);
+                let enable_button = gio::spawn_blocking(move || {
+                    let five_seconds = Duration::from_secs(5);
+                    thread::sleep(five_seconds);
+                    true
+                })
+                .await
+                .expect("Task needs to finish successfully.");
+                // Set sensitivity of button to `enable_button`
+                button_embed_sync.set_sensitive(enable_button);
+            }
+        ));
+    });
+
     let gtk_box = Box::builder()
         .orientation(gtk::Orientation::Vertical)
         .spacing(12)
@@ -87,6 +118,7 @@ fn build_ui(app: &Application) {
 
     gtk_box.append(&button_sync);
     gtk_box.append(&button_async);
+    gtk_box.append(&button_embed_sync);
 
     // Create a window
     let window = ApplicationWindow::builder()
