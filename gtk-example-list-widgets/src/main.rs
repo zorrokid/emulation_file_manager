@@ -1,7 +1,8 @@
 mod integer_object;
 use gtk::{
-    Application, ApplicationWindow, Label, ListBox, ListItem, ListView, PolicyType, ScrolledWindow,
-    SignalListItemFactory, SingleSelection, Widget, glib,
+    Application, ApplicationWindow, CustomFilter, CustomSorter, FilterChange, FilterListModel,
+    Label, ListBox, ListItem, ListView, PolicyType, ScrolledWindow, SignalListItemFactory,
+    SingleSelection, SortListModel, SorterChange, Widget, glib,
 };
 use gtk::{gio, prelude::*};
 
@@ -41,12 +42,43 @@ fn build_ui(app: &Application) {
         item.set_child(Some(&label));
 
         // Bind `list_item->item->number` to `label->label`
+        // An expression provides a way to describe references to values. One interesting part here is that these references can be several steps away.
+        //
+        // Expressions allow us to describe relationships between objects or properties that might not even exist yet. We just had to tell it to change the label whenever the number that belongs to it changes.
         item.property_expression("item")
             .chain_property::<IntegerObject>("number")
             .bind(&label, "label", Widget::NONE);
     });
 
-    factory.connect_bind(move |_, item| {
+    let filter = CustomFilter::new(move |obj| {
+        let integer_object = obj
+            .downcast_ref::<IntegerObject>()
+            .expect("Failed to downcast to IntegerObject");
+        // This filter will only allow items with an even number to be displayed
+        integer_object.number() % 2 == 0
+    });
+
+    let filter_model = FilterListModel::new(Some(model), Some(filter.clone()));
+
+    let sorter = CustomSorter::new(move |obj1, obj2| {
+        // Get `IntegerObject` from `glib::Object`
+        let integer_object_1 = obj1
+            .downcast_ref::<IntegerObject>()
+            .expect("The object needs to be of type `IntegerObject`.");
+        let integer_object_2 = obj2
+            .downcast_ref::<IntegerObject>()
+            .expect("The object needs to be of type `IntegerObject`.");
+
+        // Get property "number" from `IntegerObject`
+        let number_1 = integer_object_1.number();
+        let number_2 = integer_object_2.number();
+
+        // Reverse sorting order -> large numbers come first
+        number_2.cmp(&number_1).into()
+    });
+    let sort_model = SortListModel::new(Some(filter_model), Some(sorter.clone()));
+
+    /*factory.connect_bind(move |_, item| {
         let integer_object = item
             .downcast_ref::<ListItem>()
             .expect("Failed to downcast to ListItem")
@@ -62,18 +94,21 @@ fn build_ui(app: &Application) {
             .expect("Failed to downcast to Label");
 
         label.set_label(&integer_object.number().to_string());
-    });
+    });*/
 
-    let selection_model = SingleSelection::new(Some(model));
+    let selection_model = SingleSelection::new(Some(sort_model));
     let list_view = ListView::new(Some(selection_model), Some(factory));
 
     list_view.connect_activate(move |list_view, position| {
         let model = list_view.model().expect("The model has to be set");
-        let ingo_object = model
+        let ingteger_object = model
             .item(position)
             .and_downcast::<IntegerObject>()
             .expect("Failed to downcast to IntegerObject");
-        ingo_object.increase_number();
+        ingteger_object.increase_number();
+
+        filter.changed(FilterChange::Different);
+        sorter.changed(SorterChange::Different);
     });
 
     let scrolled_window = ScrolledWindow::builder()
