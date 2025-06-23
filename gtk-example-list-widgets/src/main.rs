@@ -1,7 +1,7 @@
 mod integer_object;
 use gtk::{
     Application, ApplicationWindow, Label, ListBox, ListItem, ListView, PolicyType, ScrolledWindow,
-    SignalListItemFactory, SingleSelection, glib,
+    SignalListItemFactory, SingleSelection, Widget, glib,
 };
 use gtk::{gio, prelude::*};
 
@@ -32,11 +32,18 @@ fn build_ui(app: &Application) {
     }
 
     let factory = SignalListItemFactory::new();
+
     factory.connect_setup(move |_, item| {
         let label = Label::new(None);
-        item.downcast_ref::<ListItem>()
-            .expect("Failed to downcast to ListItem")
-            .set_child(Some(&label));
+        let item = item
+            .downcast_ref::<ListItem>()
+            .expect("Failed to downcast to ListItem");
+        item.set_child(Some(&label));
+
+        // Bind `list_item->item->number` to `label->label`
+        item.property_expression("item")
+            .chain_property::<IntegerObject>("number")
+            .bind(&label, "label", Widget::NONE);
     });
 
     factory.connect_bind(move |_, item| {
@@ -59,6 +66,15 @@ fn build_ui(app: &Application) {
 
     let selection_model = SingleSelection::new(Some(model));
     let list_view = ListView::new(Some(selection_model), Some(factory));
+
+    list_view.connect_activate(move |list_view, position| {
+        let model = list_view.model().expect("The model has to be set");
+        let ingo_object = model
+            .item(position)
+            .and_downcast::<IntegerObject>()
+            .expect("Failed to downcast to IntegerObject");
+        ingo_object.increase_number();
+    });
 
     let scrolled_window = ScrolledWindow::builder()
         .hscrollbar_policy(PolicyType::Never)
