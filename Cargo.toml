@@ -1,4 +1,4 @@
 [workspace]
-members = ["file_import", "cli", "ui", "file_export", "database", "emulator_runner", "service", "file_system", "core_types", "utils", "gtk-ui", "gtk-example-main-loop", "gtk-example-list-widgets"]
+members = ["file_import", "cli", "ui", "file_export", "database", "emulator_runner", "service", "file_system", "core_types", "utils", "gtk-ui", "gtk-example-main-loop", "gtk-example-list-widgets", "todo-app"]
 
 resolver = "2"
