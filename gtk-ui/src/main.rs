@@ -1,7 +1,7 @@
 use gtk::prelude::*;
 use gtk::{glib, Application};
 
-const APP_ID: &str = "org.zorrokid.efm";
+const APP_ID: &str = "org.zorrokid.emufiles";
 
 fn main() -> glib::ExitCode {
     let app = Application::builder().application_id(APP_ID).build();
@@ -12,7 +12,7 @@ fn main() -> glib::ExitCode {
 fn build_ui(app: &Application) {
     let window = gtk::ApplicationWindow::builder()
         .application(app)
-        .title("EFCM")
+        .title("Emu Files")
         .build();
 
     window.present();
