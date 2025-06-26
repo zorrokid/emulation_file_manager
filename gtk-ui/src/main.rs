@@ -1,3 +1,5 @@
+mod components;
+mod objects;
 mod window;
 
 use gtk::prelude::*;
