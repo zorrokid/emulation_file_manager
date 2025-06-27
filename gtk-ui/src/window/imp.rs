@@ -37,6 +37,12 @@ impl ObjectImpl for Window {
     fn constructed(&self) {
         // Call "constructed" on parent
         self.parent_constructed();
+
+        // Setup
+        let obj = self.obj();
+        obj.setup_tasks();
+        obj.setup_callbacks();
+        obj.setup_factory();
     }
 }
 
