@@ -1,5 +1,8 @@
 mod imp;
 
+use std::sync::Arc;
+
+use database::repository_manager::RepositoryManager;
 use glib::{clone, Object};
 use gtk::subclass::prelude::*;
 use gtk::{gio, glib, Application, NoSelection, SignalListItemFactory};
@@ -8,7 +11,7 @@ use gtk::{prelude::*, ListItem};
 use crate::components::software_title_row::SoftwareTitleRow;
 use crate::objects::software_title::SoftwareTitleObject;
 
-// In order to use the composite template, we create a custom widget.
+// define custome Window widget
 glib::wrapper! {
     pub struct Window(ObjectSubclass<imp::Window>)
         @extends gtk::ApplicationWindow, gtk::Window, gtk::Widget,
@@ -17,9 +20,10 @@ glib::wrapper! {
 }
 
 impl Window {
-    pub fn new(app: &Application) -> Self {
-        // Create new window
-        Object::builder().property("application", app).build()
+    pub fn new(app: &Application, repo_manager: Arc<RepositoryManager>) -> Self {
+        let window: Self = Object::builder().property("application", app).build();
+        window.imp().repo_manager.replace(Some(repo_manager));
+        window
     }
 
     fn software_titles(&self) -> gio::ListStore {
@@ -33,6 +37,8 @@ impl Window {
 
     fn setup_tasks(&self) {
         // Create new model
+        // gio::ListStore only accepts GObjects, that's why we use `SoftwareTitleObject` which is a
+        // subclass of GObject.
         let model = gio::ListStore::new::<SoftwareTitleObject>();
 
         // Get state and set model
@@ -51,7 +57,7 @@ impl Window {
             #[weak(rename_to = window)]
             self,
             move |_| {
-                window.new_task();
+                window.new_software_title();
             }
         ));
 
@@ -60,12 +66,12 @@ impl Window {
             #[weak(rename_to = window)]
             self,
             move |_, _| {
-                window.new_task();
+                window.new_software_title();
             }
         ));
     }
 
-    fn new_task(&self) {
+    fn new_software_title(&self) {
         // Get content from entry and clear it
         let buffer = self.imp().entry.buffer();
         let content = buffer.text().to_string();
@@ -74,7 +80,7 @@ impl Window {
         }
         buffer.set_text("");
 
-        // Add new task to model
+        // Add new software title to model
         let task = SoftwareTitleObject::new(content);
         self.software_titles().append(&task);
     }

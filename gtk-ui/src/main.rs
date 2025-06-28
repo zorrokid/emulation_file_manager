@@ -2,26 +2,43 @@ mod components;
 mod objects;
 mod window;
 
+use async_std::task;
+use std::sync::Arc;
+
+use database::get_db_pool;
+use database::repository_manager::RepositoryManager;
 use gtk::prelude::*;
 use gtk::{gio, glib, Application};
 use window::Window;
 
 const APP_ID: &str = "org.zorrokid.emufiles";
 
-fn main() -> glib::ExitCode {
+fn main() {
+    task::block_on(async_main());
+}
+
+async fn async_main() {
+    // Async DB pool setup
+    let pool = match get_db_pool().await {
+        Ok(pool) => pool,
+        Err(err) => {
+            eprintln!("Failed connecting to database: {}", err);
+            return;
+        }
+    };
+    let repo_manager = Arc::new(RepositoryManager::new(pool));
     // Register and include resources
     gio::resources_register_include!("emufiles.gresource").expect("Failed to register resources.");
 
-    // Create a new application
     let app = Application::builder().application_id(APP_ID).build();
-
-    // Connect to "activate" signal of `app`
-    app.connect_activate(build_ui);
-    app.run()
+    app.connect_activate(move |app| {
+        build_ui(app, repo_manager.clone());
+    });
+    app.run();
 }
 
-fn build_ui(app: &Application) {
+fn build_ui(app: &Application, repo_manager: Arc<RepositoryManager>) {
     // Create a new custom window and present it
-    let window = Window::new(app);
+    let window = Window::new(app, repo_manager);
     window.present();
 }

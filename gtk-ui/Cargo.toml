@@ -5,6 +5,9 @@ edition = "2021"
 
 [dependencies]
 gtk = { version = "0.9.6", package = "gtk4", features = ["v4_8"] }
+database = { path = "../database" }
+service = { path = "../service" }
+async-std = "1.13.1"
 
 [build-dependencies]
 glib-build-tools = "0.20.0"

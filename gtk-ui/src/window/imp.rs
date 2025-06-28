@@ -1,5 +1,7 @@
 use std::cell::RefCell;
+use std::sync::Arc;
 
+use database::repository_manager::RepositoryManager;
 use glib::subclass::InitializingObject;
 use gtk::subclass::prelude::*;
 use gtk::{gio, glib, CompositeTemplate, Entry, ListView};
@@ -13,6 +15,7 @@ pub struct Window {
     #[template_child]
     pub software_titles_list: TemplateChild<ListView>,
     pub software_titles: RefCell<Option<gio::ListStore>>,
+    pub repo_manager: RefCell<Option<Arc<RepositoryManager>>>,
 }
 
 // The central trait for subclassing a GObject
@@ -20,7 +23,9 @@ pub struct Window {
 impl ObjectSubclass for Window {
     // `NAME` needs to match `class` attribute of template
     const NAME: &'static str = "EmuFilesWindow";
+    // This is the type of the object that this subclass will create
     type Type = super::Window;
+    // The parent type (GObject that we inherit of)
     type ParentType = gtk::ApplicationWindow;
 
     fn class_init(klass: &mut Self::Class) {
