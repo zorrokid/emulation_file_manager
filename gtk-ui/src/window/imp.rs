@@ -7,6 +7,7 @@ use gtk::subclass::prelude::*;
 use gtk::{gio, glib, CompositeTemplate, Entry, ListView};
 
 use crate::objects::repository_manager::RepositoryManagerObject;
+use crate::objects::view_model_service::ViewModelServiceObject;
 
 // Object holding the state
 #[derive(CompositeTemplate, Default, Properties)]
@@ -20,6 +21,8 @@ pub struct Window {
     pub software_titles: RefCell<Option<gio::ListStore>>,
     #[property(get, set)]
     pub repo_manager: RefCell<Option<RepositoryManagerObject>>,
+    #[property(get, set)]
+    pub view_model_service: RefCell<Option<ViewModelServiceObject>>,
 }
 
 // The central trait for subclassing a GObject
@@ -50,7 +53,6 @@ impl ObjectImpl for Window {
 
         // Setup
         let obj = self.obj();
-        //obj.bind_property("repo-manager", obj.as_ref(), "inner");
         obj.setup_software_titles();
         obj.setup_callbacks();
         obj.setup_factory();

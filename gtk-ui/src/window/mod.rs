@@ -1,8 +1,5 @@
 mod imp;
 
-use std::sync::Arc;
-
-use database::repository_manager::RepositoryManager;
 use glib::{clone, Object};
 use gtk::subclass::prelude::*;
 use gtk::{gio, glib, Application, NoSelection, SignalListItemFactory};
@@ -11,6 +8,7 @@ use gtk::{prelude::*, ListItem};
 use crate::components::software_title_row::SoftwareTitleRow;
 use crate::objects::repository_manager::RepositoryManagerObject;
 use crate::objects::software_title::SoftwareTitleObject;
+use crate::objects::view_model_service::ViewModelServiceObject;
 
 // define custome Window widget
 glib::wrapper! {
@@ -21,10 +19,15 @@ glib::wrapper! {
 }
 
 impl Window {
-    pub fn new(app: &Application, repo_manager: RepositoryManagerObject) -> Self {
+    pub fn new(
+        app: &Application,
+        repo_manager: RepositoryManagerObject,
+        view_model_service: ViewModelServiceObject,
+    ) -> Self {
         let window: Self = Object::builder()
             .property("application", app)
             .property("repo-manager", repo_manager)
+            .property("view-model-service", view_model_service)
             .build();
         window
     }
