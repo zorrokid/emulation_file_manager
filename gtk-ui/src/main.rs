@@ -3,6 +3,7 @@ mod objects;
 mod window;
 
 use async_std::task;
+use objects::repository_manager::RepositoryManagerObject;
 use std::sync::Arc;
 
 use database::get_db_pool;
@@ -39,6 +40,8 @@ async fn async_main() {
 
 fn build_ui(app: &Application, repo_manager: Arc<RepositoryManager>) {
     // Create a new custom window and present it
+
+    let repo_manager = RepositoryManagerObject::new(repo_manager);
     let window = Window::new(app, repo_manager);
     window.present();
 }

@@ -9,6 +9,7 @@ use gtk::{gio, glib, Application, NoSelection, SignalListItemFactory};
 use gtk::{prelude::*, ListItem};
 
 use crate::components::software_title_row::SoftwareTitleRow;
+use crate::objects::repository_manager::RepositoryManagerObject;
 use crate::objects::software_title::SoftwareTitleObject;
 
 // define custome Window widget
@@ -20,9 +21,11 @@ glib::wrapper! {
 }
 
 impl Window {
-    pub fn new(app: &Application, repo_manager: Arc<RepositoryManager>) -> Self {
-        let window: Self = Object::builder().property("application", app).build();
-        window.imp().repo_manager.replace(Some(repo_manager));
+    pub fn new(app: &Application, repo_manager: RepositoryManagerObject) -> Self {
+        let window: Self = Object::builder()
+            .property("application", app)
+            .property("repo-manager", repo_manager)
+            .build();
         window
     }
 
@@ -35,7 +38,7 @@ impl Window {
             .expect("Could not get current software titles.")
     }
 
-    fn setup_tasks(&self) {
+    fn setup_software_titles(&self) {
         // Create new model
         // gio::ListStore only accepts GObjects, that's why we use `SoftwareTitleObject` which is a
         // subclass of GObject.

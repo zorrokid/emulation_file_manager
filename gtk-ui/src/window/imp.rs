@@ -1,13 +1,16 @@
+use gtk::glib::object::ObjectExt;
 use std::cell::RefCell;
-use std::sync::Arc;
 
-use database::repository_manager::RepositoryManager;
 use glib::subclass::InitializingObject;
+use gtk::glib::Properties;
 use gtk::subclass::prelude::*;
 use gtk::{gio, glib, CompositeTemplate, Entry, ListView};
 
+use crate::objects::repository_manager::RepositoryManagerObject;
+
 // Object holding the state
-#[derive(CompositeTemplate, Default)]
+#[derive(CompositeTemplate, Default, Properties)]
+#[properties(wrapper_type = super::Window)]
 #[template(resource = "/org/zorrokid/emufiles/window.ui")]
 pub struct Window {
     #[template_child]
@@ -15,7 +18,8 @@ pub struct Window {
     #[template_child]
     pub software_titles_list: TemplateChild<ListView>,
     pub software_titles: RefCell<Option<gio::ListStore>>,
-    pub repo_manager: RefCell<Option<Arc<RepositoryManager>>>,
+    #[property(get, set)]
+    pub repo_manager: RefCell<Option<RepositoryManagerObject>>,
 }
 
 // The central trait for subclassing a GObject
@@ -38,6 +42,7 @@ impl ObjectSubclass for Window {
 }
 
 // Trait shared by all GObjects
+#[glib::derived_properties]
 impl ObjectImpl for Window {
     fn constructed(&self) {
         // Call "constructed" on parent
@@ -45,7 +50,8 @@ impl ObjectImpl for Window {
 
         // Setup
         let obj = self.obj();
-        obj.setup_tasks();
+        //obj.bind_property("repo-manager", obj.as_ref(), "inner");
+        obj.setup_software_titles();
         obj.setup_callbacks();
         obj.setup_factory();
     }
