@@ -157,8 +157,6 @@ impl Window {
     }
 
     fn fetch_software_titles(&self) {
-        println!("Fetching software titles...");
-        //let view_model_service = self.imp().view_model_service.clone();
         let view_model_service = self.view_model_service();
         let list_store = self.software_titles();
         let gtk_window_weak: WeakRef<gtk::Window> = self.upcast_ref::<gtk::Window>().downgrade();
@@ -167,16 +165,10 @@ impl Window {
             #[weak]
             list_store,
             async move {
-                // Borrow and clone the Option<ViewModelServiceObject>
-                //let service_opt = view_model_service.borrow().clone();
-                println!("Service object: {:?}", view_model_service);
-
                 if let Some(service_object) = view_model_service {
-                    println!("Fetching software titles from service...");
                     match service_object.get_software_title_list_models().await {
                         Ok(titles) => {
                             for title in titles {
-                                println!("Adding software title: {}", &title.name().clone());
                                 list_store.append(&title);
                             }
                         }
