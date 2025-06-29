@@ -1,14 +1,19 @@
 mod imp;
 
 use glib::{clone, Object};
+use gtk::glib::{MainContext, WeakRef};
 use gtk::subclass::prelude::*;
-use gtk::{gio, glib, Application, NoSelection, SignalListItemFactory};
+use gtk::{
+    gio, glib, Application, ButtonsType, MessageDialog, MessageType, NoSelection,
+    SignalListItemFactory,
+};
 use gtk::{prelude::*, ListItem};
 
 use crate::components::software_title_row::SoftwareTitleRow;
 use crate::objects::repository_manager::RepositoryManagerObject;
 use crate::objects::software_title::SoftwareTitleObject;
-use crate::objects::view_model_service::ViewModelServiceObject;
+use crate::objects::view_model_service::{self, ViewModelServiceObject};
+use crate::util::error::show_error_dialog;
 
 // define custome Window widget
 glib::wrapper! {
@@ -141,5 +146,51 @@ impl Window {
 
         // Set the factory of the list view
         self.imp().software_titles_list.set_factory(Some(&factory));
+    }
+
+    fn setup_property_callbacks(&self) {
+        self.connect_notify_local(Some("view-model-service"), |window, _| {
+            if window.view_model_service().is_some() {
+                window.fetch_software_titles();
+            }
+        });
+    }
+
+    fn fetch_software_titles(&self) {
+        println!("Fetching software titles...");
+        //let view_model_service = self.imp().view_model_service.clone();
+        let view_model_service = self.view_model_service();
+        let list_store = self.software_titles();
+        let gtk_window_weak: WeakRef<gtk::Window> = self.upcast_ref::<gtk::Window>().downgrade();
+
+        MainContext::default().spawn_local(clone!(
+            #[weak]
+            list_store,
+            async move {
+                // Borrow and clone the Option<ViewModelServiceObject>
+                //let service_opt = view_model_service.borrow().clone();
+                println!("Service object: {:?}", view_model_service);
+
+                if let Some(service_object) = view_model_service {
+                    println!("Fetching software titles from service...");
+                    match service_object.get_software_title_list_models().await {
+                        Ok(titles) => {
+                            for title in titles {
+                                println!("Adding software title: {}", &title.name().clone());
+                                list_store.append(&title);
+                            }
+                        }
+                        Err(err) => {
+                            if let Some(gtk_window) = gtk_window_weak.upgrade() {
+                                show_error_dialog(
+                                    &gtk_window,
+                                    &format!("Failed to fetch software titles; {err}"),
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        ));
     }
 }

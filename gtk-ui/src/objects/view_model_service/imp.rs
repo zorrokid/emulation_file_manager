@@ -6,7 +6,7 @@ use std::cell::OnceCell;
 use std::sync::Arc;
 
 pub struct ViewModelServiceObject {
-    pub inner: OnceCell<Arc<ViewModelService>>,
+    pub service: OnceCell<Arc<ViewModelService>>,
 }
 
 #[glib::object_subclass]
@@ -17,7 +17,7 @@ impl ObjectSubclass for ViewModelServiceObject {
 
     fn new() -> Self {
         Self {
-            inner: OnceCell::new(),
+            service: OnceCell::new(),
         }
     }
 }

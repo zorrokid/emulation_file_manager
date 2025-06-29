@@ -1,5 +1,6 @@
 mod components;
 mod objects;
+mod util;
 mod window;
 
 use async_std::task;
