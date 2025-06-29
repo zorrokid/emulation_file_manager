@@ -28,7 +28,7 @@ impl ViewModelServiceObject {
         match res {
             Ok(software_titles) => Ok(software_titles
                 .iter()
-                .map(|st| SoftwareTitleObject::new(st.name.clone()))
+                .map(|st| SoftwareTitleObject::new(st.id, st.name.clone()))
                 .collect()),
             Err(error) => Err(error),
         }

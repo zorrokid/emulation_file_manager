@@ -11,6 +11,7 @@ use super::SoftwareTitleData;
 #[derive(Properties, Default)]
 #[properties(wrapper_type = super::SoftwareTitleObject)]
 pub struct SoftwareTitleObject {
+    #[property(name = "id", get, set, type = i64, member = id)]
     #[property(name = "name", get, set, type = String, member = name)]
     pub data: RefCell<SoftwareTitleData>,
 }

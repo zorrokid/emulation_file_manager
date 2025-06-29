@@ -8,12 +8,16 @@ glib::wrapper! {
 }
 
 impl SoftwareTitleObject {
-    pub fn new(name: String) -> Self {
-        Object::builder().property("name", name).build()
+    pub fn new(id: i64, name: String) -> Self {
+        Object::builder()
+            .property("id", id)
+            .property("name", name)
+            .build()
     }
 }
 
 #[derive(Default)]
 pub struct SoftwareTitleData {
+    pub id: i64,
     pub name: String,
 }

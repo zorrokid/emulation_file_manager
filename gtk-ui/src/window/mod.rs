@@ -3,10 +3,7 @@ mod imp;
 use glib::{clone, Object};
 use gtk::glib::{MainContext, WeakRef};
 use gtk::subclass::prelude::*;
-use gtk::{
-    gio, glib, Application, ButtonsType, MessageDialog, MessageType, NoSelection,
-    SignalListItemFactory,
-};
+use gtk::{gio, glib, Application, NoSelection, SignalListItemFactory};
 use gtk::{prelude::*, ListItem};
 
 use crate::components::software_title_row::SoftwareTitleRow;
@@ -91,9 +88,32 @@ impl Window {
         }
         buffer.set_text("");
 
-        // Add new software title to model
-        let task = SoftwareTitleObject::new(content);
-        self.software_titles().append(&task);
+        let repository_manager = self.repo_manager();
+        let gtk_window_weak: WeakRef<gtk::Window> = self.upcast_ref::<gtk::Window>().downgrade();
+        let list_store = self.software_titles();
+
+        MainContext::default().spawn_local(clone!(
+            #[weak]
+            list_store,
+            async move {
+                if let Some(service_object) = repository_manager {
+                    match service_object.add_software_title(content).await {
+                        Ok(software_title_object) => {
+                            // Add new software title to model
+                            list_store.append(&software_title_object);
+                        }
+                        Err(err) => {
+                            if let Some(gtk_window) = gtk_window_weak.upgrade() {
+                                show_error_dialog(
+                                    &gtk_window,
+                                    &format!("Failed to add software title; {err}"),
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        ));
     }
 
     fn setup_factory(&self) {
