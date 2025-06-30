@@ -1,0 +1,13 @@
+<interface>
+  <template class="SoftwareTitleDetails" parent="GtkBox">
+    <property name="orientation">vertical</property>
+    <child>
+      <object class="GtkLabel" id="title_label"/>
+    </child>
+    <child>
+      <object class="GtkLabel" id="description_label"/>
+    </child>
+    <!-- Add more fields as needed -->
+  </template>
+</interface>
+

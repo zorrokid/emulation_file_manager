@@ -3,6 +3,7 @@
   <gresource prefix="/org/zorrokid/emufiles/">
     <file compressed="true" preprocess="xml-stripblanks">window.ui</file>
     <file compressed="true" preprocess="xml-stripblanks">software_title_row.ui</file>
+    <file compressed="true" preprocess="xml-stripblanks">software_title_details.ui</file>
   </gresource>
 </gresources>
 

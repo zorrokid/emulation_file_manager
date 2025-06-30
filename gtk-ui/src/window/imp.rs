@@ -6,6 +6,7 @@ use gtk::glib::Properties;
 use gtk::subclass::prelude::*;
 use gtk::{gio, glib, CompositeTemplate, Entry, ListView};
 
+use crate::components::software_title_details::SoftwareTitleDetails;
 use crate::objects::repository_manager::RepositoryManagerObject;
 use crate::objects::view_model_service::ViewModelServiceObject;
 
@@ -23,6 +24,8 @@ pub struct Window {
     pub repo_manager: RefCell<Option<RepositoryManagerObject>>,
     #[property(get, set)]
     pub view_model_service: RefCell<Option<ViewModelServiceObject>>,
+    #[template_child]
+    pub details_pane: TemplateChild<SoftwareTitleDetails>,
 }
 
 // The central trait for subclassing a GObject

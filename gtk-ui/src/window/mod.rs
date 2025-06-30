@@ -3,13 +3,13 @@ mod imp;
 use glib::{clone, Object};
 use gtk::glib::{MainContext, WeakRef};
 use gtk::subclass::prelude::*;
-use gtk::{gio, glib, Application, NoSelection, SignalListItemFactory};
+use gtk::{gio, glib, Application, SignalListItemFactory, SingleSelection};
 use gtk::{prelude::*, ListItem};
 
 use crate::components::software_title_row::SoftwareTitleRow;
 use crate::objects::repository_manager::RepositoryManagerObject;
 use crate::objects::software_title::SoftwareTitleObject;
-use crate::objects::view_model_service::{self, ViewModelServiceObject};
+use crate::objects::view_model_service::ViewModelServiceObject;
 use crate::util::error::show_error_dialog;
 
 // define custome Window widget
@@ -53,10 +53,11 @@ impl Window {
         self.imp().software_titles.replace(Some(model));
 
         // Wrap model with selection and pass it to the list view
-        let selection_model = NoSelection::new(Some(self.software_titles()));
+        let selection_model = SingleSelection::new(Some(self.software_titles()));
         self.imp()
             .software_titles_list
             .set_model(Some(&selection_model));
+        self.setup_selection_callbacks();
     }
 
     fn setup_callbacks(&self) {
@@ -204,5 +205,31 @@ impl Window {
                 }
             }
         ));
+    }
+
+    fn setup_selection_callbacks(&self) {
+        if let Some(selection_model) = self
+            .imp()
+            .software_titles_list
+            .model()
+            .and_downcast::<SingleSelection>()
+        {
+            // Connect to the selection changed signal
+            selection_model.connect_selected_notify(clone!(
+                #[weak (rename_to = window)]
+                self,
+                move |selection_model| {
+                    let selected_index = selection_model.selected();
+                    let list_store = window.software_titles();
+                    let selected_title = list_store
+                        .item(selected_index)
+                        .and_downcast::<SoftwareTitleObject>();
+                    window
+                        .imp()
+                        .details_pane
+                        .set_software_title(selected_title.as_ref());
+                }
+            ));
+        }
     }
 }
