@@ -1,4 +1,6 @@
+use gtk::gio;
 use gtk::glib;
+use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 
 #[derive(Default, gtk::CompositeTemplate)]
@@ -6,8 +8,9 @@ use gtk::subclass::prelude::*;
 pub struct SoftwareTitleDetails {
     #[template_child(id = "title_label")]
     pub title_label: TemplateChild<gtk::Label>,
-    #[template_child(id = "description_label")]
-    pub description_label: TemplateChild<gtk::Label>,
+    #[template_child(id = "releases_grid")]
+    pub releases_grid: TemplateChild<gtk::GridView>,
+    pub releases_model: std::cell::OnceCell<gtk::NoSelection>,
 }
 
 #[glib::object_subclass]

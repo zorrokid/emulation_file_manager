@@ -26,6 +26,10 @@ pub struct Window {
     pub view_model_service: RefCell<Option<ViewModelServiceObject>>,
     #[template_child]
     pub details_pane: TemplateChild<SoftwareTitleDetails>,
+    #[template_child(id = "header_bar")]
+    pub header_bar: TemplateChild<gtk::HeaderBar>,
+    #[template_child(id = "app_menu_button")]
+    pub app_menu_button: TemplateChild<gtk::MenuButton>,
 }
 
 // The central trait for subclassing a GObject

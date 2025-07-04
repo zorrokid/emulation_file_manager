@@ -1,9 +1,11 @@
 mod imp;
 
+use crate::objects::release::ReleaseObject;
 use crate::objects::software_title::SoftwareTitleObject;
 use glib::Object;
+use gtk::gio;
 use gtk::glib;
-use gtk::subclass::prelude::*;
+use gtk::glib::subclass::types::ObjectSubclassIsExt;
 
 glib::wrapper! {
     pub struct SoftwareTitleDetails(ObjectSubclass<imp::SoftwareTitleDetails>)
@@ -29,8 +31,18 @@ impl SoftwareTitleDetails {
             // TODO: update releases list, etc.
         } else {
             imp.title_label.set_label("");
-            imp.description_label.set_label("");
             // TODO: clear releases list, etc.
         }
+    }
+
+    pub fn set_releases(&self, releases: Vec<ReleaseObject>) {
+        let imp = self.imp();
+        let list_store = gio::ListStore::new::<ReleaseObject>();
+        for release in releases {
+            list_store.append(&release);
+        }
+        let selection_model = gtk::NoSelection::new(Some(list_store));
+        imp.releases_grid.set_model(Some(&selection_model));
+        imp.releases_model.set(selection_model).ok();
     }
 }

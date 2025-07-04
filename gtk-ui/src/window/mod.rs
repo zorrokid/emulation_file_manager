@@ -6,6 +6,8 @@ use gtk::subclass::prelude::*;
 use gtk::{gio, glib, Application, SignalListItemFactory, SingleSelection};
 use gtk::{prelude::*, ListItem};
 
+use crate::components::add_release_dialog::AddReleaseDialog;
+use crate::components::software_title_details::SoftwareTitleDetails;
 use crate::components::software_title_row::SoftwareTitleRow;
 use crate::objects::repository_manager::RepositoryManagerObject;
 use crate::objects::software_title::SoftwareTitleObject;
@@ -28,10 +30,34 @@ impl Window {
     ) -> Self {
         let window: Self = Object::builder()
             .property("application", app)
-            .property("repo-manager", repo_manager)
+            .property("repo-manager", &repo_manager)
             .property("view-model-service", view_model_service)
             .build();
+        let builder = gtk::Builder::from_resource("/org/zorrokid/emufiles/app_menu.ui");
+        let menu: gio::MenuModel = builder
+            .object("app_menu")
+            .expect("Could not get app menu from resource.");
+        let app_menu_button = window.imp().app_menu_button.get();
+        app_menu_button.set_menu_model(Some(&menu));
+        window.register_actions(app, &repo_manager);
+
         window
+    }
+
+    fn register_actions(&self, app: &gtk::Application, repo_manager: &RepositoryManagerObject) {
+        let add_release_action = gio::SimpleAction::new("add_release", None);
+        add_release_action.connect_activate(clone!(
+            #[weak(rename_to = window)]
+            self,
+            #[weak]
+            repo_manager,
+            move |_, _| {
+                let dialog = AddReleaseDialog::new(&repo_manager);
+                dialog.set_transient_for(Some(&window));
+                dialog.show();
+            }
+        ));
+        app.add_action(&add_release_action);
     }
 
     fn software_titles(&self) -> gio::ListStore {
@@ -221,6 +247,7 @@ impl Window {
                 move |selection_model| {
                     let selected_index = selection_model.selected();
                     let list_store = window.software_titles();
+
                     let selected_title = list_store
                         .item(selected_index)
                         .and_downcast::<SoftwareTitleObject>();
@@ -228,8 +255,49 @@ impl Window {
                         .imp()
                         .details_pane
                         .set_software_title(selected_title.as_ref());
+                    if let (Some(title), Some(view_model_service)) =
+                        (selected_title, window.view_model_service())
+                    {
+                        let details_pane = window.imp().details_pane.clone();
+                        MainContext::default().spawn_local(
+                            clone!(
+                                #[weak]
+                                details_pane,
+                                #[weak]
+                                view_model_service,
+                                #[weak]
+                                title,
+                                async move {
+                                    fetch_and_update_details(
+                                        view_model_service,
+                                        title,
+                                        details_pane,
+                                    )
+                                    .await;
+                                }
+                            ), // clone! ends
+                        ); // spawn local ends
+                    }
                 }
             ));
+        }
+    }
+}
+
+async fn fetch_and_update_details(
+    view_model_service: ViewModelServiceObject,
+    title: SoftwareTitleObject,
+    details_pane: SoftwareTitleDetails,
+) {
+    match view_model_service
+        .get_software_title_releases(title.id())
+        .await
+    {
+        Ok(releases) => {
+            details_pane.set_releases(releases);
+        }
+        Err(err) => {
+            eprintln!("Failed to fetch software title releases: {}", err);
         }
     }
 }

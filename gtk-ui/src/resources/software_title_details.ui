@@ -5,9 +5,12 @@
       <object class="GtkLabel" id="title_label"/>
     </child>
     <child>
-      <object class="GtkLabel" id="description_label"/>
+      <object class="GtkGridView" id="releases_grid"/>
     </child>
-    <!-- Add more fields as needed -->
+    <child>
+      <object class="GtkBox" id="release_details_box"/>
+    <!-- TODO -->
+    </child>
   </template>
 </interface>
 
