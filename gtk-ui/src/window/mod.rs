@@ -28,11 +28,14 @@ impl Window {
         repo_manager: RepositoryManagerObject,
         view_model_service: ViewModelServiceObject,
     ) -> Self {
-        let window: Self = Object::builder()
-            .property("application", app)
-            //.property("repo-manager", &repo_manager)
-            //.property("view-model-service", view_model_service)
-            .build();
+        let window: Self = Object::builder().property("application", app).build();
+        let repo_manager_clone = repo_manager.clone();
+        window.imp().repo_manager.replace(Some(repo_manager_clone));
+        window
+            .imp()
+            .view_model_service
+            .replace(Some(view_model_service));
+        window.fetch_software_titles();
         let builder = gtk::Builder::from_resource("/org/zorrokid/emufiles/app_menu.ui");
         let menu: gio::MenuModel = builder
             .object("app_menu")
@@ -45,6 +48,7 @@ impl Window {
     }
 
     fn register_actions(&self, app: &gtk::Application, repo_manager: &RepositoryManagerObject) {
+        println!("Registering actions");
         let add_release_action = gio::SimpleAction::new("add_release", None);
         add_release_action.connect_activate(clone!(
             #[weak(rename_to = window)]
@@ -52,6 +56,7 @@ impl Window {
             #[weak]
             repo_manager,
             move |_, _| {
+                println!("Add Release action triggered");
                 let dialog = AddReleaseDialog::new(&repo_manager);
                 dialog.set_transient_for(Some(&window));
                 dialog.show();
@@ -193,15 +198,6 @@ impl Window {
 
         // Set the factory of the list view
         self.imp().software_titles_list.set_factory(Some(&factory));
-    }
-
-    fn setup_property_callbacks(&self) {
-        self.connect_notify_local(Some("view-model-service"), |window, _| {
-            let view_model_service = window.imp().view_model_service.borrow().clone();
-            if view_model_service.is_some() {
-                window.fetch_software_titles();
-            }
-        });
     }
 
     fn fetch_software_titles(&self) {

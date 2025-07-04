@@ -15,7 +15,7 @@ glib::wrapper! {
 impl AddReleaseDialog {
     pub fn new(repository_manager: &RepositoryManagerObject) -> Self {
         Object::builder()
-            .property("repository-manager", repository_manager)
+            // .property("repository-manager", repository_manager)
             .build()
     }
 
