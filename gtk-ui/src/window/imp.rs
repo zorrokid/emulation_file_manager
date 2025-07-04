@@ -20,9 +20,7 @@ pub struct Window {
     #[template_child]
     pub software_titles_list: TemplateChild<ListView>,
     pub software_titles: RefCell<Option<gio::ListStore>>,
-    #[property(get, set)]
     pub repo_manager: RefCell<Option<RepositoryManagerObject>>,
-    #[property(get, set)]
     pub view_model_service: RefCell<Option<ViewModelServiceObject>>,
     #[template_child]
     pub details_pane: TemplateChild<SoftwareTitleDetails>,

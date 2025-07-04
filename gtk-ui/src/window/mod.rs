@@ -30,8 +30,8 @@ impl Window {
     ) -> Self {
         let window: Self = Object::builder()
             .property("application", app)
-            .property("repo-manager", &repo_manager)
-            .property("view-model-service", view_model_service)
+            //.property("repo-manager", &repo_manager)
+            //.property("view-model-service", view_model_service)
             .build();
         let builder = gtk::Builder::from_resource("/org/zorrokid/emufiles/app_menu.ui");
         let menu: gio::MenuModel = builder
@@ -115,7 +115,7 @@ impl Window {
         }
         buffer.set_text("");
 
-        let repository_manager = self.repo_manager();
+        let repository_manager = self.imp().repo_manager.borrow().clone();
         let gtk_window_weak: WeakRef<gtk::Window> = self.upcast_ref::<gtk::Window>().downgrade();
         let list_store = self.software_titles();
 
@@ -197,14 +197,15 @@ impl Window {
 
     fn setup_property_callbacks(&self) {
         self.connect_notify_local(Some("view-model-service"), |window, _| {
-            if window.view_model_service().is_some() {
+            let view_model_service = window.imp().view_model_service.borrow().clone();
+            if view_model_service.is_some() {
                 window.fetch_software_titles();
             }
         });
     }
 
     fn fetch_software_titles(&self) {
-        let view_model_service = self.view_model_service();
+        let view_model_service = self.imp().view_model_service.borrow().clone();
         let list_store = self.software_titles();
         let gtk_window_weak: WeakRef<gtk::Window> = self.upcast_ref::<gtk::Window>().downgrade();
 
@@ -255,8 +256,11 @@ impl Window {
                         .imp()
                         .details_pane
                         .set_software_title(selected_title.as_ref());
+
+                    let view_model_service = window.imp().view_model_service.borrow().clone();
+
                     if let (Some(title), Some(view_model_service)) =
-                        (selected_title, window.view_model_service())
+                        (selected_title, view_model_service)
                     {
                         let details_pane = window.imp().details_pane.clone();
                         MainContext::default().spawn_local(
