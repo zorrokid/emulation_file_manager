@@ -20,8 +20,13 @@ impl ObjectSubclass for AddReleaseDialog {
 
 impl ObjectImpl for AddReleaseDialog {
     fn constructed(&self) {
+        self.parent_constructed();
 
-        // You can now use self.repository_manager.get() if needed
+        let obj = self.obj();
+        obj.connect_close_request(|dialog| {
+            dialog.hide();
+            gtk::glib::Propagation::Stop
+        });
     }
 
     fn set_property(&self, id: usize, value: &glib::Value, pspec: &glib::ParamSpec) {

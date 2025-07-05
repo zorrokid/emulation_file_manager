@@ -1,8 +1,6 @@
-use gtk::glib::object::ObjectExt;
 use std::cell::RefCell;
 
 use glib::subclass::InitializingObject;
-use gtk::glib::Properties;
 use gtk::subclass::prelude::*;
 use gtk::{gio, glib, CompositeTemplate, Entry, ListView};
 
@@ -11,8 +9,7 @@ use crate::objects::repository_manager::RepositoryManagerObject;
 use crate::objects::view_model_service::ViewModelServiceObject;
 
 // Object holding the state
-#[derive(CompositeTemplate, Default, Properties)]
-#[properties(wrapper_type = super::Window)]
+#[derive(CompositeTemplate, Default)]
 #[template(resource = "/org/zorrokid/emufiles/window.ui")]
 pub struct Window {
     #[template_child]
@@ -50,7 +47,6 @@ impl ObjectSubclass for Window {
 }
 
 // Trait shared by all GObjects
-#[glib::derived_properties]
 impl ObjectImpl for Window {
     fn constructed(&self) {
         // Call "constructed" on parent

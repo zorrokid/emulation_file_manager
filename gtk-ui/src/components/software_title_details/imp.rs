@@ -3,6 +3,8 @@ use gtk::glib;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 
+use crate::objects::repository_manager::RepositoryManagerObject;
+
 #[derive(Default, gtk::CompositeTemplate)]
 #[template(resource = "/org/zorrokid/emufiles/software_title_details.ui")]
 pub struct SoftwareTitleDetails {
@@ -11,6 +13,7 @@ pub struct SoftwareTitleDetails {
     #[template_child(id = "releases_grid")]
     pub releases_grid: TemplateChild<gtk::GridView>,
     pub releases_model: std::cell::OnceCell<gtk::NoSelection>,
+    pub repo_manager: std::cell::OnceCell<RepositoryManagerObject>,
 }
 
 #[glib::object_subclass]

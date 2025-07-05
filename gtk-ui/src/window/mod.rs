@@ -42,27 +42,16 @@ impl Window {
             .expect("Could not get app menu from resource.");
         let app_menu_button = window.imp().app_menu_button.get();
         app_menu_button.set_menu_model(Some(&menu));
-        window.register_actions(app, &repo_manager);
+        let details_pane = window.imp().details_pane.get();
+        details_pane
+            .imp()
+            .repo_manager
+            .set(repo_manager.clone())
+            .ok();
+
+        details_pane.register_actions(app, &repo_manager);
 
         window
-    }
-
-    fn register_actions(&self, app: &gtk::Application, repo_manager: &RepositoryManagerObject) {
-        println!("Registering actions");
-        let add_release_action = gio::SimpleAction::new("add_release", None);
-        add_release_action.connect_activate(clone!(
-            #[weak(rename_to = window)]
-            self,
-            #[weak]
-            repo_manager,
-            move |_, _| {
-                println!("Add Release action triggered");
-                let dialog = AddReleaseDialog::new(&repo_manager);
-                dialog.set_transient_for(Some(&window));
-                dialog.show();
-            }
-        ));
-        app.add_action(&add_release_action);
     }
 
     fn software_titles(&self) -> gio::ListStore {
