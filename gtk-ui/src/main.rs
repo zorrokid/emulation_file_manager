@@ -33,6 +33,7 @@ async fn async_main() {
     let repo_manager = Arc::new(RepositoryManager::new(pool));
     let view_model_service = Arc::new(ViewModelService::new(Arc::clone(&repo_manager)));
     // Register and include resources
+    println!("Registering resources...");
     gio::resources_register_include!("emufiles.gresource").expect("Failed to register resources.");
 
     let app = Application::builder().application_id(APP_ID).build();

@@ -4,9 +4,11 @@ use glib::subclass::InitializingObject;
 use gtk::subclass::prelude::*;
 use gtk::{gio, glib, CompositeTemplate, Entry, ListView};
 
+use crate::components::simple_dialog;
 use crate::components::software_title_details::SoftwareTitleDetails;
 use crate::objects::repository_manager::RepositoryManagerObject;
 use crate::objects::view_model_service::ViewModelServiceObject;
+use gtk::prelude::*;
 
 // Object holding the state
 #[derive(CompositeTemplate, Default)]
@@ -57,6 +59,8 @@ impl ObjectImpl for Window {
         obj.setup_software_titles();
         obj.setup_callbacks();
         obj.setup_factory();
+        let dialog = simple_dialog::SimpleDialog::new();
+        dialog.show();
     }
 }
 

@@ -6,7 +6,6 @@ use gtk::subclass::prelude::*;
 use gtk::{gio, glib, Application, SignalListItemFactory, SingleSelection};
 use gtk::{prelude::*, ListItem};
 
-use crate::components::add_release_dialog::AddReleaseDialog;
 use crate::components::software_title_details::SoftwareTitleDetails;
 use crate::components::software_title_row::SoftwareTitleRow;
 use crate::objects::repository_manager::RepositoryManagerObject;

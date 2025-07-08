@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>
-  <template class="AddReleaseDialog" parent="GtkDialog">
-    <property name="title" translatable="yes">Add Release</property>
+  <template class="SystemDialog" parent="GtkDialog">
+    <property name="title" translatable="yes">Add system</property>
     <child internal-child="content_area">
       <object class="GtkBox">
         <property name="orientation">vertical</property>
@@ -12,30 +12,25 @@
         <property name="margin-end">12</property>
         <child>
           <object class="GtkLabel">
-            <property name="label" translatable="yes">Release Name:</property>
+            <property name="label" translatable="yes">System name:</property>
             <property name="halign">start</property>
           </object>
         </child>
         <child>
-          <object class="GtkEntry" id="some_widget">
-            <property name="placeholder-text" translatable="yes">Enter release name</property>
+	    <object class="GtkEntry" id="system_name_entry">
+            <property name="placeholder-text" translatable="yes">Enter system name</property>
           </object>
         </child>
-        <!-- Add more fields as needed -->
       </object>
     </child>
     <child type="action">
       <object class="GtkButton">
         <property name="label" translatable="yes">Cancel</property>
-        <property name="response-id">cancel</property>
       </object>
     </child>
     <child type="action">
       <object class="GtkButton">
         <property name="label" translatable="yes">Add</property>
-        <property name="response-id">accept</property>
-        <property name="can-default">true</property>
-        <property name="receives-default">true</property>
       </object>
     </child>
   </template>

@@ -5,7 +5,9 @@
     <file compressed="true" preprocess="xml-stripblanks">software_title_row.ui</file>
     <file compressed="true" preprocess="xml-stripblanks">software_title_details.ui</file>
     <file compressed="true" preprocess="xml-stripblanks">app_menu.ui</file>
-    <file compressed="true" preprocess="xml-stripblanks">add_release_dialog.ui</file>
+    <file compressed="true" preprocess="xml-stripblanks">system_dialog.ui</file>
+    <file compressed="true" preprocess="xml-stripblanks">release_dialog.ui</file>
+    <file compressed="true" preprocess="xml-stripblanks">simple_dialog.ui</file>
   </gresource>
 </gresources>
 

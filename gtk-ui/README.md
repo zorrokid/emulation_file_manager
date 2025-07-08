@@ -1,3 +1,35 @@
+# imp.rs vs mod.rs
+
+## **imp.rs (Implementation struct)**
+- Contains the **private/internal implementation** of your widget.
+- Methods here are usually:
+  - Internal helpers
+  - Template child access
+  - Signal handlers
+  - Trait implementations (`ObjectImpl`, `WidgetImpl`, etc.)
+- **Not visible** to users of your widget (unless you expose them via `mod.rs`).
+
+**Put methods in `imp.rs` when:**
+- They are only used internally by your widget.
+- They are helpers for trait implementations or template setup.
+- They should not be part of the public API.
+
+---
+
+## **mod.rs (Public wrapper struct)**
+- Contains the **public API** for your widget.
+- Methods here are:
+  - Constructors (`new`)
+  - Public getters/setters
+  - Any API you want users of your widget to call
+  - Methods that call into `imp.rs` for implementation details
+
+**Put methods in `mod.rs` when:**
+- They are part of your widget’s public API.
+- You want other code to call them.
+- They wrap or expose internal logic from `imp.rs`.
+
+
 # Implementing a list or grid view
 
 ### 1. **Create the UI Template**

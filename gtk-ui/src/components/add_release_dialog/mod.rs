@@ -14,6 +14,7 @@ glib::wrapper! {
 
 impl AddReleaseDialog {
     pub fn new(repository_manager: &RepositoryManagerObject) -> Self {
+        println!("Creating AddReleaseDialog");
         Object::builder()
             // .property("repository-manager", repository_manager)
             .build()
@@ -21,5 +22,10 @@ impl AddReleaseDialog {
 
     pub fn repository_manager(&self) -> RepositoryManagerObject {
         self.property::<RepositoryManagerObject>("repository-manager")
+    }
+
+    fn toplevel_window(&self) -> Option<gtk::Window> {
+        self.root()
+            .and_then(|root| root.downcast::<gtk::Window>().ok())
     }
 }

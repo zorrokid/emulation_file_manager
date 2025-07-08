@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <template class="SimpleDialog" parent="GtkDialog">
+    <property name="title">Hello Dialog</property>
+  </template>
+</interface>
+
