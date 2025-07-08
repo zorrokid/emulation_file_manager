@@ -59,8 +59,6 @@ impl ObjectImpl for Window {
         obj.setup_software_titles();
         obj.setup_callbacks();
         obj.setup_factory();
-        let dialog = simple_dialog::SimpleDialog::new();
-        dialog.show();
     }
 }
 
