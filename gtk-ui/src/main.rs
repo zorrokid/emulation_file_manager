@@ -22,7 +22,6 @@ fn main() {
 }
 
 async fn async_main() {
-    // Async DB pool setup
     let pool = match get_db_pool().await {
         Ok(pool) => pool,
         Err(err) => {
@@ -32,8 +31,6 @@ async fn async_main() {
     };
     let repo_manager = Arc::new(RepositoryManager::new(pool));
     let view_model_service = Arc::new(ViewModelService::new(Arc::clone(&repo_manager)));
-    // Register and include resources
-    println!("Registering resources...");
     gio::resources_register_include!("emufiles.gresource").expect("Failed to register resources.");
 
     let app = Application::builder().application_id(APP_ID).build();
@@ -48,8 +45,6 @@ fn build_ui(
     repo_manager: Arc<RepositoryManager>,
     view_model_service: Arc<ViewModelService>,
 ) {
-    // Create a new custom window and present it
-
     let repo_manager = RepositoryManagerObject::new(repo_manager);
     let view_model_service = ViewModelServiceObject::new(view_model_service);
     let window = Window::new(app, repo_manager, view_model_service);

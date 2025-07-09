@@ -56,8 +56,8 @@ impl ObjectImpl for AddReleaseDialog {
             #[weak(rename_to = imp)]
             self,
             move |_| {
-                // Open your custom AddSystemDialog here
                 let dialog = SystemDialog::new();
+
                 dialog.set_transient_for(Some(&imp.obj().toplevel_window().unwrap()));
                 dialog.show();
 
@@ -65,8 +65,10 @@ impl ObjectImpl for AddReleaseDialog {
                     #[weak]
                     system_store,
                     move |dialog, response| {
+                        println!("Response received: {:?}", response);
                         if response == gtk::ResponseType::Accept {
                             if let Some(new_system) = dialog.get_system_name() {
+                                println!("New system added: {}", new_system);
                                 //let gstr = glib::String::from(new_system);
                                 //system_store.append(&gstr);
                             }

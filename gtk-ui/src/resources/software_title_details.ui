@@ -4,6 +4,11 @@
     <child>
       <object class="GtkLabel" id="title_label"/>
     </child>
+	<child>
+              <object class="GtkButton" id="add_release_button">
+                <property name="label">Add Release</property>
+              </object>
+            </child>
     <child>
       <object class="GtkGridView" id="releases_grid"/>
     </child>

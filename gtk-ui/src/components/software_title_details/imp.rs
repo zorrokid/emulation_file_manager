@@ -10,6 +10,8 @@ use crate::objects::repository_manager::RepositoryManagerObject;
 pub struct SoftwareTitleDetails {
     #[template_child(id = "title_label")]
     pub title_label: TemplateChild<gtk::Label>,
+    #[template_child(id = "add_release_button")]
+    pub add_release_button: TemplateChild<gtk::Button>,
     #[template_child(id = "releases_grid")]
     pub releases_grid: TemplateChild<gtk::GridView>,
     pub releases_model: std::cell::OnceCell<gtk::NoSelection>,
@@ -22,16 +24,29 @@ impl ObjectSubclass for SoftwareTitleDetails {
     type Type = super::SoftwareTitleDetails;
     type ParentType = gtk::Box;
     type Interfaces = ();
+
     fn class_init(klass: &mut Self::Class) {
         Self::bind_template(klass);
     }
+
     fn instance_init(obj: &glib::subclass::InitializingObject<Self>) {
         obj.init_template();
     }
 }
 
 // Trait shared by all GObjects
-impl ObjectImpl for SoftwareTitleDetails {}
+impl ObjectImpl for SoftwareTitleDetails {
+    fn constructed(&self) {
+        self.parent_constructed();
+
+        let imp = self;
+        imp.add_release_button.connect_clicked(|_| {
+            // Logic to handle adding a release
+            // This could open a dialog or perform some action
+            println!("Add Release button clicked");
+        });
+    }
+}
 
 // Trait shared by all widgets
 impl WidgetImpl for SoftwareTitleDetails {}

@@ -24,12 +24,12 @@
       </object>
     </child>
     <child type="action">
-      <object class="GtkButton">
+	    <object class="GtkButton" id="cancel_button">
         <property name="label" translatable="yes">Cancel</property>
       </object>
     </child>
     <child type="action">
-      <object class="GtkButton">
+	    <object class="GtkButton" id="add_button">
         <property name="label" translatable="yes">Add</property>
       </object>
     </child>
