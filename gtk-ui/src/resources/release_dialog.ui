@@ -42,11 +42,15 @@
     <child type="action">
       <object class="GtkButton">
         <property name="label" translatable="yes">Cancel</property>
+        <property name="response-id">cancel</property>
       </object>
     </child>
     <child type="action">
       <object class="GtkButton">
         <property name="label" translatable="yes">Add</property>
+        <property name="response-id">accept</property>
+        <property name="can-default">true</property>
+        <property name="receives-default">true</property>
       </object>
     </child>
   </template>

@@ -1,3 +1,4 @@
+use crate::components::release_form::ReleaseFormWindow;
 use gtk::gio;
 use gtk::glib;
 use gtk::prelude::*;
@@ -41,9 +42,8 @@ impl ObjectImpl for SoftwareTitleDetails {
 
         let imp = self;
         imp.add_release_button.connect_clicked(|_| {
-            // Logic to handle adding a release
-            // This could open a dialog or perform some action
-            println!("Add Release button clicked");
+            let win = ReleaseFormWindow::new();
+            win.present();
         });
     }
 }

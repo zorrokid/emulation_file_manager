@@ -8,6 +8,7 @@
     <file compressed="true" preprocess="xml-stripblanks">system_dialog.ui</file>
     <file compressed="true" preprocess="xml-stripblanks">release_dialog.ui</file>
     <file compressed="true" preprocess="xml-stripblanks">simple_dialog.ui</file>
+    <file compressed="true" preprocess="xml-stripblanks">release_form.ui</file>
   </gresource>
 </gresources>
 
