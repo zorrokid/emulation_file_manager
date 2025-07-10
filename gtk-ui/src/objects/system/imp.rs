@@ -7,7 +7,6 @@ use gtk::subclass::prelude::*;
 
 use super::SystemData;
 
-// Object holding the state
 #[derive(Properties, Default)]
 #[properties(wrapper_type = super::SystemObject)]
 pub struct SystemObject {
@@ -23,6 +22,5 @@ impl ObjectSubclass for SystemObject {
     type Type = super::SystemObject;
 }
 
-// Trait shared by all GObjects
 #[glib::derived_properties]
 impl ObjectImpl for SystemObject {}

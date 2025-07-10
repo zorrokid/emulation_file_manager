@@ -11,7 +11,37 @@
             <property name="placeholder-text">Name</property>
           </object>
         </child>
-       <child>
+
+	  <!-- System Selection -->
+	      <child>
+		<object class="GtkBox">
+		  <property name="orientation">vertical</property>
+		  <child>
+		    <object class="GtkBox">
+		      <property name="orientation">horizontal</property>
+		      <property name="spacing">6</property>
+		      <child>
+			<object class="GtkDropDown" id="system_dropdown"/>
+		      </child>
+		      <child>
+			<object class="GtkButton" id="add_system_button">
+			  <property name="label">Add</property>
+			</object>
+		      </child>
+		      <child>
+			<object class="GtkButton" id="new_system_button">
+			  <property name="label">New System…</property>
+			</object>
+		      </child>
+		    </object>
+		  </child>
+		  <child>
+		    <object class="GtkListBox" id="selected_systems_list"/>
+		  </child>
+		</object>
+	      </child>
+
+	       <child>
           <object class="GtkButton" id="save_button">
             <property name="label">Save</property>
           </object>
