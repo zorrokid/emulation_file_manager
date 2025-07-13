@@ -1,6 +1,8 @@
 mod imp;
 
-use gtk::glib;
+use gtk::glib::{self, subclass::types::ObjectSubclassIsExt};
+
+use crate::objects::view_model_service::ViewModelServiceObject;
 
 glib::wrapper! {
     pub struct ReleaseFormWindow(ObjectSubclass<imp::ReleaseFormWindow>)
@@ -9,7 +11,12 @@ glib::wrapper! {
 }
 
 impl ReleaseFormWindow {
-    pub fn new() -> Self {
-        glib::Object::new()
+    pub fn new(view_model_service: ViewModelServiceObject) -> Self {
+        let obj: Self = glib::Object::new();
+        obj.imp()
+            .view_model_service
+            .set(view_model_service.clone())
+            .expect("Already initialized");
+        obj
     }
 }

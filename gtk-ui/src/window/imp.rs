@@ -1,10 +1,9 @@
-use std::cell::RefCell;
+use std::cell::{OnceCell, RefCell};
 
 use glib::subclass::InitializingObject;
 use gtk::subclass::prelude::*;
 use gtk::{gio, glib, CompositeTemplate, Entry, ListView};
 
-use crate::components::simple_dialog;
 use crate::components::software_title_details::SoftwareTitleDetails;
 use crate::objects::repository_manager::RepositoryManagerObject;
 use crate::objects::view_model_service::ViewModelServiceObject;
@@ -20,7 +19,7 @@ pub struct Window {
     pub software_titles_list: TemplateChild<ListView>,
     pub software_titles: RefCell<Option<gio::ListStore>>,
     pub repo_manager: RefCell<Option<RepositoryManagerObject>>,
-    pub view_model_service: RefCell<Option<ViewModelServiceObject>>,
+    pub view_model_service: OnceCell<ViewModelServiceObject>,
     #[template_child]
     pub details_pane: TemplateChild<SoftwareTitleDetails>,
     #[template_child(id = "header_bar")]

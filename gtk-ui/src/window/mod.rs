@@ -6,7 +6,6 @@ use gtk::subclass::prelude::*;
 use gtk::{gio, glib, Application, SignalListItemFactory, SingleSelection};
 use gtk::{prelude::*, ListItem};
 
-use crate::components::add_release_dialog::AddReleaseDialog;
 use crate::components::software_title_details::SoftwareTitleDetails;
 use crate::components::software_title_row::SoftwareTitleRow;
 use crate::objects::repository_manager::RepositoryManagerObject;
@@ -34,22 +33,25 @@ impl Window {
         window
             .imp()
             .view_model_service
-            .replace(Some(view_model_service));
+            .set(view_model_service.clone())
+            .expect("Already initialized");
         window.fetch_software_titles();
-        let builder = gtk::Builder::from_resource("/org/zorrokid/emufiles/app_menu.ui");
+        /*let builder = gtk::Builder::from_resource("/org/zorrokid/emufiles/app_menu.ui");
         let menu: gio::MenuModel = builder
             .object("app_menu")
             .expect("Could not get app menu from resource.");
         let app_menu_button = window.imp().app_menu_button.get();
-        app_menu_button.set_menu_model(Some(&menu));
+        app_menu_button.set_menu_model(Some(&menu));*/
+
         let details_pane = window.imp().details_pane.get();
+        details_pane.imp().repo_manager.set(repo_manager).ok();
         details_pane
             .imp()
-            .repo_manager
-            .set(repo_manager.clone())
-            .ok();
+            .view_model_service
+            .set(view_model_service)
+            .expect("Already initialized");
 
-        details_pane.register_actions(app, &repo_manager);
+        //details_pane.register_actions(app, &repo_manager);
 
         window
     }
@@ -190,28 +192,33 @@ impl Window {
     }
 
     fn fetch_software_titles(&self) {
-        let view_model_service = self.imp().view_model_service.borrow().clone();
+        let view_model_service = self
+            .imp()
+            .view_model_service
+            .get()
+            .expect("Not initialized");
         let list_store = self.software_titles();
+
         let gtk_window_weak: WeakRef<gtk::Window> = self.upcast_ref::<gtk::Window>().downgrade();
 
         MainContext::default().spawn_local(clone!(
             #[weak]
             list_store,
+            #[weak]
+            view_model_service,
             async move {
-                if let Some(service_object) = view_model_service {
-                    match service_object.get_software_title_list_models().await {
-                        Ok(titles) => {
-                            for title in titles {
-                                list_store.append(&title);
-                            }
+                match view_model_service.get_software_title_list_models().await {
+                    Ok(titles) => {
+                        for title in titles {
+                            list_store.append(&title);
                         }
-                        Err(err) => {
-                            if let Some(gtk_window) = gtk_window_weak.upgrade() {
-                                show_error_dialog(
-                                    &gtk_window,
-                                    &format!("Failed to fetch software titles; {err}"),
-                                );
-                            }
+                    }
+                    Err(err) => {
+                        if let Some(gtk_window) = gtk_window_weak.upgrade() {
+                            show_error_dialog(
+                                &gtk_window,
+                                &format!("Failed to fetch software titles; {err}"),
+                            );
                         }
                     }
                 }
@@ -242,11 +249,13 @@ impl Window {
                         .details_pane
                         .set_software_title(selected_title.as_ref());
 
-                    let view_model_service = window.imp().view_model_service.borrow().clone();
+                    let view_model_service = window
+                        .imp()
+                        .view_model_service
+                        .get()
+                        .expect("Not initialized");
 
-                    if let (Some(title), Some(view_model_service)) =
-                        (selected_title, view_model_service)
-                    {
+                    if let Some(title) = selected_title {
                         let details_pane = window.imp().details_pane.clone();
                         MainContext::default().spawn_local(
                             clone!(

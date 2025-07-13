@@ -1,12 +1,15 @@
 use crate::components::release_form::ReleaseFormWindow;
+use glib::Properties;
 use gtk::gio;
 use gtk::glib;
+use gtk::glib::clone;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 
 use crate::objects::repository_manager::RepositoryManagerObject;
 
-#[derive(Default, gtk::CompositeTemplate)]
+#[derive(Default, gtk::CompositeTemplate, Properties)]
+#[properties(wrapper_type = super::SoftwareTitleDetails)]
 #[template(resource = "/org/zorrokid/emufiles/software_title_details.ui")]
 pub struct SoftwareTitleDetails {
     #[template_child(id = "title_label")]
@@ -17,6 +20,9 @@ pub struct SoftwareTitleDetails {
     pub releases_grid: TemplateChild<gtk::GridView>,
     pub releases_model: std::cell::OnceCell<gtk::NoSelection>,
     pub repo_manager: std::cell::OnceCell<RepositoryManagerObject>,
+    #[property(get, set)]
+    pub view_model_service:
+        std::cell::OnceCell<crate::objects::view_model_service::ViewModelServiceObject>,
 }
 
 #[glib::object_subclass]
@@ -41,10 +47,19 @@ impl ObjectImpl for SoftwareTitleDetails {
         self.parent_constructed();
 
         let imp = self;
-        imp.add_release_button.connect_clicked(|_| {
-            let win = ReleaseFormWindow::new();
-            win.present();
-        });
+        let view_model_service = imp
+            .view_model_service
+            .get()
+            .expect("ViewModelService not initialized");
+
+        imp.add_release_button.connect_clicked(clone!(
+            #[weak]
+            view_model_service,
+            move |_| {
+                let win = ReleaseFormWindow::new(view_model_service);
+                win.present();
+            }
+        ));
     }
 }
 

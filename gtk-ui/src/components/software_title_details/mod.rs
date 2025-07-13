@@ -28,7 +28,9 @@ impl Default for SoftwareTitleDetails {
 
 impl SoftwareTitleDetails {
     pub fn new() -> Self {
-        Object::builder().build()
+        let details_pane: Self = Object::builder().build();
+        // TODO...?
+        details_pane
     }
 
     pub fn set_software_title(&self, software_title: Option<&SoftwareTitleObject>) {
@@ -58,7 +60,7 @@ impl SoftwareTitleDetails {
             .and_then(|root| root.downcast::<gtk::Window>().ok())
     }
 
-    pub fn register_actions(&self, app: &gtk::Application, repo_manager: &RepositoryManagerObject) {
+    /*pub fn register_actions(&self, app: &gtk::Application, repo_manager: &RepositoryManagerObject) {
         println!("Registering actions");
         let add_release_action = gio::SimpleAction::new("add_release", None);
         add_release_action.connect_activate(clone!(
@@ -74,5 +76,5 @@ impl SoftwareTitleDetails {
             }
         ));
         app.add_action(&add_release_action);
-    }
+    }*/
 }

@@ -17,6 +17,7 @@ pub struct ReleaseFilter {
     pub software_title_id: Option<i64>,
 }
 
+#[derive(Debug)]
 pub struct ViewModelService {
     repository_manager: Arc<RepositoryManager>,
 }

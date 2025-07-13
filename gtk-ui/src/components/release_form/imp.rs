@@ -1,8 +1,12 @@
+use std::cell::OnceCell;
+
+use gtk::glib::clone;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 use gtk::{glib, Button, CompositeTemplate, DropDown, Entry};
 
 use crate::objects::system::SystemObject;
+use crate::objects::view_model_service::ViewModelServiceObject;
 
 #[derive(CompositeTemplate, Default)]
 #[template(resource = "/org/zorrokid/emufiles/release_form.ui")]
@@ -13,6 +17,7 @@ pub struct ReleaseFormWindow {
     pub system_dropdown: TemplateChild<DropDown>,
     #[template_child(id = "save_button")]
     pub save_button: TemplateChild<Button>,
+    pub view_model_service: OnceCell<ViewModelServiceObject>,
 }
 
 #[glib::object_subclass]
@@ -55,6 +60,35 @@ impl ObjectImpl for ReleaseFormWindow {
         self.save_button.connect_clicked(|_| {
             println!("Saving release...");
         });
+
+        // TODO: do i need to clone the dropdown and service?
+        let dropdown = self.system_dropdown.get();
+        let service = self
+            .view_model_service
+            .get()
+            .expect("ViewModelService not set");
+        // TODO: add view model service to form
+
+        glib::MainContext::default().spawn_local(clone!(
+            // TODO; check correct usage for referencing dropdown and service
+            #[weak]
+            service,
+            #[weak]
+            list_store,
+            async move {
+                match service.get_system_list_models().await {
+                    Ok(systems) => {
+                        for sys in systems {
+                            list_store.append(&sys);
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Error loading systems: {}", e);
+                    }
+                }
+                println!("ReleaseFormWindow initialized with systems.");
+            }
+        ));
     }
 }
 impl WidgetImpl for ReleaseFormWindow {}

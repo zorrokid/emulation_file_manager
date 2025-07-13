@@ -7,7 +7,7 @@ use service::{
     view_model_service::{ReleaseFilter, ViewModelService},
 };
 
-use super::{release::ReleaseObject, software_title::SoftwareTitleObject};
+use super::{release::ReleaseObject, software_title::SoftwareTitleObject, system::SystemObject};
 
 glib::wrapper! {
     pub struct ViewModelServiceObject(ObjectSubclass<imp::ViewModelServiceObject>);
@@ -47,6 +47,17 @@ impl ViewModelServiceObject {
             Ok(release_list_models) => Ok(release_list_models
                 .into_iter()
                 .map(|rlm| ReleaseObject::new(rlm.id, rlm.name, rlm.system_names, rlm.file_types))
+                .collect()),
+            Err(error) => Err(error),
+        }
+    }
+
+    pub async fn get_system_list_models(&self) -> Result<Vec<SystemObject>, Error> {
+        let res = self.service().get_system_list_models().await;
+        match res {
+            Ok(system_list_models) => Ok(system_list_models
+                .into_iter()
+                .map(|slm| SystemObject::new(slm.id, slm.name))
                 .collect()),
             Err(error) => Err(error),
         }

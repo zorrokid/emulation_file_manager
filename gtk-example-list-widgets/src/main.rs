@@ -124,6 +124,6 @@ fn build_ui(app: &Application) {
         .default_width(360)
         .child(&scrolled_window)
         .build();
-
+j
     window.present();
 }
