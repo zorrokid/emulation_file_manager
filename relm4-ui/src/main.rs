@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use database::{get_db_pool, repository_manager::RepositoryManager};
 use gtk::prelude::*;
@@ -9,12 +9,13 @@ use relm4::{
     loading_widgets::LoadingWidgets,
     view,
 };
-use service::view_model_service::ViewModelService;
+use service::{view_model_service::ViewModelService, view_models::SoftwareTitleListModel};
 
 struct App {
     counter: u8,
     repository_manager: Arc<RepositoryManager>,
     view_model_service: Arc<ViewModelService>,
+    software_titles: Vec<SoftwareTitleListModel>,
 }
 
 #[derive(Debug)]
@@ -83,11 +84,16 @@ impl AsyncComponent for App {
         let pool = get_db_pool().await.expect("DB pool initialization failed");
         let repository_manager = Arc::new(RepositoryManager::new(pool));
         let view_model_service = Arc::new(ViewModelService::new(Arc::clone(&repository_manager)));
+        let software_titles = view_model_service
+            .get_software_title_list_models()
+            .await
+            .expect("Fetching software titles failed");
 
         let model = App {
             counter,
             repository_manager,
             view_model_service,
+            software_titles,
         };
 
         // Insert the code generation of the view! macro here
@@ -102,7 +108,6 @@ impl AsyncComponent for App {
         _sender: AsyncComponentSender<Self>,
         _root: &Self::Root,
     ) {
-        tokio::time::sleep(Duration::from_secs(1)).await;
         match msg {
             Msg::Increment => {
                 self.counter = self.counter.wrapping_add(1);
