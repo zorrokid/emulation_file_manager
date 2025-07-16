@@ -1,38 +1,62 @@
 use std::sync::Arc;
 
 use database::{get_db_pool, repository_manager::RepositoryManager};
-use gtk::prelude::*;
 use relm4::{
-    RelmApp, RelmWidgetExt,
-    component::{AsyncComponent, AsyncComponentParts, AsyncComponentSender},
-    gtk,
-    loading_widgets::LoadingWidgets,
-    view,
+    Component, ComponentParts, ComponentSender, RelmApp, RelmWidgetExt,
+    gtk::{
+        self,
+        prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt},
+    },
+    once_cell::sync::OnceCell,
 };
 use service::{view_model_service::ViewModelService, view_models::SoftwareTitleListModel};
 
-struct App {
-    counter: u8,
+#[derive(Debug)]
+struct InitResult {
     repository_manager: Arc<RepositoryManager>,
     view_model_service: Arc<ViewModelService>,
     software_titles: Vec<SoftwareTitleListModel>,
 }
 
 #[derive(Debug)]
-enum Msg {
+enum AppMsg {
     Increment,
     Decrement,
+    Initialize,
 }
 
-#[relm4::component(async)]
-impl AsyncComponent for App {
-    type Init = u8;
-    type Input = Msg;
+#[derive(Debug)]
+enum CommandMsg {
+    InitializationDone(InitResult),
+}
+
+struct AppModel {
+    counter: u8,
+    software_titles: Vec<SoftwareTitleListModel>,
+    repository_manager: OnceCell<Arc<RepositoryManager>>,
+    view_model_service: OnceCell<Arc<ViewModelService>>,
+}
+
+struct AppWidgets {
+    label: gtk::Label,
+}
+
+#[relm4::component]
+impl Component for AppModel {
+    /// The type of the messages that this component can receive.
+    type Input = AppMsg;
+    /// The type of the messages that this component can send.
     type Output = ();
-    type CommandOutput = ();
+    type CommandOutput = CommandMsg;
+    /// The type of data with which this component will be initialized.
+    type Init = u8;
 
     view! {
         gtk::Window {
+            set_title: Some("Simple app"),
+            set_default_width: 300,
+            set_default_height: 100,
+
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
                 set_spacing: 5,
@@ -40,12 +64,11 @@ impl AsyncComponent for App {
 
                 gtk::Button {
                     set_label: "Increment",
-                    connect_clicked => Msg::Increment,
+                    connect_clicked => AppMsg::Increment
                 },
 
-                gtk::Button {
-                    set_label: "Decrement",
-                    connect_clicked => Msg::Decrement,
+                gtk::Button::with_label("Decrement") {
+                    connect_clicked => AppMsg::Decrement
                 },
 
                 gtk::Label {
@@ -57,90 +80,79 @@ impl AsyncComponent for App {
         }
     }
 
-    fn init_loading_widgets(root: Self::Root) -> Option<LoadingWidgets> {
-        view! {
-            #[local]
-            root {
-                set_title: Some("Simple app"),
-                set_default_size: (300, 100),
-
-                // This will be removed automatically by
-                // LoadingWidgets when the full view has loaded
-                #[name(spinner)]
-                gtk::Spinner {
-                    start: (),
-                    set_halign: gtk::Align::Center,
-                }
-            }
-        }
-        Some(LoadingWidgets::new(root, spinner))
-    }
-
-    async fn init(
+    fn init(
         counter: Self::Init,
         root: Self::Root,
-        sender: AsyncComponentSender<Self>,
-    ) -> AsyncComponentParts<Self> {
-        let pool = get_db_pool().await.expect("DB pool initialization failed");
-        let repository_manager = Arc::new(RepositoryManager::new(pool));
-        let view_model_service = Arc::new(ViewModelService::new(Arc::clone(&repository_manager)));
-        let software_titles = view_model_service
-            .get_software_title_list_models()
-            .await
-            .expect("Fetching software titles failed");
-
-        let model = App {
+        sender: ComponentSender<Self>,
+    ) -> ComponentParts<Self> {
+        let model = AppModel {
             counter,
-            repository_manager,
-            view_model_service,
-            software_titles,
+            software_titles: vec![],
+            repository_manager: OnceCell::new(),
+            view_model_service: OnceCell::new(),
         };
 
-        // Insert the code generation of the view! macro here
+        // macro code generation
         let widgets = view_output!();
+        sender.input(AppMsg::Initialize);
+        sender.input(AppMsg::Increment);
+        sender.input(AppMsg::Increment);
 
-        AsyncComponentParts { model, widgets }
+        ComponentParts { model, widgets }
     }
 
-    async fn update(
-        &mut self,
-        msg: Self::Input,
-        _sender: AsyncComponentSender<Self>,
-        _root: &Self::Root,
-    ) {
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _: &Self::Root) {
         match msg {
-            Msg::Increment => {
+            AppMsg::Increment => {
                 self.counter = self.counter.wrapping_add(1);
-                let res = self
-                    .repository_manager
-                    .get_system_repository()
-                    .add_system(&"Test".to_string())
-                    .await;
-
-                match res {
-                    Ok(id) => println!("Added system with id {}", id),
-                    Err(err) => println!("Error while adding system: {}", err),
-                }
             }
-            Msg::Decrement => {
+            AppMsg::Decrement => {
                 self.counter = self.counter.wrapping_sub(1);
-                let res = self.view_model_service.get_system_list_models().await;
-                match res {
-                    Ok(systems) => {
-                        for system in systems {
-                            println!("Got system: {}", system);
-                        }
-                    }
-                    Err(err) => {
-                        println!("Failed fetching systems: {}", err);
-                    }
-                }
+            }
+            AppMsg::Initialize => {
+                sender.oneshot_command(async {
+                    let pool = get_db_pool().await.expect("DB pool initialization failed");
+                    let repository_manager = Arc::new(RepositoryManager::new(pool));
+                    let view_model_service =
+                        Arc::new(ViewModelService::new(Arc::clone(&repository_manager)));
+                    let software_titles = view_model_service
+                        .get_software_title_list_models()
+                        .await
+                        .expect("Fetching software titles failed");
+                    CommandMsg::InitializationDone(InitResult {
+                        repository_manager,
+                        view_model_service,
+                        software_titles,
+                    })
+                });
+            }
+        }
+    }
+    fn update_cmd(
+        &mut self,
+        message: Self::CommandOutput,
+        _sender: ComponentSender<Self>,
+        _: &Self::Root,
+    ) {
+        match message {
+            CommandMsg::InitializationDone(init_result) => {
+                self.view_model_service
+                    .set(init_result.view_model_service)
+                    .expect("view model service already initialized?");
+                self.repository_manager
+                    .set(init_result.repository_manager)
+                    .expect("repository manger already initialized");
+                self.software_titles = init_result.software_titles;
+                dbg!(
+                    "Software titles initialized: {}",
+                    self.software_titles.len()
+                );
             }
         }
     }
 }
 
 fn main() {
-    let app = RelmApp::new("relm4.example.simple_async");
-    app.run_async::<App>(0);
+    let app = RelmApp::new("relm4.test.simple_manual");
+    app.run::<AppModel>(0);
 }
