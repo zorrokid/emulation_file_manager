@@ -3,11 +3,9 @@ use std::sync::Arc;
 use database::{get_db_pool, repository_manager::RepositoryManager};
 use relm4::{
     Component, ComponentParts, ComponentSender, RelmApp, RelmWidgetExt,
-    gtk::{
-        self,
-        prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt},
-    },
+    gtk::{self, prelude::*},
     once_cell::sync::OnceCell,
+    typed_view::list::{RelmListItem, TypedListView},
 };
 use service::{view_model_service::ViewModelService, view_models::SoftwareTitleListModel};
 
@@ -30,11 +28,45 @@ enum CommandMsg {
     InitializationDone(InitResult),
 }
 
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct SoftwareListItem {
+    title: String,
+    description: String,
+}
+
+struct Widgets {
+    label: gtk::Label,
+}
+
+impl RelmListItem for SoftwareListItem {
+    type Root = gtk::Box;
+    type Widgets = Widgets;
+
+    fn setup(_item: &gtk::ListItem) -> (gtk::Box, Widgets) {
+        relm4::view! {
+            my_box = gtk::Box {
+                #[name = "label"]
+                gtk::Label,
+            }
+        }
+
+        let widgets = Widgets { label };
+
+        (my_box, widgets)
+    }
+
+    fn bind(&mut self, widgets: &mut Self::Widgets, _root: &mut Self::Root) {
+        let Widgets { label } = widgets;
+        label.set_label(&format!("Name: {} ", self.title));
+    }
+}
+
 struct AppModel {
     counter: u8,
     software_titles: Vec<SoftwareTitleListModel>,
     repository_manager: OnceCell<Arc<RepositoryManager>>,
     view_model_service: OnceCell<Arc<ViewModelService>>,
+    list_view_wrapper: TypedListView<SoftwareListItem, gtk::SingleSelection>,
 }
 
 struct AppWidgets {
@@ -75,8 +107,16 @@ impl Component for AppModel {
                     #[watch]
                     set_label: &format!("Counter: {}", model.counter),
                     set_margin_all: 5,
+                },
+                gtk::ScrolledWindow {
+                    set_vexpand: true,
+
+                    #[local_ref]
+                    software_titles_view -> gtk::ListView {}
                 }
             }
+
+
         }
     }
 
@@ -85,18 +125,23 @@ impl Component for AppModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        // Initialize the ListView wrapper
+        let list_view_wrapper: TypedListView<SoftwareListItem, gtk::SingleSelection> =
+            TypedListView::with_sorting();
+
         let model = AppModel {
             counter,
             software_titles: vec![],
             repository_manager: OnceCell::new(),
             view_model_service: OnceCell::new(),
+            list_view_wrapper,
         };
 
         // macro code generation
+        let software_titles_view = &model.list_view_wrapper.view;
         let widgets = view_output!();
+
         sender.input(AppMsg::Initialize);
-        sender.input(AppMsg::Increment);
-        sender.input(AppMsg::Increment);
 
         ComponentParts { model, widgets }
     }
@@ -143,6 +188,11 @@ impl Component for AppModel {
                     .set(init_result.repository_manager)
                     .expect("repository manger already initialized");
                 self.software_titles = init_result.software_titles;
+                let list_items = self.software_titles.iter().map(|title| SoftwareListItem {
+                    title: title.name.clone(),
+                    description: title.name.clone(),
+                });
+                self.list_view_wrapper.extend_from_iter(list_items);
                 dbg!(
                     "Software titles initialized: {}",
                     self.software_titles.len()
