@@ -3,7 +3,7 @@ use std::sync::Arc;
 use database::{get_db_pool, repository_manager::RepositoryManager};
 use relm4::{
     Component, ComponentParts, ComponentSender, RelmApp, RelmWidgetExt,
-    gtk::{self, prelude::*},
+    gtk::{self, glib::clone, prelude::*},
     once_cell::sync::OnceCell,
     typed_view::list::{RelmListItem, TypedListView},
 };
@@ -21,6 +21,7 @@ enum AppMsg {
     Increment,
     Decrement,
     Initialize,
+    SoftwareTitleSelected { position: u32 },
 }
 
 #[derive(Debug)]
@@ -139,6 +140,16 @@ impl Component for AppModel {
 
         // macro code generation
         let software_titles_view = &model.list_view_wrapper.view;
+
+        let selection = &model.list_view_wrapper.selection_model;
+        selection.connect_selection_changed(clone!(
+            #[strong]
+            sender,
+            move |_selection, position, _n_items| {
+                sender.input(AppMsg::SoftwareTitleSelected { position });
+            }
+        ));
+
         let widgets = view_output!();
 
         sender.input(AppMsg::Initialize);
@@ -170,6 +181,20 @@ impl Component for AppModel {
                         software_titles,
                     })
                 });
+            }
+            AppMsg::SoftwareTitleSelected { position } => {
+                if let Some(title) = self.software_titles.get(position as usize) {
+                    println!("Selected software title: {}", title.name);
+                } else {
+                    println!("No software title found at position {}", position);
+                }
+
+                if let Some(title) = self.list_view_wrapper.get(position) {
+                    let title = title.borrow();
+                    println!("Selected software title: {}", title.title);
+                } else {
+                    println!("No software title found at position {}", position);
+                }
             }
         }
     }
