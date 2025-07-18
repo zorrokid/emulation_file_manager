@@ -116,8 +116,6 @@ impl Component for AppModel {
                     software_titles_view -> gtk::ListView {}
                 }
             }
-
-
         }
     }
 
@@ -218,16 +216,12 @@ impl Component for AppModel {
                     description: title.name.clone(),
                 });
                 self.list_view_wrapper.extend_from_iter(list_items);
-                dbg!(
-                    "Software titles initialized: {}",
-                    self.software_titles.len()
-                );
             }
         }
     }
 }
 
 fn main() {
-    let app = RelmApp::new("relm4.test.simple_manual");
+    let app = RelmApp::new("org.zorrokid.efcm");
     app.run::<AppModel>(0);
 }
