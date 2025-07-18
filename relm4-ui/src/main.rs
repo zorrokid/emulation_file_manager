@@ -21,7 +21,7 @@ enum AppMsg {
     Increment,
     Decrement,
     Initialize,
-    SoftwareTitleSelected { position: u32 },
+    SoftwareTitleSelected { index: u32 },
 }
 
 #[derive(Debug)]
@@ -29,8 +29,9 @@ enum CommandMsg {
     InitializationDone(InitResult),
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, PartialEq, Eq)]
 struct SoftwareListItem {
+    id: i64,
     title: String,
     description: String,
 }
@@ -126,7 +127,7 @@ impl Component for AppModel {
     ) -> ComponentParts<Self> {
         // Initialize the ListView wrapper
         let list_view_wrapper: TypedListView<SoftwareListItem, gtk::SingleSelection> =
-            TypedListView::with_sorting();
+            TypedListView::new();
 
         let model = AppModel {
             counter,
@@ -139,15 +140,16 @@ impl Component for AppModel {
         // macro code generation
         let software_titles_view = &model.list_view_wrapper.view;
 
-        let selection = &model.list_view_wrapper.selection_model;
-        selection.connect_selection_changed(clone!(
+        let selection_model = &model.list_view_wrapper.selection_model;
+        selection_model.connect_selected_notify(clone!(
             #[strong]
             sender,
-            move |_selection, position, _n_items| {
-                sender.input(AppMsg::SoftwareTitleSelected { position });
+            move |selection| {
+                sender.input(AppMsg::SoftwareTitleSelected {
+                    index: selection.selected(),
+                });
             }
         ));
-
         let widgets = view_output!();
 
         sender.input(AppMsg::Initialize);
@@ -180,22 +182,17 @@ impl Component for AppModel {
                     })
                 });
             }
-            AppMsg::SoftwareTitleSelected { position } => {
-                if let Some(title) = self.software_titles.get(position as usize) {
-                    println!("Selected software title: {}", title.name);
-                } else {
-                    println!("No software title found at position {}", position);
-                }
-
-                if let Some(title) = self.list_view_wrapper.get(position) {
+            AppMsg::SoftwareTitleSelected { index } => {
+                if let Some(title) = self.list_view_wrapper.get(index) {
                     let title = title.borrow();
                     println!("Selected software title: {}", title.title);
                 } else {
-                    println!("No software title found at position {}", position);
+                    println!("No software title found at index {}", index);
                 }
             }
         }
     }
+
     fn update_cmd(
         &mut self,
         message: Self::CommandOutput,
@@ -214,6 +211,7 @@ impl Component for AppModel {
                 let list_items = self.software_titles.iter().map(|title| SoftwareListItem {
                     title: title.name.clone(),
                     description: title.name.clone(),
+                    id: title.id,
                 });
                 self.list_view_wrapper.extend_from_iter(list_items);
             }
