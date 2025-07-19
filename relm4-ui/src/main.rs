@@ -22,11 +22,13 @@ enum AppMsg {
     Decrement,
     Initialize,
     SoftwareTitleSelected { index: u32 },
+    AddSoftwareTitle { name: String },
 }
 
 #[derive(Debug)]
 enum CommandMsg {
     InitializationDone(InitResult),
+    SoftwareTitleAdded(SoftwareListItem),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -110,6 +112,14 @@ impl Component for AppModel {
                     set_label: &format!("Counter: {}", model.counter),
                     set_margin_all: 5,
                 },
+                gtk::Entry {
+                    connect_activate[sender] => move |entry| {
+                        let buffer = entry.buffer();
+                        sender.input(AppMsg::AddSoftwareTitle {name: buffer.text().into() });
+                        buffer.delete_text(0, None);
+                    }
+                },
+
                 gtk::ScrolledWindow {
                     set_vexpand: true,
 
@@ -190,6 +200,30 @@ impl Component for AppModel {
                     println!("No software title found at index {}", index);
                 }
             }
+            AppMsg::AddSoftwareTitle { name } => {
+                let repository_manager = self
+                    .repository_manager
+                    .get()
+                    .expect("RepositoryManager not initialized");
+
+                sender.oneshot_command(clone!(
+                    #[strong]
+                    repository_manager,
+                    async move {
+                        let id = repository_manager
+                            .get_software_title_repository()
+                            .add_software_title(&name, None)
+                            .await
+                            .expect("Failed to add software title");
+
+                        CommandMsg::SoftwareTitleAdded(SoftwareListItem {
+                            id,
+                            title: name,
+                            description: "".to_string(),
+                        })
+                    }
+                ));
+            }
         }
     }
 
@@ -214,6 +248,14 @@ impl Component for AppModel {
                     id: title.id,
                 });
                 self.list_view_wrapper.extend_from_iter(list_items);
+            }
+            CommandMsg::SoftwareTitleAdded(item) => {
+                self.software_titles.push(SoftwareTitleListModel {
+                    id: item.id,
+                    name: item.title.clone(),
+                    can_delete: false,
+                });
+                self.list_view_wrapper.append(item);
             }
         }
     }
