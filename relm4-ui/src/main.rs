@@ -1,8 +1,11 @@
+mod releases;
 use std::sync::Arc;
 
 use database::{get_db_pool, repository_manager::RepositoryManager};
+use releases::{ReleasesModel, ReleasesMsg};
 use relm4::{
-    Component, ComponentParts, ComponentSender, RelmApp, RelmWidgetExt,
+    Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmApp,
+    RelmWidgetExt,
     gtk::{self, glib::clone, prelude::*},
     once_cell::sync::OnceCell,
     typed_view::list::{RelmListItem, TypedListView},
@@ -71,6 +74,7 @@ struct AppModel {
     repository_manager: OnceCell<Arc<RepositoryManager>>,
     view_model_service: OnceCell<Arc<ViewModelService>>,
     list_view_wrapper: TypedListView<SoftwareListItem, gtk::SingleSelection>,
+    releases: Controller<ReleasesModel>,
 }
 
 struct AppWidgets {
@@ -90,43 +94,60 @@ impl Component for AppModel {
     view! {
         gtk::Window {
             set_title: Some("EFCM"),
-            set_default_width: 300,
-            set_default_height: 100,
+            set_default_width: 800,
+            set_default_height: 800,
 
-            gtk::Box {
-                set_orientation: gtk::Orientation::Vertical,
-                set_spacing: 5,
-                set_margin_all: 5,
+            gtk::Box{
+                set_orientation: gtk::Orientation::Horizontal,
 
-                gtk::Button {
-                    set_label: "Increment",
-                    connect_clicked => AppMsg::Increment
-                },
-
-                gtk::Button::with_label("Decrement") {
-                    connect_clicked => AppMsg::Decrement
-                },
-
-                gtk::Label {
-                    #[watch]
-                    set_label: &format!("Counter: {}", model.counter),
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Vertical,
+                    set_spacing: 5,
                     set_margin_all: 5,
-                },
-                gtk::Entry {
-                    connect_activate[sender] => move |entry| {
-                        let buffer = entry.buffer();
-                        sender.input(AppMsg::AddSoftwareTitle {name: buffer.text().into() });
-                        buffer.delete_text(0, None);
+
+                    gtk::Button {
+                        set_label: "Increment",
+                        connect_clicked => AppMsg::Increment
+                    },
+
+                    gtk::Button::with_label("Decrement") {
+                        connect_clicked => AppMsg::Decrement
+                    },
+
+                    gtk::Label {
+                        #[watch]
+                        set_label: &format!("Counter: {}", model.counter),
+                        set_margin_all: 5,
+                    },
+                    gtk::Entry {
+                        connect_activate[sender] => move |entry| {
+                            let buffer = entry.buffer();
+                            sender.input(AppMsg::AddSoftwareTitle {name: buffer.text().into() });
+                            buffer.delete_text(0, None);
+                        }
+                    },
+
+                    gtk::ScrolledWindow {
+                        set_vexpand: true,
+
+                        #[local_ref]
+                        software_titles_view -> gtk::ListView {}
                     }
                 },
 
-                gtk::ScrolledWindow {
-                    set_vexpand: true,
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Vertical,
+                    set_spacing: 5,
+                    set_margin_all: 5,
 
-                    #[local_ref]
-                    software_titles_view -> gtk::ListView {}
+                    append: model.releases.widget(),
+
+
+                    /*#[local_ref]
+                    details_view -> gtk::Box {}*/
                 }
-            }
+            },
+
         }
     }
 
@@ -139,12 +160,20 @@ impl Component for AppModel {
         let list_view_wrapper: TypedListView<SoftwareListItem, gtk::SingleSelection> =
             TypedListView::new();
 
+        let releases: Controller<ReleasesModel> =
+            ReleasesModel::builder()
+                .launch(())
+                .forward(sender.input_sender(), |msg| match msg {
+                    _ => AppMsg::Increment, //ReleasesMsg::SomeMessage => AppMsg::Increment, // Example message forwarding
+                });
+
         let model = AppModel {
             counter,
             software_titles: vec![],
             repository_manager: OnceCell::new(),
             view_model_service: OnceCell::new(),
             list_view_wrapper,
+            releases,
         };
 
         // macro code generation
