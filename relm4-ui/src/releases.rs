@@ -1,7 +1,10 @@
+use std::sync::Arc;
+
 use relm4::{
     Component, ComponentParts, ComponentSender, RelmWidgetExt,
     gtk::{self, prelude::*},
 };
+use service::view_model_service::ViewModelService;
 
 #[derive(Debug)]
 pub enum ReleasesMsg {
@@ -12,8 +15,16 @@ pub enum ReleasesMsg {
 #[derive(Debug)]
 pub enum CommandMsg {}
 
-#[derive(Debug, Default)]
-pub struct ReleasesModel {}
+#[derive(Debug)]
+pub struct ReleasesModel {
+    //view_model_service: Arc<ViewModelService>,
+}
+
+/*impl ReleasesModel {
+    pub fn new(view_model_service: Arc<ViewModelService>) -> Self {
+        ReleasesModel { view_model_service }
+    }
+}*/
 
 #[relm4::component(pub)]
 impl Component for ReleasesModel {

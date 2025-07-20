@@ -5,7 +5,6 @@ use database::{get_db_pool, repository_manager::RepositoryManager};
 use releases::{ReleasesModel, ReleasesMsg};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmApp,
-    RelmWidgetExt,
     gtk::{self, glib::clone, prelude::*},
     once_cell::sync::OnceCell,
     typed_view::list::{RelmListItem, TypedListView},
@@ -74,14 +73,15 @@ struct AppModel {
     repository_manager: OnceCell<Arc<RepositoryManager>>,
     view_model_service: OnceCell<Arc<ViewModelService>>,
     list_view_wrapper: TypedListView<SoftwareListItem, gtk::SingleSelection>,
-    releases: Controller<ReleasesModel>,
+    //releases: Option<Controller<ReleasesModel>>,
 }
 
 struct AppWidgets {
-    label: gtk::Label,
+    //label: gtk::Label,
+    releases_view: gtk::Box,
 }
 
-#[relm4::component]
+//#[relm4::component]
 impl Component for AppModel {
     /// The type of the messages that this component can receive.
     type Input = AppMsg;
@@ -90,8 +90,20 @@ impl Component for AppModel {
     type CommandOutput = CommandMsg;
     /// The type of data with which this component will be initialized.
     type Init = u8;
+    /// The root GTK widget that this component will create.
+    type Root = gtk::Window;
+    /// A data structure that contains the widgets that you will need to update.
+    type Widgets = AppWidgets;
 
-    view! {
+    fn init_root() -> Self::Root {
+        gtk::Window::builder()
+            .title("EFCM")
+            .default_width(800)
+            .default_height(800)
+            .build()
+    }
+
+    /*view! {
         gtk::Window {
             set_title: Some("EFCM"),
             set_default_width: 800,
@@ -149,7 +161,7 @@ impl Component for AppModel {
             },
 
         }
-    }
+    }*/
 
     fn init(
         counter: Self::Init,
@@ -160,12 +172,12 @@ impl Component for AppModel {
         let list_view_wrapper: TypedListView<SoftwareListItem, gtk::SingleSelection> =
             TypedListView::new();
 
-        let releases: Controller<ReleasesModel> =
-            ReleasesModel::builder()
-                .launch(())
-                .forward(sender.input_sender(), |msg| match msg {
-                    _ => AppMsg::Increment, //ReleasesMsg::SomeMessage => AppMsg::Increment, // Example message forwarding
-                });
+        /*let releases: Controller<ReleasesModel> =
+        ReleasesModel::builder()
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                _ => AppMsg::Increment, //ReleasesMsg::SomeMessage => AppMsg::Increment, // Example message forwarding
+            });*/
 
         let model = AppModel {
             counter,
@@ -173,10 +185,44 @@ impl Component for AppModel {
             repository_manager: OnceCell::new(),
             view_model_service: OnceCell::new(),
             list_view_wrapper,
-            releases,
+            //releases,
         };
 
-        // macro code generation
+        let main_layout_hbox = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .build();
+
+        let left_vbox = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .build();
+
+        let right_vbox = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .build();
+
+        main_layout_hbox.append(&left_vbox);
+        main_layout_hbox.append(&right_vbox);
+
+        let add_new_software_title_entry = gtk::Entry::builder()
+            .placeholder_text("Add new software title")
+            .build();
+
+        add_new_software_title_entry.connect_activate(clone!(
+            #[strong]
+            sender,
+            move |entry| {
+                let buffer = entry.buffer();
+                sender.input(AppMsg::AddSoftwareTitle {
+                    name: buffer.text().into(),
+                });
+                buffer.delete_text(0, None);
+            }
+        ));
+
+        left_vbox.append(&add_new_software_title_entry);
+
+        let software_titles_list_container = gtk::ScrolledWindow::builder().vexpand(true).build();
+
         let software_titles_view = &model.list_view_wrapper.view;
 
         let selection_model = &model.list_view_wrapper.selection_model;
@@ -189,7 +235,16 @@ impl Component for AppModel {
                 });
             }
         ));
-        let widgets = view_output!();
+
+        software_titles_list_container.set_child(Some(software_titles_view));
+
+        left_vbox.append(&software_titles_list_container);
+
+        root.set_child(Some(&main_layout_hbox));
+
+        let widgets = AppWidgets {
+            releases_view: right_vbox,
+        };
 
         sender.input(AppMsg::Initialize);
 
@@ -225,8 +280,8 @@ impl Component for AppModel {
                 if let Some(title) = self.list_view_wrapper.get(index) {
                     let title = title.borrow();
                     println!("Selected software title: {}", title.title);
-                    self.releases
-                        .emit(ReleasesMsg::SoftwareTitleSelected { id: title.id });
+                    /*self.releases
+                    .emit(ReleasesMsg::SoftwareTitleSelected { id: title.id });*/
                 } else {
                     println!("No software title found at index {}", index);
                 }
@@ -289,6 +344,13 @@ impl Component for AppModel {
                 self.list_view_wrapper.append(item);
             }
         }
+    }
+
+    fn update_view(&self, _widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        // Update the label with the current counter value
+        //widgets.label.set_label(&format!("Counter: {}", self.counter));
+        // Update the releases view if needed
+        //widgets.releases_view.set_child(Some(self.releases.widget()));
     }
 }
 
