@@ -225,6 +225,8 @@ impl Component for AppModel {
                 if let Some(title) = self.list_view_wrapper.get(index) {
                     let title = title.borrow();
                     println!("Selected software title: {}", title.title);
+                    self.releases
+                        .emit(ReleasesMsg::SoftwareTitleSelected { id: title.id });
                 } else {
                     println!("No software title found at index {}", index);
                 }

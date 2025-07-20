@@ -6,6 +6,7 @@ use relm4::{
 #[derive(Debug)]
 pub enum ReleasesMsg {
     SomeMessage,
+    SoftwareTitleSelected { id: i64 },
 }
 
 #[derive(Debug)]
@@ -49,6 +50,10 @@ impl Component for ReleasesModel {
         match msg {
             ReleasesMsg::SomeMessage => {
                 // Handle the message
+            }
+            ReleasesMsg::SoftwareTitleSelected { id } => {
+                // Handle software title selection
+                println!("Software title selected with ID: {}", id);
             }
         }
     }
