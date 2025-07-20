@@ -73,12 +73,13 @@ struct AppModel {
     repository_manager: OnceCell<Arc<RepositoryManager>>,
     view_model_service: OnceCell<Arc<ViewModelService>>,
     list_view_wrapper: TypedListView<SoftwareListItem, gtk::SingleSelection>,
-    //releases: Option<Controller<ReleasesModel>>,
+    releases_view: gtk::Box,
+    releases: OnceCell<Controller<ReleasesModel>>,
 }
 
 struct AppWidgets {
     //label: gtk::Label,
-    releases_view: gtk::Box,
+    //releases_view: gtk::Box,
 }
 
 //#[relm4::component]
@@ -103,66 +104,6 @@ impl Component for AppModel {
             .build()
     }
 
-    /*view! {
-        gtk::Window {
-            set_title: Some("EFCM"),
-            set_default_width: 800,
-            set_default_height: 800,
-
-            gtk::Box{
-                set_orientation: gtk::Orientation::Horizontal,
-
-                gtk::Box {
-                    set_orientation: gtk::Orientation::Vertical,
-                    set_spacing: 5,
-                    set_margin_all: 5,
-
-                    gtk::Button {
-                        set_label: "Increment",
-                        connect_clicked => AppMsg::Increment
-                    },
-
-                    gtk::Button::with_label("Decrement") {
-                        connect_clicked => AppMsg::Decrement
-                    },
-
-                    gtk::Label {
-                        #[watch]
-                        set_label: &format!("Counter: {}", model.counter),
-                        set_margin_all: 5,
-                    },
-                    gtk::Entry {
-                        connect_activate[sender] => move |entry| {
-                            let buffer = entry.buffer();
-                            sender.input(AppMsg::AddSoftwareTitle {name: buffer.text().into() });
-                            buffer.delete_text(0, None);
-                        }
-                    },
-
-                    gtk::ScrolledWindow {
-                        set_vexpand: true,
-
-                        #[local_ref]
-                        software_titles_view -> gtk::ListView {}
-                    }
-                },
-
-                gtk::Box {
-                    set_orientation: gtk::Orientation::Vertical,
-                    set_spacing: 5,
-                    set_margin_all: 5,
-
-                    append: model.releases.widget(),
-
-
-                    /*#[local_ref]
-                    details_view -> gtk::Box {}*/
-                }
-            },
-
-        }
-    }*/
-
     fn init(
         counter: Self::Init,
         root: Self::Root,
@@ -171,22 +112,6 @@ impl Component for AppModel {
         // Initialize the ListView wrapper
         let list_view_wrapper: TypedListView<SoftwareListItem, gtk::SingleSelection> =
             TypedListView::new();
-
-        /*let releases: Controller<ReleasesModel> =
-        ReleasesModel::builder()
-            .launch(())
-            .forward(sender.input_sender(), |msg| match msg {
-                _ => AppMsg::Increment, //ReleasesMsg::SomeMessage => AppMsg::Increment, // Example message forwarding
-            });*/
-
-        let model = AppModel {
-            counter,
-            software_titles: vec![],
-            repository_manager: OnceCell::new(),
-            view_model_service: OnceCell::new(),
-            list_view_wrapper,
-            //releases,
-        };
 
         let main_layout_hbox = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
@@ -223,9 +148,9 @@ impl Component for AppModel {
 
         let software_titles_list_container = gtk::ScrolledWindow::builder().vexpand(true).build();
 
-        let software_titles_view = &model.list_view_wrapper.view;
+        let software_titles_view = &list_view_wrapper.view;
 
-        let selection_model = &model.list_view_wrapper.selection_model;
+        let selection_model = &list_view_wrapper.selection_model;
         selection_model.connect_selected_notify(clone!(
             #[strong]
             sender,
@@ -242,8 +167,16 @@ impl Component for AppModel {
 
         root.set_child(Some(&main_layout_hbox));
 
-        let widgets = AppWidgets {
+        let widgets = AppWidgets {};
+
+        let model = AppModel {
+            counter,
+            software_titles: vec![],
+            repository_manager: OnceCell::new(),
+            view_model_service: OnceCell::new(),
+            list_view_wrapper,
             releases_view: right_vbox,
+            releases: OnceCell::new(),
         };
 
         sender.input(AppMsg::Initialize);
@@ -280,8 +213,10 @@ impl Component for AppModel {
                 if let Some(title) = self.list_view_wrapper.get(index) {
                     let title = title.borrow();
                     println!("Selected software title: {}", title.title);
-                    /*self.releases
-                    .emit(ReleasesMsg::SoftwareTitleSelected { id: title.id });*/
+                    self.releases
+                        .get()
+                        .expect("ReleasesModel not initialized")
+                        .emit(ReleasesMsg::SoftwareTitleSelected { id: title.id });
                 } else {
                     println!("No software title found at index {}", index);
                 }
@@ -321,6 +256,7 @@ impl Component for AppModel {
     ) {
         match message {
             CommandMsg::InitializationDone(init_result) => {
+                let view_model_service = Arc::clone(&init_result.view_model_service);
                 self.view_model_service
                     .set(init_result.view_model_service)
                     .expect("view model service already initialized?");
@@ -334,6 +270,17 @@ impl Component for AppModel {
                     id: title.id,
                 });
                 self.list_view_wrapper.extend_from_iter(list_items);
+
+                let releases = ReleasesModel::builder().launch(view_model_service).forward(
+                    _sender.input_sender(),
+                    |msg| match msg {
+                        _ => AppMsg::Increment, // Example message forwarding
+                    },
+                );
+                self.releases_view.append(releases.widget());
+                self.releases
+                    .set(releases)
+                    .expect("ReleasesModel already initialized");
             }
             CommandMsg::SoftwareTitleAdded(item) => {
                 self.software_titles.push(SoftwareTitleListModel {

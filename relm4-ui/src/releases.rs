@@ -17,21 +17,15 @@ pub enum CommandMsg {}
 
 #[derive(Debug)]
 pub struct ReleasesModel {
-    //view_model_service: Arc<ViewModelService>,
+    view_model_service: Arc<ViewModelService>,
 }
-
-/*impl ReleasesModel {
-    pub fn new(view_model_service: Arc<ViewModelService>) -> Self {
-        ReleasesModel { view_model_service }
-    }
-}*/
 
 #[relm4::component(pub)]
 impl Component for ReleasesModel {
     type Input = ReleasesMsg;
     type Output = ();
     type CommandOutput = CommandMsg;
-    type Init = ();
+    type Init = Arc<ViewModelService>;
 
     view! {
         #[root]
@@ -48,12 +42,12 @@ impl Component for ReleasesModel {
     }
 
     fn init(
-        _: Self::Init,
+        view_model_service: Self::Init,
         root: Self::Root,
         _sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let widgets = view_output!();
-        let model = ReleasesModel {};
+        let model = ReleasesModel { view_model_service };
         ComponentParts { model, widgets }
     }
 
