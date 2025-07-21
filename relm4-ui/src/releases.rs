@@ -2,9 +2,13 @@ use std::sync::Arc;
 
 use relm4::{
     Component, ComponentParts, ComponentSender, RelmWidgetExt,
-    gtk::{self, prelude::*},
+    gtk::{self, glib::clone, prelude::*},
 };
-use service::view_model_service::ViewModelService;
+use service::{
+    error::Error,
+    view_model_service::{ReleaseFilter, ViewModelService},
+    view_models::ReleaseListModel,
+};
 
 #[derive(Debug)]
 pub enum ReleasesMsg {
@@ -13,7 +17,9 @@ pub enum ReleasesMsg {
 }
 
 #[derive(Debug)]
-pub enum CommandMsg {}
+pub enum CommandMsg {
+    SomeMessage(Result<Vec<ReleaseListModel>, Error>),
+}
 
 #[derive(Debug)]
 pub struct ReleasesModel {
@@ -51,7 +57,7 @@ impl Component for ReleasesModel {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>, _: &Self::Root) {
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _: &Self::Root) {
         match msg {
             ReleasesMsg::SomeMessage => {
                 // Handle the message
@@ -59,6 +65,21 @@ impl Component for ReleasesModel {
             ReleasesMsg::SoftwareTitleSelected { id } => {
                 // Handle software title selection
                 println!("Software title selected with ID: {}", id);
+
+                let view_model_service = Arc::clone(&self.view_model_service);
+
+                // TODO: use command with view_model_service to fetch releases for the selected software title
+                sender.oneshot_command(async move {
+                    // Simulate fetching releases
+                    let releases_result = view_model_service
+                        .get_release_list_models(ReleaseFilter {
+                            software_title_id: Some(id),
+                            system_id: None,
+                        })
+                        .await;
+                    println!("Fetched releases: {:?}", releases_result);
+                    CommandMsg::SomeMessage(releases_result) // Replace with actual command message
+                });
             }
         }
     }
@@ -68,6 +89,19 @@ impl Component for ReleasesModel {
         _sender: ComponentSender<Self>,
         _: &Self::Root,
     ) {
-        match message {}
+        match message {
+            CommandMsg::SomeMessage(releases_result) => {
+                match releases_result {
+                    Ok(releases) => {
+                        // Handle successful release fetching
+                        println!("Releases fetched successfully: {:?}", releases);
+                    }
+                    Err(err) => {
+                        // Handle error in fetching releases
+                        eprintln!("Error fetching releases: {:?}", err);
+                    }
+                }
+            }
+        }
     }
 }
