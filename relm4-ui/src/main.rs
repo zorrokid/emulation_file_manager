@@ -252,7 +252,7 @@ impl Component for AppModel {
     fn update_cmd(
         &mut self,
         message: Self::CommandOutput,
-        _sender: ComponentSender<Self>,
+        sender: ComponentSender<Self>,
         _: &Self::Root,
     ) {
         match message {
@@ -273,7 +273,7 @@ impl Component for AppModel {
                 self.list_view_wrapper.extend_from_iter(list_items);
 
                 let releases = ReleasesModel::builder().launch(view_model_service).forward(
-                    _sender.input_sender(),
+                    sender.input_sender(),
                     |msg| match msg {
                         _ => AppMsg::Increment, // Example message forwarding
                     },

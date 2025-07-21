@@ -2,9 +2,15 @@ use relm4::{
     Component, ComponentParts, ComponentSender,
     gtk::{self, prelude::GtkWindowExt},
 };
+use service::view_models::ReleaseListModel;
 
 #[derive(Debug)]
 pub enum ReleaseFormMsg {}
+
+#[derive(Debug)]
+pub enum ReleaseFormOutputMsg {
+    ReleaseCreated(ReleaseListModel),
+}
 
 #[derive(Debug)]
 pub enum CommandMsg {}
@@ -15,7 +21,7 @@ pub struct ReleaseFormModel;
 #[relm4::component(pub)]
 impl Component for ReleaseFormModel {
     type Input = ReleaseFormMsg;
-    type Output = ();
+    type Output = ReleaseFormOutputMsg;
     type CommandOutput = CommandMsg;
     type Init = ();
 

@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
 use relm4::{
-    Component, ComponentController, ComponentParts, ComponentSender, RelmWidgetExt,
+    Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{self, prelude::*},
+    once_cell::sync::OnceCell,
 };
 use service::{
     error::Error,
@@ -10,12 +11,13 @@ use service::{
     view_models::ReleaseListModel,
 };
 
-use crate::release_form::ReleaseFormModel;
+use crate::release_form::{ReleaseFormModel, ReleaseFormMsg, ReleaseFormOutputMsg};
 
 #[derive(Debug)]
 pub enum ReleasesMsg {
     SoftwareTitleSelected { id: i64 },
-    AddRelease,
+    StartAddRelease,
+    AddRelease(ReleaseListModel),
 }
 
 #[derive(Debug)]
@@ -48,7 +50,7 @@ impl Component for ReleasesModel {
 
             gtk::Button {
                 set_label: "Add Release",
-                connect_clicked => ReleasesMsg::AddRelease,
+                connect_clicked => ReleasesMsg::StartAddRelease,
             },
 
         }
@@ -85,12 +87,26 @@ impl Component for ReleasesModel {
                     CommandMsg::FetchedReleases(releases_result) // Replace with actual command message
                 });
             }
-            ReleasesMsg::AddRelease => {
+            ReleasesMsg::StartAddRelease => {
                 // Handle adding a release
                 println!("Add Release button clicked");
-                let form_window = ReleaseFormModel::builder().launch(());
-                //form_window.connect_closed(...);
+                let form_window =
+                    ReleaseFormModel::builder()
+                        .launch(())
+                        .forward(sender.input_sender(), |msg| match msg {
+                            // Handle messages from the release form
+                            ReleaseFormOutputMsg::ReleaseCreated(release_list_model) => {
+                                ReleasesMsg::AddRelease(release_list_model)
+                            }
+                        });
+
                 form_window.widget().present();
+                //form_window.connect_closed(...);
+            }
+            ReleasesMsg::AddRelease(release_list_model) => {
+                // Handle the added release
+                println!("Release added: {:?}", release_list_model);
+                // Here you would typically update the model or UI to reflect the new release
             }
         }
     }
