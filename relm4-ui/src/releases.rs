@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use relm4::{
-    Component, ComponentParts, ComponentSender, RelmWidgetExt,
-    gtk::{self, glib::clone, prelude::*},
+    Component, ComponentController, ComponentParts, ComponentSender, RelmWidgetExt,
+    gtk::{self, prelude::*},
 };
 use service::{
     error::Error,
@@ -10,15 +10,17 @@ use service::{
     view_models::ReleaseListModel,
 };
 
+use crate::release_form::ReleaseFormModel;
+
 #[derive(Debug)]
 pub enum ReleasesMsg {
-    SomeMessage,
     SoftwareTitleSelected { id: i64 },
+    AddRelease,
 }
 
 #[derive(Debug)]
 pub enum CommandMsg {
-    SomeMessage(Result<Vec<ReleaseListModel>, Error>),
+    FetchedReleases(Result<Vec<ReleaseListModel>, Error>),
 }
 
 #[derive(Debug)]
@@ -44,6 +46,11 @@ impl Component for ReleasesModel {
                 set_label: "Releases Component",
             },
 
+            gtk::Button {
+                set_label: "Add Release",
+                connect_clicked => ReleasesMsg::AddRelease,
+            },
+
         }
     }
 
@@ -59,9 +66,6 @@ impl Component for ReleasesModel {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _: &Self::Root) {
         match msg {
-            ReleasesMsg::SomeMessage => {
-                // Handle the message
-            }
             ReleasesMsg::SoftwareTitleSelected { id } => {
                 // Handle software title selection
                 println!("Software title selected with ID: {}", id);
@@ -78,8 +82,15 @@ impl Component for ReleasesModel {
                         })
                         .await;
                     println!("Fetched releases: {:?}", releases_result);
-                    CommandMsg::SomeMessage(releases_result) // Replace with actual command message
+                    CommandMsg::FetchedReleases(releases_result) // Replace with actual command message
                 });
+            }
+            ReleasesMsg::AddRelease => {
+                // Handle adding a release
+                println!("Add Release button clicked");
+                let form_window = ReleaseFormModel::builder().launch(());
+                //form_window.connect_closed(...);
+                form_window.widget().present();
             }
         }
     }
@@ -90,7 +101,7 @@ impl Component for ReleasesModel {
         _: &Self::Root,
     ) {
         match message {
-            CommandMsg::SomeMessage(releases_result) => {
+            CommandMsg::FetchedReleases(releases_result) => {
                 match releases_result {
                     Ok(releases) => {
                         // Handle successful release fetching

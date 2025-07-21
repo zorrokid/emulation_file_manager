@@ -1,3 +1,4 @@
+mod release_form;
 mod releases;
 use std::sync::Arc;
 
