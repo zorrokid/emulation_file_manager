@@ -32,7 +32,7 @@ pub enum CommandMsg {
 pub struct ReleasesModel {
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
-    form_window: Controller<ReleaseFormModel>,
+    form_window: Option<Controller<ReleaseFormModel>>,
 }
 
 pub struct ReleasesInit {
@@ -73,22 +73,10 @@ impl Component for ReleasesModel {
     ) -> ComponentParts<Self> {
         let widgets = view_output!();
 
-        let release_form_init_model = ReleaseFormInit {
-            view_model_service: Arc::clone(&init_model.view_model_service),
-            repository_manager: Arc::clone(&init_model.repository_manager),
-        };
-        let form_window = ReleaseFormModel::builder()
-            .launch(release_form_init_model)
-            .forward(sender.input_sender(), |msg| match msg {
-                ReleaseFormOutputMsg::ReleaseCreated(release_list_model) => {
-                    ReleasesMsg::AddRelease(release_list_model)
-                }
-            });
-
         let model = ReleasesModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
-            form_window,
+            form_window: None,
         };
         ComponentParts { model, widgets }
     }
@@ -127,11 +115,13 @@ impl Component for ReleasesModel {
                         }
                     });
 
-                self.form_window = form_window;
+                self.form_window = Some(form_window);
 
-                // Handle adding a release
-                println!("Add Release button clicked");
-                self.form_window.widget().present();
+                self.form_window
+                    .as_ref()
+                    .expect("Form window should be set already")
+                    .widget()
+                    .present();
                 //form_window.connect_closed(...);
             }
             ReleasesMsg::AddRelease(release_list_model) => {

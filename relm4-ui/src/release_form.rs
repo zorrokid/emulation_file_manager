@@ -35,7 +35,7 @@ pub struct ReleaseFormModel {
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
     selected_systems: Vec<SystemListModel>,
-    system_selector: Controller<SystemSelectModel>,
+    system_selector: Option<Controller<SystemSelectModel>>,
 }
 
 #[derive(Debug)]
@@ -92,23 +92,11 @@ impl Component for ReleaseFormModel {
 
         let widgets = Widgets {};
 
-        let system_init_model = SystemSelectInit {
-            view_model_service: Arc::clone(&init_model.view_model_service),
-            repository_manager: Arc::clone(&init_model.repository_manager),
-        };
-        let system_selector = SystemSelectModel::builder()
-            .launch(system_init_model)
-            .forward(sender.input_sender(), |msg| match msg {
-                SystemSelectOutputMsg::SystemSelected(system_list_model) => {
-                    ReleaseFormMsg::SystemSelected(system_list_model)
-                }
-            });
-
         let model = ReleaseFormModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
             selected_systems: Vec::new(),
-            system_selector,
+            system_selector: None,
         };
         ComponentParts { model, widgets }
     }
@@ -128,9 +116,13 @@ impl Component for ReleaseFormModel {
                         }
                     },
                 );
-                self.system_selector = system_selector;
+                self.system_selector = Some(system_selector);
 
-                self.system_selector.widget().present();
+                self.system_selector
+                    .as_ref()
+                    .expect("System selector should be set")
+                    .widget()
+                    .present();
             }
             ReleaseFormMsg::SystemSelected(system) => {
                 println!("System selected: {:?}", &system);
