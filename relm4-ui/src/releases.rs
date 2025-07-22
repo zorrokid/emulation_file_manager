@@ -84,14 +84,11 @@ impl Component for ReleasesModel {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _: &Self::Root) {
         match msg {
             ReleasesMsg::SoftwareTitleSelected { id } => {
-                // Handle software title selection
                 println!("Software title selected with ID: {}", id);
 
                 let view_model_service = Arc::clone(&self.view_model_service);
 
-                // TODO: use command with view_model_service to fetch releases for the selected software title
                 sender.oneshot_command(async move {
-                    // Simulate fetching releases
                     let releases_result = view_model_service
                         .get_release_list_models(ReleaseFilter {
                             software_title_id: Some(id),
@@ -125,7 +122,6 @@ impl Component for ReleasesModel {
                 //form_window.connect_closed(...);
             }
             ReleasesMsg::AddRelease(release_list_model) => {
-                // Handle the added release
                 println!("Release added: {:?}", release_list_model);
                 // Here you would typically update the model or UI to reflect the new release
             }

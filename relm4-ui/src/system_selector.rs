@@ -1,14 +1,18 @@
 use std::sync::Arc;
 
-use database::repository_manager::RepositoryManager;
+use database::{database_error::Error as DatabaseError, repository_manager::RepositoryManager};
 use relm4::{
     Component, ComponentParts, ComponentSender,
     gtk::{
         self, gio,
-        prelude::{BoxExt, GtkWindowExt},
+        glib::clone,
+        prelude::{BoxExt, EntryBufferExtManual, EntryExt, GtkWindowExt},
     },
 };
-use service::{error::Error, view_model_service::ViewModelService, view_models::SystemListModel};
+use service::{
+    error::Error as ServiceError, view_model_service::ViewModelService,
+    view_models::SystemListModel,
+};
 
 pub struct SystemListItem {
     name: String,
@@ -18,6 +22,7 @@ pub struct SystemListItem {
 #[derive(Debug)]
 pub enum SystemSelectMsg {
     FetchSystems,
+    AddSystem { name: String },
 }
 
 #[derive(Debug)]
@@ -27,7 +32,9 @@ pub enum SystemSelectOutputMsg {
 
 #[derive(Debug)]
 pub enum CommandMsg {
-    SystemsFetched(Result<Vec<SystemListModel>, Error>),
+    SystemsFetched(Result<Vec<SystemListModel>, ServiceError>),
+    SystemAdded(SystemListModel),
+    AddingSystemFailed(DatabaseError),
 }
 
 pub struct SystemSelectInit {
@@ -71,9 +78,27 @@ impl Component for SystemSelectModel {
             .orientation(gtk::Orientation::Vertical)
             .build();
 
-        let label = gtk::Label::new(Some("Release Form Component"));
+        let label = gtk::Label::new(Some("System Select Component"));
 
         v_box.append(&label);
+
+        let add_new_system_entry = gtk::Entry::builder()
+            .placeholder_text("Add new system")
+            .build();
+
+        add_new_system_entry.connect_activate(clone!(
+            #[strong]
+            sender,
+            move |entry| {
+                let buffer = entry.buffer();
+                sender.input(SystemSelectMsg::AddSystem {
+                    name: buffer.text().into(),
+                });
+                buffer.delete_text(0, None);
+            }
+        ));
+
+        v_box.append(&add_new_system_entry);
 
         /*let list_store = gio::ListStore::new::<SystemListItem>();
 
@@ -106,6 +131,27 @@ impl Component for SystemSelectModel {
                     CommandMsg::SystemsFetched(systems_result)
                 });
             }
+            SystemSelectMsg::AddSystem { name } => {
+                println!("Adding new system: {}", name);
+                let repository_manager = Arc::clone(&self.repository_manager);
+                sender.oneshot_command(async move {
+                    let result = repository_manager
+                        .get_system_repository()
+                        .add_system(&name)
+                        .await;
+                    match result {
+                        Ok(id) => {
+                            let system_list_model = SystemListModel {
+                                id,
+                                name: name.clone(),
+                                can_delete: true, // OK to delete since this was just added
+                            };
+                            CommandMsg::SystemAdded(system_list_model)
+                        }
+                        Err(e) => CommandMsg::AddingSystemFailed(e),
+                    }
+                });
+            }
         }
     }
 
@@ -126,6 +172,16 @@ impl Component for SystemSelectModel {
             CommandMsg::SystemsFetched(Err(e)) => {
                 // Handle the error
                 eprintln!("Error fetching systems: {:?}", e);
+            }
+            CommandMsg::SystemAdded(system_list_model) => {
+                // Handle the successful addition of a system
+                println!("Successfully added system: {}", system_list_model.name);
+                // Optionally, you could fetch the updated list of systems
+                // self.update(SystemSelectMsg::FetchSystems, sender, root);
+            }
+            CommandMsg::AddingSystemFailed(error) => {
+                // Handle the error when adding a system
+                eprintln!("Error adding system: {:?}", error);
             }
         }
     }
