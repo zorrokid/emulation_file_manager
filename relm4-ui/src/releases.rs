@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{self, prelude::*},
@@ -11,7 +12,9 @@ use service::{
     view_models::ReleaseListModel,
 };
 
-use crate::release_form::{ReleaseFormModel, ReleaseFormMsg, ReleaseFormOutputMsg};
+use crate::release_form::{
+    ReleaseFormInit, ReleaseFormModel, ReleaseFormMsg, ReleaseFormOutputMsg,
+};
 
 #[derive(Debug)]
 pub enum ReleasesMsg {
@@ -28,6 +31,12 @@ pub enum CommandMsg {
 #[derive(Debug)]
 pub struct ReleasesModel {
     view_model_service: Arc<ViewModelService>,
+    repository_manager: Arc<RepositoryManager>,
+}
+
+pub struct ReleasesInit {
+    pub view_model_service: Arc<ViewModelService>,
+    pub repository_manager: Arc<RepositoryManager>,
 }
 
 #[relm4::component(pub)]
@@ -35,7 +44,7 @@ impl Component for ReleasesModel {
     type Input = ReleasesMsg;
     type Output = ();
     type CommandOutput = CommandMsg;
-    type Init = Arc<ViewModelService>;
+    type Init = ReleasesInit;
 
     view! {
         #[root]
@@ -57,12 +66,15 @@ impl Component for ReleasesModel {
     }
 
     fn init(
-        view_model_service: Self::Init,
+        init_model: Self::Init,
         root: Self::Root,
         _sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let widgets = view_output!();
-        let model = ReleasesModel { view_model_service };
+        let model = ReleasesModel {
+            view_model_service: init_model.view_model_service,
+            repository_manager: init_model.repository_manager,
+        };
         ComponentParts { model, widgets }
     }
 
@@ -90,15 +102,19 @@ impl Component for ReleasesModel {
             ReleasesMsg::StartAddRelease => {
                 // Handle adding a release
                 println!("Add Release button clicked");
-                let form_window =
-                    ReleaseFormModel::builder()
-                        .launch(())
-                        .forward(sender.input_sender(), |msg| match msg {
-                            // Handle messages from the release form
-                            ReleaseFormOutputMsg::ReleaseCreated(release_list_model) => {
-                                ReleasesMsg::AddRelease(release_list_model)
-                            }
-                        });
+                let init_model = ReleaseFormInit {
+                    view_model_service: Arc::clone(&self.view_model_service),
+                    repository_manager: Arc::clone(&self.repository_manager),
+                };
+                let form_window = ReleaseFormModel::builder().launch(init_model).forward(
+                    sender.input_sender(),
+                    |msg| match msg {
+                        // Handle messages from the release form
+                        ReleaseFormOutputMsg::ReleaseCreated(release_list_model) => {
+                            ReleasesMsg::AddRelease(release_list_model)
+                        }
+                    },
+                );
 
                 form_window.widget().present();
                 //form_window.connect_closed(...);

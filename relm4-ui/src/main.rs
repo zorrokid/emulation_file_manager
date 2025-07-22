@@ -1,9 +1,10 @@
 mod release_form;
 mod releases;
+mod system_selector;
 use std::sync::Arc;
 
 use database::{get_db_pool, repository_manager::RepositoryManager};
-use releases::{ReleasesModel, ReleasesMsg};
+use releases::{ReleasesInit, ReleasesModel, ReleasesMsg};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmApp,
     gtk::{self, glib::clone, prelude::*},
@@ -257,6 +258,7 @@ impl Component for AppModel {
         match message {
             CommandMsg::InitializationDone(init_result) => {
                 let view_model_service = Arc::clone(&init_result.view_model_service);
+                let repository_manager = Arc::clone(&init_result.repository_manager);
                 self.view_model_service
                     .set(init_result.view_model_service)
                     .expect("view model service already initialized?");
@@ -271,7 +273,12 @@ impl Component for AppModel {
                 });
                 self.list_view_wrapper.extend_from_iter(list_items);
 
-                let releases = ReleasesModel::builder().launch(view_model_service).forward(
+                let releases_init = ReleasesInit {
+                    view_model_service,
+                    repository_manager,
+                };
+
+                let releases = ReleasesModel::builder().launch(releases_init).forward(
                     sender.input_sender(),
                     |msg| match msg {
                         _ => AppMsg::Increment, // Example message forwarding

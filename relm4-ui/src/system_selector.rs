@@ -1,6 +1,3 @@
-use std::sync::Arc;
-
-use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentParts, ComponentSender,
     gtk::{
@@ -8,39 +5,51 @@ use relm4::{
         prelude::{BoxExt, GtkWindowExt},
     },
 };
-use service::{view_model_service::ViewModelService, view_models::ReleaseListModel};
+use service::view_models::SystemListModel;
+
+pub struct SystemListItem {
+    name: String,
+    id: i64,
+}
 
 #[derive(Debug)]
-pub enum ReleaseFormMsg {}
+pub enum SystemSelectMsg {}
 
 #[derive(Debug)]
-pub enum ReleaseFormOutputMsg {
-    ReleaseCreated(ReleaseListModel),
+pub enum SystemSelectOutputMsg {
+    SystemSelected(SystemListModel),
 }
 
 #[derive(Debug)]
 pub enum CommandMsg {}
 
 #[derive(Debug)]
-pub struct ReleaseFormModel {
-    pub view_model_service: Arc<ViewModelService>,
-    pub repository_manager: Arc<RepositoryManager>,
-}
+pub struct SystemSelectModel;
 
 pub struct Widgets {}
 
-pub struct ReleaseFormInit {
-    pub view_model_service: Arc<ViewModelService>,
-    pub repository_manager: Arc<RepositoryManager>,
-}
-
-impl Component for ReleaseFormModel {
-    type Input = ReleaseFormMsg;
-    type Output = ReleaseFormOutputMsg;
+//#[relm4::component(pub)]
+impl Component for SystemSelectModel {
+    type Input = SystemSelectMsg;
+    type Output = SystemSelectOutputMsg;
     type CommandOutput = CommandMsg;
-    type Init = ReleaseFormInit;
+    type Init = ();
     type Widgets = Widgets;
     type Root = gtk::Window;
+
+    /*view! {
+        #[root]
+        gtk::Window {
+            set_title: Some("Release Form"),
+            gtk::Box {
+                gtk::Label {
+                    set_label: "Release Form Component",
+                },
+                gtk::DropDown {
+                },
+            }
+        }
+    }*/
 
     fn init_root() -> Self::Root {
         gtk::Window::builder()
@@ -51,7 +60,7 @@ impl Component for ReleaseFormModel {
     }
 
     fn init(
-        init_model: Self::Init,
+        _: Self::Init,
         root: Self::Root,
         _sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
@@ -64,22 +73,19 @@ impl Component for ReleaseFormModel {
 
         v_box.append(&label);
 
-        let select_system_button = gtk::Button::with_label("Select System");
-        /*select_system_button.connect_clicked(clone!(@weak root => move |_| {
-            let system_select_model = SystemSelectModel::new();
-            system_select_model.show(&root);
-        }));*/
+        /*let list_store = gio::ListStore::new::<SystemListItem>();
 
-        v_box.append(&select_system_button);
+        let systems_dropdown = gtk::DropDown::builder()
+            .model(&gtk::StringList::new(&["System 1", "System 2", "System 3"]))
+            .build();
+
+        v_box.append(&systems_dropdown);*/
 
         root.set_child(Some(&v_box));
 
         let widgets = Widgets {};
 
-        let model = ReleaseFormModel {
-            view_model_service: init_model.view_model_service,
-            repository_manager: init_model.repository_manager,
-        };
+        let model = SystemSelectModel {};
         ComponentParts { model, widgets }
     }
 
