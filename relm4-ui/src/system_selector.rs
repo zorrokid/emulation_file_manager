@@ -1,3 +1,6 @@
+use std::sync::Arc;
+
+use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentParts, ComponentSender,
     gtk::{
@@ -5,7 +8,7 @@ use relm4::{
         prelude::{BoxExt, GtkWindowExt},
     },
 };
-use service::view_models::SystemListModel;
+use service::{error::Error, view_model_service::ViewModelService, view_models::SystemListModel};
 
 pub struct SystemListItem {
     name: String,
@@ -13,7 +16,9 @@ pub struct SystemListItem {
 }
 
 #[derive(Debug)]
-pub enum SystemSelectMsg {}
+pub enum SystemSelectMsg {
+    FetchSystems,
+}
 
 #[derive(Debug)]
 pub enum SystemSelectOutputMsg {
@@ -21,35 +26,32 @@ pub enum SystemSelectOutputMsg {
 }
 
 #[derive(Debug)]
-pub enum CommandMsg {}
+pub enum CommandMsg {
+    SystemsFetched(Result<Vec<SystemListModel>, Error>),
+}
+
+pub struct SystemSelectInit {
+    pub view_model_service: Arc<ViewModelService>,
+    pub repository_manager: Arc<RepositoryManager>,
+}
 
 #[derive(Debug)]
-pub struct SystemSelectModel;
+pub struct SystemSelectModel {
+    view_model_service: Arc<ViewModelService>,
+    repository_manager: Arc<RepositoryManager>,
+    systems: Vec<SystemListModel>,
+}
 
+#[derive(Debug)]
 pub struct Widgets {}
 
-//#[relm4::component(pub)]
 impl Component for SystemSelectModel {
     type Input = SystemSelectMsg;
     type Output = SystemSelectOutputMsg;
     type CommandOutput = CommandMsg;
-    type Init = ();
+    type Init = SystemSelectInit;
     type Widgets = Widgets;
     type Root = gtk::Window;
-
-    /*view! {
-        #[root]
-        gtk::Window {
-            set_title: Some("Release Form"),
-            gtk::Box {
-                gtk::Label {
-                    set_label: "Release Form Component",
-                },
-                gtk::DropDown {
-                },
-            }
-        }
-    }*/
 
     fn init_root() -> Self::Root {
         gtk::Window::builder()
@@ -60,11 +62,11 @@ impl Component for SystemSelectModel {
     }
 
     fn init(
-        _: Self::Init,
+        init_model: Self::Init,
         root: Self::Root,
-        _sender: ComponentSender<Self>,
+        sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        //let widgets = view_output!();
+        println!("Initializing SystemSelectModel");
         let v_box = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
             .build();
@@ -85,16 +87,46 @@ impl Component for SystemSelectModel {
 
         let widgets = Widgets {};
 
-        let model = SystemSelectModel {};
+        let model = SystemSelectModel {
+            view_model_service: init_model.view_model_service,
+            repository_manager: init_model.repository_manager,
+            systems: Vec::new(),
+        };
+        sender.input(SystemSelectMsg::FetchSystems);
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, _msg: Self::Input, _sender: ComponentSender<Self>, _: &Self::Root) {}
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _: &Self::Root) {
+        match msg {
+            SystemSelectMsg::FetchSystems => {
+                println!("Fetching systems...");
+                let view_model_service = Arc::clone(&self.view_model_service);
+                sender.oneshot_command(async move {
+                    let systems_result = view_model_service.get_system_list_models().await;
+                    CommandMsg::SystemsFetched(systems_result)
+                });
+            }
+        }
+    }
+
     fn update_cmd(
         &mut self,
-        _message: Self::CommandOutput,
+        message: Self::CommandOutput,
         _sender: ComponentSender<Self>,
         _: &Self::Root,
     ) {
+        match message {
+            CommandMsg::SystemsFetched(Ok(systems)) => {
+                // Handle the fetched systems, e.g., populate a dropdown or list
+                for system in &systems {
+                    println!("Fetched system: {} with ID: {}", system.name, system.id);
+                }
+                self.systems = systems;
+            }
+            CommandMsg::SystemsFetched(Err(e)) => {
+                // Handle the error
+                eprintln!("Error fetching systems: {:?}", e);
+            }
+        }
     }
 }

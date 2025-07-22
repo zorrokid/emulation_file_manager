@@ -2,16 +2,25 @@ use std::sync::Arc;
 
 use database::repository_manager::RepositoryManager;
 use relm4::{
-    Component, ComponentParts, ComponentSender,
+    Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
         self, gio,
-        prelude::{BoxExt, GtkWindowExt},
+        glib::clone,
+        prelude::{BoxExt, ButtonExt, GtkWindowExt},
     },
 };
-use service::{view_model_service::ViewModelService, view_models::ReleaseListModel};
+use service::{
+    view_model_service::ViewModelService,
+    view_models::{ReleaseListModel, SystemListModel},
+};
+
+use crate::system_selector::{SystemSelectInit, SystemSelectModel, SystemSelectOutputMsg};
 
 #[derive(Debug)]
-pub enum ReleaseFormMsg {}
+pub enum ReleaseFormMsg {
+    OpenSystemSelector,
+    SystemSelected(SystemListModel),
+}
 
 #[derive(Debug)]
 pub enum ReleaseFormOutputMsg {
@@ -23,10 +32,13 @@ pub enum CommandMsg {}
 
 #[derive(Debug)]
 pub struct ReleaseFormModel {
-    pub view_model_service: Arc<ViewModelService>,
-    pub repository_manager: Arc<RepositoryManager>,
+    view_model_service: Arc<ViewModelService>,
+    repository_manager: Arc<RepositoryManager>,
+    selected_systems: Vec<SystemListModel>,
+    system_selector: Controller<SystemSelectModel>,
 }
 
+#[derive(Debug)]
 pub struct Widgets {}
 
 pub struct ReleaseFormInit {
@@ -53,7 +65,7 @@ impl Component for ReleaseFormModel {
     fn init(
         init_model: Self::Init,
         root: Self::Root,
-        _sender: ComponentSender<Self>,
+        sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         //let widgets = view_output!();
         let v_box = gtk::Box::builder()
@@ -65,10 +77,14 @@ impl Component for ReleaseFormModel {
         v_box.append(&label);
 
         let select_system_button = gtk::Button::with_label("Select System");
-        /*select_system_button.connect_clicked(clone!(@weak root => move |_| {
-            let system_select_model = SystemSelectModel::new();
-            system_select_model.show(&root);
-        }));*/
+        select_system_button.connect_clicked(clone!(
+            #[strong]
+            sender,
+            move |_| {
+                sender.input(ReleaseFormMsg::OpenSystemSelector);
+                println!("Select System button clicked");
+            }
+        ));
 
         v_box.append(&select_system_button);
 
@@ -76,14 +92,53 @@ impl Component for ReleaseFormModel {
 
         let widgets = Widgets {};
 
+        let system_init_model = SystemSelectInit {
+            view_model_service: Arc::clone(&init_model.view_model_service),
+            repository_manager: Arc::clone(&init_model.repository_manager),
+        };
+        let system_selector = SystemSelectModel::builder()
+            .launch(system_init_model)
+            .forward(sender.input_sender(), |msg| match msg {
+                SystemSelectOutputMsg::SystemSelected(system_list_model) => {
+                    ReleaseFormMsg::SystemSelected(system_list_model)
+                }
+            });
+
         let model = ReleaseFormModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
+            selected_systems: Vec::new(),
+            system_selector,
         };
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, _msg: Self::Input, _sender: ComponentSender<Self>, _: &Self::Root) {}
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _: &Self::Root) {
+        match msg {
+            ReleaseFormMsg::OpenSystemSelector => {
+                let init_model = SystemSelectInit {
+                    view_model_service: Arc::clone(&self.view_model_service),
+                    repository_manager: Arc::clone(&self.repository_manager),
+                };
+                let system_selector = SystemSelectModel::builder().launch(init_model).forward(
+                    sender.input_sender(),
+                    |msg| match msg {
+                        SystemSelectOutputMsg::SystemSelected(system_list_model) => {
+                            ReleaseFormMsg::SystemSelected(system_list_model)
+                        }
+                    },
+                );
+                self.system_selector = system_selector;
+
+                self.system_selector.widget().present();
+            }
+            ReleaseFormMsg::SystemSelected(system) => {
+                println!("System selected: {:?}", &system);
+                self.selected_systems.push(system);
+            }
+        }
+    }
+
     fn update_cmd(
         &mut self,
         _message: Self::CommandOutput,
