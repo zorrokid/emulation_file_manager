@@ -83,7 +83,6 @@ struct AppWidgets {
     //releases_view: gtk::Box,
 }
 
-//#[relm4::component]
 impl Component for AppModel {
     /// The type of the messages that this component can receive.
     type Input = AppMsg;
