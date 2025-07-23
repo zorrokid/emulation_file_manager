@@ -2024,15 +2024,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "glib-build-tools"
-version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7029c2651d9b5d5a3eea93ec8a1995665c6d3a69ce9bf6042ad9064d134736d8"
-dependencies = [
- "gio",
-]
-
-[[package]]
 name = "glib-macros"
 version = "0.20.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2203,32 +2194,6 @@ dependencies = [
  "libc",
  "pango-sys",
  "system-deps",
-]
-
-[[package]]
-name = "gtk-example-list-widgets"
-version = "0.1.0"
-dependencies = [
- "gtk4",
-]
-
-[[package]]
-name = "gtk-example-main-loop"
-version = "0.1.0"
-dependencies = [
- "async-channel 2.3.1",
- "gtk4",
-]
-
-[[package]]
-name = "gtk-ui"
-version = "0.1.0"
-dependencies = [
- "async-std",
- "database",
- "glib-build-tools",
- "gtk4",
- "service",
 ]
 
 [[package]]
@@ -4193,30 +4158,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "relm4-ui"
+name = "relm4-ui-test-simle"
 version = "0.1.0"
 dependencies = [
  "database",
  "relm4",
  "relm4-components",
  "service",
- "tokio",
-]
-
-[[package]]
-name = "relm4-ui-test"
-version = "0.1.0"
-dependencies = [
- "relm4",
- "relm4-components",
-]
-
-[[package]]
-name = "relm4-ui-test-simle"
-version = "0.1.0"
-dependencies = [
- "relm4",
- "relm4-components",
 ]
 
 [[package]]
@@ -5172,14 +5120,6 @@ name = "tinyvec_macros"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
-
-[[package]]
-name = "todo-app"
-version = "0.1.0"
-dependencies = [
- "glib-build-tools",
- "gtk4",
-]
 
 [[package]]
 name = "tokio"
