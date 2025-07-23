@@ -1,4 +1,5 @@
 mod file_selector;
+mod file_set_form;
 mod list_item;
 mod release_form;
 mod releases;

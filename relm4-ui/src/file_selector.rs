@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use database::{database_error::Error as DatabaseError, repository_manager::RepositoryManager};
 use relm4::{
-    Component, ComponentParts, ComponentSender,
+    Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
         self,
         glib::clone,
@@ -15,13 +15,18 @@ use service::{
     view_models::FileSetListModel,
 };
 
-use crate::list_item::ListItem;
+use crate::{
+    file_set_form::{FileSetFormInit, FileSetFormModel, FileSetFormOutputMsg},
+    list_item::ListItem,
+};
 
 #[derive(Debug)]
 pub enum FileSelectMsg {
     FetchFiles,
     AddFileSet,
     SelectClicked,
+    OpenFileSetForm,
+    FileSetCreated(FileSetListModel),
 }
 
 #[derive(Debug)]
@@ -47,6 +52,7 @@ pub struct FileSelectModel {
     repository_manager: Arc<RepositoryManager>,
     file_sets: Vec<FileSetListModel>,
     list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
+    file_set_form: Option<Controller<FileSetFormModel>>,
 }
 
 #[derive(Debug)]
@@ -72,14 +78,23 @@ impl Component for FileSelectModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let v_box = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .build();
+
+        let add_file_set_button = gtk::Button::with_label("Add File Set");
+        add_file_set_button.connect_clicked(clone!(
+            #[strong]
+            sender,
+            move |_| {
+                sender.input(FileSelectMsg::OpenFileSetForm);
+            }
+        ));
+        v_box.append(&add_file_set_button);
         let list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> = TypedListView::new();
         let files_list = &list_view_wrapper.view;
         let files_list_container = gtk::ScrolledWindow::builder().vexpand(true).build();
         files_list_container.set_child(Some(files_list));
-
-        let v_box = gtk::Box::builder()
-            .orientation(gtk::Orientation::Vertical)
-            .build();
 
         let label = gtk::Label::new(Some("Select file set"));
         v_box.append(&label);
@@ -101,12 +116,36 @@ impl Component for FileSelectModel {
             repository_manager: init_model.repository_manager,
             file_sets: Vec::new(),
             list_view_wrapper,
+            file_set_form: None,
         };
         sender.input(FileSelectMsg::FetchFiles);
         ComponentParts { model, widgets }
     }
+
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         match msg {
+            FileSelectMsg::OpenFileSetForm => {
+                let init_model = FileSetFormInit {
+                    view_model_service: Arc::clone(&self.view_model_service),
+                    repository_manager: Arc::clone(&self.repository_manager),
+                };
+                let file_set_form = FileSetFormModel::builder().launch(init_model).forward(
+                    sender.input_sender(),
+                    |msg| match msg {
+                        FileSetFormOutputMsg::FileSetCreated(file_set_liset_model) => {
+                            FileSelectMsg::FileSetCreated(file_set_liset_model)
+                        }
+                    },
+                );
+                self.file_set_form = Some(file_set_form);
+
+                self.file_set_form
+                    .as_ref()
+                    .expect("File set form should be set")
+                    .widget()
+                    .present();
+            }
+
             _ => {
                 // Handle other messages here
             }
