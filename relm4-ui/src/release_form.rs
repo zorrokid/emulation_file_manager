@@ -129,21 +129,21 @@ impl Component for ReleaseFormModel {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _: &Self::Root) {
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         match msg {
             ReleaseFormMsg::OpenSystemSelector => {
                 let init_model = SystemSelectInit {
                     view_model_service: Arc::clone(&self.view_model_service),
                     repository_manager: Arc::clone(&self.repository_manager),
                 };
-                let system_selector = SystemSelectModel::builder().launch(init_model).forward(
-                    sender.input_sender(),
-                    |msg| match msg {
+                let system_selector = SystemSelectModel::builder()
+                    .transient_for(root)
+                    .launch(init_model)
+                    .forward(sender.input_sender(), |msg| match msg {
                         SystemSelectOutputMsg::SystemSelected(system_list_model) => {
                             ReleaseFormMsg::SystemSelected(system_list_model)
                         }
-                    },
-                );
+                    });
                 self.system_selector = Some(system_selector);
 
                 self.system_selector
@@ -157,14 +157,14 @@ impl Component for ReleaseFormModel {
                     view_model_service: Arc::clone(&self.view_model_service),
                     repository_manager: Arc::clone(&self.repository_manager),
                 };
-                let file_selector = FileSelectModel::builder().launch(init_model).forward(
-                    sender.input_sender(),
-                    |msg| match msg {
+                let file_selector = FileSelectModel::builder()
+                    .transient_for(root)
+                    .launch(init_model)
+                    .forward(sender.input_sender(), |msg| match msg {
                         FileSelectOutputMsg::FileSelected(file_set_liset_model) => {
                             ReleaseFormMsg::FileSelected(file_set_liset_model)
                         }
-                    },
-                );
+                    });
                 self.file_selector = Some(file_selector);
 
                 self.file_selector

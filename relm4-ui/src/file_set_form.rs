@@ -4,9 +4,10 @@ use database::{database_error::Error as DatabaseError, repository_manager::Repos
 use relm4::{
     Component, ComponentParts, ComponentSender,
     gtk::{
-        self,
+        self, FileChooserDialog,
+        ffi::GtkFileDialog,
         glib::clone,
-        prelude::{BoxExt, ButtonExt, GtkWindowExt},
+        prelude::{BoxExt, ButtonExt, DialogExt, FileChooserExt, GtkWindowExt},
     },
     typed_view::list::TypedListView,
 };
@@ -18,6 +19,7 @@ use service::{
 #[derive(Debug)]
 pub enum FileSetFormMsg {
     OpenFileSelector,
+    FileSelected,
 }
 
 #[derive(Debug)]
@@ -26,7 +28,9 @@ pub enum FileSetFormOutputMsg {
 }
 
 #[derive(Debug)]
-pub enum CommandMsg {}
+pub enum CommandMsg {
+    FileSelected,
+}
 
 pub struct FileSetFormInit {
     pub view_model_service: Arc<ViewModelService>,
@@ -86,6 +90,34 @@ impl Component for FileSetFormModel {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         match msg {
+            FileSetFormMsg::OpenFileSelector => {
+                println!("Open file selector button clicked");
+                let dialog = FileChooserDialog::builder()
+                    .title("Select Files")
+                    .action(gtk::FileChooserAction::Open)
+                    .modal(true)
+                    .transient_for(root)
+                    .build();
+
+                dialog.add_button("Cancel", gtk::ResponseType::Cancel);
+                dialog.add_button("Open", gtk::ResponseType::Accept);
+
+                dialog.connect_response(clone!(
+                    #[strong]
+                    sender,
+                    move |dialog, response| {
+                        if response == gtk::ResponseType::Accept {
+                            if let Some(file) = dialog.file() {
+                                println!("Selected file: {:?}", file);
+                                sender.input(FileSetFormMsg::FileSelected);
+                            }
+                        }
+                        dialog.close();
+                    }
+                ));
+
+                dialog.present();
+            }
             _ => {
                 // Handle input messages here
             }

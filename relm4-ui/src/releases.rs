@@ -81,7 +81,7 @@ impl Component for ReleasesModel {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _: &Self::Root) {
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         match msg {
             ReleasesMsg::SoftwareTitleSelected { id } => {
                 println!("Software title selected with ID: {}", id);
@@ -105,6 +105,7 @@ impl Component for ReleasesModel {
                     repository_manager: Arc::clone(&self.repository_manager),
                 };
                 let form_window = ReleaseFormModel::builder()
+                    .transient_for(root)
                     .launch(release_form_init_model)
                     .forward(sender.input_sender(), |msg| match msg {
                         ReleaseFormOutputMsg::ReleaseCreated(release_list_model) => {
