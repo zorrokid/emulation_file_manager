@@ -8,13 +8,17 @@ use relm4::{
         glib::clone,
         prelude::{BoxExt, ButtonExt, GtkWindowExt},
     },
+    typed_view::list::TypedListView,
 };
 use service::{
     view_model_service::ViewModelService,
     view_models::{ReleaseListModel, SystemListModel},
 };
 
-use crate::system_selector::{SystemSelectInit, SystemSelectModel, SystemSelectOutputMsg};
+use crate::{
+    list_item::ListItem,
+    system_selector::{SystemSelectInit, SystemSelectModel, SystemSelectOutputMsg},
+};
 
 #[derive(Debug)]
 pub enum ReleaseFormMsg {
@@ -36,6 +40,7 @@ pub struct ReleaseFormModel {
     repository_manager: Arc<RepositoryManager>,
     selected_systems: Vec<SystemListModel>,
     system_selector: Option<Controller<SystemSelectModel>>,
+    selected_systems_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
 }
 
 #[derive(Debug)]
@@ -67,7 +72,9 @@ impl Component for ReleaseFormModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        //let widgets = view_output!();
+        let selected_systems_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
+            TypedListView::new();
+
         let v_box = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
             .build();
@@ -86,6 +93,7 @@ impl Component for ReleaseFormModel {
             }
         ));
 
+        v_box.append(&selected_systems_list_view_wrapper.view);
         v_box.append(&select_system_button);
 
         root.set_child(Some(&v_box));
@@ -97,6 +105,7 @@ impl Component for ReleaseFormModel {
             repository_manager: init_model.repository_manager,
             selected_systems: Vec::new(),
             system_selector: None,
+            selected_systems_list_view_wrapper,
         };
         ComponentParts { model, widgets }
     }
@@ -126,6 +135,10 @@ impl Component for ReleaseFormModel {
             }
             ReleaseFormMsg::SystemSelected(system) => {
                 println!("System selected: {:?}", &system);
+                self.selected_systems_list_view_wrapper.append(ListItem {
+                    name: system.name.clone(),
+                    id: system.id,
+                });
                 self.selected_systems.push(system);
             }
         }

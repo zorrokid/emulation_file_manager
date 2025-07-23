@@ -37,7 +37,6 @@ enum CommandMsg {
 }
 
 struct AppModel {
-    counter: u8,
     software_titles: Vec<SoftwareTitleListModel>,
     repository_manager: OnceCell<Arc<RepositoryManager>>,
     view_model_service: OnceCell<Arc<ViewModelService>>,
@@ -137,7 +136,6 @@ impl Component for AppModel {
         let widgets = AppWidgets {};
 
         let model = AppModel {
-            counter,
             software_titles: vec![],
             repository_manager: OnceCell::new(),
             view_model_service: OnceCell::new(),
