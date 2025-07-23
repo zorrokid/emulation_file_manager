@@ -4,7 +4,7 @@ use database::{database_error::Error as DatabaseError, repository_manager::Repos
 use relm4::{
     Component, ComponentParts, ComponentSender,
     gtk::{
-        self, gio,
+        self,
         glib::clone,
         prelude::{BoxExt, ButtonExt, EntryBufferExtManual, EntryExt, GtkWindowExt},
     },
@@ -52,7 +52,6 @@ impl RelmListItem for SystemListItem {
 pub enum SystemSelectMsg {
     FetchSystems,
     AddSystem { name: String },
-    SystemSelected { index: u32 },
     SelectClicked,
 }
 
@@ -159,14 +158,6 @@ impl Component for SystemSelectModel {
         ));
         v_box.append(&select_button);
 
-        /*let list_store = gio::ListStore::new::<SystemListItem>();
-
-        let systems_dropdown = gtk::DropDown::builder()
-            .model(&gtk::StringList::new(&["System 1", "System 2", "System 3"]))
-            .build();
-
-        v_box.append(&systems_dropdown);*/
-
         root.set_child(Some(&v_box));
 
         let widgets = Widgets {};
@@ -212,28 +203,6 @@ impl Component for SystemSelectModel {
                     }
                 });
             }
-            SystemSelectMsg::SystemSelected { index } => {
-                if let Some(system) = self.list_view_wrapper.get(index) {
-                    let system = system.borrow();
-                    println!("System selected: {} with ID: {}", system.name, system.id);
-                    let res =
-                        sender.output(SystemSelectOutputMsg::SystemSelected(SystemListModel {
-                            id: system.id,
-                            name: system.name.clone(),
-                            can_delete: false, // TODO
-                        }));
-                    match res {
-                        Ok(_) => {
-                            println!("System selection output sent successfully.");
-                            root.close();
-                        }
-                        Err(e) => eprintln!("Failed to send system selection output: {:?}", e),
-                    }
-                } else {
-                    eprintln!("No system found at index {}", index);
-                }
-            }
-
             SystemSelectMsg::SelectClicked => {
                 let selected = self.list_view_wrapper.selection_model.selected();
                 if let Some(system) = self.list_view_wrapper.get(selected) {
