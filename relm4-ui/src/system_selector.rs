@@ -8,45 +8,14 @@ use relm4::{
         glib::clone,
         prelude::{BoxExt, ButtonExt, EntryBufferExtManual, EntryExt, GtkWindowExt},
     },
-    typed_view::list::{RelmListItem, TypedListView},
+    typed_view::list::TypedListView,
 };
 use service::{
     error::Error as ServiceError, view_model_service::ViewModelService,
     view_models::SystemListModel,
 };
 
-#[derive(Debug, Clone)]
-pub struct SystemListItem {
-    name: String,
-    id: i64,
-}
-
-pub struct ListItemWidgets {
-    label: gtk::Label,
-}
-
-impl RelmListItem for SystemListItem {
-    type Root = gtk::Box;
-    type Widgets = ListItemWidgets;
-
-    fn setup(_item: &gtk::ListItem) -> (gtk::Box, ListItemWidgets) {
-        relm4::view! {
-            my_box = gtk::Box {
-                #[name = "label"]
-                gtk::Label,
-            }
-        }
-
-        let widgets = ListItemWidgets { label };
-
-        (my_box, widgets)
-    }
-
-    fn bind(&mut self, widgets: &mut Self::Widgets, _root: &mut Self::Root) {
-        let ListItemWidgets { label } = widgets;
-        label.set_label(&format!("Name: {} ", self.name));
-    }
-}
+use crate::list_item::ListItem;
 
 #[derive(Debug)]
 pub enum SystemSelectMsg {
@@ -77,7 +46,7 @@ pub struct SystemSelectModel {
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
     systems: Vec<SystemListModel>,
-    list_view_wrapper: TypedListView<SystemListItem, gtk::SingleSelection>,
+    list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
 }
 
 #[derive(Debug)]
@@ -104,8 +73,7 @@ impl Component for SystemSelectModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let list_view_wrapper: TypedListView<SystemListItem, gtk::SingleSelection> =
-            TypedListView::new();
+        let list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> = TypedListView::new();
 
         /*let selection_model = &list_view_wrapper.selection_model;
         selection_model.connect_selected_notify(clone!(
@@ -241,7 +209,7 @@ impl Component for SystemSelectModel {
                     println!("Fetched system: {} with ID: {}", system.name, system.id);
                 }
                 self.systems = systems;
-                let list_items = self.systems.iter().map(|system| SystemListItem {
+                let list_items = self.systems.iter().map(|system| ListItem {
                     name: system.name.clone(),
                     id: system.id,
                 });

@@ -1,15 +1,17 @@
+mod list_item;
 mod release_form;
 mod releases;
 mod system_selector;
 use std::sync::Arc;
 
 use database::{get_db_pool, repository_manager::RepositoryManager};
+use list_item::ListItem;
 use releases::{ReleasesInit, ReleasesModel, ReleasesMsg};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmApp,
     gtk::{self, glib::clone, prelude::*},
     once_cell::sync::OnceCell,
-    typed_view::list::{RelmListItem, TypedListView},
+    typed_view::list::TypedListView,
 };
 use service::{view_model_service::ViewModelService, view_models::SoftwareTitleListModel};
 
@@ -22,51 +24,16 @@ struct InitResult {
 
 #[derive(Debug)]
 enum AppMsg {
-    Increment,
-    Decrement,
     Initialize,
     SoftwareTitleSelected { index: u32 },
     AddSoftwareTitle { name: String },
+    Dummy,
 }
 
 #[derive(Debug)]
 enum CommandMsg {
     InitializationDone(InitResult),
-    SoftwareTitleAdded(SoftwareListItem),
-}
-
-#[derive(Debug, PartialEq, Eq)]
-struct SoftwareListItem {
-    id: i64,
-    title: String,
-    description: String,
-}
-
-struct ListItemWidgets {
-    label: gtk::Label,
-}
-
-impl RelmListItem for SoftwareListItem {
-    type Root = gtk::Box;
-    type Widgets = ListItemWidgets;
-
-    fn setup(_item: &gtk::ListItem) -> (gtk::Box, ListItemWidgets) {
-        relm4::view! {
-            my_box = gtk::Box {
-                #[name = "label"]
-                gtk::Label,
-            }
-        }
-
-        let widgets = ListItemWidgets { label };
-
-        (my_box, widgets)
-    }
-
-    fn bind(&mut self, widgets: &mut Self::Widgets, _root: &mut Self::Root) {
-        let ListItemWidgets { label } = widgets;
-        label.set_label(&format!("Name: {} ", self.title));
-    }
+    SoftwareTitleAdded(ListItem),
 }
 
 struct AppModel {
@@ -74,7 +41,7 @@ struct AppModel {
     software_titles: Vec<SoftwareTitleListModel>,
     repository_manager: OnceCell<Arc<RepositoryManager>>,
     view_model_service: OnceCell<Arc<ViewModelService>>,
-    list_view_wrapper: TypedListView<SoftwareListItem, gtk::SingleSelection>,
+    list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     releases_view: gtk::Box,
     releases: OnceCell<Controller<ReleasesModel>>,
 }
@@ -111,8 +78,7 @@ impl Component for AppModel {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         // Initialize the ListView wrapper
-        let list_view_wrapper: TypedListView<SoftwareListItem, gtk::SingleSelection> =
-            TypedListView::new();
+        let list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> = TypedListView::new();
 
         let main_layout_hbox = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
@@ -187,12 +153,6 @@ impl Component for AppModel {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _: &Self::Root) {
         match msg {
-            AppMsg::Increment => {
-                self.counter = self.counter.wrapping_add(1);
-            }
-            AppMsg::Decrement => {
-                self.counter = self.counter.wrapping_sub(1);
-            }
             AppMsg::Initialize => {
                 sender.oneshot_command(async {
                     let pool = get_db_pool().await.expect("DB pool initialization failed");
@@ -213,7 +173,7 @@ impl Component for AppModel {
             AppMsg::SoftwareTitleSelected { index } => {
                 if let Some(title) = self.list_view_wrapper.get(index) {
                     let title = title.borrow();
-                    println!("Selected software title: {}", title.title);
+                    println!("Selected software title: {}", title.name);
                     self.releases
                         .get()
                         .expect("ReleasesModel not initialized")
@@ -238,13 +198,12 @@ impl Component for AppModel {
                             .await
                             .expect("Failed to add software title");
 
-                        CommandMsg::SoftwareTitleAdded(SoftwareListItem {
-                            id,
-                            title: name,
-                            description: "".to_string(),
-                        })
+                        CommandMsg::SoftwareTitleAdded(ListItem { id, name })
                     }
                 ));
+            }
+            AppMsg::Dummy => {
+                println!("Dummy message received");
             }
         }
     }
@@ -266,9 +225,8 @@ impl Component for AppModel {
                     .set(init_result.repository_manager)
                     .expect("repository manger already initialized");
                 self.software_titles = init_result.software_titles;
-                let list_items = self.software_titles.iter().map(|title| SoftwareListItem {
-                    title: title.name.clone(),
-                    description: title.name.clone(),
+                let list_items = self.software_titles.iter().map(|title| ListItem {
+                    name: title.name.clone(),
                     id: title.id,
                 });
                 self.list_view_wrapper.extend_from_iter(list_items);
@@ -281,7 +239,7 @@ impl Component for AppModel {
                 let releases = ReleasesModel::builder().launch(releases_init).forward(
                     sender.input_sender(),
                     |msg| match msg {
-                        _ => AppMsg::Increment, // Example message forwarding
+                        _ => AppMsg::Dummy, // Example message forwarding
                     },
                 );
                 self.releases_view.append(releases.widget());
@@ -292,7 +250,7 @@ impl Component for AppModel {
             CommandMsg::SoftwareTitleAdded(item) => {
                 self.software_titles.push(SoftwareTitleListModel {
                     id: item.id,
-                    name: item.title.clone(),
+                    name: item.name.clone(),
                     can_delete: false,
                 });
                 self.list_view_wrapper.append(item);
