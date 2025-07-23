@@ -6,23 +6,54 @@ use relm4::{
     gtk::{
         self, gio,
         glib::clone,
-        prelude::{BoxExt, EntryBufferExtManual, EntryExt, GtkWindowExt},
+        prelude::{BoxExt, ButtonExt, EntryBufferExtManual, EntryExt, GtkWindowExt},
     },
+    typed_view::list::{RelmListItem, TypedListView},
 };
 use service::{
     error::Error as ServiceError, view_model_service::ViewModelService,
     view_models::SystemListModel,
 };
 
+#[derive(Debug, Clone)]
 pub struct SystemListItem {
     name: String,
     id: i64,
+}
+
+pub struct ListItemWidgets {
+    label: gtk::Label,
+}
+
+impl RelmListItem for SystemListItem {
+    type Root = gtk::Box;
+    type Widgets = ListItemWidgets;
+
+    fn setup(_item: &gtk::ListItem) -> (gtk::Box, ListItemWidgets) {
+        relm4::view! {
+            my_box = gtk::Box {
+                #[name = "label"]
+                gtk::Label,
+            }
+        }
+
+        let widgets = ListItemWidgets { label };
+
+        (my_box, widgets)
+    }
+
+    fn bind(&mut self, widgets: &mut Self::Widgets, _root: &mut Self::Root) {
+        let ListItemWidgets { label } = widgets;
+        label.set_label(&format!("Name: {} ", self.name));
+    }
 }
 
 #[derive(Debug)]
 pub enum SystemSelectMsg {
     FetchSystems,
     AddSystem { name: String },
+    SystemSelected { index: u32 },
+    SelectClicked,
 }
 
 #[derive(Debug)]
@@ -47,6 +78,7 @@ pub struct SystemSelectModel {
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
     systems: Vec<SystemListModel>,
+    list_view_wrapper: TypedListView<SystemListItem, gtk::SingleSelection>,
 }
 
 #[derive(Debug)]
@@ -73,7 +105,24 @@ impl Component for SystemSelectModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        println!("Initializing SystemSelectModel");
+        let list_view_wrapper: TypedListView<SystemListItem, gtk::SingleSelection> =
+            TypedListView::new();
+
+        /*let selection_model = &list_view_wrapper.selection_model;
+        selection_model.connect_selected_notify(clone!(
+            #[strong]
+            sender,
+            move |selection| {
+                sender.input(SystemSelectMsg::SystemSelected {
+                    index: selection.selected(),
+                });
+            }
+        ));*/
+
+        let system_list = &list_view_wrapper.view;
+        let system_list_container = gtk::ScrolledWindow::builder().vexpand(true).build();
+        system_list_container.set_child(Some(system_list));
+
         let v_box = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
             .build();
@@ -99,6 +148,16 @@ impl Component for SystemSelectModel {
         ));
 
         v_box.append(&add_new_system_entry);
+        v_box.append(&system_list_container);
+        let select_button = gtk::Button::with_label("Select System");
+        select_button.connect_clicked(clone!(
+            #[strong]
+            sender,
+            move |_| {
+                sender.input(SystemSelectMsg::SelectClicked);
+            }
+        ));
+        v_box.append(&select_button);
 
         /*let list_store = gio::ListStore::new::<SystemListItem>();
 
@@ -116,12 +175,13 @@ impl Component for SystemSelectModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
             systems: Vec::new(),
+            list_view_wrapper,
         };
         sender.input(SystemSelectMsg::FetchSystems);
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _: &Self::Root) {
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         match msg {
             SystemSelectMsg::FetchSystems => {
                 println!("Fetching systems...");
@@ -152,13 +212,57 @@ impl Component for SystemSelectModel {
                     }
                 });
             }
+            SystemSelectMsg::SystemSelected { index } => {
+                if let Some(system) = self.list_view_wrapper.get(index) {
+                    let system = system.borrow();
+                    println!("System selected: {} with ID: {}", system.name, system.id);
+                    let res =
+                        sender.output(SystemSelectOutputMsg::SystemSelected(SystemListModel {
+                            id: system.id,
+                            name: system.name.clone(),
+                            can_delete: false, // TODO
+                        }));
+                    match res {
+                        Ok(_) => {
+                            println!("System selection output sent successfully.");
+                            root.close();
+                        }
+                        Err(e) => eprintln!("Failed to send system selection output: {:?}", e),
+                    }
+                } else {
+                    eprintln!("No system found at index {}", index);
+                }
+            }
+
+            SystemSelectMsg::SelectClicked => {
+                let selected = self.list_view_wrapper.selection_model.selected();
+                if let Some(system) = self.list_view_wrapper.get(selected) {
+                    let system = system.borrow();
+                    println!("System selected: {} with ID: {}", system.name, system.id);
+                    let res =
+                        sender.output(SystemSelectOutputMsg::SystemSelected(SystemListModel {
+                            id: system.id,
+                            name: system.name.clone(),
+                            can_delete: false, // TODO
+                        }));
+                    match res {
+                        Ok(_) => {
+                            println!("System selection output sent successfully.");
+                            root.close();
+                        }
+                        Err(e) => eprintln!("Failed to send system selection output: {:?}", e),
+                    }
+                } else {
+                    eprintln!("No system found at selected index {}", selected);
+                }
+            }
         }
     }
 
     fn update_cmd(
         &mut self,
         message: Self::CommandOutput,
-        _sender: ComponentSender<Self>,
+        sender: ComponentSender<Self>,
         _: &Self::Root,
     ) {
         match message {
@@ -168,6 +272,11 @@ impl Component for SystemSelectModel {
                     println!("Fetched system: {} with ID: {}", system.name, system.id);
                 }
                 self.systems = systems;
+                let list_items = self.systems.iter().map(|system| SystemListItem {
+                    name: system.name.clone(),
+                    id: system.id,
+                });
+                self.list_view_wrapper.extend_from_iter(list_items);
             }
             CommandMsg::SystemsFetched(Err(e)) => {
                 // Handle the error
@@ -176,8 +285,7 @@ impl Component for SystemSelectModel {
             CommandMsg::SystemAdded(system_list_model) => {
                 // Handle the successful addition of a system
                 println!("Successfully added system: {}", system_list_model.name);
-                // Optionally, you could fetch the updated list of systems
-                // self.update(SystemSelectMsg::FetchSystems, sender, root);
+                sender.input(SystemSelectMsg::FetchSystems);
             }
             CommandMsg::AddingSystemFailed(error) => {
                 // Handle the error when adding a system
