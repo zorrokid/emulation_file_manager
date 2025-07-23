@@ -62,7 +62,7 @@ impl Component for SystemSelectModel {
 
     fn init_root() -> Self::Root {
         gtk::Window::builder()
-            .title("Release Form")
+            .title("System Selector")
             .default_width(800)
             .default_height(800)
             .build()
@@ -94,8 +94,7 @@ impl Component for SystemSelectModel {
             .orientation(gtk::Orientation::Vertical)
             .build();
 
-        let label = gtk::Label::new(Some("System Select Component"));
-
+        let label = gtk::Label::new(Some("Select system"));
         v_box.append(&label);
 
         let add_new_system_entry = gtk::Entry::builder()

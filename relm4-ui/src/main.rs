@@ -1,3 +1,4 @@
+mod file_selector;
 mod list_item;
 mod release_form;
 mod releases;

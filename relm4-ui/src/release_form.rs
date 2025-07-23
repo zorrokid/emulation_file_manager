@@ -12,10 +12,11 @@ use relm4::{
 };
 use service::{
     view_model_service::ViewModelService,
-    view_models::{ReleaseListModel, SystemListModel},
+    view_models::{FileSetListModel, ReleaseListModel, SystemListModel},
 };
 
 use crate::{
+    file_selector::{FileSelectInit, FileSelectModel, FileSelectOutputMsg},
     list_item::ListItem,
     system_selector::{SystemSelectInit, SystemSelectModel, SystemSelectOutputMsg},
 };
@@ -23,7 +24,9 @@ use crate::{
 #[derive(Debug)]
 pub enum ReleaseFormMsg {
     OpenSystemSelector,
+    OpenFileSelector,
     SystemSelected(SystemListModel),
+    FileSelected(FileSetListModel),
 }
 
 #[derive(Debug)]
@@ -40,6 +43,7 @@ pub struct ReleaseFormModel {
     repository_manager: Arc<RepositoryManager>,
     selected_systems: Vec<SystemListModel>,
     system_selector: Option<Controller<SystemSelectModel>>,
+    file_selector: Option<Controller<FileSelectModel>>,
     selected_systems_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
 }
 
@@ -72,17 +76,19 @@ impl Component for ReleaseFormModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let selected_systems_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
-            TypedListView::new();
-
         let v_box = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
             .build();
 
         let label = gtk::Label::new(Some("Release Form Component"));
-
         v_box.append(&label);
 
+        let selected_systems_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
+            TypedListView::new();
+
+        v_box.append(&selected_systems_list_view_wrapper.view);
+
+        // TODO: disable when window is opened
         let select_system_button = gtk::Button::with_label("Select System");
         select_system_button.connect_clicked(clone!(
             #[strong]
@@ -93,8 +99,20 @@ impl Component for ReleaseFormModel {
             }
         ));
 
-        v_box.append(&selected_systems_list_view_wrapper.view);
         v_box.append(&select_system_button);
+
+        // TODO: disable when window is opened
+        let select_file_button = gtk::Button::with_label("Select File Set");
+        select_file_button.connect_clicked(clone!(
+            #[strong]
+            sender,
+            move |_| {
+                sender.input(ReleaseFormMsg::OpenFileSelector);
+                println!("Select File Set button clicked");
+            }
+        ));
+
+        v_box.append(&select_file_button);
 
         root.set_child(Some(&v_box));
 
@@ -105,6 +123,7 @@ impl Component for ReleaseFormModel {
             repository_manager: init_model.repository_manager,
             selected_systems: Vec::new(),
             system_selector: None,
+            file_selector: None,
             selected_systems_list_view_wrapper,
         };
         ComponentParts { model, widgets }
@@ -133,6 +152,28 @@ impl Component for ReleaseFormModel {
                     .widget()
                     .present();
             }
+            ReleaseFormMsg::OpenFileSelector => {
+                let init_model = FileSelectInit {
+                    view_model_service: Arc::clone(&self.view_model_service),
+                    repository_manager: Arc::clone(&self.repository_manager),
+                };
+                let file_selector = FileSelectModel::builder().launch(init_model).forward(
+                    sender.input_sender(),
+                    |msg| match msg {
+                        FileSelectOutputMsg::FileSelected(file_set_liset_model) => {
+                            ReleaseFormMsg::FileSelected(file_set_liset_model)
+                        }
+                    },
+                );
+                self.file_selector = Some(file_selector);
+
+                self.file_selector
+                    .as_ref()
+                    .expect("File selector should be set")
+                    .widget()
+                    .present();
+            }
+
             ReleaseFormMsg::SystemSelected(system) => {
                 println!("System selected: {:?}", &system);
                 self.selected_systems_list_view_wrapper.append(ListItem {
@@ -140,6 +181,10 @@ impl Component for ReleaseFormModel {
                     id: system.id,
                 });
                 self.selected_systems.push(system);
+            }
+            ReleaseFormMsg::FileSelected(file_set) => {
+                println!("File set selected: {:?}", &file_set);
+                // TODO: handle the file set selection
             }
         }
     }
