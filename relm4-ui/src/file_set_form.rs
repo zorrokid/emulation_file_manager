@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use database::{database_error::Error as DatabaseError, repository_manager::RepositoryManager};
 use relm4::{
@@ -6,6 +6,7 @@ use relm4::{
     gtk::{
         self, FileChooserDialog,
         ffi::GtkFileDialog,
+        gio::prelude::FileExt,
         glib::clone,
         prelude::{BoxExt, ButtonExt, DialogExt, FileChooserExt, GtkWindowExt},
     },
@@ -19,7 +20,7 @@ use service::{
 #[derive(Debug)]
 pub enum FileSetFormMsg {
     OpenFileSelector,
-    FileSelected,
+    FileSelected(PathBuf),
 }
 
 #[derive(Debug)]
@@ -107,9 +108,8 @@ impl Component for FileSetFormModel {
                     sender,
                     move |dialog, response| {
                         if response == gtk::ResponseType::Accept {
-                            if let Some(file) = dialog.file() {
-                                println!("Selected file: {:?}", file);
-                                sender.input(FileSetFormMsg::FileSelected);
+                            if let Some(path) = dialog.file().and_then(|f| f.path()) {
+                                sender.input(FileSetFormMsg::FileSelected(path));
                             }
                         }
                         dialog.close();
@@ -118,7 +118,12 @@ impl Component for FileSetFormModel {
 
                 dialog.present();
             }
+            FileSetFormMsg::FileSelected(path) => {
+                println!("File selected: {:?}", path);
+                // TODO: handle selected file
+            }
             _ => {
+
                 // Handle input messages here
             }
         }
