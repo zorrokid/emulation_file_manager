@@ -8,5 +8,11 @@ relm4 = "0.9.1"
 relm4-components = "0.9.1"
 database = { path = "../database" }
 service = { path = "../service" }
+file_export = { path = "../file_export" }
+file_import = { path = "../file_import" }
+core_types = { path = "../core_types" }
+emulator_runner = { path = "../emulator_runner" }
+utils = { path = "../utils" }
+
 
 

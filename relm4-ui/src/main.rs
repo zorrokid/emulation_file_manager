@@ -1,3 +1,4 @@
+mod file_importer;
 mod file_selector;
 mod file_set_form;
 mod list_item;

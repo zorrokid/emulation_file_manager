@@ -17,6 +17,8 @@ use service::{
     view_models::FileSetListModel,
 };
 
+use crate::file_importer::FileImporter;
+
 #[derive(Debug)]
 pub enum FileSetFormMsg {
     OpenFileSelector,
@@ -42,10 +44,13 @@ pub struct FileSetFormInit {
 pub struct FileSetFormModel {
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
+    file_importer: FileImporter,
 }
 
 #[derive(Debug)]
-pub struct Widgets {}
+pub struct Widgets {
+    selected_file_label: gtk::Label,
+}
 
 impl Component for FileSetFormModel {
     type Input = FileSetFormMsg;
@@ -84,8 +89,13 @@ impl Component for FileSetFormModel {
         let model = FileSetFormModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
+            file_importer: FileImporter::new(),
         };
-        let widgets = Widgets {};
+        let selected_file_label = gtk::Label::new(Some("No file selected"));
+        v_box.append(&selected_file_label);
+        let widgets = Widgets {
+            selected_file_label,
+        };
         ComponentParts { model, widgets }
     }
 
@@ -120,6 +130,7 @@ impl Component for FileSetFormModel {
             }
             FileSetFormMsg::FileSelected(path) => {
                 println!("File selected: {:?}", path);
+                self.file_importer.set_current_picked_file(path);
                 // TODO: handle selected file
             }
             _ => {
@@ -140,5 +151,17 @@ impl Component for FileSetFormModel {
                 // Handle command outputs here
             }
         }
+    }
+
+    fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        let selected_file_text = self
+            .file_importer
+            .get_current_picked_file()
+            .map_or("No file selected".to_string(), |path| {
+                path.to_string_lossy().to_string()
+            });
+        widgets
+            .selected_file_label
+            .set_text(selected_file_text.as_str());
     }
 }
