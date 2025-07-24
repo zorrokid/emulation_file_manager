@@ -1,6 +1,8 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
+use core_types::{ReadFile, Sha1Checksum};
 use database::{database_error::Error as DatabaseError, repository_manager::RepositoryManager};
+use file_import::FileImportError;
 use relm4::{
     Component, ComponentParts, ComponentSender,
     gtk::{
@@ -33,6 +35,7 @@ pub enum FileSetFormOutputMsg {
 #[derive(Debug)]
 pub enum CommandMsg {
     FileSelected,
+    FileContentsRead(Result<HashMap<Sha1Checksum, ReadFile>, FileImportError>),
 }
 
 pub struct FileSetFormInit {
@@ -130,8 +133,16 @@ impl Component for FileSetFormModel {
             }
             FileSetFormMsg::FileSelected(path) => {
                 println!("File selected: {:?}", path);
-                self.file_importer.set_current_picked_file(path);
-                // TODO: handle selected file
+                self.file_importer.set_current_picked_file(path.clone());
+                let is_zip_file = self.file_importer.is_zip_file();
+                sender.oneshot_command(async move {
+                    // TODO: combine this in file_import
+                    let res = match is_zip_file {
+                        true => file_import::read_zip_contents_with_checksums(path),
+                        false => file_import::read_file_checksum(path),
+                    };
+                    CommandMsg::FileContentsRead(res)
+                });
             }
             _ => {
 
@@ -147,6 +158,9 @@ impl Component for FileSetFormModel {
         _: &Self::Root,
     ) {
         match message {
+            CommandMsg::FileContentsRead(Ok(file_contents)) => {
+                println!("File contents read successfully: {:?}", file_contents);
+            }
             _ => {
                 // Handle command outputs here
             }
