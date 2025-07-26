@@ -1,25 +1,85 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use core_types::{ReadFile, Sha1Checksum};
-use database::{database_error::Error as DatabaseError, repository_manager::RepositoryManager};
+use database::{
+    database_error::Error as DatabaseError, models::FileInfo, repository_manager::RepositoryManager,
+};
 use file_import::FileImportError;
 use relm4::{
-    Component, ComponentParts, ComponentSender,
+    Component, ComponentParts, ComponentSender, FactorySender, RelmWidgetExt,
     gtk::{
         self, FileChooserDialog,
-        ffi::GtkFileDialog,
         gio::prelude::FileExt,
         glib::clone,
-        prelude::{BoxExt, ButtonExt, DialogExt, FileChooserExt, GtkWindowExt},
+        prelude::{
+            BoxExt, ButtonExt, CheckButtonExt, DialogExt, FileChooserExt, GtkWindowExt,
+            OrientableExt, WidgetExt,
+        },
     },
-    typed_view::list::TypedListView,
+    prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque},
 };
-use service::{
-    error::Error as ServiceError, view_model_service::ViewModelService,
-    view_models::FileSetListModel,
-};
+use service::{view_model_service::ViewModelService, view_models::FileSetListModel};
 
 use crate::file_importer::FileImporter;
+
+#[derive(Debug)]
+struct File {
+    name: String,
+    selected: bool,
+}
+
+#[derive(Debug)]
+enum FileInput {
+    Toggle(bool),
+}
+
+#[relm4::factory]
+impl FactoryComponent for File {
+    type Init = String;
+    type Input = FileInput;
+    type Output = ();
+    type CommandOutput = ();
+    type ParentWidget = gtk::ListBox;
+
+    view! {
+        gtk::Box {
+            set_orientation: gtk::Orientation::Horizontal,
+
+            gtk::CheckButton {
+                set_active: false,
+                set_margin_all: 12,
+                connect_toggled[sender] => move |checkbox| {
+                    sender.input(FileInput::Toggle(checkbox.is_active()));
+                }
+            },
+
+            #[name(label)]
+            gtk::Label {
+                set_label: &self.name,
+                set_hexpand: true,
+                set_halign: gtk::Align::Start,
+                set_margin_all: 12,
+            },
+        }
+    }
+
+    fn pre_view() {}
+
+    fn init_model(name: Self::Init, _index: &DynamicIndex, _sender: FactorySender<Self>) -> Self {
+        Self {
+            name,
+            selected: false,
+        }
+    }
+
+    fn update(&mut self, message: Self::Input, _sender: FactorySender<Self>) {
+        match message {
+            FileInput::Toggle(selected) => {
+                self.selected = selected;
+            }
+        }
+    }
+}
 
 #[derive(Debug)]
 pub enum FileSetFormMsg {
@@ -36,6 +96,7 @@ pub enum FileSetFormOutputMsg {
 pub enum CommandMsg {
     FileSelected,
     FileContentsRead(Result<HashMap<Sha1Checksum, ReadFile>, FileImportError>),
+    ExistingFilesRead(Result<Vec<FileInfo>, DatabaseError>),
 }
 
 pub struct FileSetFormInit {
@@ -48,34 +109,69 @@ pub struct FileSetFormModel {
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
     file_importer: FileImporter,
+    files: FactoryVecDeque<File>,
 }
 
-#[derive(Debug)]
-pub struct Widgets {
-    selected_file_label: gtk::Label,
-}
+/*#[derive(Debug)]
+struct Widgets {
+    pub selected_file_label: gtk::Label,
+}*/
 
+#[relm4::component(pub)]
 impl Component for FileSetFormModel {
     type Input = FileSetFormMsg;
     type Output = FileSetFormOutputMsg;
     type CommandOutput = CommandMsg;
     type Init = FileSetFormInit;
-    type Widgets = Widgets;
-    type Root = gtk::Window;
+    //type Widgets = Widgets;
+    //type Root = gtk::Window;
 
-    fn init_root() -> Self::Root {
+    view! {
+        #[root]
+        gtk::Window {
+            set_default_width: 800,
+            set_default_height: 600,
+            gtk::Box {
+                set_orientation: gtk::Orientation::Vertical,
+                set_spacing: 5,
+                set_margin_all: 5,
+
+                gtk::Button {
+                    set_label: "Open file selector",
+                    connect_clicked => FileSetFormMsg::OpenFileSelector,
+                },
+
+
+                #[name = "selected_file_label"]
+                gtk::Label {
+                    set_label: "Selected file:",
+                },
+
+               gtk::ScrolledWindow {
+                    set_hscrollbar_policy: gtk::PolicyType::Never,
+                    set_min_content_height: 360,
+                    set_vexpand: true,
+
+                    #[local_ref]
+                    files_list_box -> gtk::ListBox {}
+                }
+            }
+        }
+    }
+    /*fn init_root() -> Self::Root {
         gtk::Window::builder()
             .title("Create file set")
             .default_width(800)
             .default_height(800)
             .build()
-    }
+    }*/
+
     fn init(
         init_model: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let open_file_selector_button = gtk::Button::with_label("Open file selector");
+        /*let open_file_selector_button = gtk::Button::with_label("Open file selector");
         open_file_selector_button.connect_clicked(clone!(
             #[strong]
             sender,
@@ -98,7 +194,17 @@ impl Component for FileSetFormModel {
         v_box.append(&selected_file_label);
         let widgets = Widgets {
             selected_file_label,
+        };*/
+
+        let files = FactoryVecDeque::builder().launch_default().detach();
+        let model = FileSetFormModel {
+            view_model_service: init_model.view_model_service,
+            repository_manager: init_model.repository_manager,
+            file_importer: FileImporter::new(),
+            files,
         };
+        let files_list_box = model.files.widget();
+        let widgets = view_output!();
         ComponentParts { model, widgets }
     }
 
@@ -160,6 +266,46 @@ impl Component for FileSetFormModel {
         match message {
             CommandMsg::FileContentsRead(Ok(file_contents)) => {
                 println!("File contents read successfully: {:?}", file_contents);
+                let file_checksums = file_contents.keys().cloned().collect::<Vec<Sha1Checksum>>();
+                self.file_importer
+                    .set_current_picked_file_content(file_contents);
+
+                let repository_manager = Arc::clone(&self.repository_manager);
+                sender.oneshot_command(async move {
+                    let existing_files_file_info = repository_manager
+                        .get_file_info_repository()
+                        .get_file_infos_by_sha1_checksums(file_checksums)
+                        .await;
+                    CommandMsg::ExistingFilesRead(existing_files_file_info)
+                });
+            }
+            CommandMsg::FileContentsRead(Err(e)) => {
+                eprintln!("Error reading file contents: {:?}", e);
+                // TODO: show error to user
+            }
+            CommandMsg::ExistingFilesRead(Ok(existing_files_file_info)) => {
+                println!(
+                    "Existing files read successfully: {:?}",
+                    existing_files_file_info
+                );
+                self.file_importer
+                    .set_existing_files(existing_files_file_info);
+
+                for file in self
+                    .file_importer
+                    .get_current_picked_file_content()
+                    .values()
+                {
+                    self.files.guard().push_back(file.file_name.clone());
+                    /*self.files.guard().push_back(File {
+                        name: file.archive_file_name,
+                        selected: false,
+                    });*/
+                }
+            }
+            CommandMsg::ExistingFilesRead(Err(e)) => {
+                eprintln!("Error reading existing files: {:?}", e);
+                // TODO: show error to user
             }
             _ => {
                 // Handle command outputs here
@@ -167,7 +313,7 @@ impl Component for FileSetFormModel {
         }
     }
 
-    fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+    /*fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
         let selected_file_text = self
             .file_importer
             .get_current_picked_file()
@@ -177,5 +323,5 @@ impl Component for FileSetFormModel {
         widgets
             .selected_file_label
             .set_text(selected_file_text.as_str());
-    }
+    }*/
 }

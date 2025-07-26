@@ -145,7 +145,9 @@ impl Component for FileSelectModel {
                     .widget()
                     .present();
             }
-
+            FileSelectMsg::FileSetCreated(file_set_list_model) => {
+                println!("File set created {}", file_set_list_model);
+            }
             _ => {
                 // Handle other messages here
             }
