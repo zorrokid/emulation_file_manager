@@ -22,9 +22,10 @@ use service::{view_model_service::ViewModelService, view_models::FileSetListMode
 
 use crate::file_importer::FileImporter;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct File {
     name: String,
+    sha1_checksun: Sha1Checksum,
     selected: bool,
 }
 
@@ -33,11 +34,19 @@ enum FileInput {
     Toggle(bool),
 }
 
+#[derive(Debug)]
+enum FileOutput {
+    SetFileSelected {
+        sha1_checksum: Sha1Checksum,
+        selected: bool,
+    },
+}
+
 #[relm4::factory]
 impl FactoryComponent for File {
-    type Init = String;
+    type Init = ReadFile;
     type Input = FileInput;
-    type Output = ();
+    type Output = FileOutput;
     type CommandOutput = ();
     type ParentWidget = gtk::ListBox;
 
@@ -48,8 +57,15 @@ impl FactoryComponent for File {
             gtk::CheckButton {
                 set_active: false,
                 set_margin_all: 12,
-                connect_toggled[sender] => move |checkbox| {
+                connect_toggled[sender, sha1_checksum = self.sha1_checksun.clone()] => move |checkbox| {
                     sender.input(FileInput::Toggle(checkbox.is_active()));
+                    let res = sender.output(FileOutput::SetFileSelected {
+                        sha1_checksum,
+                        selected: checkbox.is_active(),
+                    });
+                    if let Err(e) = res {
+                        eprintln!("Error sending output: {:?}", e);
+                    }
                 }
             },
 
@@ -65,9 +81,14 @@ impl FactoryComponent for File {
 
     fn pre_view() {}
 
-    fn init_model(name: Self::Init, _index: &DynamicIndex, _sender: FactorySender<Self>) -> Self {
+    fn init_model(
+        read_file: Self::Init,
+        _index: &DynamicIndex,
+        _sender: FactorySender<Self>,
+    ) -> Self {
         Self {
-            name,
+            name: read_file.file_name,
+            sha1_checksun: read_file.sha1_checksum,
             selected: false,
         }
     }
@@ -85,6 +106,11 @@ impl FactoryComponent for File {
 pub enum FileSetFormMsg {
     OpenFileSelector,
     FileSelected(PathBuf),
+    CreateFileSetFromSelectedFiles,
+    SetFileSelected {
+        sha1_checksum: Sha1Checksum,
+        selected: bool,
+    },
 }
 
 #[derive(Debug)]
@@ -155,7 +181,12 @@ impl Component for FileSetFormModel {
 
                     #[local_ref]
                     files_list_box -> gtk::ListBox {}
-                }
+                },
+
+                gtk::Button {
+                    set_label: "Create File Set",
+                    connect_clicked => FileSetFormMsg::CreateFileSetFromSelectedFiles,
+                },
             }
         }
     }
@@ -197,7 +228,18 @@ impl Component for FileSetFormModel {
             selected_file_label,
         };*/
 
-        let files = FactoryVecDeque::builder().launch_default().detach();
+        let files = FactoryVecDeque::builder()
+            .launch_default()
+            //.detach();
+            .forward(sender.input_sender(), |output| match output {
+                FileOutput::SetFileSelected {
+                    sha1_checksum,
+                    selected,
+                } => FileSetFormMsg::SetFileSelected {
+                    sha1_checksum,
+                    selected,
+                },
+            });
         let model = FileSetFormModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
@@ -251,6 +293,25 @@ impl Component for FileSetFormModel {
                     CommandMsg::FileContentsRead(res)
                 });
             }
+            FileSetFormMsg::CreateFileSetFromSelectedFiles => {
+                self.files.guard().iter().for_each(|file| {
+                    println!("File {} selected: {}", file.name, file.selected);
+                });
+            }
+            FileSetFormMsg::SetFileSelected {
+                sha1_checksum,
+                selected,
+            } => {
+                println!(
+                    "File with checksum {:?} selected: {}",
+                    sha1_checksum, selected
+                );
+                if selected {
+                    self.file_importer.select_file(&sha1_checksum);
+                } else {
+                    self.file_importer.deselect_file(&sha1_checksum);
+                }
+            }
             _ => {
 
                 // Handle input messages here
@@ -297,7 +358,7 @@ impl Component for FileSetFormModel {
                     .get_current_picked_file_content()
                     .values()
                 {
-                    self.files.guard().push_back(file.file_name.clone());
+                    self.files.guard().push_back(file.clone());
                     /*self.files.guard().push_back(File {
                         name: file.archive_file_name,
                         selected: false,
@@ -307,6 +368,11 @@ impl Component for FileSetFormModel {
             CommandMsg::ExistingFilesRead(Err(e)) => {
                 eprintln!("Error reading existing files: {:?}", e);
                 // TODO: show error to user
+            }
+            CommandMsg::FileSelected => {
+                // This is a placeholder for handling file selection command output
+                // You can update the UI or perform other actions here
+                println!("File selected command executed");
             }
             _ => {
                 // Handle command outputs here
