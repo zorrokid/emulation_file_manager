@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    fmt::Display,
     path::PathBuf,
 };
 
@@ -14,6 +15,16 @@ pub struct FileImporter {
     existing_files: HashMap<Sha1Checksum, ImportedFile>,
     selected_files_from_current_picked_file: HashSet<Sha1Checksum>,
     imported_files: HashMap<Sha1Checksum, ImportedFile>,
+}
+
+impl Display for FileImporter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(path) = &self.current_picked_file {
+            write!(f, "Current picked file: {}", path.display())
+        } else {
+            write!(f, "No file currently picked")
+        }
+    }
 }
 
 impl FileImporter {

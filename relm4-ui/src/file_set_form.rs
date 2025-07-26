@@ -144,7 +144,8 @@ impl Component for FileSetFormModel {
 
                 #[name = "selected_file_label"]
                 gtk::Label {
-                    set_label: "Selected file:",
+                    #[watch]
+                    set_label: &format!("Selected file: {}", model.file_importer),
                 },
 
                gtk::ScrolledWindow {
