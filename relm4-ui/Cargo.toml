@@ -13,6 +13,7 @@ file_import = { path = "../file_import" }
 core_types = { path = "../core_types" }
 emulator_runner = { path = "../emulator_runner" }
 utils = { path = "../utils" }
-
+strum = "0.27"
+strum_macros = "0.27"
 
 
