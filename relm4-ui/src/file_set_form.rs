@@ -174,7 +174,7 @@ pub enum FileSetFormMsg {
         selected: bool,
     },
     SetFileTypeSelected {
-        file_type: FileType,
+        index: u32,
     },
 }
 
@@ -250,7 +250,14 @@ impl Component for FileSetFormModel {
                 },
 
                 #[local_ref]
-                file_types_dropdown -> gtk::DropDown {},
+                file_types_dropdown -> gtk::DropDown {
+                    connect_selected_notify[sender] => move |dropdown| {
+                        sender.input(FileSetFormMsg::SetFileTypeSelected {
+                            index: dropdown.selected(),
+                        });
+                    }
+
+                },
 
                 gtk::Button {
                     set_label: "Create File Set",
@@ -333,7 +340,6 @@ impl Component for FileSetFormModel {
             //file_types,
         };
         let files_list_box = model.files.widget();
-        //let file_types_dropdown = model.file_types.widget();
         let file_types_dropdown = gtk::DropDown::builder().build();
         let file_types: Vec<String> = FileType::iter().map(|ft| ft.to_string()).collect();
         let file_types_str: Vec<&str> = file_types.iter().map(|s| s.as_str()).collect();
@@ -406,8 +412,8 @@ impl Component for FileSetFormModel {
                     self.file_importer.deselect_file(&sha1_checksum);
                 }
             }
-            FileSetFormMsg::SetFileTypeSelected { file_type } => {
-                println!("File type selected: {}", file_type);
+            FileSetFormMsg::SetFileTypeSelected { index } => {
+                println!("File type selected from index: {}", index);
                 // TODO
             }
             _ => {
