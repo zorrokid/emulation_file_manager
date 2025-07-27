@@ -201,7 +201,8 @@ pub struct FileSetFormModel {
     repository_manager: Arc<RepositoryManager>,
     file_importer: FileImporter,
     files: FactoryVecDeque<File>,
-    //file_types: FactoryVecDeque<DropDownFileType>,
+    file_types: Vec<FileType>,
+    selected_file_type: Option<FileType>,
 }
 
 /*#[derive(Debug)]
@@ -262,6 +263,8 @@ impl Component for FileSetFormModel {
                 gtk::Button {
                     set_label: "Create File Set",
                     connect_clicked => FileSetFormMsg::CreateFileSetFromSelectedFiles,
+                    #[watch]
+                    set_sensitive: model.selected_file_type.is_some() && model.file_importer.is_selected_files(),
                 },
             }
         }
@@ -332,20 +335,27 @@ impl Component for FileSetFormModel {
                 .collect::<Vec<_>>(),
         );*/
 
+        let file_types: Vec<FileType> = FileType::iter().collect();
+
+        let file_types_dropdown = gtk::DropDown::builder().build();
+        let file_types_to_drop_down: Vec<String> =
+            file_types.iter().map(|ft| ft.to_string()).collect();
+        let file_types_str: Vec<&str> =
+            file_types_to_drop_down.iter().map(|s| s.as_str()).collect();
+
+        let file_types_drop_down_model = gtk::StringList::new(&file_types_str);
+
+        file_types_dropdown.set_model(Some(&file_types_drop_down_model));
+
         let model = FileSetFormModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
             file_importer: FileImporter::new(),
             files,
-            //file_types,
+            file_types,
+            selected_file_type: None,
         };
         let files_list_box = model.files.widget();
-        let file_types_dropdown = gtk::DropDown::builder().build();
-        let file_types: Vec<String> = FileType::iter().map(|ft| ft.to_string()).collect();
-        let file_types_str: Vec<&str> = file_types.iter().map(|s| s.as_str()).collect();
-        let file_types_drop_down_model = gtk::StringList::new(&file_types_str);
-
-        file_types_dropdown.set_model(Some(&file_types_drop_down_model));
 
         let widgets = view_output!();
         ComponentParts { model, widgets }
@@ -414,7 +424,13 @@ impl Component for FileSetFormModel {
             }
             FileSetFormMsg::SetFileTypeSelected { index } => {
                 println!("File type selected from index: {}", index);
-                // TODO
+                let file_type = self
+                    .file_types
+                    .get(index as usize)
+                    .cloned()
+                    .expect("Invalid file type index");
+                println!("Selected file type: {:?}", file_type);
+                self.selected_file_type = Some(file_type);
             }
             _ => {
 
