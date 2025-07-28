@@ -29,6 +29,7 @@ pub enum FileSelectMsg {
     SelectClicked,
     OpenFileSetForm,
     FileSetCreated(FileSetListModel),
+    FileSetSelected { index: u32 },
 }
 
 #[derive(Debug)]
@@ -59,7 +60,8 @@ pub struct FileSelectModel {
     list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     file_set_form: Option<Controller<FileSetFormModel>>,
     selected_system_ids: Vec<i64>,
-    seleccted_file_type: Option<FileType>,
+    selected_file_type: Option<FileType>,
+    selected_file_set: Option<FileSetListModel>,
 }
 
 #[derive(Debug)]
@@ -100,12 +102,16 @@ impl Component for FileSelectModel {
                 gtk::ScrolledWindow {
                     set_vexpand: true,
                     #[local_ref]
-                    file_set_list_view -> gtk::ListView {}
+                    file_set_list_view -> gtk::ListView {
+
+                    }
                 },
 
                 gtk::Button {
                     set_label: "Select File Set",
                     connect_clicked => FileSelectMsg::SelectClicked,
+                    #[watch]
+                    set_sensitive: model.selected_file_set.is_some() && model.selected_file_type.is_some(),
                 },
             }
         }
@@ -157,9 +163,22 @@ impl Component for FileSelectModel {
             list_view_wrapper,
             file_set_form: None,
             selected_system_ids: init_model.selected_system_ids,
-            seleccted_file_type: None,
+            selected_file_type: None,
+            selected_file_set: None,
         };
         let file_set_list_view = &model.list_view_wrapper.view;
+        model
+            .list_view_wrapper
+            .selection_model
+            .connect_selected_notify(clone!(
+                #[strong]
+                sender,
+                move |selection| {
+                    let selected = selection.selected();
+                    println!("File Select - Selected item index: {:?}", selected);
+                    sender.input(FileSelectMsg::FileSetSelected { index: selected });
+                }
+            ));
         let widgets = view_output!();
         sender.input(FileSelectMsg::FetchFiles);
         ComponentParts { model, widgets }
@@ -199,9 +218,10 @@ impl Component for FileSelectModel {
             }
             FileSelectMsg::SelectClicked => {
                 let selection = self.list_view_wrapper.selection_model.selected();
+                println!("File Select Clicked - Selected item: {:?}", selection);
                 if let (Some(selected_item), Some(file_type)) = (
                     self.list_view_wrapper.get(selection),
-                    self.seleccted_file_type,
+                    self.selected_file_type,
                 ) {
                     let selected_item = selected_item.borrow();
                     println!(
@@ -224,6 +244,26 @@ impl Component for FileSelectModel {
                     }
                 } else {
                     eprintln!("No file set selected");
+                }
+            }
+            FileSelectMsg::FileSetSelected { index } => {
+                println!("File set selected at index: {}", index);
+                if let (Some(file_set), Some(file_type)) =
+                    (self.list_view_wrapper.get(index), self.selected_file_type)
+                {
+                    let file_set = file_set.borrow();
+                    println!(
+                        "File set selected: {} with ID: {}",
+                        file_set.name, file_set.id
+                    );
+                    let file_set_list_model = FileSetListModel {
+                        id: file_set.id,
+                        file_set_name: file_set.name.clone(),
+                        file_type: file_type.into(),
+                    };
+                    self.selected_file_set = Some(file_set_list_model);
+                } else {
+                    eprintln!("No file set found at index {}", index);
                 }
             }
             _ => {
