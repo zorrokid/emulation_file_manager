@@ -42,10 +42,12 @@ pub struct ReleaseFormModel {
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
     selected_systems: Vec<SystemListModel>,
+    selected_file_sets: Vec<FileSetListModel>,
     settings: Arc<Settings>,
     system_selector: Option<Controller<SystemSelectModel>>,
     file_selector: Option<Controller<FileSelectModel>>,
     selected_systems_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
+    selected_file_sets_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
 }
 
 #[derive(Debug)]
@@ -103,6 +105,11 @@ impl Component for ReleaseFormModel {
 
         v_box.append(&select_system_button);
 
+        let selected_file_sets_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
+            TypedListView::new();
+
+        v_box.append(&selected_file_sets_list_view_wrapper.view);
+
         // TODO: disable when window is opened
         let select_file_button = gtk::Button::with_label("Select File Set");
         select_file_button.connect_clicked(clone!(
@@ -128,6 +135,8 @@ impl Component for ReleaseFormModel {
             system_selector: None,
             file_selector: None,
             selected_systems_list_view_wrapper,
+            selected_file_sets_list_view_wrapper,
+            selected_file_sets: Vec::new(),
         };
         ComponentParts { model, widgets }
     }
@@ -189,7 +198,11 @@ impl Component for ReleaseFormModel {
             }
             ReleaseFormMsg::FileSetSelected(file_set) => {
                 println!("File set selected: {:?}", &file_set);
-                // TODO: handle the file set selection
+                self.selected_file_sets_list_view_wrapper.append(ListItem {
+                    name: file_set.file_set_name.clone(),
+                    id: file_set.id,
+                });
+                self.selected_file_sets.push(file_set);
             }
         }
     }
