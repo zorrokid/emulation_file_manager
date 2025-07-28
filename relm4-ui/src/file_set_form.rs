@@ -1,6 +1,10 @@
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+    sync::Arc,
+};
 
-use core_types::{FileType, ReadFile, Sha1Checksum};
+use core_types::{FileType, ImportedFile, ReadFile, Sha1Checksum};
 use database::{
     database_error::Error as DatabaseError, models::FileInfo, repository_manager::RepositoryManager,
 };
@@ -18,9 +22,12 @@ use relm4::{
     },
     prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque},
 };
-use service::{view_model_service::ViewModelService, view_models::FileSetListModel};
+use service::{
+    view_model_service::ViewModelService,
+    view_models::{FileSetListModel, Settings},
+};
 
-use crate::file_importer::FileImporter;
+use crate::{file_importer::FileImporter, utils::resolve_file_type_path};
 use strum::IntoEnumIterator;
 
 #[derive(Debug, Clone)]
@@ -188,21 +195,27 @@ pub enum CommandMsg {
     FileSelected,
     FileContentsRead(Result<HashMap<Sha1Checksum, ReadFile>, FileImportError>),
     ExistingFilesRead(Result<Vec<FileInfo>, DatabaseError>),
+    FilesImported(Result<HashMap<Sha1Checksum, ImportedFile>, FileImportError>),
+    FilesSavedToDatabase(Result<i64, DatabaseError>),
 }
 
 pub struct FileSetFormInit {
     pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
+    pub settings: Arc<Settings>,
+    pub selected_system_ids: Vec<i64>,
 }
 
 #[derive(Debug)]
 pub struct FileSetFormModel {
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
+    settings: Arc<Settings>,
     file_importer: FileImporter,
     files: FactoryVecDeque<File>,
     file_types: Vec<FileType>,
     selected_file_type: Option<FileType>,
+    selected_system_ids: Vec<i64>,
 }
 
 /*#[derive(Debug)]
@@ -350,10 +363,12 @@ impl Component for FileSetFormModel {
         let model = FileSetFormModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
+            settings: init_model.settings,
             file_importer: FileImporter::new(),
             files,
             file_types,
             selected_file_type: None,
+            selected_system_ids: init_model.selected_system_ids,
         };
         let files_list_box = model.files.widget();
 
@@ -403,11 +418,6 @@ impl Component for FileSetFormModel {
                     CommandMsg::FileContentsRead(res)
                 });
             }
-            FileSetFormMsg::CreateFileSetFromSelectedFiles => {
-                self.files.guard().iter().for_each(|file| {
-                    println!("File {} selected: {}", file.name, file.selected);
-                });
-            }
             FileSetFormMsg::SetFileSelected {
                 sha1_checksum,
                 selected,
@@ -432,6 +442,48 @@ impl Component for FileSetFormModel {
                 println!("Selected file type: {:?}", file_type);
                 self.selected_file_type = Some(file_type);
             }
+            FileSetFormMsg::CreateFileSetFromSelectedFiles => {
+                if let (Some(file_path), Some(file_type)) = (
+                    self.file_importer.get_current_picked_file(),
+                    self.selected_file_type,
+                ) {
+                    let target_path =
+                        resolve_file_type_path(&self.settings.collection_root_dir, &file_type);
+                    let file_filter = self
+                        .file_importer
+                        .get_selected_files_from_current_picked_file_that_are_new()
+                        .iter()
+                        .map(|file| file.file_name.clone())
+                        .collect::<HashSet<String>>();
+
+                    let is_zip_file = self.file_importer.is_zip_file();
+                    let file_name = file_path
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .unwrap_or("unknown_file")
+                        .to_string();
+
+                    let file_path = file_path.clone();
+                    sender.oneshot_command(async move {
+                        // TODO: combine this in file_import
+                        let res = match is_zip_file {
+                            true => file_import::import_files_from_zip(
+                                file_path,
+                                target_path,
+                                file_filter,
+                                file_type,
+                            ),
+                            false => file_import::import_file(
+                                file_path,
+                                target_path,
+                                file_name,
+                                file_type,
+                            ),
+                        };
+                        CommandMsg::FilesImported(res)
+                    });
+                }
+            }
             _ => {
 
                 // Handle input messages here
@@ -443,7 +495,7 @@ impl Component for FileSetFormModel {
         &mut self,
         message: Self::CommandOutput,
         sender: ComponentSender<Self>,
-        _: &Self::Root,
+        root: &Self::Root,
     ) {
         match message {
             CommandMsg::FileContentsRead(Ok(file_contents)) => {
@@ -489,6 +541,65 @@ impl Component for FileSetFormModel {
                 // This is a placeholder for handling file selection command output
                 // You can update the UI or perform other actions here
                 println!("File selected command executed");
+            }
+            CommandMsg::FilesImported(Ok(imported_files_map)) => {
+                println!("Files imported successfully: {:?}", imported_files_map);
+                if let (Some(file_type), Some(file_name)) = (
+                    self.selected_file_type,
+                    self.file_importer.get_current_picked_file_name(),
+                ) {
+                    self.file_importer
+                        .set_imported_files(imported_files_map.clone());
+                    let repo = Arc::clone(&self.repository_manager);
+
+                    // combine the newly imported files with the existing files
+                    let mut imported_files = imported_files_map
+                        .values()
+                        .cloned()
+                        .collect::<Vec<ImportedFile>>();
+                    imported_files
+                        .extend(self.file_importer.get_existing_files().values().cloned());
+                    let system_ids = self.selected_system_ids.clone();
+
+                    let repo = Arc::clone(&self.repository_manager);
+
+                    sender.oneshot_command(async move {
+                        let result = repo
+                            .get_file_set_repository()
+                            .add_file_set(file_name, file_type.into(), imported_files, &system_ids)
+                            .await;
+                        CommandMsg::FilesSavedToDatabase(result)
+                    });
+                }
+            }
+            CommandMsg::FilesImported(Err(e)) => {
+                eprintln!("Error importing files: {:?}", e);
+                // TODO: show error to user
+            }
+            CommandMsg::FilesSavedToDatabase(Ok(id)) => {
+                println!("Files saved to database successfully with ID: {}", id);
+                if let (Some(file_type), Some(file_set_name)) = (
+                    self.selected_file_type,
+                    self.file_importer.get_current_picked_file_name(),
+                ) {
+                    let file_set_list_model = FileSetListModel {
+                        id,
+                        file_set_name,
+                        file_type: file_type.into(),
+                    };
+                    let res =
+                        sender.output(FileSetFormOutputMsg::FileSetCreated(file_set_list_model));
+                    if let Err(e) = res {
+                        eprintln!("Error sending output: {:?}", e);
+                        // TODO: show error to user
+                    } else {
+                        println!("File set created successfully");
+                        root.close();
+                    }
+                }
+            }
+            CommandMsg::FilesSavedToDatabase(Err(e)) => {
+                eprintln!("Error saving files to database: {:?}", e);
             }
             _ => {
                 // Handle command outputs here

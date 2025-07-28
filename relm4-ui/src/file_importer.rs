@@ -43,6 +43,9 @@ impl FileImporter {
     pub fn get_current_picked_file_content(&self) -> &HashMap<Sha1Checksum, ReadFile> {
         &self.current_picked_file_content
     }
+    pub fn get_existing_files(&self) -> &HashMap<Sha1Checksum, ImportedFile> {
+        &self.existing_files
+    }
     pub fn get_selected_files_from_current_picked_file_that_are_new(&self) -> Vec<ReadFile> {
         let existing_files_checksums: HashSet<Sha1Checksum> =
             self.existing_files.keys().cloned().collect();
@@ -66,6 +69,13 @@ impl FileImporter {
     pub fn set_current_picked_file(&mut self, file: PathBuf) {
         self.clear();
         self.current_picked_file = Some(file);
+    }
+
+    pub fn get_current_picked_file_name(&self) -> Option<String> {
+        self.current_picked_file.as_ref().and_then(|path| {
+            path.file_name()
+                .map(|name| name.to_string_lossy().to_string())
+        })
     }
     pub fn set_current_picked_file_content(&mut self, content: HashMap<Sha1Checksum, ReadFile>) {
         self.selected_files_from_current_picked_file

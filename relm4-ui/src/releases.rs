@@ -9,7 +9,7 @@ use relm4::{
 use service::{
     error::Error,
     view_model_service::{ReleaseFilter, ViewModelService},
-    view_models::ReleaseListModel,
+    view_models::{ReleaseListModel, Settings},
 };
 
 use crate::release_form::{
@@ -32,12 +32,14 @@ pub enum CommandMsg {
 pub struct ReleasesModel {
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
+    settings: Arc<Settings>,
     form_window: Option<Controller<ReleaseFormModel>>,
 }
 
 pub struct ReleasesInit {
     pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
+    pub settings: Arc<Settings>,
 }
 
 #[relm4::component(pub)]
@@ -76,6 +78,7 @@ impl Component for ReleasesModel {
         let model = ReleasesModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
+            settings: init_model.settings,
             form_window: None,
         };
         ComponentParts { model, widgets }
@@ -103,6 +106,7 @@ impl Component for ReleasesModel {
                 let release_form_init_model = ReleaseFormInit {
                     view_model_service: Arc::clone(&self.view_model_service),
                     repository_manager: Arc::clone(&self.repository_manager),
+                    settings: Arc::clone(&self.settings),
                 };
                 let form_window = ReleaseFormModel::builder()
                     .transient_for(root)

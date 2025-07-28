@@ -11,8 +11,9 @@ use relm4::{
     typed_view::list::TypedListView,
 };
 use service::{
-    error::Error as ServiceError, view_model_service::ViewModelService,
-    view_models::FileSetListModel,
+    error::Error as ServiceError,
+    view_model_service::ViewModelService,
+    view_models::{FileSetListModel, Settings},
 };
 
 use crate::{
@@ -44,15 +45,19 @@ pub enum CommandMsg {
 pub struct FileSelectInit {
     pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
+    pub settings: Arc<Settings>,
+    pub selected_system_ids: Vec<i64>,
 }
 
 #[derive(Debug)]
 pub struct FileSelectModel {
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
+    settings: Arc<Settings>,
     file_sets: Vec<FileSetListModel>,
     list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     file_set_form: Option<Controller<FileSetFormModel>>,
+    selected_system_ids: Vec<i64>,
 }
 
 #[derive(Debug)]
@@ -114,9 +119,11 @@ impl Component for FileSelectModel {
         let model = FileSelectModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
+            settings: init_model.settings,
             file_sets: Vec::new(),
             list_view_wrapper,
             file_set_form: None,
+            selected_system_ids: init_model.selected_system_ids,
         };
         sender.input(FileSelectMsg::FetchFiles);
         ComponentParts { model, widgets }
@@ -128,6 +135,8 @@ impl Component for FileSelectModel {
                 let init_model = FileSetFormInit {
                     view_model_service: Arc::clone(&self.view_model_service),
                     repository_manager: Arc::clone(&self.repository_manager),
+                    settings: Arc::clone(&self.settings),
+                    selected_system_ids: self.selected_system_ids.clone(),
                 };
                 let file_set_form = FileSetFormModel::builder().launch(init_model).forward(
                     sender.input_sender(),

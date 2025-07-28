@@ -5,6 +5,7 @@ mod list_item;
 mod release_form;
 mod releases;
 mod system_selector;
+mod utils;
 use std::sync::Arc;
 
 use database::{get_db_pool, repository_manager::RepositoryManager};
@@ -16,13 +17,17 @@ use relm4::{
     once_cell::sync::OnceCell,
     typed_view::list::TypedListView,
 };
-use service::{view_model_service::ViewModelService, view_models::SoftwareTitleListModel};
+use service::{
+    view_model_service::ViewModelService,
+    view_models::{Settings, SoftwareTitleListModel},
+};
 
 #[derive(Debug)]
 struct InitResult {
     repository_manager: Arc<RepositoryManager>,
     view_model_service: Arc<ViewModelService>,
     software_titles: Vec<SoftwareTitleListModel>,
+    settings: Settings,
 }
 
 #[derive(Debug)]
@@ -164,10 +169,15 @@ impl Component for AppModel {
                         .get_software_title_list_models()
                         .await
                         .expect("Fetching software titles failed");
+                    let settings = view_model_service
+                        .get_settings()
+                        .await
+                        .expect("Failed to get config");
                     CommandMsg::InitializationDone(InitResult {
                         repository_manager,
                         view_model_service,
                         software_titles,
+                        settings,
                     })
                 });
             }
@@ -235,6 +245,7 @@ impl Component for AppModel {
                 let releases_init = ReleasesInit {
                     view_model_service,
                     repository_manager,
+                    settings: Arc::new(init_result.settings),
                 };
 
                 let releases = ReleasesModel::builder().launch(releases_init).forward(

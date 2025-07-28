@@ -12,7 +12,7 @@ use relm4::{
 };
 use service::{
     view_model_service::ViewModelService,
-    view_models::{FileSetListModel, ReleaseListModel, SystemListModel},
+    view_models::{FileSetListModel, ReleaseListModel, Settings, SystemListModel},
 };
 
 use crate::{
@@ -42,6 +42,7 @@ pub struct ReleaseFormModel {
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
     selected_systems: Vec<SystemListModel>,
+    settings: Arc<Settings>,
     system_selector: Option<Controller<SystemSelectModel>>,
     file_selector: Option<Controller<FileSelectModel>>,
     selected_systems_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
@@ -53,6 +54,7 @@ pub struct Widgets {}
 pub struct ReleaseFormInit {
     pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
+    pub settings: Arc<Settings>,
 }
 
 impl Component for ReleaseFormModel {
@@ -121,6 +123,7 @@ impl Component for ReleaseFormModel {
         let model = ReleaseFormModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
+            settings: init_model.settings,
             selected_systems: Vec::new(),
             system_selector: None,
             file_selector: None,
@@ -156,6 +159,8 @@ impl Component for ReleaseFormModel {
                 let init_model = FileSelectInit {
                     view_model_service: Arc::clone(&self.view_model_service),
                     repository_manager: Arc::clone(&self.repository_manager),
+                    settings: Arc::clone(&self.settings),
+                    selected_system_ids: self.selected_systems.iter().map(|s| s.id).collect(),
                 };
                 let file_selector = FileSelectModel::builder()
                     .transient_for(root)
