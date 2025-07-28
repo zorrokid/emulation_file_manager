@@ -180,9 +180,9 @@ pub enum FileSetFormMsg {
         sha1_checksum: Sha1Checksum,
         selected: bool,
     },
-    SetFileTypeSelected {
+    /*SetFileTypeSelected {
         index: u32,
-    },
+    },*/
 }
 
 #[derive(Debug)]
@@ -204,6 +204,7 @@ pub struct FileSetFormInit {
     pub repository_manager: Arc<RepositoryManager>,
     pub settings: Arc<Settings>,
     pub selected_system_ids: Vec<i64>,
+    pub selected_file_type: FileType,
 }
 
 #[derive(Debug)]
@@ -213,8 +214,8 @@ pub struct FileSetFormModel {
     settings: Arc<Settings>,
     file_importer: FileImporter,
     files: FactoryVecDeque<File>,
-    file_types: Vec<FileType>,
-    selected_file_type: Option<FileType>,
+    //file_types: Vec<FileType>,
+    selected_file_type: FileType,
     selected_system_ids: Vec<i64>,
 }
 
@@ -263,7 +264,7 @@ impl Component for FileSetFormModel {
                     files_list_box -> gtk::ListBox {}
                 },
 
-                #[local_ref]
+                /*#[local_ref]
                 file_types_dropdown -> gtk::DropDown {
                     connect_selected_notify[sender] => move |dropdown| {
                         sender.input(FileSetFormMsg::SetFileTypeSelected {
@@ -271,13 +272,13 @@ impl Component for FileSetFormModel {
                         });
                     }
 
-                },
+                },*/
 
                 gtk::Button {
                     set_label: "Create File Set",
                     connect_clicked => FileSetFormMsg::CreateFileSetFromSelectedFiles,
                     #[watch]
-                    set_sensitive: model.selected_file_type.is_some() && model.file_importer.is_selected_files(),
+                    set_sensitive: model.file_importer.is_selected_files(),
                 },
             }
         }
@@ -348,7 +349,7 @@ impl Component for FileSetFormModel {
                 .collect::<Vec<_>>(),
         );*/
 
-        let file_types: Vec<FileType> = FileType::iter().collect();
+        /*let file_types: Vec<FileType> = FileType::iter().collect();
 
         let file_types_dropdown = gtk::DropDown::builder().build();
         let file_types_to_drop_down: Vec<String> =
@@ -358,7 +359,7 @@ impl Component for FileSetFormModel {
 
         let file_types_drop_down_model = gtk::StringList::new(&file_types_str);
 
-        file_types_dropdown.set_model(Some(&file_types_drop_down_model));
+        file_types_dropdown.set_model(Some(&file_types_drop_down_model));*/
 
         let model = FileSetFormModel {
             view_model_service: init_model.view_model_service,
@@ -366,8 +367,8 @@ impl Component for FileSetFormModel {
             settings: init_model.settings,
             file_importer: FileImporter::new(),
             files,
-            file_types,
-            selected_file_type: None,
+            //file_types,
+            selected_file_type: init_model.selected_file_type,
             selected_system_ids: init_model.selected_system_ids,
         };
         let files_list_box = model.files.widget();
@@ -432,7 +433,7 @@ impl Component for FileSetFormModel {
                     self.file_importer.deselect_file(&sha1_checksum);
                 }
             }
-            FileSetFormMsg::SetFileTypeSelected { index } => {
+            /*FileSetFormMsg::SetFileTypeSelected { index } => {
                 println!("File type selected from index: {}", index);
                 let file_type = self
                     .file_types
@@ -441,12 +442,10 @@ impl Component for FileSetFormModel {
                     .expect("Invalid file type index");
                 println!("Selected file type: {:?}", file_type);
                 self.selected_file_type = Some(file_type);
-            }
+            }*/
             FileSetFormMsg::CreateFileSetFromSelectedFiles => {
-                if let (Some(file_path), Some(file_type)) = (
-                    self.file_importer.get_current_picked_file(),
-                    self.selected_file_type,
-                ) {
+                if let Some(file_path) = self.file_importer.get_current_picked_file() {
+                    let file_type = self.selected_file_type;
                     let target_path =
                         resolve_file_type_path(&self.settings.collection_root_dir, &file_type);
                     let file_filter = self
@@ -544,10 +543,7 @@ impl Component for FileSetFormModel {
             }
             CommandMsg::FilesImported(Ok(imported_files_map)) => {
                 println!("Files imported successfully: {:?}", imported_files_map);
-                if let (Some(file_type), Some(file_name)) = (
-                    self.selected_file_type,
-                    self.file_importer.get_current_picked_file_name(),
-                ) {
+                if let Some(file_name) = self.file_importer.get_current_picked_file_name() {
                     self.file_importer
                         .set_imported_files(imported_files_map.clone());
                     let repo = Arc::clone(&self.repository_manager);
@@ -563,6 +559,7 @@ impl Component for FileSetFormModel {
 
                     let repo = Arc::clone(&self.repository_manager);
 
+                    let file_type = self.selected_file_type;
                     sender.oneshot_command(async move {
                         let result = repo
                             .get_file_set_repository()
@@ -578,14 +575,11 @@ impl Component for FileSetFormModel {
             }
             CommandMsg::FilesSavedToDatabase(Ok(id)) => {
                 println!("Files saved to database successfully with ID: {}", id);
-                if let (Some(file_type), Some(file_set_name)) = (
-                    self.selected_file_type,
-                    self.file_importer.get_current_picked_file_name(),
-                ) {
+                if let Some(file_set_name) = self.file_importer.get_current_picked_file_name() {
                     let file_set_list_model = FileSetListModel {
                         id,
                         file_set_name,
-                        file_type: file_type.into(),
+                        file_type: self.selected_file_type.into(),
                     };
                     let res =
                         sender.output(FileSetFormOutputMsg::FileSetCreated(file_set_list_model));

@@ -16,6 +16,7 @@ use service::{
     view_model_service::ViewModelService,
     view_models::{FileSetListModel, Settings},
 };
+use strum::IntoEnumIterator;
 
 use crate::{
     file_set_form::{FileSetFormInit, FileSetFormModel, FileSetFormOutputMsg},
@@ -30,6 +31,7 @@ pub enum FileSelectMsg {
     OpenFileSetForm,
     FileSetCreated(FileSetListModel),
     FileSetSelected { index: u32 },
+    SetFileTypeSelected { index: u32 },
 }
 
 #[derive(Debug)]
@@ -62,6 +64,7 @@ pub struct FileSelectModel {
     selected_system_ids: Vec<i64>,
     selected_file_type: Option<FileType>,
     selected_file_set: Option<FileSetListModel>,
+    file_types: Vec<FileType>,
 }
 
 #[derive(Debug)]
@@ -94,6 +97,17 @@ impl Component for FileSelectModel {
                 gtk::Label {
                     set_label: "File Selector Component",
                 },
+                #[local_ref]
+                file_types_dropdown -> gtk::DropDown {
+                    connect_selected_notify[sender] => move |dropdown| {
+                        sender.input(FileSelectMsg::SetFileTypeSelected {
+                            index: dropdown.selected(),
+                        });
+                    }
+
+                },
+
+
                 gtk::Button {
                     set_label: "Add File Set",
                     connect_clicked => FileSelectMsg::OpenFileSetForm,
@@ -155,6 +169,18 @@ impl Component for FileSelectModel {
         root.set_child(Some(&v_box));*/
 
         //let widgets = Widgets {};
+        let file_types: Vec<FileType> = FileType::iter().collect();
+
+        let file_types_dropdown = gtk::DropDown::builder().build();
+        let file_types_to_drop_down: Vec<String> =
+            file_types.iter().map(|ft| ft.to_string()).collect();
+        let file_types_str: Vec<&str> =
+            file_types_to_drop_down.iter().map(|s| s.as_str()).collect();
+
+        let file_types_drop_down_model = gtk::StringList::new(&file_types_str);
+
+        file_types_dropdown.set_model(Some(&file_types_drop_down_model));
+
         let model = FileSelectModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
@@ -165,6 +191,7 @@ impl Component for FileSelectModel {
             selected_system_ids: init_model.selected_system_ids,
             selected_file_type: None,
             selected_file_set: None,
+            file_types,
         };
         let file_set_list_view = &model.list_view_wrapper.view;
         model
@@ -187,27 +214,30 @@ impl Component for FileSelectModel {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         match msg {
             FileSelectMsg::OpenFileSetForm => {
-                let init_model = FileSetFormInit {
-                    view_model_service: Arc::clone(&self.view_model_service),
-                    repository_manager: Arc::clone(&self.repository_manager),
-                    settings: Arc::clone(&self.settings),
-                    selected_system_ids: self.selected_system_ids.clone(),
-                };
-                let file_set_form = FileSetFormModel::builder().launch(init_model).forward(
-                    sender.input_sender(),
-                    |msg| match msg {
-                        FileSetFormOutputMsg::FileSetCreated(file_set_liset_model) => {
-                            FileSelectMsg::FileSetCreated(file_set_liset_model)
-                        }
-                    },
-                );
-                self.file_set_form = Some(file_set_form);
+                if let Some(selected_file_type) = self.selected_file_type {
+                    let init_model = FileSetFormInit {
+                        view_model_service: Arc::clone(&self.view_model_service),
+                        repository_manager: Arc::clone(&self.repository_manager),
+                        settings: Arc::clone(&self.settings),
+                        selected_system_ids: self.selected_system_ids.clone(),
+                        selected_file_type,
+                    };
+                    let file_set_form = FileSetFormModel::builder().launch(init_model).forward(
+                        sender.input_sender(),
+                        |msg| match msg {
+                            FileSetFormOutputMsg::FileSetCreated(file_set_liset_model) => {
+                                FileSelectMsg::FileSetCreated(file_set_liset_model)
+                            }
+                        },
+                    );
+                    self.file_set_form = Some(file_set_form);
 
-                self.file_set_form
-                    .as_ref()
-                    .expect("File set form should be set")
-                    .widget()
-                    .present();
+                    self.file_set_form
+                        .as_ref()
+                        .expect("File set form should be set")
+                        .widget()
+                        .present();
+                }
             }
             FileSelectMsg::FileSetCreated(file_set_list_model) => {
                 println!("File Selector - File set created {}", file_set_list_model);
@@ -266,6 +296,17 @@ impl Component for FileSelectModel {
                     eprintln!("No file set found at index {}", index);
                 }
             }
+            FileSelectMsg::SetFileTypeSelected { index } => {
+                println!("File type selected from index: {}", index);
+                let file_type = self
+                    .file_types
+                    .get(index as usize)
+                    .cloned()
+                    .expect("Invalid file type index");
+                println!("Selected file type: {:?}", file_type);
+                self.selected_file_type = Some(file_type);
+            }
+
             _ => {
                 // Handle other messages here
             }
