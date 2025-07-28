@@ -180,6 +180,7 @@ impl Component for FileSelectModel {
         let file_types_drop_down_model = gtk::StringList::new(&file_types_str);
 
         file_types_dropdown.set_model(Some(&file_types_drop_down_model));
+        file_types_dropdown.set_selected(0);
 
         let model = FileSelectModel {
             view_model_service: init_model.view_model_service,
@@ -189,7 +190,7 @@ impl Component for FileSelectModel {
             list_view_wrapper,
             file_set_form: None,
             selected_system_ids: init_model.selected_system_ids,
-            selected_file_type: None,
+            selected_file_type: file_types.first().cloned(),
             selected_file_set: None,
             file_types,
         };
@@ -305,6 +306,26 @@ impl Component for FileSelectModel {
                     .expect("Invalid file type index");
                 println!("Selected file type: {:?}", file_type);
                 self.selected_file_type = Some(file_type);
+                sender.input(FileSelectMsg::FetchFiles);
+            }
+            FileSelectMsg::FetchFiles => {
+                println!("Fetching file sets for selected systems and file type");
+                if let Some(file_type) = self.selected_file_type {
+                    println!("Selected file type: {:?}", file_type);
+                    let view_model_service = Arc::clone(&self.view_model_service);
+                    let system_ids = self.selected_system_ids.clone();
+                    println!("Selected system IDs: {:?}", system_ids);
+                    sender.oneshot_command(clone!(
+                        #[strong]
+                        view_model_service,
+                        async move {
+                            let file_sets = view_model_service
+                                .get_file_set_list_models(file_type.into(), &system_ids)
+                                .await;
+                            CommandMsg::FilesFetched(file_sets)
+                        }
+                    ));
+                }
             }
 
             _ => {
@@ -320,6 +341,20 @@ impl Component for FileSelectModel {
         _: &Self::Root,
     ) {
         match message {
+            CommandMsg::FilesFetched(Ok(file_sets)) => {
+                println!("File sets fetched successfully: {:?}", file_sets);
+                self.file_sets = file_sets;
+                self.list_view_wrapper.clear();
+                let list_items = self.file_sets.iter().map(|file_set| ListItem {
+                    id: file_set.id,
+                    name: file_set.file_set_name.clone(),
+                });
+                self.list_view_wrapper.extend_from_iter(list_items);
+            }
+            CommandMsg::FilesFetched(Err(e)) => {
+                eprintln!("Failed to fetch file sets: {:?}", e);
+                // TODO handle error
+            }
             _ => {
                 // Handle command outputs here
             }

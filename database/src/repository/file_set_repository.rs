@@ -105,6 +105,38 @@ impl FileSetRepository {
         Ok(file_sets)
     }
 
+    pub async fn get_file_sets_by_file_type_and_systems(
+        &self,
+        file_type: FileType,
+        system_ids: &[i64],
+    ) -> Result<Vec<FileSet>, DatabaseError> {
+        println!(
+            "Getting file sets for file type: {:?} and systems: {:?}",
+            file_type, system_ids
+        );
+        let placeholders = system_ids
+            .iter()
+            .map(|_| "?")
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        let file_sets_query = format!(
+            "SELECT DISTINCT fs.id, fs.file_name, fs.file_type 
+             FROM file_set fs
+             INNER JOIN file_set_file_info fsfi ON fs.id = fsfi.file_set_id
+             INNER JOIN file_info_system fis ON fsfi.file_info_id = fis.file_info_id
+             WHERE fs.file_type = ? AND fis.system_id IN ({})",
+            placeholders
+        );
+        let mut query_builder =
+            sqlx::query_as::<Sqlite, FileSet>(&file_sets_query).bind(file_type as i64);
+        for system_id in system_ids {
+            query_builder = query_builder.bind(system_id);
+        }
+        let file_sets = query_builder.fetch_all(&*self.pool).await?;
+        Ok(file_sets)
+    }
+
     // TODO: update file set
     pub async fn add_file_set(
         &self,
