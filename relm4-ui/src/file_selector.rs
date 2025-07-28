@@ -1,12 +1,13 @@
 use std::sync::Arc;
 
+use core_types::FileType;
 use database::{database_error::Error as DatabaseError, repository_manager::RepositoryManager};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
         self,
         glib::clone,
-        prelude::{BoxExt, ButtonExt, GtkWindowExt},
+        prelude::{BoxExt, ButtonExt, GtkWindowExt, SelectionModelExt},
     },
     typed_view::list::TypedListView,
 };
@@ -32,7 +33,7 @@ pub enum FileSelectMsg {
 
 #[derive(Debug)]
 pub enum FileSelectOutputMsg {
-    FileSelected(FileSetListModel),
+    FileSetSelected(FileSetListModel),
 }
 
 #[derive(Debug)]
@@ -58,6 +59,7 @@ pub struct FileSelectModel {
     list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     file_set_form: Option<Controller<FileSetFormModel>>,
     selected_system_ids: Vec<i64>,
+    seleccted_file_type: Option<FileType>,
 }
 
 #[derive(Debug)]
@@ -124,6 +126,7 @@ impl Component for FileSelectModel {
             list_view_wrapper,
             file_set_form: None,
             selected_system_ids: init_model.selected_system_ids,
+            seleccted_file_type: None,
         };
         sender.input(FileSelectMsg::FetchFiles);
         ComponentParts { model, widgets }
@@ -156,6 +159,39 @@ impl Component for FileSelectModel {
             }
             FileSelectMsg::FileSetCreated(file_set_list_model) => {
                 println!("File set created {}", file_set_list_model);
+                self.list_view_wrapper.append(ListItem {
+                    id: file_set_list_model.id,
+                    name: file_set_list_model.file_set_name.clone(),
+                });
+            }
+            FileSelectMsg::SelectClicked => {
+                let selection = self.list_view_wrapper.selection_model.selected();
+                if let (Some(selected_item), Some(file_type)) = (
+                    self.list_view_wrapper.get(selection),
+                    self.seleccted_file_type,
+                ) {
+                    let selected_item = selected_item.borrow();
+                    println!(
+                        "File set selected: {} with ID: {}",
+                        selected_item.name, selected_item.id
+                    );
+                    let file_set_list_model = FileSetListModel {
+                        id: selected_item.id,
+                        file_set_name: selected_item.name.clone(),
+                        file_type: file_type.into(),
+                    };
+                    let res =
+                        sender.output(FileSelectOutputMsg::FileSetSelected(file_set_list_model));
+                    if let Err(e) = res {
+                        eprintln!("Failed to send output message: {:?}", e);
+                        // TODO handle error
+                    } else {
+                        println!("File set selection output sent successfully.");
+                        root.close();
+                    }
+                } else {
+                    eprintln!("No file set selected");
+                }
             }
             _ => {
                 // Handle other messages here

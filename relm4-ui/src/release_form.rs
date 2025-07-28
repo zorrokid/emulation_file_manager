@@ -26,7 +26,7 @@ pub enum ReleaseFormMsg {
     OpenSystemSelector,
     OpenFileSelector,
     SystemSelected(SystemListModel),
-    FileSelected(FileSetListModel),
+    FileSetSelected(FileSetListModel),
 }
 
 #[derive(Debug)]
@@ -166,8 +166,8 @@ impl Component for ReleaseFormModel {
                     .transient_for(root)
                     .launch(init_model)
                     .forward(sender.input_sender(), |msg| match msg {
-                        FileSelectOutputMsg::FileSelected(file_set_liset_model) => {
-                            ReleaseFormMsg::FileSelected(file_set_liset_model)
+                        FileSelectOutputMsg::FileSetSelected(file_set_liset_model) => {
+                            ReleaseFormMsg::FileSetSelected(file_set_liset_model)
                         }
                     });
                 self.file_selector = Some(file_selector);
@@ -187,7 +187,7 @@ impl Component for ReleaseFormModel {
                 });
                 self.selected_systems.push(system);
             }
-            ReleaseFormMsg::FileSelected(file_set) => {
+            ReleaseFormMsg::FileSetSelected(file_set) => {
                 println!("File set selected: {:?}", &file_set);
                 // TODO: handle the file set selection
             }
