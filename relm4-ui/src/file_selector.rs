@@ -7,7 +7,7 @@ use relm4::{
     gtk::{
         self,
         glib::clone,
-        prelude::{BoxExt, ButtonExt, GtkWindowExt, SelectionModelExt},
+        prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, SelectionModelExt, WidgetExt},
     },
     typed_view::list::TypedListView,
 };
@@ -65,27 +65,58 @@ pub struct FileSelectModel {
 #[derive(Debug)]
 pub struct Widgets {}
 
+#[relm4::component(pub)]
 impl Component for FileSelectModel {
     type Input = FileSelectMsg;
     type Output = FileSelectOutputMsg;
     type CommandOutput = CommandMsg;
     type Init = FileSelectInit;
-    type Widgets = Widgets;
-    type Root = gtk::Window;
+    //type Widgets = Widgets;
+    //type Root = gtk::Window;
 
-    fn init_root() -> Self::Root {
+    /*fn init_root() -> Self::Root {
         gtk::Window::builder()
             .title("File Selector")
             .default_width(800)
             .default_height(800)
             .build()
+    }*/
+
+    view! {
+        #[root]
+        gtk::Window {
+            set_default_width: 800,
+            set_default_height: 800,
+            gtk::Box {
+                set_orientation: gtk::Orientation::Vertical,
+                gtk::Label {
+                    set_label: "File Selector Component",
+                },
+                gtk::Button {
+                    set_label: "Add File Set",
+                    connect_clicked => FileSelectMsg::OpenFileSetForm,
+                },
+
+                gtk::ScrolledWindow {
+                    set_vexpand: true,
+                    #[local_ref]
+                    file_set_list_view -> gtk::ListView {}
+                },
+
+                gtk::Button {
+                    set_label: "Select File Set",
+                    connect_clicked => FileSelectMsg::SelectClicked,
+                },
+            }
+        }
     }
+
     fn init(
         init_model: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let v_box = gtk::Box::builder()
+        /*let v_box = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
             .build();
 
@@ -97,9 +128,9 @@ impl Component for FileSelectModel {
                 sender.input(FileSelectMsg::OpenFileSetForm);
             }
         ));
-        v_box.append(&add_file_set_button);
+        v_box.append(&add_file_set_button);*/
         let list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> = TypedListView::new();
-        let files_list = &list_view_wrapper.view;
+        /*let files_list = &list_view_wrapper.view;
         let files_list_container = gtk::ScrolledWindow::builder().vexpand(true).build();
         files_list_container.set_child(Some(files_list));
 
@@ -115,9 +146,9 @@ impl Component for FileSelectModel {
             }
         ));
         v_box.append(&select_button);
-        root.set_child(Some(&v_box));
+        root.set_child(Some(&v_box));*/
 
-        let widgets = Widgets {};
+        //let widgets = Widgets {};
         let model = FileSelectModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
@@ -128,6 +159,8 @@ impl Component for FileSelectModel {
             selected_system_ids: init_model.selected_system_ids,
             seleccted_file_type: None,
         };
+        let file_set_list_view = &model.list_view_wrapper.view;
+        let widgets = view_output!();
         sender.input(FileSelectMsg::FetchFiles);
         ComponentParts { model, widgets }
     }
@@ -158,7 +191,7 @@ impl Component for FileSelectModel {
                     .present();
             }
             FileSelectMsg::FileSetCreated(file_set_list_model) => {
-                println!("File set created {}", file_set_list_model);
+                println!("File Selector - File set created {}", file_set_list_model);
                 self.list_view_wrapper.append(ListItem {
                     id: file_set_list_model.id,
                     name: file_set_list_model.file_set_name.clone(),
