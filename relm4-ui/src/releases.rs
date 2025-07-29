@@ -4,7 +4,6 @@ use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{self, prelude::*},
-    once_cell::sync::OnceCell,
 };
 use service::{
     error::Error,
@@ -12,9 +11,7 @@ use service::{
     view_models::{ReleaseListModel, Settings},
 };
 
-use crate::release_form::{
-    ReleaseFormInit, ReleaseFormModel, ReleaseFormMsg, ReleaseFormOutputMsg,
-};
+use crate::release_form::{ReleaseFormInit, ReleaseFormModel, ReleaseFormOutputMsg};
 
 #[derive(Debug)]
 pub enum ReleasesMsg {

@@ -20,6 +20,9 @@ use service::{
 use crate::{
     file_selector::{FileSelectInit, FileSelectModel, FileSelectOutputMsg},
     list_item::ListItem,
+    software_title_selector::{
+        SoftwareTitleSelectInit, SoftwareTitleSelectModel, SoftwareTitleSelectOutputMsg,
+    },
     system_selector::{SystemSelectInit, SystemSelectModel, SystemSelectOutputMsg},
 };
 
@@ -29,7 +32,9 @@ pub enum ReleaseFormMsg {
     OpenFileSelector,
     SystemSelected(SystemListModel),
     FileSetSelected(FileSetListModel),
+    SoftwareTitleSelected(SoftwareTitleListModel),
     StartSaveRelease,
+    OpenSoftwareTitleSelector,
 }
 
 #[derive(Debug)]
@@ -46,18 +51,17 @@ pub enum CommandMsg {
 pub struct ReleaseFormModel {
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
+    selected_sofware_titles: Vec<SoftwareTitleListModel>,
     selected_systems: Vec<SystemListModel>,
     selected_file_sets: Vec<FileSetListModel>,
     settings: Arc<Settings>,
     system_selector: Option<Controller<SystemSelectModel>>,
     file_selector: Option<Controller<FileSelectModel>>,
+    software_title_selector: Option<Controller<SoftwareTitleSelectModel>>,
+    selected_software_titles_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     selected_systems_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     selected_file_sets_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
-    selected_sofware_titles: Vec<SoftwareTitleListModel>,
 }
-
-#[derive(Debug)]
-pub struct Widgets {}
 
 pub struct ReleaseFormInit {
     pub view_model_service: Arc<ViewModelService>,
@@ -71,44 +75,37 @@ impl Component for ReleaseFormModel {
     type Output = ReleaseFormOutputMsg;
     type CommandOutput = CommandMsg;
     type Init = ReleaseFormInit;
-    //type Widgets = Widgets;
-    //type Root = gtk::Window;
-
-    /*fn init_root() -> Self::Root {
-        gtk::Window::builder()
-            .title("Release Form")
-            .default_width(800)
-            .default_height(800)
-            .build()
-    }*/
 
     view! {
         #[root]
         gtk::Window {
             set_default_width: 800,
             set_default_height: 600,
+            set_title: Some("Release Form"),
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
 
-                gtk::Label {
-                    set_label: "Release Form Component",
+                gtk::ScrolledWindow {
+                    set_vexpand: true,
+                    #[local_ref]
+                    selected_software_titles_list_view -> gtk::ListView {}
+                },
+                gtk::Button {
+                    set_label: "Select Software Title",
+                    connect_clicked => ReleaseFormMsg::OpenSoftwareTitleSelector,
                 },
 
-                gtk::Button {
-                    set_label: "Select System",
-                    connect_clicked => ReleaseFormMsg::OpenSystemSelector,
-                },
 
                 gtk::ScrolledWindow {
                     set_vexpand: true,
                     #[local_ref]
                     selected_systems_list_view -> gtk::ListView {}
                 },
-
                 gtk::Button {
-                    set_label: "Select File Set",
-                    connect_clicked => ReleaseFormMsg::OpenFileSelector,
+                    set_label: "Select System",
+                    connect_clicked => ReleaseFormMsg::OpenSystemSelector,
                 },
+
 
 
                gtk::ScrolledWindow {
@@ -119,6 +116,11 @@ impl Component for ReleaseFormModel {
                     selected_file_sets_list_view -> gtk::ListView {}
 
                 },
+                gtk::Button {
+                    set_label: "Select File Set",
+                    connect_clicked => ReleaseFormMsg::OpenFileSelector,
+                },
+
 
                 gtk::Button {
                     set_label: "Submit Release",
@@ -133,63 +135,16 @@ impl Component for ReleaseFormModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        // TODO: add software title selector and possibly convert to use component macro
-        /*let v_box = gtk::Box::builder()
-            .orientation(gtk::Orientation::Vertical)
-            .build();
-
-        let label = gtk::Label::new(Some("Release Form Component"));
-        v_box.append(&label);*/
-
         let selected_systems_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
             TypedListView::new();
-
-        /*v_box.append(&selected_systems_list_view_wrapper.view);
-
-        // TODO: disable when window is opened
-        let select_system_button = gtk::Button::with_label("Select System");
-        select_system_button.connect_clicked(clone!(
-            #[strong]
-            sender,
-            move |_| {
-                sender.input(ReleaseFormMsg::OpenSystemSelector);
-                println!("Select System button clicked");
-            }
-        ));
-
-        v_box.append(&select_system_button);*/
 
         let selected_file_sets_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
             TypedListView::new();
 
-        /*v_box.append(&selected_file_sets_list_view_wrapper.view);
-
-        // TODO: disable when window is opened
-        let select_file_button = gtk::Button::with_label("Select File Set");
-        select_file_button.connect_clicked(clone!(
-            #[strong]
-            sender,
-            move |_| {
-                sender.input(ReleaseFormMsg::OpenFileSelector);
-                println!("Select File Set button clicked");
-            }
-        ));
-
-        v_box.append(&select_file_button);
-
-        let submit_button = gtk::Button::with_label("Submit Release");
-        submit_button.connect_clicked(clone!(
-            #[strong]
-            sender,
-            move |_| {
-                println!("Submit Release button clicked");
-                sender.input(ReleaseFormMsg::StartSaveRelease);
-            }
-        ));
-
-        root.set_child(Some(&v_box));*/
-
-        //let widgets = Widgets {};
+        let selected_software_titles_list_view_wrapper: TypedListView<
+            ListItem,
+            gtk::SingleSelection,
+        > = TypedListView::new();
 
         let model = ReleaseFormModel {
             view_model_service: init_model.view_model_service,
@@ -198,6 +153,8 @@ impl Component for ReleaseFormModel {
             selected_systems: Vec::new(),
             system_selector: None,
             file_selector: None,
+            software_title_selector: None,
+            selected_software_titles_list_view_wrapper,
             selected_systems_list_view_wrapper,
             selected_file_sets_list_view_wrapper,
             selected_file_sets: Vec::new(),
@@ -206,6 +163,8 @@ impl Component for ReleaseFormModel {
 
         let selected_systems_list_view = &model.selected_systems_list_view_wrapper.view;
         let selected_file_sets_list_view = &model.selected_file_sets_list_view_wrapper.view;
+        let selected_software_titles_list_view =
+            &model.selected_software_titles_list_view_wrapper.view;
         let widgets = view_output!();
         ComponentParts { model, widgets }
     }
@@ -256,6 +215,25 @@ impl Component for ReleaseFormModel {
                     .widget()
                     .present();
             }
+            ReleaseFormMsg::OpenSoftwareTitleSelector => {
+                let software_title_selector = SoftwareTitleSelectModel::builder()
+                    .transient_for(root)
+                    .launch(SoftwareTitleSelectInit {
+                        view_model_service: Arc::clone(&self.view_model_service),
+                        repository_manager: Arc::clone(&self.repository_manager),
+                    })
+                    .forward(sender.input_sender(), |msg| match msg {
+                        SoftwareTitleSelectOutputMsg::SoftwareTitleSelected(software_title) => {
+                            ReleaseFormMsg::SoftwareTitleSelected(software_title)
+                        }
+                    });
+                self.software_title_selector = Some(software_title_selector);
+                self.software_title_selector
+                    .as_ref()
+                    .expect("Software title selector should be set")
+                    .widget()
+                    .present();
+            }
 
             ReleaseFormMsg::SystemSelected(system) => {
                 println!("System selected: {:?}", &system);
@@ -272,6 +250,15 @@ impl Component for ReleaseFormModel {
                     id: file_set.id,
                 });
                 self.selected_file_sets.push(file_set);
+            }
+            ReleaseFormMsg::SoftwareTitleSelected(software_title) => {
+                println!("Software title selected: {:?}", &software_title);
+                self.selected_software_titles_list_view_wrapper
+                    .append(ListItem {
+                        name: software_title.name.clone(),
+                        id: software_title.id,
+                    });
+                self.selected_sofware_titles.push(software_title);
             }
             ReleaseFormMsg::StartSaveRelease => {
                 println!("Starting to save release with selected systems and file sets");
