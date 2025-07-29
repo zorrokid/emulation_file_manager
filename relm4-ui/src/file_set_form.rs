@@ -28,7 +28,6 @@ use service::{
 };
 
 use crate::{file_importer::FileImporter, utils::resolve_file_type_path};
-use strum::IntoEnumIterator;
 
 #[derive(Debug, Clone)]
 struct File {
@@ -110,67 +109,6 @@ impl FactoryComponent for File {
     }
 }
 
-/*#[derive(Debug, Clone)]
-struct DropDownFileType {
-    name: String,
-    file_type: FileType,
-    selected: bool,
-}
-
-#[derive(Debug)]
-enum DropDownFileTypeInput {
-    FileTypeSelected { file_type: FileType },
-}
-
-#[derive(Debug)]
-enum DropDownFileTypeOutput {
-    FileTypeSelected { file_type: FileType },
-}
-
-#[relm4::factory]
-impl FactoryComponent for DropDownFileType {
-    type Init = FileType;
-    type Input = DropDownFileTypeInput;
-    type Output = DropDownFileTypeOutput;
-    type CommandOutput = ();
-    type ParentWidget = gtk::DropDown;
-
-    view! {
-        gtk::Box {
-            set_orientation: gtk::Orientation::Horizontal,
-            #[name(label)]
-            gtk::Label {
-                set_label: &self.name,
-                set_hexpand: true,
-                set_halign: gtk::Align::Start,
-                set_margin_all: 12,
-            },
-        }
-    }
-
-    fn init_model(
-        file_type: Self::Init,
-        _index: &DynamicIndex,
-        _sender: FactorySender<Self>,
-    ) -> Self {
-        Self {
-            name: file_type.to_string(),
-            file_type,
-            selected: false,
-        }
-    }
-
-    fn update(&mut self, message: Self::Input, _sender: FactorySender<Self>) {
-        match message {
-            _ => {
-                // Handle input messages here
-            }
-        }
-    }
-}*/
-
-//
-
 #[derive(Debug)]
 pub enum FileSetFormMsg {
     OpenFileSelector,
@@ -180,9 +118,6 @@ pub enum FileSetFormMsg {
         sha1_checksum: Sha1Checksum,
         selected: bool,
     },
-    /*SetFileTypeSelected {
-        index: u32,
-    },*/
 }
 
 #[derive(Debug)]
@@ -214,15 +149,9 @@ pub struct FileSetFormModel {
     settings: Arc<Settings>,
     file_importer: FileImporter,
     files: FactoryVecDeque<File>,
-    //file_types: Vec<FileType>,
     selected_file_type: FileType,
     selected_system_ids: Vec<i64>,
 }
-
-/*#[derive(Debug)]
-struct Widgets {
-    pub selected_file_label: gtk::Label,
-}*/
 
 #[relm4::component(pub)]
 impl Component for FileSetFormModel {
@@ -230,8 +159,6 @@ impl Component for FileSetFormModel {
     type Output = FileSetFormOutputMsg;
     type CommandOutput = CommandMsg;
     type Init = FileSetFormInit;
-    //type Widgets = Widgets;
-    //type Root = gtk::Window;
 
     view! {
         #[root]
@@ -264,16 +191,6 @@ impl Component for FileSetFormModel {
                     files_list_box -> gtk::ListBox {}
                 },
 
-                /*#[local_ref]
-                file_types_dropdown -> gtk::DropDown {
-                    connect_selected_notify[sender] => move |dropdown| {
-                        sender.input(FileSetFormMsg::SetFileTypeSelected {
-                            index: dropdown.selected(),
-                        });
-                    }
-
-                },*/
-
                 gtk::Button {
                     set_label: "Create File Set",
                     connect_clicked => FileSetFormMsg::CreateFileSetFromSelectedFiles,
@@ -283,83 +200,24 @@ impl Component for FileSetFormModel {
             }
         }
     }
-    /*fn init_root() -> Self::Root {
-        gtk::Window::builder()
-            .title("Create file set")
-            .default_width(800)
-            .default_height(800)
-            .build()
-    }*/
 
     fn init(
         init_model: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        /*let open_file_selector_button = gtk::Button::with_label("Open file selector");
-        open_file_selector_button.connect_clicked(clone!(
-            #[strong]
-            sender,
-            move |_| {
-                sender.input(FileSetFormMsg::OpenFileSelector);
-            }
-        ));
-        let v_box = gtk::Box::builder()
-            .orientation(gtk::Orientation::Vertical)
-            .build();
-        v_box.append(&open_file_selector_button);
-        root.set_child(Some(&v_box));
-
-        let model = FileSetFormModel {
-            view_model_service: init_model.view_model_service,
-            repository_manager: init_model.repository_manager,
-            file_importer: FileImporter::new(),
-        };
-        let selected_file_label = gtk::Label::new(Some("No file selected"));
-        v_box.append(&selected_file_label);
-        let widgets = Widgets {
-            selected_file_label,
-        };*/
-
-        let files = FactoryVecDeque::builder()
-            .launch_default()
-            //.detach();
-            .forward(sender.input_sender(), |output| match output {
-                FileOutput::SetFileSelected {
-                    sha1_checksum,
-                    selected,
-                } => FileSetFormMsg::SetFileSelected {
-                    sha1_checksum,
-                    selected,
-                },
-            });
-
-        /*let file_types = FactoryVecDeque::builder()
-        .launch_default()
-        //.detach();
-        .forward(sender.input_sender(), |output| match output {
-            DropDownFileTypeOutput::FileTypeSelected { file_type } => {
-                FileSetFormMsg::SetFileTypeSelected { file_type }
-            }
-        });*/
-
-        /*file_types.append(
-            FileType::iter()
-                .map(|file_type| DropDownFileType::new(file_type))
-                .collect::<Vec<_>>(),
-        );*/
-
-        /*let file_types: Vec<FileType> = FileType::iter().collect();
-
-        let file_types_dropdown = gtk::DropDown::builder().build();
-        let file_types_to_drop_down: Vec<String> =
-            file_types.iter().map(|ft| ft.to_string()).collect();
-        let file_types_str: Vec<&str> =
-            file_types_to_drop_down.iter().map(|s| s.as_str()).collect();
-
-        let file_types_drop_down_model = gtk::StringList::new(&file_types_str);
-
-        file_types_dropdown.set_model(Some(&file_types_drop_down_model));*/
+        let files =
+            FactoryVecDeque::builder()
+                .launch_default()
+                .forward(sender.input_sender(), |output| match output {
+                    FileOutput::SetFileSelected {
+                        sha1_checksum,
+                        selected,
+                    } => FileSetFormMsg::SetFileSelected {
+                        sha1_checksum,
+                        selected,
+                    },
+                });
 
         let model = FileSetFormModel {
             view_model_service: init_model.view_model_service,
@@ -367,7 +225,6 @@ impl Component for FileSetFormModel {
             settings: init_model.settings,
             file_importer: FileImporter::new(),
             files,
-            //file_types,
             selected_file_type: init_model.selected_file_type,
             selected_system_ids: init_model.selected_system_ids,
         };
@@ -433,16 +290,6 @@ impl Component for FileSetFormModel {
                     self.file_importer.deselect_file(&sha1_checksum);
                 }
             }
-            /*FileSetFormMsg::SetFileTypeSelected { index } => {
-                println!("File type selected from index: {}", index);
-                let file_type = self
-                    .file_types
-                    .get(index as usize)
-                    .cloned()
-                    .expect("Invalid file type index");
-                println!("Selected file type: {:?}", file_type);
-                self.selected_file_type = Some(file_type);
-            }*/
             FileSetFormMsg::CreateFileSetFromSelectedFiles => {
                 if let Some(file_path) = self.file_importer.get_current_picked_file() {
                     let file_type = self.selected_file_type;
@@ -483,10 +330,7 @@ impl Component for FileSetFormModel {
                     });
                 }
             }
-            _ => {
-
-                // Handle input messages here
-            }
+            _ => {}
         }
     }
 
@@ -595,21 +439,7 @@ impl Component for FileSetFormModel {
             CommandMsg::FilesSavedToDatabase(Err(e)) => {
                 eprintln!("Error saving files to database: {:?}", e);
             }
-            _ => {
-                // Handle command outputs here
-            }
+            _ => {}
         }
     }
-
-    /*fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
-        let selected_file_text = self
-            .file_importer
-            .get_current_picked_file()
-            .map_or("No file selected".to_string(), |path| {
-                path.to_string_lossy().to_string()
-            });
-        widgets
-            .selected_file_label
-            .set_text(selected_file_text.as_str());
-    }*/
 }

@@ -1,3 +1,5 @@
+mod emulator_form;
+mod emulator_runner;
 mod file_importer;
 mod file_selector;
 mod file_set_form;
@@ -95,6 +97,10 @@ impl Component for AppModel {
 
         let left_vbox = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
+            .spacing(10)
+            .margin_top(10)
+            .margin_bottom(10)
+            .margin_start(10)
             .build();
 
         let right_vbox = gtk::Box::builder()

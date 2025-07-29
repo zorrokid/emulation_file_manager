@@ -9,7 +9,7 @@ use relm4::{
 use service::{
     error::Error,
     view_model_service::{ReleaseFilter, ViewModelService},
-    view_models::{ReleaseListModel, ReleaseViewModel, Settings},
+    view_models::{FileSetViewModel, ReleaseListModel, ReleaseViewModel, Settings},
 };
 
 use crate::{
@@ -23,6 +23,7 @@ pub enum ReleasesMsg {
     ReleaseSelected { index: u32 },
     StartAddRelease,
     AddRelease(ReleaseListModel),
+    StartEmulatorRunner,
 }
 
 #[derive(Debug)]
@@ -38,8 +39,12 @@ pub struct ReleasesModel {
     settings: Arc<Settings>,
     form_window: Option<Controller<ReleaseFormModel>>,
     releases_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
+
+    // selected release (TODO: split to another component)
     selected_release: Option<ReleaseViewModel>,
     selected_release_system_names: String,
+    file_set_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
+    selected_file_set: Option<FileSetViewModel>,
 }
 
 pub struct ReleasesInit {
@@ -62,6 +67,8 @@ impl Component for ReleasesModel {
 
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
+                set_spacing: 10,
+                set_margin_all: 10,
 
                 gtk::Label {
                     set_label: "Releases",
@@ -82,6 +89,8 @@ impl Component for ReleasesModel {
 
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
+                set_spacing: 10,
+                set_margin_all: 10,
 
                 gtk::Label {
                     set_label: "Selected Release",
@@ -92,6 +101,16 @@ impl Component for ReleasesModel {
                     set_label: model.selected_release_system_names.as_str(),
 
                 },
+
+                #[local_ref]
+                file_set_list_view -> gtk::ListView { },
+
+                gtk::Button {
+                    set_label: "Run with Emulator",
+                    #[watch]
+                    set_sensitive: model.selected_file_set.is_some(),
+                    connect_clicked => ReleasesMsg::StartEmulatorRunner,
+                }
             }
         }
     }
@@ -109,8 +128,11 @@ impl Component for ReleasesModel {
             releases_list_view_wrapper: TypedListView::new(),
             selected_release: None,
             selected_release_system_names: String::new(),
+            file_set_list_view_wrapper: TypedListView::new(),
+            selected_file_set: None,
         };
         let releases_list_view = &model.releases_list_view_wrapper.view;
+        let file_set_list_view = &model.file_set_list_view_wrapper.view;
         let widgets = view_output!();
         ComponentParts { model, widgets }
     }
@@ -183,6 +205,11 @@ impl Component for ReleasesModel {
                     name: release_list_model.name,
                 });
             }
+            ReleasesMsg::StartEmulatorRunner => {
+                if let Some(file_set) = &self.selected_file_set {
+                    println!("Starting emulator runner with file set: {:?}", file_set);
+                }
+            }
         }
     }
     fn update_cmd(
@@ -225,6 +252,33 @@ impl Component for ReleasesModel {
                         .join(", ")
                 });
                 self.selected_release_system_names = system_names;
+                self.file_set_list_view_wrapper.clear();
+                self.file_set_list_view_wrapper.extend_from_iter(
+                    self.selected_release.as_ref().map_or(vec![], |r| {
+                        r.file_sets
+                            .iter()
+                            .map(|fs| ListItem {
+                                id: fs.id,
+                                name: fs.file_set_name.clone(),
+                            })
+                            .collect()
+                    }),
+                );
+
+                let selected_index = self.file_set_list_view_wrapper.selection_model.selected();
+                let selected_file_set = self.file_set_list_view_wrapper.get(selected_index);
+                if let (Some(file_set), Some(release)) = (selected_file_set, &self.selected_release)
+                {
+                    release
+                        .file_sets
+                        .iter()
+                        .find(|fs| fs.id == file_set.borrow().id)
+                        .map(|fs| {
+                            self.selected_file_set = Some(fs.clone());
+                        });
+                } else {
+                    self.selected_file_set = None;
+                }
             }
             CommandMsg::FetchedRelease(Err(err)) => {
                 eprintln!("Error fetching release: {:?}", err);
