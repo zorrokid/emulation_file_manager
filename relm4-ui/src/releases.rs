@@ -9,7 +9,7 @@ use relm4::{
 use service::{
     error::Error,
     view_model_service::{ReleaseFilter, ViewModelService},
-    view_models::{ReleaseListModel, Settings},
+    view_models::{ReleaseListModel, ReleaseViewModel, Settings},
 };
 
 use crate::{
@@ -20,6 +20,7 @@ use crate::{
 #[derive(Debug)]
 pub enum ReleasesMsg {
     SoftwareTitleSelected { id: i64 },
+    ReleaseSelected { index: u32 },
     StartAddRelease,
     AddRelease(ReleaseListModel),
 }
@@ -27,6 +28,7 @@ pub enum ReleasesMsg {
 #[derive(Debug)]
 pub enum CommandMsg {
     FetchedReleases(Result<Vec<ReleaseListModel>, Error>),
+    FetchedRelease(Result<ReleaseViewModel, Error>),
 }
 
 #[derive(Debug)]
@@ -107,6 +109,25 @@ impl Component for ReleasesModel {
                     CommandMsg::FetchedReleases(releases_result)
                 });
             }
+            ReleasesMsg::ReleaseSelected { index } => {
+                println!("Software title selected with index: {}", index);
+
+                let selected = self.releases_list_view_wrapper.get(index);
+                if let Some(item) = selected {
+                    println!("Selected item: {:?}", item);
+                    let selected_id = item.borrow().id;
+                    let view_model_service = Arc::clone(&self.view_model_service);
+
+                    sender.oneshot_command(async move {
+                        let release = view_model_service.get_release_view_model(selected_id).await;
+                        println!("Fetched release: {:?}", release);
+                        CommandMsg::FetchedRelease(release)
+                    });
+                } else {
+                    println!("No item found at index: {}", index);
+                }
+            }
+
             ReleasesMsg::StartAddRelease => {
                 let release_form_init_model = ReleaseFormInit {
                     view_model_service: Arc::clone(&self.view_model_service),
@@ -143,14 +164,13 @@ impl Component for ReleasesModel {
     fn update_cmd(
         &mut self,
         message: Self::CommandOutput,
-        _sender: ComponentSender<Self>,
+        sender: ComponentSender<Self>,
         _: &Self::Root,
     ) {
         match message {
             CommandMsg::FetchedReleases(releases_result) => {
                 match releases_result {
                     Ok(releases) => {
-                        // Handle successful release fetching
                         println!("Releases fetched successfully: {:?}", releases);
                         let items: Vec<ListItem> = releases
                             .into_iter()
@@ -161,12 +181,22 @@ impl Component for ReleasesModel {
                             .collect();
                         self.releases_list_view_wrapper.clear();
                         self.releases_list_view_wrapper.extend_from_iter(items);
+                        let index = self.releases_list_view_wrapper.selection_model.selected();
+                        sender.input(ReleasesMsg::ReleaseSelected { index });
                     }
                     Err(err) => {
-                        // Handle error in fetching releases
                         eprintln!("Error fetching releases: {:?}", err);
+                        // TODO: show error to user
                     }
                 }
+            }
+            CommandMsg::FetchedRelease(Ok(release)) => {
+                println!("Release fetched successfully: {:?}", release);
+                // Handle the fetched release, e.g., display it in a new window or dialog
+            }
+            CommandMsg::FetchedRelease(Err(err)) => {
+                eprintln!("Error fetching release: {:?}", err);
+                // TODO: show error to user
             }
         }
     }
