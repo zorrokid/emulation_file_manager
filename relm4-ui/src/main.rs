@@ -4,6 +4,7 @@ mod file_set_form;
 mod list_item;
 mod release_form;
 mod releases;
+mod software_title_selector;
 mod system_selector;
 mod utils;
 use std::sync::Arc;

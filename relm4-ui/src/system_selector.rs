@@ -5,8 +5,9 @@ use relm4::{
     Component, ComponentParts, ComponentSender,
     gtk::{
         self,
-        glib::clone,
-        prelude::{BoxExt, ButtonExt, EntryBufferExtManual, EntryExt, GtkWindowExt},
+        prelude::{
+            ButtonExt, EntryBufferExtManual, EntryExt, GtkWindowExt, OrientableExt, WidgetExt,
+        },
     },
     typed_view::list::TypedListView,
 };
@@ -49,23 +50,51 @@ pub struct SystemSelectModel {
     list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
 }
 
-#[derive(Debug)]
-pub struct Widgets {}
-
+#[relm4::component(pub)]
 impl Component for SystemSelectModel {
     type Input = SystemSelectMsg;
     type Output = SystemSelectOutputMsg;
     type CommandOutput = CommandMsg;
     type Init = SystemSelectInit;
-    type Widgets = Widgets;
-    type Root = gtk::Window;
 
-    fn init_root() -> Self::Root {
-        gtk::Window::builder()
-            .title("System Selector")
-            .default_width(800)
-            .default_height(800)
-            .build()
+    view! {
+        #[root]
+        gtk::Window {
+            set_default_width: 800,
+            set_default_height: 800,
+            set_title: Some("System Selector"),
+            gtk::Box {
+                set_orientation: gtk::Orientation::Vertical,
+
+                gtk::Label {
+                    set_label: "System Selector",
+                },
+
+                gtk::Entry {
+                    connect_activate[sender] => move |entry|  {
+                        let buffer = entry.buffer();
+                        sender.input(
+                            SystemSelectMsg::AddSystem {
+                                name: buffer.text().into(),
+                            }
+                        );
+                        buffer.delete_text(0, None);
+                    }
+                },
+
+                gtk::ScrolledWindow {
+                    set_vexpand: true,
+                    #[local_ref]
+                    systems_list_view -> gtk::ListView {}
+                },
+
+                gtk::Button {
+                    set_label: "Select System",
+                    connect_clicked => SystemSelectMsg::SelectClicked,
+                },
+
+            }
+        }
     }
 
     fn init(
@@ -75,66 +104,16 @@ impl Component for SystemSelectModel {
     ) -> ComponentParts<Self> {
         let list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> = TypedListView::new();
 
-        /*let selection_model = &list_view_wrapper.selection_model;
-        selection_model.connect_selected_notify(clone!(
-            #[strong]
-            sender,
-            move |selection| {
-                sender.input(SystemSelectMsg::SystemSelected {
-                    index: selection.selected(),
-                });
-            }
-        ));*/
-
-        let system_list = &list_view_wrapper.view;
-        let system_list_container = gtk::ScrolledWindow::builder().vexpand(true).build();
-        system_list_container.set_child(Some(system_list));
-
-        let v_box = gtk::Box::builder()
-            .orientation(gtk::Orientation::Vertical)
-            .build();
-
-        let label = gtk::Label::new(Some("Select system"));
-        v_box.append(&label);
-
-        let add_new_system_entry = gtk::Entry::builder()
-            .placeholder_text("Add new system")
-            .build();
-
-        add_new_system_entry.connect_activate(clone!(
-            #[strong]
-            sender,
-            move |entry| {
-                let buffer = entry.buffer();
-                sender.input(SystemSelectMsg::AddSystem {
-                    name: buffer.text().into(),
-                });
-                buffer.delete_text(0, None);
-            }
-        ));
-
-        v_box.append(&add_new_system_entry);
-        v_box.append(&system_list_container);
-        let select_button = gtk::Button::with_label("Select System");
-        select_button.connect_clicked(clone!(
-            #[strong]
-            sender,
-            move |_| {
-                sender.input(SystemSelectMsg::SelectClicked);
-            }
-        ));
-        v_box.append(&select_button);
-
-        root.set_child(Some(&v_box));
-
-        let widgets = Widgets {};
-
         let model = SystemSelectModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
             systems: Vec::new(),
             list_view_wrapper,
         };
+
+        let systems_list_view = &model.list_view_wrapper.view;
+        let widgets = view_output!();
+
         sender.input(SystemSelectMsg::FetchSystems);
         ComponentParts { model, widgets }
     }
@@ -215,17 +194,16 @@ impl Component for SystemSelectModel {
                 self.list_view_wrapper.extend_from_iter(list_items);
             }
             CommandMsg::SystemsFetched(Err(e)) => {
-                // Handle the error
                 eprintln!("Error fetching systems: {:?}", e);
+                // TODO: show error to user
             }
             CommandMsg::SystemAdded(system_list_model) => {
-                // Handle the successful addition of a system
                 println!("Successfully added system: {}", system_list_model.name);
                 sender.input(SystemSelectMsg::FetchSystems);
             }
             CommandMsg::AddingSystemFailed(error) => {
-                // Handle the error when adding a system
                 eprintln!("Error adding system: {:?}", error);
+                // TODO: show error to user
             }
         }
     }
