@@ -38,6 +38,8 @@ pub struct ReleasesModel {
     settings: Arc<Settings>,
     form_window: Option<Controller<ReleaseFormModel>>,
     releases_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
+    selected_release: Option<ReleaseViewModel>,
+    selected_release_system_names: String,
 }
 
 pub struct ReleasesInit {
@@ -56,21 +58,41 @@ impl Component for ReleasesModel {
     view! {
         #[root]
         gtk::Box {
-            set_orientation: gtk::Orientation::Vertical,
-            set_spacing: 5,
-            set_margin_all: 5,
+            set_orientation: gtk::Orientation::Horizontal,
 
-            gtk::ScrolledWindow {
-                set_vexpand: true,
-                #[local_ref]
-                releases_list_view -> gtk::ListView {}
+            gtk::Box {
+                set_orientation: gtk::Orientation::Vertical,
+
+                gtk::Label {
+                    set_label: "Releases",
+                },
+
+                gtk::ScrolledWindow {
+                    set_vexpand: true,
+                    #[local_ref]
+                    releases_list_view -> gtk::ListView {}
+                },
+
+                gtk::Button {
+                    set_label: "Add Release",
+                    connect_clicked => ReleasesMsg::StartAddRelease,
+                },
+
             },
 
-            gtk::Button {
-                set_label: "Add Release",
-                connect_clicked => ReleasesMsg::StartAddRelease,
-            },
+            gtk::Box {
+                set_orientation: gtk::Orientation::Vertical,
 
+                gtk::Label {
+                    set_label: "Selected Release",
+                },
+
+                gtk::Label {
+                    #[watch]
+                    set_label: model.selected_release_system_names.as_str(),
+
+                },
+            }
         }
     }
 
@@ -85,6 +107,8 @@ impl Component for ReleasesModel {
             settings: init_model.settings,
             form_window: None,
             releases_list_view_wrapper: TypedListView::new(),
+            selected_release: None,
+            selected_release_system_names: String::new(),
         };
         let releases_list_view = &model.releases_list_view_wrapper.view;
         let widgets = view_output!();
@@ -192,7 +216,15 @@ impl Component for ReleasesModel {
             }
             CommandMsg::FetchedRelease(Ok(release)) => {
                 println!("Release fetched successfully: {:?}", release);
-                // Handle the fetched release, e.g., display it in a new window or dialog
+                self.selected_release = Some(release);
+                let system_names = self.selected_release.as_ref().map_or(String::new(), |r| {
+                    r.systems
+                        .iter()
+                        .map(|s| s.name.clone())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                });
+                self.selected_release_system_names = system_names;
             }
             CommandMsg::FetchedRelease(Err(err)) => {
                 eprintln!("Error fetching release: {:?}", err);

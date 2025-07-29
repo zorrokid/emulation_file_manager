@@ -90,6 +90,7 @@ impl Component for AppModel {
 
         let main_layout_hbox = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
+            .spacing(10)
             .build();
 
         let left_vbox = gtk::Box::builder()
@@ -102,6 +103,9 @@ impl Component for AppModel {
 
         main_layout_hbox.append(&left_vbox);
         main_layout_hbox.append(&right_vbox);
+
+        let title_label = gtk::Label::builder().label("Software Titles").build();
+        left_vbox.append(&title_label);
 
         let add_new_software_title_entry = gtk::Entry::builder()
             .placeholder_text("Add new software title")

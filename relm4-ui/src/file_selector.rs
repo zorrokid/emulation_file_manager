@@ -67,25 +67,12 @@ pub struct FileSelectModel {
     file_types: Vec<FileType>,
 }
 
-#[derive(Debug)]
-pub struct Widgets {}
-
 #[relm4::component(pub)]
 impl Component for FileSelectModel {
     type Input = FileSelectMsg;
     type Output = FileSelectOutputMsg;
     type CommandOutput = CommandMsg;
     type Init = FileSelectInit;
-    //type Widgets = Widgets;
-    //type Root = gtk::Window;
-
-    /*fn init_root() -> Self::Root {
-        gtk::Window::builder()
-            .title("File Selector")
-            .default_width(800)
-            .default_height(800)
-            .build()
-    }*/
 
     view! {
         #[root]
