@@ -6,7 +6,7 @@ use relm4::{
     gtk::{
         self, gio,
         glib::clone,
-        prelude::{BoxExt, ButtonExt, GtkWindowExt},
+        prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt},
     },
     typed_view::list::TypedListView,
 };
@@ -65,20 +65,67 @@ pub struct ReleaseFormInit {
     pub settings: Arc<Settings>,
 }
 
+#[relm4::component(pub)]
 impl Component for ReleaseFormModel {
     type Input = ReleaseFormMsg;
     type Output = ReleaseFormOutputMsg;
     type CommandOutput = CommandMsg;
     type Init = ReleaseFormInit;
-    type Widgets = Widgets;
-    type Root = gtk::Window;
+    //type Widgets = Widgets;
+    //type Root = gtk::Window;
 
-    fn init_root() -> Self::Root {
+    /*fn init_root() -> Self::Root {
         gtk::Window::builder()
             .title("Release Form")
             .default_width(800)
             .default_height(800)
             .build()
+    }*/
+
+    view! {
+        #[root]
+        gtk::Window {
+            set_default_width: 800,
+            set_default_height: 600,
+            gtk::Box {
+                set_orientation: gtk::Orientation::Vertical,
+
+                gtk::Label {
+                    set_label: "Release Form Component",
+                },
+
+                gtk::Button {
+                    set_label: "Select System",
+                    connect_clicked => ReleaseFormMsg::OpenSystemSelector,
+                },
+
+                gtk::ScrolledWindow {
+                    set_vexpand: true,
+                    #[local_ref]
+                    selected_systems_list_view -> gtk::ListView {}
+                },
+
+                gtk::Button {
+                    set_label: "Select File Set",
+                    connect_clicked => ReleaseFormMsg::OpenFileSelector,
+                },
+
+
+               gtk::ScrolledWindow {
+                    set_min_content_height: 360,
+                    set_vexpand: true,
+
+                    #[local_ref]
+                    selected_file_sets_list_view -> gtk::ListView {}
+
+                },
+
+                gtk::Button {
+                    set_label: "Submit Release",
+                    connect_clicked => ReleaseFormMsg::StartSaveRelease,
+                },
+            },
+        }
     }
 
     fn init(
@@ -87,17 +134,17 @@ impl Component for ReleaseFormModel {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         // TODO: add software title selector and possibly convert to use component macro
-        let v_box = gtk::Box::builder()
+        /*let v_box = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
             .build();
 
         let label = gtk::Label::new(Some("Release Form Component"));
-        v_box.append(&label);
+        v_box.append(&label);*/
 
         let selected_systems_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
             TypedListView::new();
 
-        v_box.append(&selected_systems_list_view_wrapper.view);
+        /*v_box.append(&selected_systems_list_view_wrapper.view);
 
         // TODO: disable when window is opened
         let select_system_button = gtk::Button::with_label("Select System");
@@ -110,12 +157,12 @@ impl Component for ReleaseFormModel {
             }
         ));
 
-        v_box.append(&select_system_button);
+        v_box.append(&select_system_button);*/
 
         let selected_file_sets_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
             TypedListView::new();
 
-        v_box.append(&selected_file_sets_list_view_wrapper.view);
+        /*v_box.append(&selected_file_sets_list_view_wrapper.view);
 
         // TODO: disable when window is opened
         let select_file_button = gtk::Button::with_label("Select File Set");
@@ -140,9 +187,9 @@ impl Component for ReleaseFormModel {
             }
         ));
 
-        root.set_child(Some(&v_box));
+        root.set_child(Some(&v_box));*/
 
-        let widgets = Widgets {};
+        //let widgets = Widgets {};
 
         let model = ReleaseFormModel {
             view_model_service: init_model.view_model_service,
@@ -156,6 +203,10 @@ impl Component for ReleaseFormModel {
             selected_file_sets: Vec::new(),
             selected_sofware_titles: Vec::new(),
         };
+
+        let selected_systems_list_view = &model.selected_systems_list_view_wrapper.view;
+        let selected_file_sets_list_view = &model.selected_file_sets_list_view_wrapper.view;
+        let widgets = view_output!();
         ComponentParts { model, widgets }
     }
 

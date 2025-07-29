@@ -116,9 +116,7 @@ impl Component for FileSelectModel {
                 gtk::ScrolledWindow {
                     set_vexpand: true,
                     #[local_ref]
-                    file_set_list_view -> gtk::ListView {
-
-                    }
+                    file_set_list_view -> gtk::ListView {}
                 },
 
                 gtk::Button {
