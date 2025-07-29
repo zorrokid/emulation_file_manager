@@ -99,7 +99,7 @@ impl Component for ReleasesModel {
                         })
                         .await;
                     println!("Fetched releases: {:?}", releases_result);
-                    CommandMsg::FetchedReleases(releases_result) // Replace with actual command message
+                    CommandMsg::FetchedReleases(releases_result)
                 });
             }
             ReleasesMsg::StartAddRelease => {

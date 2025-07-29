@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use database::repository_manager::RepositoryManager;
+use database::{database_error::Error, repository_manager::RepositoryManager};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
@@ -12,7 +12,9 @@ use relm4::{
 };
 use service::{
     view_model_service::ViewModelService,
-    view_models::{FileSetListModel, ReleaseListModel, Settings, SystemListModel},
+    view_models::{
+        FileSetListModel, ReleaseListModel, Settings, SoftwareTitleListModel, SystemListModel,
+    },
 };
 
 use crate::{
@@ -27,6 +29,7 @@ pub enum ReleaseFormMsg {
     OpenFileSelector,
     SystemSelected(SystemListModel),
     FileSetSelected(FileSetListModel),
+    StartSaveRelease,
 }
 
 #[derive(Debug)]
@@ -35,7 +38,9 @@ pub enum ReleaseFormOutputMsg {
 }
 
 #[derive(Debug)]
-pub enum CommandMsg {}
+pub enum CommandMsg {
+    ReleaseCreated(Result<i64, Error>),
+}
 
 #[derive(Debug)]
 pub struct ReleaseFormModel {
@@ -48,6 +53,7 @@ pub struct ReleaseFormModel {
     file_selector: Option<Controller<FileSelectModel>>,
     selected_systems_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     selected_file_sets_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
+    selected_sofware_titles: Vec<SoftwareTitleListModel>,
 }
 
 #[derive(Debug)]
@@ -80,6 +86,7 @@ impl Component for ReleaseFormModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        // TODO: add software title selector and possibly convert to use component macro
         let v_box = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
             .build();
@@ -123,6 +130,16 @@ impl Component for ReleaseFormModel {
 
         v_box.append(&select_file_button);
 
+        let submit_button = gtk::Button::with_label("Submit Release");
+        submit_button.connect_clicked(clone!(
+            #[strong]
+            sender,
+            move |_| {
+                println!("Submit Release button clicked");
+                sender.input(ReleaseFormMsg::StartSaveRelease);
+            }
+        ));
+
         root.set_child(Some(&v_box));
 
         let widgets = Widgets {};
@@ -137,6 +154,7 @@ impl Component for ReleaseFormModel {
             selected_systems_list_view_wrapper,
             selected_file_sets_list_view_wrapper,
             selected_file_sets: Vec::new(),
+            selected_sofware_titles: Vec::new(),
         };
         ComponentParts { model, widgets }
     }
@@ -204,14 +222,88 @@ impl Component for ReleaseFormModel {
                 });
                 self.selected_file_sets.push(file_set);
             }
+            ReleaseFormMsg::StartSaveRelease => {
+                println!("Starting to save release with selected systems and file sets");
+                let repository_manager = Arc::clone(&self.repository_manager);
+                if self.selected_systems.is_empty() {
+                    println!("No systems selected, cannot create release.");
+                } else if self.selected_file_sets.is_empty() {
+                    println!("No file sets selected, cannot create release.");
+                } else if self.selected_sofware_titles.is_empty() {
+                    println!("No software titles selected, cannot create release.");
+                } else {
+                    println!(
+                        "Selected systems: {:?}, Selected file sets: {:?}",
+                        self.selected_systems, self.selected_file_sets
+                    );
+
+                    let software_title_ids: Vec<i64> = self
+                        .selected_sofware_titles
+                        .iter()
+                        .map(|title| title.id)
+                        .collect();
+
+                    let file_set_ids: Vec<i64> =
+                        self.selected_file_sets.iter().map(|fs| fs.id).collect();
+
+                    let system_ids: Vec<i64> = self
+                        .selected_systems
+                        .iter()
+                        .map(|system| system.id)
+                        .collect();
+
+                    sender.oneshot_command(async move {
+                        let release_list_model = repository_manager
+                            .get_release_repository()
+                            .add_release_full(
+                                "".to_string(),
+                                software_title_ids,
+                                file_set_ids,
+                                system_ids,
+                            )
+                            .await;
+                        CommandMsg::ReleaseCreated(release_list_model)
+                    });
+                }
+            }
         }
     }
 
     fn update_cmd(
         &mut self,
-        _message: Self::CommandOutput,
-        _sender: ComponentSender<Self>,
-        _: &Self::Root,
+        message: Self::CommandOutput,
+        sender: ComponentSender<Self>,
+        root: &Self::Root,
     ) {
+        match message {
+            CommandMsg::ReleaseCreated(Ok(id)) => {
+                println!("Release created with ID: {}", id);
+                let release_list_model = ReleaseListModel {
+                    id,
+                    name: "New Release".to_string(),
+                    system_names: self
+                        .selected_systems
+                        .iter()
+                        .map(|s| s.name.clone())
+                        .collect(),
+                    file_types: self
+                        .selected_file_sets
+                        .iter()
+                        .map(|fs| fs.file_type.to_string())
+                        .collect(),
+                };
+                let res = sender.output(ReleaseFormOutputMsg::ReleaseCreated(release_list_model));
+                if let Err(e) = res {
+                    eprintln!("Failed to send output message: {:?}", e);
+                } else {
+                    println!("Output message sent successfully");
+                    root.close();
+                }
+            }
+            CommandMsg::ReleaseCreated(Err(err)) => {
+                eprintln!("Failed to create release: {:?}", err);
+                // Handle error, maybe show a dialog or log it
+            }
+        }
     }
 }
