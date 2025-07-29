@@ -4,9 +4,8 @@ use database::{database_error::Error, repository_manager::RepositoryManager};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
-        self, gio,
-        glib::clone,
-        prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt},
+        self,
+        prelude::{ButtonExt, GtkWindowExt, OrientableExt, WidgetExt},
     },
     typed_view::list::TypedListView,
 };
@@ -333,6 +332,7 @@ impl Component for ReleaseFormModel {
                 let res = sender.output(ReleaseFormOutputMsg::ReleaseCreated(release_list_model));
                 if let Err(e) = res {
                     eprintln!("Failed to send output message: {:?}", e);
+                    // TODO: show error to user
                 } else {
                     println!("Output message sent successfully");
                     root.close();
@@ -340,7 +340,7 @@ impl Component for ReleaseFormModel {
             }
             CommandMsg::ReleaseCreated(Err(err)) => {
                 eprintln!("Failed to create release: {:?}", err);
-                // Handle error, maybe show a dialog or log it
+                // TODO: show error to user
             }
         }
     }

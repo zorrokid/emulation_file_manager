@@ -4,6 +4,7 @@ use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{self, prelude::*},
+    typed_view::list::TypedListView,
 };
 use service::{
     error::Error,
@@ -11,7 +12,10 @@ use service::{
     view_models::{ReleaseListModel, Settings},
 };
 
-use crate::release_form::{ReleaseFormInit, ReleaseFormModel, ReleaseFormOutputMsg};
+use crate::{
+    list_item::ListItem,
+    release_form::{ReleaseFormInit, ReleaseFormModel, ReleaseFormOutputMsg},
+};
 
 #[derive(Debug)]
 pub enum ReleasesMsg {
@@ -31,6 +35,7 @@ pub struct ReleasesModel {
     repository_manager: Arc<RepositoryManager>,
     settings: Arc<Settings>,
     form_window: Option<Controller<ReleaseFormModel>>,
+    releases_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
 }
 
 pub struct ReleasesInit {
@@ -53,8 +58,10 @@ impl Component for ReleasesModel {
             set_spacing: 5,
             set_margin_all: 5,
 
-            gtk::Label {
-                set_label: "Releases Component",
+            gtk::ScrolledWindow {
+                set_vexpand: true,
+                #[local_ref]
+                releases_list_view -> gtk::ListView {}
             },
 
             gtk::Button {
@@ -70,14 +77,15 @@ impl Component for ReleasesModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let widgets = view_output!();
-
         let model = ReleasesModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
             settings: init_model.settings,
             form_window: None,
+            releases_list_view_wrapper: TypedListView::new(),
         };
+        let releases_list_view = &model.releases_list_view_wrapper.view;
+        let widgets = view_output!();
         ComponentParts { model, widgets }
     }
 
@@ -125,7 +133,10 @@ impl Component for ReleasesModel {
             }
             ReleasesMsg::AddRelease(release_list_model) => {
                 println!("Release added: {:?}", release_list_model);
-                // Here you would typically update the model or UI to reflect the new release
+                self.releases_list_view_wrapper.append(ListItem {
+                    id: release_list_model.id,
+                    name: release_list_model.name,
+                });
             }
         }
     }
@@ -141,6 +152,15 @@ impl Component for ReleasesModel {
                     Ok(releases) => {
                         // Handle successful release fetching
                         println!("Releases fetched successfully: {:?}", releases);
+                        let items: Vec<ListItem> = releases
+                            .into_iter()
+                            .map(|release| ListItem {
+                                id: release.id,
+                                name: release.name,
+                            })
+                            .collect();
+                        self.releases_list_view_wrapper.clear();
+                        self.releases_list_view_wrapper.extend_from_iter(items);
                     }
                     Err(err) => {
                         // Handle error in fetching releases
