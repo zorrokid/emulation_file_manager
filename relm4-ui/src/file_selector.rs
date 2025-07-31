@@ -7,7 +7,7 @@ use relm4::{
     gtk::{
         self,
         glib::clone,
-        prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, SelectionModelExt, WidgetExt},
+        prelude::{ButtonExt, GtkWindowExt, OrientableExt, WidgetExt},
     },
     typed_view::list::TypedListView,
 };
@@ -121,39 +121,7 @@ impl Component for FileSelectModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        /*let v_box = gtk::Box::builder()
-            .orientation(gtk::Orientation::Vertical)
-            .build();
-
-        let add_file_set_button = gtk::Button::with_label("Add File Set");
-        add_file_set_button.connect_clicked(clone!(
-            #[strong]
-            sender,
-            move |_| {
-                sender.input(FileSelectMsg::OpenFileSetForm);
-            }
-        ));
-        v_box.append(&add_file_set_button);*/
         let list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> = TypedListView::new();
-        /*let files_list = &list_view_wrapper.view;
-        let files_list_container = gtk::ScrolledWindow::builder().vexpand(true).build();
-        files_list_container.set_child(Some(files_list));
-
-        let label = gtk::Label::new(Some("Select file set"));
-        v_box.append(&label);
-        v_box.append(&files_list_container);
-        let select_button = gtk::Button::with_label("Select File Set");
-        select_button.connect_clicked(clone!(
-            #[strong]
-            sender,
-            move |_| {
-                sender.input(FileSelectMsg::SelectClicked);
-            }
-        ));
-        v_box.append(&select_button);
-        root.set_child(Some(&v_box));*/
-
-        //let widgets = Widgets {};
         let file_types: Vec<FileType> = FileType::iter().collect();
 
         let file_types_dropdown = gtk::DropDown::builder().build();

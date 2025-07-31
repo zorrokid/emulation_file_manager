@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use database::repository_manager::RepositoryManager;
+use database::{models::FileInfo, repository_manager::RepositoryManager};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{self, prelude::*},
@@ -9,21 +9,32 @@ use relm4::{
 use service::{
     error::Error,
     view_model_service::{ReleaseFilter, ViewModelService},
-    view_models::{FileSetViewModel, ReleaseListModel, ReleaseViewModel, Settings},
+    view_models::{
+        EmulatorViewModel, FileSetViewModel, ReleaseListModel, ReleaseViewModel, Settings,
+    },
 };
 
 use crate::{
+    emulator_runner::{EmulatorRunnerInit, EmulatorRunnerModel, EmulatorRunnerOutputMsg},
     list_item::ListItem,
     release_form::{ReleaseFormInit, ReleaseFormModel, ReleaseFormOutputMsg},
 };
 
 #[derive(Debug)]
 pub enum ReleasesMsg {
-    SoftwareTitleSelected { id: i64 },
-    ReleaseSelected { index: u32 },
+    SoftwareTitleSelected {
+        id: i64,
+    },
+    ReleaseSelected {
+        index: u32,
+    },
     StartAddRelease,
     AddRelease(ReleaseListModel),
     StartEmulatorRunner,
+    StartEmulator {
+        emulator: EmulatorViewModel,
+        file_info: FileInfo,
+    },
 }
 
 #[derive(Debug)]
@@ -45,6 +56,7 @@ pub struct ReleasesModel {
     selected_release_system_names: String,
     file_set_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     selected_file_set: Option<FileSetViewModel>,
+    emulator_runner: Option<Controller<EmulatorRunnerModel>>,
 }
 
 pub struct ReleasesInit {
@@ -130,6 +142,7 @@ impl Component for ReleasesModel {
             selected_release_system_names: String::new(),
             file_set_list_view_wrapper: TypedListView::new(),
             selected_file_set: None,
+            emulator_runner: None,
         };
         let releases_list_view = &model.releases_list_view_wrapper.view;
         let file_set_list_view = &model.file_set_list_view_wrapper.view;
@@ -206,9 +219,47 @@ impl Component for ReleasesModel {
                 });
             }
             ReleasesMsg::StartEmulatorRunner => {
-                if let Some(file_set) = &self.selected_file_set {
+                if let (Some(file_set), Some(release)) =
+                    (&self.selected_file_set, &self.selected_release)
+                {
                     println!("Starting emulator runner with file set: {:?}", file_set);
+                    let init_model = EmulatorRunnerInit {
+                        view_model_service: Arc::clone(&self.view_model_service),
+                        repository_manager: Arc::clone(&self.repository_manager),
+                        settings: Arc::clone(&self.settings),
+                        file_set: file_set.clone(),
+                        system_ids: release.systems.iter().map(|s| s.id).collect(),
+                    };
+                    let emulator_runner = EmulatorRunnerModel::builder()
+                        .transient_for(root)
+                        .launch(init_model)
+                        .forward(sender.input_sender(), |msg| match msg {
+                            EmulatorRunnerOutputMsg::EmulatorAndStartFileSelected {
+                                emulator,
+                                file_info,
+                            } => ReleasesMsg::StartEmulator {
+                                emulator,
+                                file_info,
+                            },
+                        });
+
+                    self.emulator_runner = Some(emulator_runner);
+                    self.emulator_runner
+                        .as_ref()
+                        .expect("Emulator runner should be set already")
+                        .widget()
+                        .present();
                 }
+            }
+            ReleasesMsg::StartEmulator {
+                emulator,
+                file_info,
+            } => {
+                println!(
+                    "Starting emulator: {:?} with file: {:?}",
+                    emulator, file_info
+                );
+                // TODO
             }
         }
     }
