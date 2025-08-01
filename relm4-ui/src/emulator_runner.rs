@@ -11,7 +11,7 @@ use database::{
     repository_manager::RepositoryManager,
 };
 use emulator_runner::{error::EmulatorRunnerError, run_with_emulator};
-use file_export::{FileExportError, export_files, export_files_zipped};
+use file_export::{export_files, export_files_zipped};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
@@ -55,7 +55,6 @@ pub enum EmulatorRunnerOutputMsg {
 
 #[derive(Debug)]
 pub enum EmulatorRunnerCommandMsg {
-    FileSetsFetched(Result<Vec<FileSetListModel>, ServiceError>),
     EmulatorsFetched(Result<Vec<EmulatorViewModel>, ServiceError>),
     FinishedRunningEmulator(Result<(), EmulatorRunnerError>),
 }
@@ -223,7 +222,8 @@ impl Component for EmulatorRunnerModel {
             ));
 
         let widgets = view_output!();
-        //sender.input(EmulatorRunnerMsg::FetchEmulators);
+        sender.input(EmulatorRunnerMsg::SystemSelected { index: 0 });
+        sender.input(EmulatorRunnerMsg::FileSelected { index: 0 });
         ComponentParts { model, widgets }
     }
 
@@ -324,10 +324,10 @@ impl Component for EmulatorRunnerModel {
                 } else {
                     // Handle the case where no emulator or file is selected
                     eprintln!("No emulator or file selected");
-                    return;
                 }
             }
             EmulatorRunnerMsg::FileSelected { index } => {
+                println!("File selected at index: {}", index);
                 let file_list_item = self.file_list_view_wrapper.get(index);
                 if let Some(item) = file_list_item {
                     let id = item.borrow().id;
@@ -336,6 +336,7 @@ impl Component for EmulatorRunnerModel {
                 }
             }
             EmulatorRunnerMsg::EmulatorSelected { index } => {
+                println!("Emulator selected at index: {}", index);
                 let emulator_list_item = self.emulator_list_view_wrapper.get(index);
                 if let Some(item) = emulator_list_item {
                     let id = item.borrow().id;
@@ -344,6 +345,7 @@ impl Component for EmulatorRunnerModel {
                 }
             }
             EmulatorRunnerMsg::SystemSelected { index } => {
+                println!("System selected at index: {}", index);
                 let system_list_item = self.system_list_view_wrapper.get(index);
                 if let Some(item) = system_list_item {
                     let id = item.borrow().id;
@@ -399,7 +401,7 @@ impl Component for EmulatorRunnerModel {
         &mut self,
         message: Self::CommandOutput,
         _sender: ComponentSender<Self>,
-        _: &Self::Root,
+        root: &Self::Root,
     ) {
         match message {
             EmulatorRunnerCommandMsg::EmulatorsFetched(Ok(emulator_view_models)) => {
@@ -419,8 +421,12 @@ impl Component for EmulatorRunnerModel {
                 eprintln!("Error fetching emulators: {:?}", error);
                 // TODO: Handle error appropriately, e.g., show a dialog or log the error
             }
-            _ => {
-                // Handle error or other cases
+            EmulatorRunnerCommandMsg::FinishedRunningEmulator(Ok(())) => {
+                println!("Emulator ran successfully");
+                root.close();
+            }
+            EmulatorRunnerCommandMsg::FinishedRunningEmulator(Err(error)) => {
+                eprintln!("Error running emulator: {:?}", error);
             }
         }
     }
