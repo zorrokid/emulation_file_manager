@@ -2,9 +2,9 @@
 
 ## Technologies
 
-- **Rust**: The primary programming language used for development.
-- **rs-gtk**: A Rust binding for GTK, used for building the GUI.
-- **sqlx** with **SQLite**: Used for database management, providing an asynchronous interface to SQLite database. 
+- [Rust](https://www.rust-lang.org/): The primary programming language used for development.
+- [relm4](https://relm4.org/): Used for building GTK4 GUI 
+- [SQLx](https://github.com/launchbadge/sqlx): Used for SQLite database management, providing an asynchronous interface to SQLite database. 
 
 ## Crates
 
