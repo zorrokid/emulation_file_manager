@@ -165,7 +165,6 @@ impl Component for EmulatorFormModel {
                         sender.input(
                             EmulatorFormMsg::ExecutableChanged(buffer.text().into()),
                         );
-                        buffer.delete_text(0, None);
                     },
                 },
 
@@ -181,6 +180,10 @@ impl Component for EmulatorFormModel {
                 gtk::Button {
                     set_label: "Select System",
                     connect_clicked => EmulatorFormMsg::OpenSystemSelector,
+                },
+
+                gtk::Label {
+                    set_label: "Add command line argument",
                 },
 
                 gtk::Entry {
@@ -203,6 +206,7 @@ impl Component for EmulatorFormModel {
 
                 gtk::Button {
                     set_label: "Submit",
+                    #[watch]
                     set_sensitive: !model.executable.is_empty() && !model.selected_systems.is_empty(),
                     connect_clicked => EmulatorFormMsg::Submit,
                 }
@@ -213,16 +217,19 @@ impl Component for EmulatorFormModel {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         match msg {
             EmulatorFormMsg::ExecutableChanged(executable) => {
+                println!("Executable changed: {}", executable);
                 self.executable = executable;
             }
             EmulatorFormMsg::ExtractFilesToggled => {
                 self.extract_files = !self.extract_files;
+                println!("Extract files toggled: {}", self.extract_files);
             }
             EmulatorFormMsg::SystemSelected(system) => {
                 self.selected_systems_list_view_wrapper.append(ListItem {
                     name: system.name.clone(),
                     id: system.id,
                 });
+                println!("System selected: {}", system.name);
                 self.selected_systems.push(system);
             }
             EmulatorFormMsg::OpenSystemSelector => {

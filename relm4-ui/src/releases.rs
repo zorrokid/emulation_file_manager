@@ -228,7 +228,7 @@ impl Component for ReleasesModel {
                         repository_manager: Arc::clone(&self.repository_manager),
                         settings: Arc::clone(&self.settings),
                         file_set: file_set.clone(),
-                        system_ids: release.systems.iter().map(|s| s.id).collect(),
+                        systems: release.systems.clone(),
                     };
                     let emulator_runner = EmulatorRunnerModel::builder()
                         .transient_for(root)
