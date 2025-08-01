@@ -303,7 +303,7 @@ impl FileSetRepository {
 
 #[cfg(test)]
 mod tests {
-    use crate::setup_test_db;
+    use crate::{repository::system_repository::SystemRepository, setup_test_db};
 
     use super::*;
     use sqlx::{query, query_scalar};
@@ -412,8 +412,14 @@ mod tests {
                 archive_file_name: archive_file_name_2.to_string(),
             },
         ];
+
+        let system_id = SystemRepository::new(pool.clone())
+            .add_system(&"Test System".to_string())
+            .await
+            .unwrap();
+
         let file_set_id = FileSetRepository { pool: pool.clone() }
-            .add_file_set(file_name, file_type, files)
+            .add_file_set(file_name, file_type, files, &[system_id])
             .await
             .unwrap();
 
@@ -467,13 +473,18 @@ mod tests {
 
         let repo = FileSetRepository { pool: pool.clone() };
 
+        let system_1_id = SystemRepository::new(pool.clone())
+            .add_system(&"Test System 1".to_string())
+            .await
+            .unwrap();
+
         let _file_set_1_id = repo
-            .add_file_set(file_set_1_name, file_type, file_set_1_files)
+            .add_file_set(file_set_1_name, file_type, file_set_1_files, &[system_1_id])
             .await
             .unwrap();
 
         let _file_set_2_id = repo
-            .add_file_set(file_set_2_name, file_type, file_set_2_files)
+            .add_file_set(file_set_2_name, file_type, file_set_2_files, &[system_1_id])
             .await
             .unwrap();
 

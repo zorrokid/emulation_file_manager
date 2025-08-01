@@ -20,24 +20,6 @@ pub fn prepare_fileset_for_export(
     extract_files: bool,
 ) -> FileSetExportModel {
     let source_file_path = resolve_file_type_path(collection_root_dir, &file_set.file_type.into());
-    let output_file_name_mapping = file_set
-        .files
-        .iter()
-        .map(|f| (f.archive_file_name.clone(), f.file_name.clone()))
-        .collect::<HashMap<_, _>>();
-
-    let filename_checksum_mapping = file_set
-        .files
-        .iter()
-        .map(|f| {
-            let checksum: Sha1Checksum = f
-                .sha1_checksum
-                .clone()
-                .try_into()
-                .expect("Failed to convert to Sha1Checksum");
-            (f.archive_file_name.clone(), checksum)
-        })
-        .collect::<HashMap<String, Sha1Checksum>>();
 
     let output_mapping = file_set
         .files
@@ -59,6 +41,7 @@ pub fn prepare_fileset_for_export(
         .collect::<HashMap<String, OutputFile>>();
 
     let exported_zip_file_name = file_set.file_set_name.clone();
+
     FileSetExportModel {
         output_mapping,
         source_file_path,

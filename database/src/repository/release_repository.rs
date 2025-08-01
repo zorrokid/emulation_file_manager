@@ -547,6 +547,7 @@ mod tests {
                     file_size: 1024,
                     sha1_checksum: [0; 20],
                 }],
+                &[system_1_id],
             )
             .await
             .unwrap();
@@ -561,6 +562,7 @@ mod tests {
                     file_size: 1024,
                     sha1_checksum: [1; 20],
                 }],
+                &[system_2_id],
             )
             .await
             .unwrap();
@@ -575,6 +577,7 @@ mod tests {
                     file_size: 1024,
                     sha1_checksum: [2; 20],
                 }],
+                &[system_3_id],
             )
             .await
             .unwrap();
