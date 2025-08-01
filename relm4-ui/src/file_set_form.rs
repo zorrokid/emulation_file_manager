@@ -24,7 +24,10 @@ use relm4::{
 };
 use service::view_models::{FileSetListModel, Settings};
 
-use crate::{file_importer::FileImporter, utils::resolve_file_type_path};
+use crate::{
+    file_importer::FileImporter,
+    utils::{prepare_file_import, resolve_file_type_path},
+};
 
 #[derive(Debug, Clone)]
 struct File {
@@ -285,40 +288,14 @@ impl Component for FileSetFormModel {
             }
             FileSetFormMsg::CreateFileSetFromSelectedFiles => {
                 if let Some(file_path) = self.file_importer.get_current_picked_file() {
-                    let file_type = self.selected_file_type;
-                    let target_path =
-                        resolve_file_type_path(&self.settings.collection_root_dir, &file_type);
-                    let file_filter = self
-                        .file_importer
-                        .get_selected_files_from_current_picked_file_that_are_new()
-                        .iter()
-                        .map(|file| file.file_name.clone())
-                        .collect::<HashSet<String>>();
-
-                    let is_zip_file = self.file_importer.is_zip_file();
-                    let file_name = file_path
-                        .file_name()
-                        .and_then(|name| name.to_str())
-                        .unwrap_or("unknown_file")
-                        .to_string();
-
-                    let file_path = file_path.clone();
+                    let file_import_model = prepare_file_import(
+                        file_path,
+                        self.selected_file_type,
+                        &self.settings.collection_root_dir,
+                        &self.file_importer,
+                    );
                     sender.oneshot_command(async move {
-                        // TODO: combine this in file_import
-                        let res = match is_zip_file {
-                            true => file_import::import_files_from_zip(
-                                file_path,
-                                target_path,
-                                file_filter,
-                                file_type,
-                            ),
-                            false => file_import::import_file(
-                                file_path,
-                                target_path,
-                                file_name,
-                                file_type,
-                            ),
-                        };
+                        let res = file_import::import(&file_import_model);
                         CommandMsg::FilesImported(res)
                     });
                 }

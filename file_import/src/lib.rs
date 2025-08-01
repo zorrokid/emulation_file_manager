@@ -10,7 +10,7 @@ use std::{
     fmt::Display,
     fs::File,
     io::Read,
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 use utils::file_util;
 use zip::ZipArchive;
@@ -23,6 +23,16 @@ pub enum FileImportError {
     FileIoError(String),
 }
 
+pub struct FileImportModel {
+    pub file_path: PathBuf,
+    pub output_dir: PathBuf,
+    pub file_name: String,
+    pub file_type: FileType,
+    // used when importing files from zip archive
+    pub file_name_filter: HashSet<String>,
+    pub is_zip_file: bool,
+}
+
 impl Display for FileImportError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -32,7 +42,7 @@ impl Display for FileImportError {
     }
 }
 
-pub fn get_compression_level(file_type: FileType) -> CompressionLevel {
+pub fn get_compression_level(file_type: &FileType) -> CompressionLevel {
     match file_type {
         FileType::Rom | FileType::DiskImage | FileType::TapeImage | FileType::MemorySnapshot => {
             CompressionLevel::Good
@@ -46,18 +56,38 @@ pub fn get_compression_level(file_type: FileType) -> CompressionLevel {
     }
 }
 
+pub fn import(
+    file_import_model: &FileImportModel,
+) -> Result<HashMap<Sha1Checksum, ImportedFile>, FileImportError> {
+    if file_import_model.is_zip_file {
+        import_files_from_zip(
+            &file_import_model.file_path,
+            &file_import_model.output_dir,
+            &file_import_model.file_name_filter,
+            &file_import_model.file_type,
+        )
+    } else {
+        import_file(
+            &file_import_model.file_path,
+            &file_import_model.output_dir,
+            &file_import_model.file_name,
+            &file_import_model.file_type,
+        )
+    }
+}
+
 /// Import single-non zipped file.
 pub fn import_file(
-    file_path: PathBuf,
-    output_dir: PathBuf,
-    file_name: String,
-    file_type: FileType,
+    file_path: &Path,
+    output_dir: &Path,
+    file_name: &str,
+    file_type: &FileType,
 ) -> Result<HashMap<Sha1Checksum, ImportedFile>, FileImportError> {
     let mut file = File::open(file_path)
         .map_err(|e| FileImportError::FileIoError(format!("Failed opening file: {}", e)))?;
     let archive_file_name = generate_archive_file_name();
     let (sha1_checksum, file_size) = output_zstd_compressed(
-        &output_dir,
+        output_dir,
         &mut file,
         &archive_file_name,
         get_compression_level(file_type),
@@ -66,7 +96,7 @@ pub fn import_file(
         FileImportError::FileIoError(format!("Failed writing file to output directory: {}", e))
     })?;
     let imported_file = ImportedFile {
-        original_file_name: file_name,
+        original_file_name: file_name.to_string(),
         archive_file_name: archive_file_name.to_string(),
         sha1_checksum,
         file_size,
@@ -94,10 +124,10 @@ pub fn import_file(
 /// A `Result` containing a hash map with file names and their checksums, or an error if the operation fails.
 ///
 pub fn import_files_from_zip(
-    file_path: PathBuf,
-    output_dir: PathBuf,
-    file_name_filter: HashSet<String>,
-    file_type: FileType,
+    file_path: &PathBuf,
+    output_dir: &PathBuf,
+    file_name_filter: &HashSet<String>,
+    file_type: &FileType,
 ) -> Result<HashMap<Sha1Checksum, ImportedFile>, FileImportError> {
     let file = File::open(file_path)
         .map_err(|e| FileImportError::FileIoError(format!("Failed opening file: {}", e)))?;
@@ -112,7 +142,7 @@ pub fn import_files_from_zip(
         let archive_file_name = generate_archive_file_name();
         if file.is_file() && file_name_filter.contains(file.name()) {
             let (sha1_checksum, file_size) = output_zstd_compressed(
-                &output_dir,
+                output_dir,
                 &mut file,
                 &archive_file_name,
                 get_compression_level(file_type),
@@ -275,8 +305,12 @@ mod tests {
         zip_writer.finish().unwrap();
         let mut file_name_filter = HashSet::new();
         file_name_filter.insert(TEST_FILE_NAME.to_string());
-        let result =
-            import_files_from_zip(zip_file_path, output_path, file_name_filter, FileType::Rom);
+        let result = import_files_from_zip(
+            &zip_file_path,
+            &output_path,
+            &file_name_filter,
+            &FileType::Rom,
+        );
         let (checksum, size) = get_sha1_and_size(TEST_FILE_CONTENT);
         assert!(result.is_ok());
         let hash_map = result.unwrap();
