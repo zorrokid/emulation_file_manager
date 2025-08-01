@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use database::repository_manager::RepositoryManager;
+use database::{models::FileType, repository_manager::RepositoryManager};
 
 use crate::{
     error::Error,
@@ -17,6 +17,7 @@ pub struct ReleaseFilter {
     pub software_title_id: Option<i64>,
 }
 
+#[derive(Debug)]
 pub struct ViewModelService {
     repository_manager: Arc<RepositoryManager>,
 }
@@ -172,7 +173,25 @@ impl ViewModelService {
         Ok(list_models)
     }
 
-    pub async fn get_file_set_list_models(&self) -> Result<Vec<FileSetListModel>, Error> {
+    pub async fn get_file_set_list_models(
+        &self,
+        file_type: FileType,
+        system_ids: &[i64],
+    ) -> Result<Vec<FileSetListModel>, Error> {
+        let file_sets = self
+            .repository_manager
+            .get_file_set_repository()
+            .get_file_sets_by_file_type_and_systems(file_type, system_ids)
+            .await
+            .map_err(|err| Error::DbError(err.to_string()))?;
+
+        let list_models: Vec<FileSetListModel> =
+            file_sets.iter().map(FileSetListModel::from).collect();
+
+        Ok(list_models)
+    }
+
+    pub async fn get_all_file_set_list_models(&self) -> Result<Vec<FileSetListModel>, Error> {
         let file_sets = self
             .repository_manager
             .get_file_set_repository()

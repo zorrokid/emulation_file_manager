@@ -4,6 +4,7 @@ use std::fmt::{Display, Formatter};
 
 use sqlx::FromRow;
 
+// TODO: use only FileType from core_types
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum FileType {
     Rom = 1,
@@ -31,6 +32,23 @@ impl From<FileType> for CoreFileType {
             FileType::LoadingScreen => CoreFileType::LoadingScreen,
             FileType::TitleScreen => CoreFileType::TitleScreen,
             FileType::ManualScan => CoreFileType::ManualScan,
+        }
+    }
+}
+
+impl From<CoreFileType> for FileType {
+    fn from(value: CoreFileType) -> Self {
+        match value {
+            CoreFileType::Rom => FileType::Rom,
+            CoreFileType::DiskImage => FileType::DiskImage,
+            CoreFileType::TapeImage => FileType::TapeImage,
+            CoreFileType::Screenshot => FileType::Screenshot,
+            CoreFileType::Manual => FileType::Manual,
+            CoreFileType::CoverScan => FileType::CoverScan,
+            CoreFileType::MemorySnapshot => FileType::MemorySnapshot,
+            CoreFileType::LoadingScreen => FileType::LoadingScreen,
+            CoreFileType::TitleScreen => FileType::TitleScreen,
+            CoreFileType::ManualScan => FileType::ManualScan,
         }
     }
 }

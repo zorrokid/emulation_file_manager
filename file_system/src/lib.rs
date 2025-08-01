@@ -20,5 +20,5 @@ fn get_default_data_dir() -> std::path::PathBuf {
 }
 
 fn get_project_dirs() -> ProjectDirs {
-    ProjectDirs::from("com", "zorrokid", "scm").expect("could not determine project directory")
+    ProjectDirs::from("org", "zorrokid", "efm").expect("could not determine project directory")
 }
