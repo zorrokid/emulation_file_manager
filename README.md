@@ -49,9 +49,9 @@ Will be removed.
 
 GUI created with Iced - obsolete and will be removed.
 
-### gtk-ui
+### relm4-ui
 
-New GUI created with rs-gtk. This is the main crate for the application, providing the user interface and integrating with other crates.
+New GUI created with relm4. This is the main crate for the application, providing the user interface and integrating with other crates.
 
 ## Architecture
 
