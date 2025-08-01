@@ -22,10 +22,7 @@ use relm4::{
     },
     prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque},
 };
-use service::{
-    view_model_service::ViewModelService,
-    view_models::{FileSetListModel, Settings},
-};
+use service::view_models::{FileSetListModel, Settings};
 
 use crate::{file_importer::FileImporter, utils::resolve_file_type_path};
 
@@ -127,7 +124,6 @@ pub enum FileSetFormOutputMsg {
 
 #[derive(Debug)]
 pub enum CommandMsg {
-    FileSelected,
     FileContentsRead(Result<HashMap<Sha1Checksum, ReadFile>, FileImportError>),
     ExistingFilesRead(Result<Vec<FileInfo>, DatabaseError>),
     FilesImported(Result<HashMap<Sha1Checksum, ImportedFile>, FileImportError>),
@@ -135,7 +131,6 @@ pub enum CommandMsg {
 }
 
 pub struct FileSetFormInit {
-    pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
     pub settings: Arc<Settings>,
     pub selected_system_ids: Vec<i64>,
@@ -144,7 +139,6 @@ pub struct FileSetFormInit {
 
 #[derive(Debug)]
 pub struct FileSetFormModel {
-    view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
     settings: Arc<Settings>,
     file_importer: FileImporter,
@@ -220,7 +214,6 @@ impl Component for FileSetFormModel {
                 });
 
         let model = FileSetFormModel {
-            view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
             settings: init_model.settings,
             file_importer: FileImporter::new(),
@@ -380,17 +373,11 @@ impl Component for FileSetFormModel {
                 eprintln!("Error reading existing files: {:?}", e);
                 // TODO: show error to user
             }
-            CommandMsg::FileSelected => {
-                // This is a placeholder for handling file selection command output
-                // You can update the UI or perform other actions here
-                println!("File selected command executed");
-            }
             CommandMsg::FilesImported(Ok(imported_files_map)) => {
                 println!("Files imported successfully: {:?}", imported_files_map);
                 if let Some(file_name) = self.file_importer.get_current_picked_file_name() {
                     self.file_importer
                         .set_imported_files(imported_files_map.clone());
-                    let repo = Arc::clone(&self.repository_manager);
 
                     // combine the newly imported files with the existing files
                     let mut imported_files = imported_files_map
