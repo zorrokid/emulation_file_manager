@@ -29,7 +29,7 @@ impl EmulatorRepository {
 
     pub async fn get_emulators_for_systems(
         &self,
-        system_ids: Vec<i64>,
+        system_ids: &[i64],
     ) -> Result<Vec<Emulator>, DatabaseError> {
         if system_ids.is_empty() {
             return Ok(vec![]);
@@ -42,7 +42,7 @@ impl EmulatorRepository {
              WHERE es.system_id IN (",
         );
         let mut separated = query_builder.separated(", ");
-        for id in &system_ids {
+        for id in system_ids {
             separated.push_bind(*id);
         }
         separated.push_unseparated(")");

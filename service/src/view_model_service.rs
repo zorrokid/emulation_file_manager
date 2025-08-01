@@ -73,7 +73,7 @@ impl ViewModelService {
 
     pub async fn get_emulator_view_models_for_systems(
         &self,
-        system_ids: Vec<i64>,
+        system_ids: &[i64],
     ) -> Result<Vec<EmulatorViewModel>, Error> {
         let emulators = self
             .repository_manager
