@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use database::{models::FileInfo, repository_manager::RepositoryManager};
+use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{self, prelude::*},
@@ -9,32 +9,22 @@ use relm4::{
 use service::{
     error::Error,
     view_model_service::{ReleaseFilter, ViewModelService},
-    view_models::{
-        EmulatorViewModel, FileSetViewModel, ReleaseListModel, ReleaseViewModel, Settings,
-    },
+    view_models::{FileSetViewModel, ReleaseListModel, ReleaseViewModel, Settings},
 };
 
 use crate::{
-    emulator_runner::{EmulatorRunnerInit, EmulatorRunnerModel, EmulatorRunnerOutputMsg},
+    emulator_runner::{EmulatorRunnerInit, EmulatorRunnerModel},
     list_item::ListItem,
     release_form::{ReleaseFormInit, ReleaseFormModel, ReleaseFormOutputMsg},
 };
 
 #[derive(Debug)]
 pub enum ReleasesMsg {
-    SoftwareTitleSelected {
-        id: i64,
-    },
-    ReleaseSelected {
-        index: u32,
-    },
+    SoftwareTitleSelected { id: i64 },
+    ReleaseSelected { index: u32 },
     StartAddRelease,
     AddRelease(ReleaseListModel),
     StartEmulatorRunner,
-    StartEmulator {
-        emulator: EmulatorViewModel,
-        file_info: FileInfo,
-    },
 }
 
 #[derive(Debug)]
@@ -233,15 +223,7 @@ impl Component for ReleasesModel {
                     let emulator_runner = EmulatorRunnerModel::builder()
                         .transient_for(root)
                         .launch(init_model)
-                        .forward(sender.input_sender(), |msg| match msg {
-                            EmulatorRunnerOutputMsg::EmulatorAndStartFileSelected {
-                                emulator,
-                                file_info,
-                            } => ReleasesMsg::StartEmulator {
-                                emulator,
-                                file_info,
-                            },
-                        });
+                        .detach();
 
                     self.emulator_runner = Some(emulator_runner);
                     self.emulator_runner
@@ -250,16 +232,6 @@ impl Component for ReleasesModel {
                         .widget()
                         .present();
                 }
-            }
-            ReleasesMsg::StartEmulator {
-                emulator,
-                file_info,
-            } => {
-                println!(
-                    "Starting emulator: {:?} with file: {:?}",
-                    emulator, file_info
-                );
-                // TODO
             }
         }
     }
@@ -317,16 +289,16 @@ impl Component for ReleasesModel {
                 );
 
                 let selected_index = self.file_set_list_view_wrapper.selection_model.selected();
-                let selected_file_set = self.file_set_list_view_wrapper.get(selected_index);
-                if let (Some(file_set), Some(release)) = (selected_file_set, &self.selected_release)
+                let selected_file_set_list_item =
+                    self.file_set_list_view_wrapper.get(selected_index);
+                if let (Some(file_set_list_item), Some(release)) =
+                    (selected_file_set_list_item, &self.selected_release)
                 {
-                    release
+                    let file_set = release
                         .file_sets
                         .iter()
-                        .find(|fs| fs.id == file_set.borrow().id)
-                        .map(|fs| {
-                            self.selected_file_set = Some(fs.clone());
-                        });
+                        .find(|fs| fs.id == file_set_list_item.borrow().id);
+                    self.selected_file_set = file_set.cloned();
                 } else {
                     self.selected_file_set = None;
                 }
