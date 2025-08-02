@@ -5,7 +5,7 @@ use std::{
 };
 
 use core_types::Sha1Checksum;
-use file_export::{export_files, export_files_zipped};
+use file_export::{export_files, export_files_zipped, FileSetExportModel, OutputFile};
 use tempfile::tempdir;
 use utils::test_utils::get_sha1_and_size;
 
@@ -25,16 +25,18 @@ fn test_export_files() {
     fs::create_dir_all(&output_dir).unwrap();
 
     create_sample_compressed_file(&input_dir, TEST_FILE_NAME);
-    let (filename_checksum_mapping, output_file_name_mapping) = prepare_file_mappings();
-
+    let output_mapping = prepare_file_mappings();
     let output_file_path = output_dir.join(TEST_OUTPUT_FILE_NAME);
-    export_files(
-        input_dir,
+
+    let export_model = FileSetExportModel {
+        output_mapping,
+        source_file_path: input_dir,
+        extract_files: false,
+        exported_zip_file_name: TEST_OUTPUT_FILE_NAME.to_string(),
         output_dir,
-        output_file_name_mapping,
-        filename_checksum_mapping,
-    )
-    .unwrap();
+    };
+
+    export_files(&export_model).unwrap();
 
     assert!(output_file_path.exists());
     let content = fs::read_to_string(output_file_path).unwrap();
@@ -52,17 +54,18 @@ fn test_export_files_zipped() {
 
     create_sample_compressed_file(&input_dir, TEST_FILE_NAME);
 
-    let (filename_checksum_mapping, output_file_name_mapping) = prepare_file_mappings();
+    let output_mapping = prepare_file_mappings();
     let zip_file_path = output_dir.join("exported_files.zip");
 
-    export_files_zipped(
-        input_dir,
+    let export_model = FileSetExportModel {
+        output_mapping,
+        source_file_path: input_dir.clone(),
+        extract_files: true,
+        exported_zip_file_name: "exported_files.zip".to_string(),
         output_dir,
-        output_file_name_mapping,
-        filename_checksum_mapping,
-        "exported_files.zip".to_string(),
-    )
-    .unwrap();
+    };
+
+    export_files_zipped(&export_model).unwrap();
 
     // Check if the zip file was created
     assert!(zip_file_path.exists());
@@ -86,14 +89,15 @@ fn create_sample_compressed_file(
     compressed_file_path
 }
 
-fn prepare_file_mappings() -> (HashMap<String, Sha1Checksum>, HashMap<String, String>) {
-    let mut output_file_name_mapping = HashMap::new();
-    output_file_name_mapping.insert(
-        TEST_FILE_NAME.to_string(),
-        TEST_OUTPUT_FILE_NAME.to_string(),
-    );
+fn prepare_file_mappings() -> HashMap<String, OutputFile> {
+    let mut output_mapping = HashMap::new();
     let (checksum, _) = get_sha1_and_size(TEST_FILE_CONTENT);
-    let mut filename_checksum_mapping = HashMap::new();
-    filename_checksum_mapping.insert(TEST_FILE_NAME.to_string(), checksum);
-    (filename_checksum_mapping, output_file_name_mapping)
+    output_mapping.insert(
+        TEST_FILE_NAME.to_string(),
+        OutputFile {
+            output_file_name: TEST_OUTPUT_FILE_NAME.to_string(),
+            checksum,
+        },
+    );
+    output_mapping
 }

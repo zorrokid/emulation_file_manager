@@ -1,17 +1,17 @@
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     emulator_form::{EmulatorFormInit, EmulatorFormModel, EmulatorFormOutputMsg},
     list_item::ListItem,
-    utils::resolve_file_type_path,
+    utils::{prepare_fileset_for_export, resolve_file_type_path},
 };
 use core_types::Sha1Checksum;
 use database::{
-    models::{FileInfo, FileSetFileInfo, System},
+    models::{FileSetFileInfo, System},
     repository_manager::RepositoryManager,
 };
 use emulator_runner::{error::EmulatorRunnerError, run_with_emulator};
-use file_export::{export_files, export_files_zipped};
+use file_export::{export_files, export_files_zipped, export_files_zipped_or_non_zipped};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
@@ -24,14 +24,11 @@ use relm4::{
 use service::{
     error::Error as ServiceError,
     view_model_service::ViewModelService,
-    view_models::{
-        EmulatorListModel, EmulatorViewModel, FileSetListModel, FileSetViewModel, Settings,
-    },
+    view_models::{EmulatorListModel, EmulatorViewModel, FileSetViewModel, Settings},
 };
 
 #[derive(Debug)]
 pub enum EmulatorRunnerMsg {
-    FetchFileSets,
     FetchEmulators { system_id: i64 },
 
     // list selection messages
@@ -43,14 +40,6 @@ pub enum EmulatorRunnerMsg {
     AddEmulator(EmulatorListModel),
 
     RunEmulator,
-}
-
-#[derive(Debug)]
-pub enum EmulatorRunnerOutputMsg {
-    EmulatorAndStartFileSelected {
-        emulator: EmulatorViewModel,
-        file_info: FileInfo,
-    },
 }
 
 #[derive(Debug)]
@@ -96,7 +85,7 @@ pub struct EmulatorRunnerModel {
 #[relm4::component(pub)]
 impl Component for EmulatorRunnerModel {
     type Input = EmulatorRunnerMsg;
-    type Output = EmulatorRunnerOutputMsg;
+    type Output = ();
     type CommandOutput = EmulatorRunnerCommandMsg;
     type Init = EmulatorRunnerInit;
 
@@ -239,77 +228,39 @@ impl Component for EmulatorRunnerModel {
                         emulator.systems.iter().find(|s| s.system_id == system.id);
 
                     if let Some(emulator_system) = emulator_system {
+                        let temp_dir = std::env::temp_dir();
+                        let export_model = prepare_fileset_for_export(
+                            &self.file_set,
+                            &self.settings.collection_root_dir,
+                            temp_dir.as_path(),
+                            emulator.extract_files,
+                        );
                         let files_in_fileset = self
                             .file_set
                             .files
                             .iter()
                             .map(|f| f.file_name.clone())
                             .collect::<Vec<_>>();
-                        let file_set_name = self.file_set.file_set_name.clone();
-                        let collection_root_dir = self.settings.collection_root_dir.clone();
-                        let temp_dir = std::env::temp_dir();
-                        let source_file_path = resolve_file_type_path(
-                            &collection_root_dir,
-                            &self.file_set.file_type.into(),
-                        );
-                        let temp_path = PathBuf::from(temp_dir);
-                        let output_file_name_mapping = self
-                            .file_set
-                            .files
-                            .iter()
-                            .map(|f| (f.archive_file_name.clone(), f.file_name.clone()))
-                            .collect::<HashMap<_, _>>();
-
-                        let filename_checksum_mapping = self
-                            .file_set
-                            .files
-                            .iter()
-                            .map(|f| {
-                                let checksum: Sha1Checksum = f
-                                    .sha1_checksum
-                                    .clone()
-                                    .try_into()
-                                    .expect("Failed to convert to Sha1Checksum");
-                                (f.archive_file_name.clone(), checksum)
-                            })
-                            .collect::<HashMap<String, Sha1Checksum>>();
-
-                        let exported_zip_file_name = self.file_set.file_set_name.clone();
 
                         let extract_files = emulator.extract_files;
                         let starting_file = if extract_files {
                             selected_file.file_name.clone()
                         } else {
-                            exported_zip_file_name.clone()
+                            export_model.exported_zip_file_name.clone()
                         };
+
                         let executable = emulator.executable.clone();
                         let arguments = emulator_system.arguments.clone();
 
                         sender.oneshot_command(async move {
-                            let file_export_result = if extract_files {
-                                export_files(
-                                    source_file_path,
-                                    temp_path.clone(),
-                                    output_file_name_mapping,
-                                    filename_checksum_mapping,
-                                )
-                            } else {
-                                export_files_zipped(
-                                    source_file_path,
-                                    temp_path.clone(),
-                                    output_file_name_mapping,
-                                    filename_checksum_mapping,
-                                    exported_zip_file_name,
-                                )
-                            };
-                            let res = match file_export_result {
+                            let res = match export_files_zipped_or_non_zipped(&export_model) {
                                 Ok(()) => {
                                     run_with_emulator(
                                         executable,
                                         arguments,
                                         files_in_fileset,
                                         starting_file,
-                                        temp_path,
+                                        temp_dir,
                                     )
                                     .await
                                 }

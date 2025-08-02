@@ -4,6 +4,7 @@ mod file_importer;
 mod file_selector;
 mod file_set_form;
 mod list_item;
+mod release;
 mod release_form;
 mod releases;
 mod software_title_selector;

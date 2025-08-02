@@ -41,17 +41,10 @@ A crate for database related operations, including migrations for creating and m
 
 A crate for providing services to the, such as view model service defined in `view_model_service.rs` and the view model definitions. 
 
-### cli
-
-Will be removed.
-
-### ui
-
-GUI created with Iced - obsolete and will be removed.
 
 ### relm4-ui
 
-New GUI created with relm4. This is the main crate for the application, providing the user interface and integrating with other crates.
+User interface (GTK4 GUI created with relm4). This is the main crate for the application, providing the user interface and integrating with other crates.
 
 ## Architecture
 

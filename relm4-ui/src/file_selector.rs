@@ -26,7 +26,6 @@ use crate::{
 #[derive(Debug)]
 pub enum FileSelectMsg {
     FetchFiles,
-    AddFileSet,
     SelectClicked,
     OpenFileSetForm,
     FileSetCreated(FileSetListModel),
@@ -170,7 +169,6 @@ impl Component for FileSelectModel {
             FileSelectMsg::OpenFileSetForm => {
                 if let Some(selected_file_type) = self.selected_file_type {
                     let init_model = FileSetFormInit {
-                        view_model_service: Arc::clone(&self.view_model_service),
                         repository_manager: Arc::clone(&self.repository_manager),
                         settings: Arc::clone(&self.settings),
                         selected_system_ids: self.selected_system_ids.clone(),
