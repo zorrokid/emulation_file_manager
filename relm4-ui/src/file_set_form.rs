@@ -24,10 +24,7 @@ use relm4::{
 };
 use service::view_models::{FileSetListModel, Settings};
 
-use crate::{
-    file_importer::FileImporter,
-    utils::{prepare_file_import, resolve_file_type_path},
-};
+use crate::{file_importer::FileImporter, utils::prepare_file_import};
 
 #[derive(Debug, Clone)]
 struct File {
@@ -62,7 +59,7 @@ impl FactoryComponent for File {
             set_orientation: gtk::Orientation::Horizontal,
 
             gtk::CheckButton {
-                set_active: false,
+                set_active: self.selected,
                 set_margin_all: 12,
                 connect_toggled[sender, sha1_checksum = self.sha1_checksun.clone()] => move |checkbox| {
                     sender.input(FileInput::Toggle(checkbox.is_active()));
@@ -96,7 +93,7 @@ impl FactoryComponent for File {
         Self {
             name: read_file.file_name,
             sha1_checksun: read_file.sha1_checksum,
-            selected: false,
+            selected: true, // initially all files are selected for import
         }
     }
 
@@ -294,6 +291,7 @@ impl Component for FileSetFormModel {
                         &self.settings.collection_root_dir,
                         &self.file_importer,
                     );
+                    println!("Prepared file import model: {:?}", file_import_model);
                     sender.oneshot_command(async move {
                         let res = file_import::import(&file_import_model);
                         CommandMsg::FilesImported(res)
@@ -356,22 +354,20 @@ impl Component for FileSetFormModel {
                     self.file_importer
                         .set_imported_files(imported_files_map.clone());
 
-                    // combine the newly imported files with the existing files
-                    let mut imported_files = imported_files_map
-                        .values()
-                        .cloned()
-                        .collect::<Vec<ImportedFile>>();
-                    imported_files
-                        .extend(self.file_importer.get_existing_files().values().cloned());
                     let system_ids = self.selected_system_ids.clone();
-
                     let repo = Arc::clone(&self.repository_manager);
 
+                    let files_in_file_set = self.file_importer.get_files_selected_for_file_set();
                     let file_type = self.selected_file_type;
                     sender.oneshot_command(async move {
                         let result = repo
                             .get_file_set_repository()
-                            .add_file_set(file_name, file_type.into(), imported_files, &system_ids)
+                            .add_file_set(
+                                file_name,
+                                file_type.into(),
+                                files_in_file_set,
+                                &system_ids,
+                            )
                             .await;
                         CommandMsg::FilesSavedToDatabase(result)
                     });

@@ -43,9 +43,7 @@ impl FileImporter {
     pub fn get_current_picked_file_content(&self) -> &HashMap<Sha1Checksum, ReadFile> {
         &self.current_picked_file_content
     }
-    pub fn get_existing_files(&self) -> &HashMap<Sha1Checksum, ImportedFile> {
-        &self.existing_files
-    }
+
     pub fn get_selected_files_from_current_picked_file_that_are_new(&self) -> Vec<ReadFile> {
         let existing_files_checksums: HashSet<Sha1Checksum> =
             self.existing_files.keys().cloned().collect();
@@ -118,6 +116,22 @@ impl FileImporter {
         self.imported_files.clear();
     }
 
+    /// combines newly imported files with existing files selected for the file set
+    pub fn get_files_selected_for_file_set(&self) -> Vec<ImportedFile> {
+        let mut selected_existing_files = self
+            .existing_files
+            .iter()
+            .filter(|(sha1_checksum, _)| {
+                self.selected_files_from_current_picked_file
+                    .contains(*sha1_checksum)
+            })
+            .map(|(_, imported_file)| imported_file.clone())
+            .collect::<Vec<ImportedFile>>();
+
+        selected_existing_files.extend(self.imported_files.values().cloned());
+        selected_existing_files
+    }
+
     pub fn is_file_selected(&self, sha1_checksum: &Sha1Checksum) -> bool {
         self.selected_files_from_current_picked_file
             .contains(sha1_checksum)
@@ -126,11 +140,19 @@ impl FileImporter {
     pub fn deselect_file(&mut self, sha1_checksum: &Sha1Checksum) {
         self.selected_files_from_current_picked_file
             .remove(sha1_checksum);
+        println!(
+            "Selected files after deselecting: {:?}",
+            self.selected_files_from_current_picked_file
+        );
     }
 
     pub fn select_file(&mut self, sha1_checksum: &Sha1Checksum) {
         self.selected_files_from_current_picked_file
             .insert(*sha1_checksum);
+        println!(
+            "Selected files after selecting: {:?}",
+            self.selected_files_from_current_picked_file
+        );
     }
 
     pub fn toggle_file_selection(&mut self, sha1_checksum: Sha1Checksum) {

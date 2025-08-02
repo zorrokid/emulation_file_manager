@@ -49,6 +49,7 @@ pub enum ReleaseMsg {
     StartEmulatorRunner,
     StartEditRelease,
     UpdateRelease(ReleaseListModel),
+    Clear,
 }
 
 #[derive(Debug)]
@@ -184,6 +185,15 @@ impl Component for ReleaseModel {
                         .widget()
                         .present();
                 }
+            }
+            ReleaseMsg::Clear => {
+                println!("Clearing release model");
+                self.selected_release = None;
+                self.selected_release_system_names.clear();
+                self.file_set_list_view_wrapper.clear();
+                self.selected_file_set = None;
+                self.emulator_runner = None;
+                self.form_window = None;
             }
             _ => (),
         }

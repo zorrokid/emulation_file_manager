@@ -84,7 +84,7 @@ impl Component for AppModel {
     }
 
     fn init(
-        counter: Self::Init,
+        _: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {

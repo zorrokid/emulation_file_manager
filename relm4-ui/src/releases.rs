@@ -3,7 +3,7 @@ use std::sync::Arc;
 use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
-    gtk::{self, prelude::*},
+    gtk::{self, glib::clone, prelude::*},
     typed_view::list::TypedListView,
 };
 use service::{
@@ -112,6 +112,17 @@ impl Component for ReleasesModel {
             selected_software_title_id: None,
         };
         let releases_list_view = &model.releases_list_view_wrapper.view;
+        let selection_model = &model.releases_list_view_wrapper.selection_model;
+        selection_model.connect_selected_notify(clone!(
+            #[strong]
+            sender,
+            move |selection| {
+                sender.input(ReleasesMsg::ReleaseSelected {
+                    index: selection.selected(),
+                });
+            }
+        ));
+
         let widgets = view_output!();
         ComponentParts { model, widgets }
     }
@@ -121,6 +132,7 @@ impl Component for ReleasesModel {
             ReleasesMsg::SoftwareTitleSelected { id } => {
                 println!("Software title selected with ID: {}", id);
                 self.selected_software_title_id = Some(id);
+                self.release.sender().emit(ReleaseMsg::Clear);
                 sender.input(ReleasesMsg::FetchReleases);
             }
             ReleasesMsg::FetchReleases => {
@@ -145,7 +157,7 @@ impl Component for ReleasesModel {
                 }
             }
             ReleasesMsg::ReleaseSelected { index } => {
-                println!("Software title selected with index: {}", index);
+                println!("Release selected with index: {}", index);
 
                 let selected = self.releases_list_view_wrapper.get(index);
                 if let Some(item) = selected {
@@ -225,6 +237,7 @@ impl Component for ReleasesModel {
                         self.releases_list_view_wrapper.clear();
                         self.releases_list_view_wrapper.extend_from_iter(items);
                         let index = self.releases_list_view_wrapper.selection_model.selected();
+                        println!("Selected index after fetching releases: {}", index);
                         sender.input(ReleasesMsg::ReleaseSelected { index });
                     }
                     Err(err) => {
