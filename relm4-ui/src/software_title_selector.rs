@@ -40,6 +40,7 @@ pub enum CommandMsg {
 pub struct SoftwareTitleSelectInit {
     pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
+    pub selected_software_title_ids: Vec<i64>,
 }
 
 #[derive(Debug)]
@@ -48,6 +49,7 @@ pub struct SoftwareTitleSelectModel {
     repository_manager: Arc<RepositoryManager>,
     software_titles: Vec<SoftwareTitleListModel>,
     list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
+    selected_software_title_ids: Vec<i64>,
 }
 
 #[relm4::component(pub)]
@@ -105,6 +107,7 @@ impl Component for SoftwareTitleSelectModel {
             repository_manager: init_model.repository_manager,
             software_titles: Vec::new(),
             list_view_wrapper,
+            selected_software_title_ids: init_model.selected_software_title_ids,
         };
 
         let software_titles_list_view = &model.list_view_wrapper.view;
@@ -193,10 +196,14 @@ impl Component for SoftwareTitleSelectModel {
                     );
                 }
                 self.software_titles = software_titles;
-                let list_items = self.software_titles.iter().map(|software_title| ListItem {
-                    name: software_title.name.clone(),
-                    id: software_title.id,
-                });
+                let list_items = self
+                    .software_titles
+                    .iter()
+                    .filter(|st| !self.selected_software_title_ids.contains(&st.id))
+                    .map(|software_title| ListItem {
+                        name: software_title.name.clone(),
+                        id: software_title.id,
+                    });
                 self.list_view_wrapper.extend_from_iter(list_items);
             }
             CommandMsg::SoftwareTitlesFetched(Err(e)) => {

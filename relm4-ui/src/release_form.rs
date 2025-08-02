@@ -12,7 +12,8 @@ use relm4::{
 use service::{
     view_model_service::ViewModelService,
     view_models::{
-        FileSetListModel, ReleaseListModel, Settings, SoftwareTitleListModel, SystemListModel,
+        FileSetListModel, ReleaseListModel, ReleaseViewModel, Settings, SoftwareTitleListModel,
+        SystemListModel,
     },
 };
 
@@ -38,19 +39,19 @@ pub enum ReleaseFormMsg {
 
 #[derive(Debug)]
 pub enum ReleaseFormOutputMsg {
-    ReleaseCreated(ReleaseListModel),
+    ReleaseCreatedOrUpdated { id: i64 },
 }
 
 #[derive(Debug)]
 pub enum CommandMsg {
-    ReleaseCreated(Result<i64, Error>),
+    ReleaseCreatedOrUpdated(Result<i64, Error>),
 }
 
 #[derive(Debug)]
 pub struct ReleaseFormModel {
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
-    selected_sofware_titles: Vec<SoftwareTitleListModel>,
+    selected_software_titles: Vec<SoftwareTitleListModel>,
     selected_systems: Vec<SystemListModel>,
     selected_file_sets: Vec<FileSetListModel>,
     settings: Arc<Settings>,
@@ -60,12 +61,14 @@ pub struct ReleaseFormModel {
     selected_software_titles_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     selected_systems_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     selected_file_sets_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
+    release: Option<ReleaseViewModel>,
 }
 
 pub struct ReleaseFormInit {
     pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
     pub settings: Arc<Settings>,
+    pub release: Option<ReleaseViewModel>,
 }
 
 #[relm4::component(pub)]
@@ -134,30 +137,88 @@ impl Component for ReleaseFormModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let selected_systems_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
+        let mut selected_systems = vec![];
+        let mut selected_file_sets = vec![];
+        let mut selected_software_titles = vec![];
+        if let Some(release) = &init_model.release {
+            selected_systems = release
+                .systems
+                .iter()
+                .map(|s| SystemListModel {
+                    id: s.id,
+                    name: s.name.clone(),
+                    can_delete: false,
+                })
+                .collect();
+
+            selected_file_sets = release
+                .file_sets
+                .iter()
+                .map(|fs| FileSetListModel {
+                    id: fs.id,
+                    file_set_name: fs.file_set_name.clone(),
+                    file_type: fs.file_type,
+                })
+                .collect();
+            selected_software_titles = release
+                .software_titles
+                .iter()
+                .map(|st| SoftwareTitleListModel {
+                    id: st.id,
+                    name: st.name.clone(),
+                    can_delete: false,
+                })
+                .collect();
+        }
+
+        let mut selected_systems_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
             TypedListView::new();
 
-        let selected_file_sets_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
-            TypedListView::new();
+        selected_systems_list_view_wrapper.extend_from_iter(selected_systems.iter().map(|s| {
+            ListItem {
+                id: s.id,
+                name: s.name.clone(),
+            }
+        }));
 
-        let selected_software_titles_list_view_wrapper: TypedListView<
+        let mut selected_file_sets_list_view_wrapper: TypedListView<
             ListItem,
             gtk::SingleSelection,
         > = TypedListView::new();
+
+        selected_file_sets_list_view_wrapper.extend_from_iter(selected_file_sets.iter().map(
+            |fs| ListItem {
+                id: fs.id,
+                name: fs.file_set_name.clone(),
+            },
+        ));
+
+        let mut selected_software_titles_list_view_wrapper: TypedListView<
+            ListItem,
+            gtk::SingleSelection,
+        > = TypedListView::new();
+
+        selected_software_titles_list_view_wrapper.extend_from_iter(
+            selected_software_titles.iter().map(|st| ListItem {
+                id: st.id,
+                name: st.name.clone(),
+            }),
+        );
 
         let model = ReleaseFormModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
             settings: init_model.settings,
-            selected_systems: Vec::new(),
+            release: init_model.release,
             system_selector: None,
             file_selector: None,
             software_title_selector: None,
             selected_software_titles_list_view_wrapper,
             selected_systems_list_view_wrapper,
             selected_file_sets_list_view_wrapper,
-            selected_file_sets: Vec::new(),
-            selected_sofware_titles: Vec::new(),
+            selected_systems,
+            selected_file_sets,
+            selected_software_titles,
         };
 
         let selected_systems_list_view = &model.selected_systems_list_view_wrapper.view;
@@ -174,6 +235,7 @@ impl Component for ReleaseFormModel {
                 let init_model = SystemSelectInit {
                     view_model_service: Arc::clone(&self.view_model_service),
                     repository_manager: Arc::clone(&self.repository_manager),
+                    selected_system_ids: self.selected_systems.iter().map(|s| s.id).collect(),
                 };
                 let system_selector = SystemSelectModel::builder()
                     .transient_for(root)
@@ -197,6 +259,7 @@ impl Component for ReleaseFormModel {
                     repository_manager: Arc::clone(&self.repository_manager),
                     settings: Arc::clone(&self.settings),
                     selected_system_ids: self.selected_systems.iter().map(|s| s.id).collect(),
+                    selected_file_set_ids: self.selected_file_sets.iter().map(|fs| fs.id).collect(),
                 };
                 let file_selector = FileSelectModel::builder()
                     .transient_for(root)
@@ -220,6 +283,11 @@ impl Component for ReleaseFormModel {
                     .launch(SoftwareTitleSelectInit {
                         view_model_service: Arc::clone(&self.view_model_service),
                         repository_manager: Arc::clone(&self.repository_manager),
+                        selected_software_title_ids: self
+                            .selected_software_titles
+                            .iter()
+                            .map(|st| st.id)
+                            .collect(),
                     })
                     .forward(sender.input_sender(), |msg| match msg {
                         SoftwareTitleSelectOutputMsg::SoftwareTitleSelected(software_title) => {
@@ -257,7 +325,7 @@ impl Component for ReleaseFormModel {
                         name: software_title.name.clone(),
                         id: software_title.id,
                     });
-                self.selected_sofware_titles.push(software_title);
+                self.selected_software_titles.push(software_title);
             }
             ReleaseFormMsg::StartSaveRelease => {
                 println!("Starting to save release with selected systems and file sets");
@@ -266,7 +334,7 @@ impl Component for ReleaseFormModel {
                     println!("No systems selected, cannot create release.");
                 } else if self.selected_file_sets.is_empty() {
                     println!("No file sets selected, cannot create release.");
-                } else if self.selected_sofware_titles.is_empty() {
+                } else if self.selected_software_titles.is_empty() {
                     println!("No software titles selected, cannot create release.");
                 } else {
                     println!(
@@ -275,7 +343,7 @@ impl Component for ReleaseFormModel {
                     );
 
                     let software_title_ids: Vec<i64> = self
-                        .selected_sofware_titles
+                        .selected_software_titles
                         .iter()
                         .map(|title| title.id)
                         .collect();
@@ -289,17 +357,37 @@ impl Component for ReleaseFormModel {
                         .map(|system| system.id)
                         .collect();
 
+                    let release_id = self.release.as_ref().map(|r| r.id);
+
                     sender.oneshot_command(async move {
-                        let release_list_model = repository_manager
-                            .get_release_repository()
-                            .add_release_full(
-                                "".to_string(),
-                                software_title_ids,
-                                file_set_ids,
-                                system_ids,
-                            )
-                            .await;
-                        CommandMsg::ReleaseCreated(release_list_model)
+                        let res = match release_id {
+                            Some(id) => {
+                                println!("Editing existing release with id: {}", id);
+                                repository_manager
+                                    .get_release_repository()
+                                    .update_release_full(
+                                        id,
+                                        "".to_string(),
+                                        software_title_ids,
+                                        file_set_ids,
+                                        system_ids,
+                                    )
+                                    .await
+                            }
+                            _ => {
+                                println!("Creating new release");
+                                repository_manager
+                                    .get_release_repository()
+                                    .add_release_full(
+                                        "".to_string(),
+                                        software_title_ids,
+                                        file_set_ids,
+                                        system_ids,
+                                    )
+                                    .await
+                            }
+                        };
+                        CommandMsg::ReleaseCreatedOrUpdated(res)
                     });
                 }
             }
@@ -313,9 +401,9 @@ impl Component for ReleaseFormModel {
         root: &Self::Root,
     ) {
         match message {
-            CommandMsg::ReleaseCreated(Ok(id)) => {
-                println!("Release created with ID: {}", id);
-                let release_list_model = ReleaseListModel {
+            CommandMsg::ReleaseCreatedOrUpdated(Ok(id)) => {
+                println!("Release created or updated with ID: {}", id);
+                /*let release_list_model = ReleaseListModel {
                     id,
                     name: "New Release".to_string(),
                     system_names: self
@@ -328,8 +416,8 @@ impl Component for ReleaseFormModel {
                         .iter()
                         .map(|fs| fs.file_type.to_string())
                         .collect(),
-                };
-                let res = sender.output(ReleaseFormOutputMsg::ReleaseCreated(release_list_model));
+                };*/
+                let res = sender.output(ReleaseFormOutputMsg::ReleaseCreatedOrUpdated { id });
                 if let Err(e) = res {
                     eprintln!("Failed to send output message: {:?}", e);
                     // TODO: show error to user
@@ -338,7 +426,7 @@ impl Component for ReleaseFormModel {
                     root.close();
                 }
             }
-            CommandMsg::ReleaseCreated(Err(err)) => {
+            CommandMsg::ReleaseCreatedOrUpdated(Err(err)) => {
                 eprintln!("Failed to create release: {:?}", err);
                 // TODO: show error to user
             }

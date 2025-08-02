@@ -24,6 +24,7 @@ pub enum ReleasesMsg {
     ReleaseSelected { index: u32 },
     StartAddRelease,
     AddRelease(ReleaseListModel),
+    FetchReleases,
 }
 
 #[derive(Debug)]
@@ -38,6 +39,7 @@ pub struct ReleasesModel {
     settings: Arc<Settings>,
     form_window: Option<Controller<ReleaseFormModel>>,
     releases_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
+    selected_software_title_id: Option<i64>,
 
     release: Controller<ReleaseModel>,
 }
@@ -107,6 +109,7 @@ impl Component for ReleasesModel {
             form_window: None,
             releases_list_view_wrapper: TypedListView::new(),
             release: release_model,
+            selected_software_title_id: None,
         };
         let releases_list_view = &model.releases_list_view_wrapper.view;
         let widgets = view_output!();
@@ -117,19 +120,29 @@ impl Component for ReleasesModel {
         match msg {
             ReleasesMsg::SoftwareTitleSelected { id } => {
                 println!("Software title selected with ID: {}", id);
+                self.selected_software_title_id = Some(id);
+                sender.input(ReleasesMsg::FetchReleases);
+            }
+            ReleasesMsg::FetchReleases => {
+                if let Some(software_title_id) = self.selected_software_title_id {
+                    println!(
+                        "Fetching releases for software title ID: {}",
+                        software_title_id
+                    );
 
-                let view_model_service = Arc::clone(&self.view_model_service);
-
-                sender.oneshot_command(async move {
-                    let releases_result = view_model_service
-                        .get_release_list_models(ReleaseFilter {
-                            software_title_id: Some(id),
-                            system_id: None,
-                        })
-                        .await;
-                    println!("Fetched releases: {:?}", releases_result);
-                    CommandMsg::FetchedReleases(releases_result)
-                });
+                    let view_model_service = Arc::clone(&self.view_model_service);
+                    sender.oneshot_command(async move {
+                        let releases_result = view_model_service
+                            .get_release_list_models(ReleaseFilter {
+                                software_title_id: Some(software_title_id),
+                                system_id: None,
+                            })
+                            .await;
+                        CommandMsg::FetchedReleases(releases_result)
+                    });
+                } else {
+                    eprintln!("No software title selected to fetch releases.");
+                }
             }
             ReleasesMsg::ReleaseSelected { index } => {
                 println!("Software title selected with index: {}", index);
@@ -138,36 +151,49 @@ impl Component for ReleasesModel {
                 if let Some(item) = selected {
                     println!("Selected item: {:?}", item);
                     let selected_id = item.borrow().id;
-                    self.release.sender().emit(ReleaseMsg::ReleaseSelected {
-                        release_id: selected_id,
-                    });
+                    self.release
+                        .sender()
+                        .emit(ReleaseMsg::ReleaseSelected { id: selected_id });
                 } else {
                     println!("No item found at index: {}", index);
                 }
             }
 
             ReleasesMsg::StartAddRelease => {
-                let release_form_init_model = ReleaseFormInit {
-                    view_model_service: Arc::clone(&self.view_model_service),
-                    repository_manager: Arc::clone(&self.repository_manager),
-                    settings: Arc::clone(&self.settings),
-                };
-                let form_window = ReleaseFormModel::builder()
-                    .transient_for(root)
-                    .launch(release_form_init_model)
-                    .forward(sender.input_sender(), |msg| match msg {
-                        ReleaseFormOutputMsg::ReleaseCreated(release_list_model) => {
-                            ReleasesMsg::AddRelease(release_list_model)
-                        }
-                    });
+                if let Some(software_title_id) = self.selected_software_title_id {
+                    println!(
+                        "Starting to add release for software title ID: {}",
+                        software_title_id
+                    );
 
-                self.form_window = Some(form_window);
+                    let release_form_init_model = ReleaseFormInit {
+                        view_model_service: Arc::clone(&self.view_model_service),
+                        repository_manager: Arc::clone(&self.repository_manager),
+                        settings: Arc::clone(&self.settings),
+                        release: None,
+                    };
 
-                self.form_window
-                    .as_ref()
-                    .expect("Form window should be set already")
-                    .widget()
-                    .present();
+                    let form_window = ReleaseFormModel::builder()
+                        .transient_for(root)
+                        .launch(release_form_init_model)
+                        .forward(sender.input_sender(), |msg| match msg {
+                            ReleaseFormOutputMsg::ReleaseCreatedOrUpdated { id } => {
+                                println!("Release created or updated with ID: {}", id);
+                                ReleasesMsg::FetchReleases
+                            }
+                        });
+
+                    self.form_window = Some(form_window);
+
+                    self.form_window
+                        .as_ref()
+                        .expect("Form window should be set already")
+                        .widget()
+                        .present();
+                } else {
+                    eprintln!("No software title selected for adding a release.");
+                    return;
+                }
             }
             ReleasesMsg::AddRelease(release_list_model) => {
                 println!("Release added: {:?}", release_list_model);

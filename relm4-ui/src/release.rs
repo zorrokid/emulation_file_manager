@@ -12,12 +12,13 @@ use relm4::{
 use service::{
     error::Error,
     view_model_service::ViewModelService,
-    view_models::{FileSetViewModel, ReleaseViewModel, Settings},
+    view_models::{FileSetViewModel, ReleaseListModel, ReleaseViewModel, Settings},
 };
 
 use crate::{
     emulator_runner::{EmulatorRunnerInit, EmulatorRunnerModel},
     list_item::ListItem,
+    release_form::{ReleaseFormInit, ReleaseFormModel, ReleaseFormOutputMsg},
 };
 
 #[derive(Debug)]
@@ -31,6 +32,7 @@ pub struct ReleaseModel {
     file_set_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     selected_file_set: Option<FileSetViewModel>,
     emulator_runner: Option<Controller<EmulatorRunnerModel>>,
+    form_window: Option<Controller<ReleaseFormModel>>,
 }
 
 #[derive(Debug)]
@@ -42,8 +44,11 @@ pub struct ReleaseInitModel {
 
 #[derive(Debug)]
 pub enum ReleaseMsg {
-    ReleaseSelected { release_id: i64 },
+    ReleaseSelected { id: i64 },
+    FetchRelease { id: i64 },
     StartEmulatorRunner,
+    StartEditRelease,
+    UpdateRelease(ReleaseListModel),
 }
 
 #[derive(Debug)]
@@ -79,8 +84,11 @@ impl Component for ReleaseModel {
                 #[watch]
                 set_sensitive: model.selected_file_set.is_some(),
                 connect_clicked => ReleaseMsg::StartEmulatorRunner,
+            },
+            gtk::Button {
+                set_label: "Edit",
+                connect_clicked => ReleaseMsg::StartEditRelease,
             }
-
         }
     }
 
@@ -99,6 +107,7 @@ impl Component for ReleaseModel {
             file_set_list_view_wrapper: TypedListView::new(),
             selected_file_set: None,
             emulator_runner: None,
+            form_window: None,
         };
 
         let file_set_list_view = &model.file_set_list_view_wrapper.view;
@@ -108,11 +117,14 @@ impl Component for ReleaseModel {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         match msg {
-            ReleaseMsg::ReleaseSelected { release_id } => {
+            ReleaseMsg::ReleaseSelected { id } => {
+                sender.input(ReleaseMsg::FetchRelease { id });
+            }
+            ReleaseMsg::FetchRelease { id } => {
                 let view_model_service = Arc::clone(&self.view_model_service);
 
                 sender.oneshot_command(async move {
-                    let release = view_model_service.get_release_view_model(release_id).await;
+                    let release = view_model_service.get_release_view_model(id).await;
                     println!("Fetched release: {:?}", release);
                     ReleaseCommandMsg::FetchedRelease(release)
                 });
@@ -142,6 +154,38 @@ impl Component for ReleaseModel {
                         .present();
                 }
             }
+            ReleaseMsg::UpdateRelease(release_list_model) => {
+                println!("Updating release with model: {:?}", release_list_model);
+                // TODO
+            }
+            ReleaseMsg::StartEditRelease => {
+                if let Some(release) = &self.selected_release {
+                    println!("Starting edit release for: {:?}", release);
+                    let release_form_init_model = ReleaseFormInit {
+                        view_model_service: Arc::clone(&self.view_model_service),
+                        repository_manager: Arc::clone(&self.repository_manager),
+                        settings: Arc::clone(&self.settings),
+                        release: Some(release.clone()),
+                    };
+                    let form_window = ReleaseFormModel::builder()
+                        .transient_for(root)
+                        .launch(release_form_init_model)
+                        .forward(sender.input_sender(), |msg| match msg {
+                            ReleaseFormOutputMsg::ReleaseCreatedOrUpdated { id } => {
+                                ReleaseMsg::FetchRelease { id }
+                            }
+                        });
+
+                    self.form_window = Some(form_window);
+
+                    self.form_window
+                        .as_ref()
+                        .expect("Form window should be set already")
+                        .widget()
+                        .present();
+                }
+            }
+            _ => (),
         }
     }
 

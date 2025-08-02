@@ -236,6 +236,7 @@ impl Component for EmulatorFormModel {
                 let init_model = SystemSelectInit {
                     view_model_service: Arc::clone(&self.view_model_service),
                     repository_manager: Arc::clone(&self.repository_manager),
+                    selected_system_ids: self.selected_systems.iter().map(|s| s.id).collect(),
                 };
                 let system_selector = SystemSelectModel::builder()
                     .transient_for(root)

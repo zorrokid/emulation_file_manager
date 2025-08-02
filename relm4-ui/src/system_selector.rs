@@ -40,6 +40,7 @@ pub enum CommandMsg {
 pub struct SystemSelectInit {
     pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
+    pub selected_system_ids: Vec<i64>,
 }
 
 #[derive(Debug)]
@@ -48,6 +49,7 @@ pub struct SystemSelectModel {
     repository_manager: Arc<RepositoryManager>,
     systems: Vec<SystemListModel>,
     list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
+    selected_system_ids: Vec<i64>,
 }
 
 #[relm4::component(pub)]
@@ -109,6 +111,7 @@ impl Component for SystemSelectModel {
             repository_manager: init_model.repository_manager,
             systems: Vec::new(),
             list_view_wrapper,
+            selected_system_ids: init_model.selected_system_ids,
         };
 
         let systems_list_view = &model.list_view_wrapper.view;
@@ -187,10 +190,14 @@ impl Component for SystemSelectModel {
                     println!("Fetched system: {} with ID: {}", system.name, system.id);
                 }
                 self.systems = systems;
-                let list_items = self.systems.iter().map(|system| ListItem {
-                    name: system.name.clone(),
-                    id: system.id,
-                });
+                let list_items = self
+                    .systems
+                    .iter()
+                    .filter(|f| !self.selected_system_ids.contains(&f.id))
+                    .map(|system| ListItem {
+                        name: system.name.clone(),
+                        id: system.id,
+                    });
                 self.list_view_wrapper.extend_from_iter(list_items);
             }
             CommandMsg::SystemsFetched(Err(e)) => {
