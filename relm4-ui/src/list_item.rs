@@ -1,9 +1,10 @@
 use relm4::{
     gtk::{self, prelude::*},
+    prelude::*,
     typed_view::list::RelmListItem,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ListItem {
     pub name: String,
     pub id: i64,

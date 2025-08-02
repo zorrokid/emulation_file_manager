@@ -50,6 +50,7 @@ pub struct FileSelectInit {
     pub repository_manager: Arc<RepositoryManager>,
     pub settings: Arc<Settings>,
     pub selected_system_ids: Vec<i64>,
+    pub selected_file_set_ids: Vec<i64>,
 }
 
 #[derive(Debug)]
@@ -64,6 +65,7 @@ pub struct FileSelectModel {
     selected_file_type: Option<FileType>,
     selected_file_set: Option<FileSetListModel>,
     file_types: Vec<FileType>,
+    selected_file_set_ids: Vec<i64>,
 }
 
 #[relm4::component(pub)]
@@ -145,6 +147,7 @@ impl Component for FileSelectModel {
             selected_file_type: file_types.first().cloned(),
             selected_file_set: None,
             file_types,
+            selected_file_set_ids: init_model.selected_file_set_ids,
         };
         let file_set_list_view = &model.list_view_wrapper.view;
         model
@@ -288,18 +291,22 @@ impl Component for FileSelectModel {
     fn update_cmd(
         &mut self,
         message: Self::CommandOutput,
-        sender: ComponentSender<Self>,
-        _: &Self::Root,
+        _sender: ComponentSender<Self>,
+        _root: &Self::Root,
     ) {
         match message {
             CommandMsg::FilesFetched(Ok(file_sets)) => {
                 println!("File sets fetched successfully: {:?}", file_sets);
                 self.file_sets = file_sets;
                 self.list_view_wrapper.clear();
-                let list_items = self.file_sets.iter().map(|file_set| ListItem {
-                    id: file_set.id,
-                    name: file_set.file_set_name.clone(),
-                });
+                let list_items = self
+                    .file_sets
+                    .iter()
+                    .filter(|f| !self.selected_file_set_ids.contains(&f.id))
+                    .map(|file_set| ListItem {
+                        id: file_set.id,
+                        name: file_set.file_set_name.clone(),
+                    });
                 self.list_view_wrapper.extend_from_iter(list_items);
             }
             CommandMsg::FilesFetched(Err(e)) => {
