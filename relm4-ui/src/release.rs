@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use database::repository_manager::RepositoryManager;
+use database::{models::FileType, repository_manager::RepositoryManager};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
@@ -238,42 +238,50 @@ impl Component for ReleaseModel {
         match message {
             ReleaseCommandMsg::FetchedRelease(Ok(release)) => {
                 println!("Release fetched successfully: {:?}", release);
-                self.selected_release = Some(release);
-                let system_names = self.selected_release.as_ref().map_or(String::new(), |r| {
-                    r.systems
-                        .iter()
-                        .map(|s| s.name.clone())
-                        .collect::<Vec<_>>()
-                        .join(", ")
+                self.selected_release_system_names = release
+                    .systems
+                    .iter()
+                    .map(|s| s.name.clone())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                let emulator_file_types = [
+                    FileType::DiskImage,
+                    FileType::TapeImage,
+                    FileType::Rom,
+                    FileType::MemorySnapshot,
+                ];
+
+                let emulator_file_sets = release
+                    .file_sets
+                    .iter()
+                    .filter(|fs| emulator_file_types.contains(&fs.file_type))
+                    .cloned()
+                    .collect::<Vec<_>>();
+
+                let emulator_file_set_list_items = emulator_file_sets.iter().map(|fs| ListItem {
+                    id: fs.id,
+                    name: fs.file_set_name.clone(),
                 });
-                self.selected_release_system_names = system_names;
+
                 self.file_set_list_view_wrapper.clear();
-                self.file_set_list_view_wrapper.extend_from_iter(
-                    self.selected_release.as_ref().map_or(vec![], |r| {
-                        r.file_sets
-                            .iter()
-                            .map(|fs| ListItem {
-                                id: fs.id,
-                                name: fs.file_set_name.clone(),
-                            })
-                            .collect()
-                    }),
-                );
+                self.file_set_list_view_wrapper
+                    .extend_from_iter(emulator_file_set_list_items);
 
                 let selected_index = self.file_set_list_view_wrapper.selection_model.selected();
+
                 let selected_file_set_list_item =
                     self.file_set_list_view_wrapper.get(selected_index);
-                if let (Some(file_set_list_item), Some(release)) =
-                    (selected_file_set_list_item, &self.selected_release)
-                {
-                    let file_set = release
-                        .file_sets
+                if let Some(file_set_list_item) = selected_file_set_list_item {
+                    let file_set = emulator_file_sets
                         .iter()
                         .find(|fs| fs.id == file_set_list_item.borrow().id);
                     self.selected_file_set = file_set.cloned();
                 } else {
                     self.selected_file_set = None;
                 }
+
+                self.selected_release = Some(release);
             }
             ReleaseCommandMsg::FetchedRelease(Err(err)) => {
                 eprintln!("Error fetching release: {:?}", err);
