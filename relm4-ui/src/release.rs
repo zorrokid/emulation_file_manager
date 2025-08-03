@@ -5,6 +5,7 @@ use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
         self,
+        glib::clone,
         prelude::{ButtonExt, GtkWindowExt, OrientableExt, WidgetExt},
     },
     typed_view::list::TypedListView,
@@ -50,6 +51,7 @@ pub enum ReleaseMsg {
     StartEditRelease,
     UpdateRelease(ReleaseListModel),
     Clear,
+    FileSetSelected { index: u32 },
 }
 
 #[derive(Debug)]
@@ -96,7 +98,7 @@ impl Component for ReleaseModel {
     fn init(
         init_model: Self::Init,
         root: Self::Root,
-        _sender: ComponentSender<Self>,
+        sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let model = ReleaseModel {
             view_model_service: init_model.view_model_service,
@@ -112,6 +114,16 @@ impl Component for ReleaseModel {
         };
 
         let file_set_list_view = &model.file_set_list_view_wrapper.view;
+        let selection_model = &model.file_set_list_view_wrapper.selection_model;
+        selection_model.connect_selected_notify(clone!(
+            #[strong]
+            sender,
+            move |s| {
+                let index = s.selected();
+                println!("Selected index: {}", index);
+                sender.input(ReleaseMsg::FileSetSelected { index });
+            }
+        ));
         let widgets = view_output!();
         ComponentParts { model, widgets }
     }
@@ -194,6 +206,24 @@ impl Component for ReleaseModel {
                 self.selected_file_set = None;
                 self.emulator_runner = None;
                 self.form_window = None;
+            }
+            ReleaseMsg::FileSetSelected { index } => {
+                println!("File set selected with index: {}", index);
+                let selected = self.file_set_list_view_wrapper.get(index);
+                if let Some(file_set_list_item) = selected {
+                    let file_set_id = file_set_list_item.borrow().id;
+                    let file_set = self.selected_release.as_ref().and_then(|release| {
+                        release
+                            .file_sets
+                            .iter()
+                            .find(|fs| fs.id == file_set_id)
+                            .cloned()
+                    });
+                    self.selected_file_set = file_set;
+                    println!("Selected file set: {:?}", self.selected_file_set);
+                } else {
+                    println!("No file set found at index: {}", index);
+                }
             }
             _ => (),
         }
