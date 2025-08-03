@@ -1,17 +1,16 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use crate::{
     emulator_form::{EmulatorFormInit, EmulatorFormModel, EmulatorFormOutputMsg},
     list_item::ListItem,
-    utils::{prepare_fileset_for_export, resolve_file_type_path},
+    utils::prepare_fileset_for_export,
 };
-use core_types::Sha1Checksum;
 use database::{
     models::{FileSetFileInfo, System},
     repository_manager::RepositoryManager,
 };
 use emulator_runner::{error::EmulatorRunnerError, run_with_emulator};
-use file_export::{export_files, export_files_zipped, export_files_zipped_or_non_zipped};
+use file_export::export_files_zipped_or_non_zipped;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{

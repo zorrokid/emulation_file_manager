@@ -3,6 +3,7 @@ mod emulator_runner;
 mod file_importer;
 mod file_selector;
 mod file_set_form;
+mod image_fileset_viewer;
 mod list_item;
 mod release;
 mod release_form;
