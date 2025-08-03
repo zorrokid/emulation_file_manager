@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use core_types::{EMULATOR_FILE_TYPES, IMAGE_FILE_TYPES};
-use database::{models::FileType, repository_manager::RepositoryManager};
-use file_export::{FileExportError, FileSetExportModel, export_files};
+use database::repository_manager::RepositoryManager;
+use file_export::{FileExportError, FileSetExportModel};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
@@ -23,7 +23,6 @@ use crate::{
     image_fileset_viewer::{ImageFileSetViewerInit, ImageFilesetViewer},
     list_item::ListItem,
     release_form::{ReleaseFormInit, ReleaseFormModel, ReleaseFormOutputMsg},
-    utils::prepare_fileset_for_export,
 };
 
 #[derive(Debug)]
@@ -66,7 +65,6 @@ pub enum ReleaseMsg {
 #[derive(Debug)]
 pub enum ReleaseCommandMsg {
     FetchedRelease(Result<ReleaseViewModel, Error>),
-    ExportedImageFileSet(Result<(), FileExportError>, FileSetExportModel),
 }
 
 #[relm4::component(pub)]
@@ -86,7 +84,6 @@ impl Component for ReleaseModel {
             gtk::Label {
                 #[watch]
                 set_label: model.selected_release_system_names.as_str(),
-
             },
 
             #[local_ref]
@@ -297,20 +294,6 @@ impl Component for ReleaseModel {
                             .find(|fs| fs.id == file_set_id)
                             .cloned()
                     });
-                    if let Some(file_set) = &file_set {
-                        let export_model = prepare_fileset_for_export(
-                            file_set,
-                            &self.settings.collection_root_dir,
-                            std::env::temp_dir().as_path(),
-                            true,
-                        );
-                        sender.spawn_command(move |_sender| {
-                            let res = export_files(&export_model);
-                            ReleaseCommandMsg::ExportedImageFileSet(res, export_model);
-                        });
-                    } else {
-                        println!("No file set found at index: {}", index);
-                    }
 
                     self.selected_image_file_set = file_set;
                     println!("Selected file set: {:?}", self.selected_file_set);
@@ -414,12 +397,6 @@ impl Component for ReleaseModel {
             ReleaseCommandMsg::FetchedRelease(Err(err)) => {
                 eprintln!("Error fetching release: {:?}", err);
                 // TODO: show error to user
-            }
-            ReleaseCommandMsg::ExportedImageFileSet(Ok(()), export_model) => {
-                println!("Image file set exported successfully: {:?}", export_model);
-            }
-            ReleaseCommandMsg::ExportedImageFileSet(Err(err), export_model) => {
-                eprintln!("Error exporting image file set: {:?}", err);
             }
         }
     }

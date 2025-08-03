@@ -39,6 +39,8 @@ pub enum FileType {
     TitleScreen = 9,
     #[strum(serialize = "Manual Scan")]
     ManualScan = 10,
+    #[strum(serialize = "Media Scan")]
+    MediaScan = 11,
 }
 
 impl FileType {
@@ -54,6 +56,21 @@ impl FileType {
             FileType::LoadingScreen => "loading_screen",
             FileType::TitleScreen => "title_screen",
             FileType::ManualScan => "manual_scan",
+            FileType::MediaScan => "media_scan",
         }
     }
 }
+
+pub const EMULATOR_FILE_TYPES: &[FileType] = &[
+    FileType::DiskImage,
+    FileType::TapeImage,
+    FileType::Rom,
+    FileType::MemorySnapshot,
+];
+
+pub const IMAGE_FILE_TYPES: &[FileType] = &[
+    FileType::ManualScan,
+    FileType::CoverScan,
+    FileType::Screenshot,
+    FileType::MediaScan,
+];

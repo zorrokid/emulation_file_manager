@@ -1,16 +1,81 @@
-use std::sync::Arc;
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
-use database::models::FileSet;
+use file_export::{FileExportError, FileSetExportModel, export_files};
 use relm4::{
-    Component, ComponentController, ComponentParts, ComponentSender, Controller,
+    Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
         self,
         glib::clone,
-        prelude::{ButtonExt, GtkWindowExt, OrientableExt, WidgetExt},
+        prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt},
     },
-    typed_view::list::TypedListView,
+    typed_view::{
+        grid::{RelmGridItem, TypedGridView},
+        list::TypedListView,
+    },
 };
 use service::view_models::{FileSetViewModel, Settings};
+use thumbnails::{ThumbnailPathMap, prepare_thumbnails};
+
+use crate::utils::prepare_fileset_for_export;
+
+// grid
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct MyGridItem {
+    thumbnail_path: PathBuf,
+    image_path: PathBuf,
+}
+
+impl MyGridItem {
+    fn new(thumbnail_path: PathBuf, image_path: PathBuf) -> Self {
+        Self {
+            thumbnail_path,
+            image_path,
+        }
+    }
+}
+
+struct Widgets {
+    thumbnail: gtk::Image,
+    button: gtk::Button,
+}
+
+impl RelmGridItem for MyGridItem {
+    type Root = gtk::Box;
+    type Widgets = Widgets;
+
+    fn setup(_item: &gtk::ListItem) -> (gtk::Box, Widgets) {
+        relm4::view! {
+            my_box = gtk::Box {
+                set_orientation: gtk::Orientation::Horizontal,
+                set_margin_all: 2,
+                set_spacing: 5,
+
+                #[name = "thumbnail"]
+                gtk::Image {
+                    set_pixel_size: 100,
+                    set_valign: gtk::Align::Center,
+                },
+
+               #[name = "button"]
+                gtk::Button,
+            }
+        }
+
+        let widgets = Widgets { thumbnail, button };
+
+        (my_box, widgets)
+    }
+
+    fn bind(&mut self, widgets: &mut Self::Widgets, _root: &mut Self::Root) {
+        let Widgets { thumbnail, button } = widgets;
+        thumbnail.set_from_file(Some(&self.thumbnail_path));
+    }
+}
+
+//
 
 #[derive(Debug)]
 pub enum ImageFilesetViewerMsg {
@@ -19,7 +84,8 @@ pub enum ImageFilesetViewerMsg {
 
 #[derive(Debug)]
 pub enum ImageFileSetViewerCommandMsg {
-    FileSetExtracted,
+    ExportedImageFileSet(Result<(), FileExportError>, FileSetExportModel),
+    ThumbnailsPrepared(ThumbnailPathMap),
 }
 
 pub struct ImageFileSetViewerInit {
@@ -31,6 +97,8 @@ pub struct ImageFileSetViewerInit {
 pub struct ImageFilesetViewer {
     file_set: FileSetViewModel,
     settings: Arc<Settings>,
+    thumbnails_mapping: ThumbnailPathMap,
+    grid_view_wrapper: TypedGridView<MyGridItem, gtk::SingleSelection>,
 }
 
 #[relm4::component(pub)]
@@ -50,22 +118,104 @@ impl Component for ImageFilesetViewer {
                 gtk::Label {
                     set_label: &format!("Viewing fileset: {}", model.file_set.file_set_name),
                 },
+
+                gtk::ScrolledWindow {
+                    set_vexpand: true,
+
+                    #[local_ref]
+                    my_view -> gtk::GridView {
+                        set_orientation: gtk::Orientation::Vertical,
+                        set_max_columns: 3,
+                    }
+                }
+
            },
+           // TODO: add grid of thumbnail links and show selected image in scrolled view
         }
     }
 
     fn init(
         init: Self::Init,
         root: Self::Root,
-        _sender: ComponentSender<Self>,
+        sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let export_model = prepare_fileset_for_export(
+            &init.file_set,
+            &init.settings.collection_root_dir,
+            // TODO: temp_dir should come from settings
+            std::env::temp_dir().as_path(),
+            true,
+        );
+
+        let grid_view_wrapper: TypedGridView<MyGridItem, gtk::SingleSelection> =
+            TypedGridView::new();
+
         let model = ImageFilesetViewer {
             file_set: init.file_set,
             settings: init.settings,
+            thumbnails_mapping: ThumbnailPathMap::new(),
+            grid_view_wrapper,
         };
+        let my_view = &model.grid_view_wrapper.view;
 
         let widgets = view_output!();
 
+        sender.spawn_command(move |sender| {
+            let res = export_files(&export_model);
+            sender.emit(ImageFileSetViewerCommandMsg::ExportedImageFileSet(
+                res,
+                export_model,
+            ));
+        });
+
         ComponentParts { model, widgets }
+    }
+
+    fn update_cmd(
+        &mut self,
+        message: Self::CommandOutput,
+        sender: ComponentSender<Self>,
+        _root: &Self::Root,
+    ) {
+        match message {
+            ImageFileSetViewerCommandMsg::ExportedImageFileSet(Ok(()), export_model) => {
+                // Handle successful export, e.g., show a success message
+                println!("Fileset exported successfully: {:?}", export_model);
+                let collection_root_dir = self.settings.collection_root_dir.clone();
+                sender.spawn_command(move |sender| {
+                    let res = prepare_thumbnails(&export_model, &collection_root_dir);
+                    // You can emit a message to update the UI or notify the user
+                    match res {
+                        Ok(thumbnails_mapping) => {
+                            println!("Thumbnails prepared successfully: {:?}", thumbnails_mapping);
+                            sender.emit(ImageFileSetViewerCommandMsg::ThumbnailsPrepared(
+                                thumbnails_mapping,
+                            ));
+                        }
+                        Err(e) => {
+                            eprintln!("Failed to prepare thumbnails: {}", e);
+                        }
+                    }
+                });
+            }
+            ImageFileSetViewerCommandMsg::ExportedImageFileSet(Err(e), _) => {
+                // Handle export error, e.g., show an error message
+                eprintln!("Failed to export fileset: {}", e);
+            }
+            ImageFileSetViewerCommandMsg::ThumbnailsPrepared(thumbnails_mapping) => {
+                // Handle thumbnails prepared, e.g., update the UI to show thumbnails
+                println!("Thumbnails prepared successfully.");
+
+                let grid_items = thumbnails_mapping
+                    .iter()
+                    .map(|(file_name, thumbnail_path)| {
+                        MyGridItem::new(thumbnail_path.clone(), file_name.clone().into())
+                    });
+
+                self.grid_view_wrapper.extend_from_iter(grid_items);
+
+                self.thumbnails_mapping = thumbnails_mapping;
+            }
+        }
     }
 }
