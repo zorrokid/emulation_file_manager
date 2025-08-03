@@ -30,6 +30,7 @@ pub struct OutputFile {
     pub checksum: Sha1Checksum,
 }
 
+#[derive(Debug)]
 pub struct FileSetExportModel {
     pub output_mapping: HashMap<String, OutputFile>,
     pub source_file_path: PathBuf,
@@ -42,9 +43,9 @@ pub fn export_files_zipped_or_non_zipped(
     export_model: &FileSetExportModel,
 ) -> Result<(), FileExportError> {
     if export_model.extract_files {
-        export_files_zipped(export_model)
-    } else {
         export_files(export_model)
+    } else {
+        export_files_zipped(export_model)
     }
 }
 

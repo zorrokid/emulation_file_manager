@@ -235,6 +235,9 @@ impl Component for EmulatorRunnerModel {
                             temp_dir.as_path(),
                             emulator.extract_files,
                         );
+
+                        println!("Export model prepared: {:?}", export_model);
+
                         let files_in_fileset = self
                             .file_set
                             .files
@@ -243,6 +246,10 @@ impl Component for EmulatorRunnerModel {
                             .collect::<Vec<_>>();
 
                         let extract_files = emulator.extract_files;
+                        println!(
+                            "Extract files: {}, Files in fileset: {:?}",
+                            extract_files, files_in_fileset
+                        );
                         let starting_file = if extract_files {
                             selected_file.file_name.clone()
                         } else {

@@ -23,6 +23,7 @@ pub enum FileImportError {
     FileIoError(String),
 }
 
+#[derive(Debug)]
 pub struct FileImportModel {
     pub file_path: PathBuf,
     pub output_dir: PathBuf,
@@ -124,11 +125,19 @@ pub fn import_file(
 /// A `Result` containing a hash map with file names and their checksums, or an error if the operation fails.
 ///
 pub fn import_files_from_zip(
-    file_path: &PathBuf,
-    output_dir: &PathBuf,
+    file_path: &Path,
+    output_dir: &Path,
     file_name_filter: &HashSet<String>,
     file_type: &FileType,
 ) -> Result<HashMap<Sha1Checksum, ImportedFile>, FileImportError> {
+    println!(
+        "Importing files from zip: {} to output directory: {} with file filter: {:?} and file type {}.",
+        file_path.display(),
+        output_dir.display(),
+        file_name_filter,
+        file_type
+    );
+
     let file = File::open(file_path)
         .map_err(|e| FileImportError::FileIoError(format!("Failed opening file: {}", e)))?;
     let mut archive = ZipArchive::new(file)
