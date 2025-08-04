@@ -17,6 +17,7 @@ pub enum FileType {
     LoadingScreen = 8,
     TitleScreen = 9,
     ManualScan = 10,
+    MediaScan = 11,
 }
 
 impl From<FileType> for CoreFileType {
@@ -32,6 +33,7 @@ impl From<FileType> for CoreFileType {
             FileType::LoadingScreen => CoreFileType::LoadingScreen,
             FileType::TitleScreen => CoreFileType::TitleScreen,
             FileType::ManualScan => CoreFileType::ManualScan,
+            FileType::MediaScan => CoreFileType::MediaScan,
         }
     }
 }
@@ -49,6 +51,7 @@ impl From<CoreFileType> for FileType {
             CoreFileType::LoadingScreen => FileType::LoadingScreen,
             CoreFileType::TitleScreen => FileType::TitleScreen,
             CoreFileType::ManualScan => FileType::ManualScan,
+            CoreFileType::MediaScan => FileType::MediaScan,
         }
     }
 }
@@ -66,6 +69,7 @@ impl FileType {
             FileType::LoadingScreen => "loading_screen",
             FileType::TitleScreen => "title_screen",
             FileType::ManualScan => "manual_scan",
+            FileType::MediaScan => "media_scan",
         }
     }
 }
@@ -83,6 +87,7 @@ impl From<FileType> for i64 {
             FileType::LoadingScreen => 8,
             FileType::TitleScreen => 9,
             FileType::ManualScan => 10,
+            FileType::MediaScan => 11,
         }
     }
 }
@@ -101,6 +106,7 @@ impl TryFrom<i64> for FileType {
             8 => Ok(FileType::LoadingScreen),
             9 => Ok(FileType::TitleScreen),
             10 => Ok(FileType::ManualScan),
+            11 => Ok(FileType::MediaScan),
             _ => Err(sqlx::Error::ColumnDecode {
                 index: "file_type".into(),
                 source: Box::new(std::io::Error::new(
@@ -125,6 +131,7 @@ impl Display for FileType {
             FileType::LoadingScreen => write!(f, "Loading Screen"),
             FileType::TitleScreen => write!(f, "Title Screen"),
             FileType::ManualScan => write!(f, "Manual Scan"),
+            FileType::MediaScan => write!(f, "Media Scan"),
         }
     }
 }
