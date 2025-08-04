@@ -37,7 +37,7 @@ pub fn prepare_thumbnails(
     let exported_files_dir = &export_model.output_dir;
     let mut thumbnail_path_mapp: HashMap<String, PathBuf> = HashMap::new();
     for (archive_file_name, output_file) in &export_model.output_mapping {
-        let thumbnail_path = thumbnails_dir.join(format!("{}.png", output_file.output_file_name));
+        let thumbnail_path = thumbnails_dir.join(format!("{}.png", archive_file_name));
         let exported_file_path = exported_files_dir.join(&output_file.output_file_name);
 
         println!(

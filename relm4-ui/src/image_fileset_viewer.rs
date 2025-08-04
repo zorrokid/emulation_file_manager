@@ -1,20 +1,14 @@
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::{path::PathBuf, sync::Arc};
 
 use file_export::{FileExportError, FileSetExportModel, export_files};
 use relm4::{
-    Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
+    Component, ComponentParts, ComponentSender, RelmWidgetExt,
     gtk::{
         self,
         glib::clone,
-        prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt},
+        prelude::{BoxExt, GtkWindowExt, OrientableExt, WidgetExt},
     },
-    typed_view::{
-        grid::{RelmGridItem, TypedGridView},
-        list::TypedListView,
-    },
+    typed_view::grid::{RelmGridItem, TypedGridView},
 };
 use service::view_models::{FileSetViewModel, Settings};
 use thumbnails::{ThumbnailPathMap, prepare_thumbnails};
@@ -53,10 +47,12 @@ impl RelmGridItem for MyGridItem {
                 set_margin_all: 2,
                 set_spacing: 5,
 
+
                 #[name = "thumbnail"]
                 gtk::Image {
                     set_pixel_size: 100,
                     set_valign: gtk::Align::Center,
+
                 },
 
                #[name = "button"]
@@ -79,7 +75,7 @@ impl RelmGridItem for MyGridItem {
 
 #[derive(Debug)]
 pub enum ImageFilesetViewerMsg {
-    FileSelected,
+    FileSelected { index: u32 },
 }
 
 #[derive(Debug)]
@@ -99,6 +95,7 @@ pub struct ImageFilesetViewer {
     settings: Arc<Settings>,
     thumbnails_mapping: ThumbnailPathMap,
     grid_view_wrapper: TypedGridView<MyGridItem, gtk::SingleSelection>,
+    selected_image: PathBuf,
 }
 
 #[relm4::component(pub)]
@@ -127,6 +124,17 @@ impl Component for ImageFilesetViewer {
                         set_orientation: gtk::Orientation::Vertical,
                         set_max_columns: 3,
                     }
+                },
+
+                gtk::ScrolledWindow {
+                    set_vexpand: true,
+                    #[name = "selected_image"]
+                    gtk::Image {
+                        set_pixel_size: 300,
+                        set_valign: gtk::Align::Center,
+                        #[watch]
+                        set_from_file: Some(&model.selected_image),
+                    }
                 }
 
            },
@@ -150,11 +158,23 @@ impl Component for ImageFilesetViewer {
         let grid_view_wrapper: TypedGridView<MyGridItem, gtk::SingleSelection> =
             TypedGridView::new();
 
+        let selection_model = &grid_view_wrapper.selection_model;
+        selection_model.connect_selected_notify(clone!(
+            #[strong]
+            sender,
+            move |selection| {
+                sender.input(ImageFilesetViewerMsg::FileSelected {
+                    index: selection.selected(),
+                });
+            }
+        ));
+
         let model = ImageFilesetViewer {
             file_set: init.file_set,
             settings: init.settings,
             thumbnails_mapping: ThumbnailPathMap::new(),
             grid_view_wrapper,
+            selected_image: PathBuf::new(),
         };
         let my_view = &model.grid_view_wrapper.view;
 
@@ -169,6 +189,23 @@ impl Component for ImageFilesetViewer {
         });
 
         ComponentParts { model, widgets }
+    }
+
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
+        match msg {
+            ImageFilesetViewerMsg::FileSelected { index } => {
+                if let Some(item) = self.grid_view_wrapper.get(index) {
+                    // Handle the selected item, e.g., show the image in a larger view
+                    let image_path = item.borrow().image_path.clone();
+                    println!("Selected file: {:?}", image_path);
+                    let temp_dir = std::env::temp_dir();
+                    let path = temp_dir.join(&image_path);
+                    self.selected_image = path;
+                } else {
+                    println!("No item found at index {}", index);
+                }
+            }
+        }
     }
 
     fn update_cmd(
