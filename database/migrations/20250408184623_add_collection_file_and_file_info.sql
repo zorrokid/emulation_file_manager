@@ -101,5 +101,6 @@ CREATE TABLE document_viewer (
     id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
     name TEXT NOT NULL,
     executable TEXT NOT NULL,
-    document_type INTEGER NOT NULL
+    document_type INTEGER NOT NULL,
+    arguments TEXT NOT NULL
 );

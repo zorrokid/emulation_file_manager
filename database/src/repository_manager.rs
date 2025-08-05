@@ -3,10 +3,11 @@ use std::sync::Arc;
 use sqlx::{Pool, Sqlite};
 
 use crate::repository::{
-    emulator_repository::EmulatorRepository, file_info_repository::FileInfoRepository,
-    file_set_repository::FileSetRepository, franchise_repository::FranchiseRepository,
-    release_repository::ReleaseRepository, setting_repository::SettingRepository,
-    software_title_repository::SoftwareTitleRepository, system_repository::SystemRepository,
+    document_viewer_repository::DocumentViewerRepository, emulator_repository::EmulatorRepository,
+    file_info_repository::FileInfoRepository, file_set_repository::FileSetRepository,
+    franchise_repository::FranchiseRepository, release_repository::ReleaseRepository,
+    setting_repository::SettingRepository, software_title_repository::SoftwareTitleRepository,
+    system_repository::SystemRepository,
 };
 
 #[derive(Debug)]
@@ -19,6 +20,7 @@ pub struct RepositoryManager {
     release_repository: ReleaseRepository,
     software_title_repository: SoftwareTitleRepository,
     setting_repository: SettingRepository,
+    document_viewer_repository: DocumentViewerRepository,
 }
 
 impl RepositoryManager {
@@ -31,6 +33,7 @@ impl RepositoryManager {
         let release_repository = ReleaseRepository::new(pool.clone());
         let software_title_repository = SoftwareTitleRepository::new(pool.clone());
         let setting_repository = SettingRepository::new(pool.clone());
+        let document_viewer_repository = DocumentViewerRepository::new(pool.clone());
 
         Self {
             file_info_repository,
@@ -41,6 +44,7 @@ impl RepositoryManager {
             release_repository,
             software_title_repository,
             setting_repository,
+            document_viewer_repository,
         }
     }
 
@@ -74,5 +78,9 @@ impl RepositoryManager {
 
     pub fn settings(&self) -> &SettingRepository {
         &self.setting_repository
+    }
+
+    pub fn get_document_viewer_repository(&self) -> &DocumentViewerRepository {
+        &self.document_viewer_repository
     }
 }

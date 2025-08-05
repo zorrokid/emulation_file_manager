@@ -10,7 +10,7 @@ Dev db is created to data/db.sqlite
 
 ## runtime database
 
-When running application, runtime db is created to ~/.local/share/scm/db.sqlite in Linux 
+When running application, runtime db is created to ~/.local/share/efm/db.sqlite in Linux 
 
 To reset db it can be simply deleted, new db will be created when starting application again.
 
