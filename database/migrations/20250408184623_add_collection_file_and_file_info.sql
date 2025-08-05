@@ -97,3 +97,9 @@ CREATE TABLE setting (
     value TEXT NOT NULL
 );
 
+CREATE TABLE document_viewer (
+    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+    name TEXT NOT NULL,
+    executable TEXT NOT NULL,
+    document_type INTEGER NOT NULL
+);

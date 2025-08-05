@@ -1,3 +1,4 @@
+mod document_file_set_viewer;
 mod emulator_form;
 mod emulator_runner;
 mod file_importer;

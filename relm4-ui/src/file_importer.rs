@@ -1,7 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use core_types::{ImportedFile, ReadFile, Sha1Checksum};
@@ -75,6 +75,14 @@ impl FileImporter {
                 .map(|name| name.to_string_lossy().to_string())
         })
     }
+    pub fn get_file_set_name(&self) -> Option<String> {
+        self.get_current_picked_file_name().and_then(|name| {
+            Path::new(&name)
+                .file_stem()
+                .map(|stem| stem.to_string_lossy().to_string())
+        })
+    }
+
     pub fn set_current_picked_file_content(&mut self, content: HashMap<Sha1Checksum, ReadFile>) {
         self.selected_files_from_current_picked_file
             .extend(content.keys());
