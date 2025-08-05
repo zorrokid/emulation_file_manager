@@ -1,11 +1,19 @@
 use std::sync::Arc;
 
-use crate::{list_item::ListItem, utils::prepare_fileset_for_export};
+use crate::{
+    document_viewer_form::{
+        DocumentViewerFormInit, DocumentViewerFormModel, DocumentViewerFormOutputMsg,
+    },
+    list_item::ListItem,
+    utils::prepare_fileset_for_export,
+};
 use database::{
-    models::{FileSetFileInfo, System},
+    database_error::DatabaseError,
+    models::{DocumentViewer as DocumentViewerDbModel, FileSetFileInfo},
     repository_manager::RepositoryManager,
 };
-use file_export::export_files_zipped_or_non_zipped;
+use emulator_runner::{error::EmulatorRunnerError, run_with_emulator};
+use file_export::{export_files, export_files_zipped_or_non_zipped};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
@@ -17,27 +25,27 @@ use relm4::{
 };
 use service::{
     view_model_service::ViewModelService,
-    view_models::{FileSetViewModel, Settings},
+    view_models::{DocumentViewerListModel, FileSetViewModel, Settings},
 };
 
 #[derive(Debug)]
 pub enum DocumentViewerMsg {
-    FetchViewers { system_id: i64 },
+    FetchViewers,
 
     // list selection messages
     FileSelected { index: u32 },
     ViewerSelected { index: u32 },
 
     OpenViewerForm,
-    AddViewer, // (ViewerListModel),
+    AddViewer(DocumentViewerListModel),
 
     StartViewer,
 }
 
 #[derive(Debug)]
 pub enum DocumentViewerCommandMsg {
-    //ViewersFetched(Result<Vec<ViewerViewModel>, ServiceError>),
-    //FinishedRunningViewer(Result<(), DocumentViewerError>),
+    ViewersFetched(Result<Vec<DocumentViewerDbModel>, DatabaseError>),
+    FinishedRunningViewer(Result<(), EmulatorRunnerError>),
 }
 
 pub struct DocumentViewerInit {
@@ -58,16 +66,16 @@ pub struct DocumentViewer {
     viewer_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
 
     // controllers
-    //viewer_form: Option<Controller<ViewerForm>>,
+    viewer_form: Option<Controller<DocumentViewerFormModel>>,
 
     // data
-    //viewers: Vec<ViewerViewModel>,
+    viewers: Vec<DocumentViewerDbModel>,
 
     // needed for running the viewer:
     settings: Arc<Settings>,
     file_set: FileSetViewModel,
     selected_file: Option<FileSetFileInfo>,
-    //selected_viewer: Option<ViewerViewModel>,
+    selected_viewer: Option<DocumentViewerDbModel>,
 }
 
 #[relm4::component(pub)]
@@ -97,8 +105,8 @@ impl Component for DocumentViewer {
                 gtk::Button {
                     set_label: "Start viewer",
                     connect_clicked => DocumentViewerMsg::StartViewer,
-                    //#[watch]
-                    //set_sensitive: model.selected_viewer.is_some() && model.selected_file.is_some(),
+                    #[watch]
+                    set_sensitive: model.selected_viewer.is_some() && model.selected_file.is_some(),
                 },
             }
         }
@@ -128,7 +136,7 @@ impl Component for DocumentViewer {
             view_model_service: init.view_model_service,
             repository_manager: init.repository_manager,
 
-            //viewers: Vec::new(),
+            viewers: Vec::new(),
             settings: init.settings,
             file_set: init.file_set,
 
@@ -136,8 +144,8 @@ impl Component for DocumentViewer {
             viewer_list_view_wrapper,
 
             selected_file: None,
-            //selected_viewer: None,
-            //viewer_form: None,
+            selected_viewer: None,
+            viewer_form: None,
         };
 
         let file_list_view = &model.file_list_view_wrapper.view;
@@ -169,6 +177,7 @@ impl Component for DocumentViewer {
 
         let widgets = view_output!();
         sender.input(DocumentViewerMsg::FileSelected { index: 0 });
+        sender.input(DocumentViewerMsg::FetchViewers);
         ComponentParts { model, widgets }
     }
 
@@ -176,16 +185,15 @@ impl Component for DocumentViewer {
         match msg {
             DocumentViewerMsg::StartViewer => {
                 println!("Starting viewer...");
-                /*if let (Some(viewer), Some(selected_file)) = (
-                    //self.selected_viewer.clone(),
-                    self.selected_file.clone(),
-                ) {
+                if let (Some(viewer), Some(selected_file)) =
+                    (self.selected_viewer.clone(), self.selected_file.clone())
+                {
                     let temp_dir = std::env::temp_dir();
                     let export_model = prepare_fileset_for_export(
                         &self.file_set,
                         &self.settings.collection_root_dir,
                         temp_dir.as_path(),
-                        viewer.extract_files,
+                        true,
                     );
 
                     println!("Export model prepared: {:?}", export_model);
@@ -197,24 +205,15 @@ impl Component for DocumentViewer {
                         .map(|f| f.file_name.clone())
                         .collect::<Vec<_>>();
 
-                    let extract_files = viewer.extract_files;
-                    println!(
-                        "Extract files: {}, Files in fileset: {:?}",
-                        extract_files, files_in_fileset
-                    );
-                    let starting_file = if extract_files {
-                        selected_file.file_name.clone()
-                    } else {
-                        export_model.exported_zip_file_name.clone()
-                    };
+                    let starting_file = selected_file.file_name.clone();
 
                     let executable = viewer.executable.clone();
                     let arguments = viewer.arguments.clone();
 
                     sender.oneshot_command(async move {
-                        let res = match export_files_zipped_or_non_zipped(&export_model) {
+                        let res = match export_files(&export_model) {
                             Ok(()) => {
-                                run_with_viewer(
+                                run_with_emulator(
                                     executable,
                                     arguments,
                                     files_in_fileset,
@@ -223,7 +222,7 @@ impl Component for DocumentViewer {
                                 )
                                 .await
                             }
-                            Err(e) => Err(DocumentViewerError::IoError(format!(
+                            Err(e) => Err(EmulatorRunnerError::IoError(format!(
                                 "Failed to export files: {}",
                                 e
                             ))),
@@ -233,7 +232,7 @@ impl Component for DocumentViewer {
                 } else {
                     // Handle the case where no viewer or file is selected
                     eprintln!("No viewer or file selected");
-                }*/
+                }
             }
             DocumentViewerMsg::FileSelected { index } => {
                 println!("File selected at index: {}", index);
@@ -246,24 +245,24 @@ impl Component for DocumentViewer {
             }
             DocumentViewerMsg::ViewerSelected { index } => {
                 println!("Viewer selected at index: {}", index);
-                /*let viewer_list_item = self.viewer_list_view_wrapper.get(index);
+                let viewer_list_item = self.viewer_list_view_wrapper.get(index);
                 if let Some(item) = viewer_list_item {
                     let id = item.borrow().id;
                     let viewer = self.viewers.iter().find(|e| e.id == id);
                     self.selected_viewer = viewer.cloned();
-                }*/
+                }
             }
             DocumentViewerMsg::OpenViewerForm => {
                 println!("Open Viewer Form");
-                /*let init_model = ViewerFormInit {
+                let init_model = DocumentViewerFormInit {
                     view_model_service: Arc::clone(&self.view_model_service),
                     repository_manager: Arc::clone(&self.repository_manager),
                 };
-                let viewer_form = ViewerFormModel::builder()
+                let viewer_form = DocumentViewerFormModel::builder()
                     .transient_for(root)
                     .launch(init_model)
                     .forward(sender.input_sender(), |msg| match msg {
-                        ViewerFormOutputMsg::ViewerAdded(viewer_list_model) => {
+                        DocumentViewerFormOutputMsg::DocumentViewerAdded(viewer_list_model) => {
                             DocumentViewerMsg::AddViewer(viewer_list_model)
                         }
                     });
@@ -273,20 +272,21 @@ impl Component for DocumentViewer {
                     .as_ref()
                     .expect("Viewer form should be initialized")
                     .widget()
-                    .present();*/
+                    .present();
             }
-            DocumentViewerMsg::AddViewer/*(_viewer_list_model)*/ => {
-                //sender.input(DocumentViewerMsg::FetchViewers);
+            DocumentViewerMsg::AddViewer(viewer_list_model) => {
+                sender.input(DocumentViewerMsg::FetchViewers);
             }
-            DocumentViewerMsg::FetchViewers { system_id } => {
-                println!("Fetching viewers for systems: {:?}", system_id);
-                /*let view_model_service = Arc::clone(&self.view_model_service);
+            DocumentViewerMsg::FetchViewers => {
+                println!("Fetching viewers");
+                let repository = Arc::clone(&self.repository_manager);
                 sender.oneshot_command(async move {
-                    let viewers_result = view_model_service
-                        .get_viewer_view_models_for_systems(&[system_id])
+                    let viewers_result = repository
+                        .get_document_viewer_repository()
+                        .get_document_viewers()
                         .await;
                     DocumentViewerCommandMsg::ViewersFetched(viewers_result)
-                });*/
+                });
             }
             _ => {}
         }
@@ -296,19 +296,19 @@ impl Component for DocumentViewer {
         &mut self,
         message: Self::CommandOutput,
         _sender: ComponentSender<Self>,
-        _root: &Self::Root,
+        root: &Self::Root,
     ) {
         match message {
-            /*DocumentViewerCommandMsg::ViewersFetched(Ok(viewer_view_models)) => {
-                println!("Viewers fetched successfully: {:?}", viewer_view_models);
-                let viewer_list_items = viewer_view_models
+            DocumentViewerCommandMsg::ViewersFetched(Ok(viewer_db_models)) => {
+                println!("Viewers fetched successfully: {:?}", viewer_db_models);
+                let viewer_list_items = viewer_db_models
                     .iter()
                     .map(|viewer| ListItem {
                         id: viewer.id,
                         name: viewer.name.clone(),
                     })
                     .collect::<Vec<_>>();
-                self.viewers = viewer_view_models;
+                self.viewers = viewer_db_models;
                 self.viewer_list_view_wrapper
                     .extend_from_iter(viewer_list_items);
             }
@@ -322,7 +322,7 @@ impl Component for DocumentViewer {
             }
             DocumentViewerCommandMsg::FinishedRunningViewer(Err(error)) => {
                 eprintln!("Error running viewer: {:?}", error);
-            }*/
+            }
         }
     }
 }

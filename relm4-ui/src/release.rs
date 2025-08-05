@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use core_types::{EMULATOR_FILE_TYPES, IMAGE_FILE_TYPES};
+use core_types::{DOCUMENT_FILE_TYPES, EMULATOR_FILE_TYPES, IMAGE_FILE_TYPES};
 use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
@@ -465,6 +465,40 @@ impl Component for ReleaseModel {
                     self.selected_image_file_set = file_set.cloned();
                 } else {
                     self.selected_image_file_set = None;
+                }
+
+                // document file sets
+
+                let document_file_sets = release
+                    .file_sets
+                    .iter()
+                    .filter(|fs| DOCUMENT_FILE_TYPES.contains(&fs.file_type.into()))
+                    .cloned()
+                    .collect::<Vec<_>>();
+
+                let document_file_set_list_items = document_file_sets.iter().map(|fs| ListItem {
+                    id: fs.id,
+                    name: fs.file_set_name.clone(),
+                });
+
+                self.document_file_set_list_view_wrapper.clear();
+                self.document_file_set_list_view_wrapper
+                    .extend_from_iter(document_file_set_list_items);
+
+                let selected_index = self
+                    .document_file_set_list_view_wrapper
+                    .selection_model
+                    .selected();
+
+                let selected_document_file_set_list_item =
+                    self.document_file_set_list_view_wrapper.get(selected_index);
+                if let Some(file_set_list_item) = selected_document_file_set_list_item {
+                    let file_set = document_file_sets
+                        .iter()
+                        .find(|fs| fs.id == file_set_list_item.borrow().id);
+                    self.selected_document_file_set = file_set.cloned();
+                } else {
+                    self.selected_document_file_set = None;
                 }
 
                 // Update the selected release

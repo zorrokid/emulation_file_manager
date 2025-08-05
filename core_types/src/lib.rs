@@ -5,6 +5,36 @@ use strum_macros::{Display, EnumIter};
 pub type Sha1Checksum = [u8; 20];
 pub type FileSize = u64;
 
+#[derive(Debug, Clone)]
+pub enum CoreTypeError {
+    ConversionError(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub enum DocumentType {
+    Pdf = 1,
+}
+
+impl From<DocumentType> for i64 {
+    fn from(value: DocumentType) -> Self {
+        match value {
+            DocumentType::Pdf => 1,
+        }
+    }
+}
+
+impl TryFrom<i64> for DocumentType {
+    type Error = CoreTypeError;
+    fn try_from(value: i64) -> Result<Self, CoreTypeError> {
+        match value {
+            1 => Ok(DocumentType::Pdf),
+            _ => Err(CoreTypeError::ConversionError(
+                "Failed convert to DocumentType".to_string(),
+            )),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ImportedFile {
     pub original_file_name: String,
@@ -73,4 +103,8 @@ pub const IMAGE_FILE_TYPES: &[FileType] = &[
     FileType::CoverScan,
     FileType::Screenshot,
     FileType::MediaScan,
+    FileType::LoadingScreen,
+    FileType::TitleScreen,
 ];
+
+pub const DOCUMENT_FILE_TYPES: &[FileType] = &[FileType::Manual];

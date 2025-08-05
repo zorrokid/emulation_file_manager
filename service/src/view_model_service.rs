@@ -5,9 +5,9 @@ use database::{models::FileType, repository_manager::RepositoryManager};
 use crate::{
     error::Error,
     view_models::{
-        EmulatorListModel, EmulatorSystemViewModel, EmulatorViewModel, FileSetListModel,
-        FileSetViewModel, ReleaseListModel, ReleaseViewModel, Settings, SoftwareTitleListModel,
-        SystemListModel,
+        DocumentViewerListModel, EmulatorListModel, EmulatorSystemViewModel, EmulatorViewModel,
+        FileSetListModel, FileSetViewModel, ReleaseListModel, ReleaseViewModel, Settings,
+        SoftwareTitleListModel, SystemListModel,
     },
 };
 
@@ -67,6 +67,24 @@ impl ViewModelService {
 
         let list_models: Vec<EmulatorListModel> =
             emulators.iter().map(EmulatorListModel::from).collect();
+
+        Ok(list_models)
+    }
+
+    pub async fn get_document_viewer_list_models(
+        &self,
+    ) -> Result<Vec<DocumentViewerListModel>, Error> {
+        let document_viewers = self
+            .repository_manager
+            .get_document_viewer_repository()
+            .get_document_viewers()
+            .await
+            .map_err(|err| Error::DbError(err.to_string()))?;
+
+        let list_models: Vec<DocumentViewerListModel> = document_viewers
+            .iter()
+            .map(DocumentViewerListModel::from)
+            .collect();
 
         Ok(list_models)
     }
