@@ -5,8 +5,8 @@ use std::{
 };
 
 use database::models::{
-    Emulator, FileSet, FileSetFileInfo, FileType, ReleaseExtended, SettingName, SoftwareTitle,
-    System,
+    DocumentViewer, Emulator, FileSet, FileSetFileInfo, FileType, ReleaseExtended, SettingName,
+    SoftwareTitle, System,
 };
 use file_system::get_files_root_dir;
 
@@ -199,4 +199,19 @@ pub struct ReleaseViewModel {
     pub systems: Vec<System>,
     pub software_titles: Vec<SoftwareTitle>,
     pub file_sets: Vec<FileSetViewModel>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DocumentViewerListModel {
+    pub id: i64,
+    pub name: String,
+}
+
+impl From<&DocumentViewer> for DocumentViewerListModel {
+    fn from(document_viewer: &DocumentViewer) -> Self {
+        DocumentViewerListModel {
+            id: document_viewer.id,
+            name: document_viewer.name.clone(),
+        }
+    }
 }

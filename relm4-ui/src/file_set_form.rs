@@ -350,7 +350,8 @@ impl Component for FileSetFormModel {
             }
             CommandMsg::FilesImported(Ok(imported_files_map)) => {
                 println!("Files imported successfully: {:?}", imported_files_map);
-                if let Some(file_name) = self.file_importer.get_current_picked_file_name() {
+                if let Some(file_set_name) = self.file_importer.get_file_set_name() {
+                    println!("File set name: {}", file_set_name);
                     self.file_importer
                         .set_imported_files(imported_files_map.clone());
 
@@ -363,7 +364,7 @@ impl Component for FileSetFormModel {
                         let result = repo
                             .get_file_set_repository()
                             .add_file_set(
-                                file_name,
+                                file_set_name,
                                 file_type.into(),
                                 files_in_file_set,
                                 &system_ids,
@@ -379,7 +380,7 @@ impl Component for FileSetFormModel {
             }
             CommandMsg::FilesSavedToDatabase(Ok(id)) => {
                 println!("Files saved to database successfully with ID: {}", id);
-                if let Some(file_set_name) = self.file_importer.get_current_picked_file_name() {
+                if let Some(file_set_name) = self.file_importer.get_file_set_name() {
                     let file_set_list_model = FileSetListModel {
                         id,
                         file_set_name,

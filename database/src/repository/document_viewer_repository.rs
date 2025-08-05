@@ -1,0 +1,101 @@
+use std::sync::Arc;
+
+use core_types::DocumentType;
+use sqlx::{Pool, Row, Sqlite};
+
+use crate::{
+    database_error::{DatabaseError, Error},
+    models::DocumentViewer,
+};
+
+#[derive(Debug)]
+pub struct DocumentViewerRepository {
+    pool: Arc<Pool<Sqlite>>,
+}
+
+impl DocumentViewerRepository {
+    pub fn new(pool: Arc<Pool<Sqlite>>) -> Self {
+        Self { pool }
+    }
+
+    pub async fn get_document_viewers(&self) -> Result<Vec<DocumentViewer>, DatabaseError> {
+        let document_viewers = sqlx::query(
+            "SELECT id, name, executable, document_type, arguments 
+             FROM document_viewer",
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        let document_viewers = document_viewers
+            .into_iter()
+            .map(|row| {
+                let document_type: i64 = row.get("document_type");
+                let document_type = DocumentType::try_from(document_type).map_err(|e| {
+                    DatabaseError::DbError(format!(
+                        "Couldn't convert {} to DocumentType",
+                        document_type
+                    ))
+                })?;
+
+                Ok(DocumentViewer {
+                    id: row.get("id"),
+                    name: row.get("name"),
+                    executable: row.get("executable"),
+                    document_type,
+                    arguments: row.get("arguments"),
+                })
+            })
+            .collect::<Result<Vec<_>, DatabaseError>>()?;
+
+        Ok(document_viewers)
+    }
+
+    pub async fn add_document_viewer(
+        &self,
+        name: &String,
+        executable: &String,
+        arguments: &String,
+        document_type: &DocumentType,
+    ) -> Result<i64, Error> {
+        let document_type: i64 = (*document_type).into();
+        let result = sqlx::query!(
+            "INSERT INTO document_viewer (
+                name, 
+                executable, 
+                arguments,
+                document_type
+            ) VALUES (?, ?, ?, ?)",
+            name,
+            executable,
+            arguments,
+            document_type,
+        )
+        .execute(&*self.pool)
+        .await?;
+
+        Ok(result.last_insert_rowid())
+    }
+
+    pub async fn update_document_viewer(
+        &self,
+        document_viewer: &DocumentViewer,
+    ) -> Result<i64, DatabaseError> {
+        let document_type: i64 = document_viewer.document_type.into();
+        let result = sqlx::query!(
+            "UPDATE document_viewer SET 
+             name = ?, 
+             executable = ?, 
+             arguments = ?,
+             document_type = ?
+             WHERE id = ?",
+            document_viewer.name,
+            document_viewer.executable,
+            document_viewer.arguments,
+            document_type,
+            document_viewer.id
+        )
+        .execute(&*self.pool)
+        .await?;
+        Ok(result.last_insert_rowid())
+    }
+}

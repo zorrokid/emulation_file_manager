@@ -187,6 +187,7 @@ impl Component for EmulatorFormModel {
                 },
 
                 gtk::Entry {
+                    #[watch]
                     set_sensitive: model.currently_selected_system.is_some(),
                     connect_activate[sender] => move |entry| {
                         let buffer = entry.buffer();
@@ -231,6 +232,16 @@ impl Component for EmulatorFormModel {
                 });
                 println!("System selected: {}", system.name);
                 self.selected_systems.push(system);
+                let selected_index = self
+                    .selected_systems_list_view_wrapper
+                    .selection_model
+                    .selected();
+
+                if let Some(system) = self.selected_systems_list_view_wrapper.get(selected_index) {
+                    let id = system.borrow().id;
+                    let system = self.selected_systems.iter().find(|s| s.id == id).cloned();
+                    self.currently_selected_system = system;
+                }
             }
             EmulatorFormMsg::OpenSystemSelector => {
                 let init_model = SystemSelectInit {

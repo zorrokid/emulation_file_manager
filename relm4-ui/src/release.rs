@@ -1,8 +1,7 @@
 use std::sync::Arc;
 
-use core_types::{EMULATOR_FILE_TYPES, IMAGE_FILE_TYPES};
+use core_types::{DOCUMENT_FILE_TYPES, EMULATOR_FILE_TYPES, IMAGE_FILE_TYPES};
 use database::repository_manager::RepositoryManager;
-use file_export::{FileExportError, FileSetExportModel};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
@@ -19,6 +18,7 @@ use service::{
 };
 
 use crate::{
+    document_file_set_viewer::{DocumentViewer, DocumentViewerInit},
     emulator_runner::{EmulatorRunnerInit, EmulatorRunnerModel},
     image_fileset_viewer::{ImageFileSetViewerInit, ImageFilesetViewer},
     list_item::ListItem,
@@ -33,12 +33,17 @@ pub struct ReleaseModel {
 
     selected_release: Option<ReleaseViewModel>,
     selected_release_system_names: String,
+
     emulator_file_set_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     image_file_set_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
+    document_file_set_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
+
     selected_file_set: Option<FileSetViewModel>,
     selected_image_file_set: Option<FileSetViewModel>,
+    selected_document_file_set: Option<FileSetViewModel>,
     emulator_runner: Option<Controller<EmulatorRunnerModel>>,
     image_file_set_viewer: Option<Controller<ImageFilesetViewer>>,
+    document_file_set_viewer: Option<Controller<DocumentViewer>>,
     form_window: Option<Controller<ReleaseFormModel>>,
 }
 
@@ -55,11 +60,13 @@ pub enum ReleaseMsg {
     FetchRelease { id: i64 },
     StartEmulatorRunner,
     StartImageFileSetViewer,
+    StartDocumentFileSetViewer,
     StartEditRelease,
     UpdateRelease(ReleaseListModel),
     Clear,
     FileSetSelected { index: u32 },
     ImageFileSetSelected { index: u32 },
+    DocumentFileSetSelected { index: u32 },
 }
 
 #[derive(Debug)]
@@ -106,6 +113,16 @@ impl Component for ReleaseModel {
                 connect_clicked => ReleaseMsg::StartImageFileSetViewer,
             },
 
+            #[local_ref]
+            document_file_set_list_view -> gtk::ListView { },
+
+            gtk::Button {
+                set_label: "View Document Set",
+                #[watch]
+                set_sensitive: model.selected_document_file_set.is_some(),
+                connect_clicked => ReleaseMsg::StartDocumentFileSetViewer,
+            },
+
             gtk::Button {
                 set_label: "Edit",
                 connect_clicked => ReleaseMsg::StartEditRelease,
@@ -127,10 +144,14 @@ impl Component for ReleaseModel {
             selected_release_system_names: String::new(),
             emulator_file_set_list_view_wrapper: TypedListView::new(),
             image_file_set_list_view_wrapper: TypedListView::new(),
+            document_file_set_list_view_wrapper: TypedListView::new(),
+
             selected_file_set: None,
             selected_image_file_set: None,
+            selected_document_file_set: None,
             emulator_runner: None,
             image_file_set_viewer: None,
+            document_file_set_viewer: None,
             form_window: None,
         };
 
@@ -155,6 +176,18 @@ impl Component for ReleaseModel {
                 let index = s.selected();
                 println!("Selected index: {}", index);
                 sender.input(ReleaseMsg::ImageFileSetSelected { index });
+            }
+        ));
+
+        let document_file_set_list_view = &model.document_file_set_list_view_wrapper.view;
+        let document_selection_model = &model.document_file_set_list_view_wrapper.selection_model;
+        document_selection_model.connect_selected_notify(clone!(
+            #[strong]
+            sender,
+            move |s| {
+                let index = s.selected();
+                println!("Selected index: {}", index);
+                sender.input(ReleaseMsg::DocumentFileSetSelected { index });
             }
         ));
 
@@ -224,6 +257,31 @@ impl Component for ReleaseModel {
                         .present();
                 }
             }
+            ReleaseMsg::StartDocumentFileSetViewer => {
+                if let Some(file_set) = &self.selected_document_file_set {
+                    println!(
+                        "Starting document file set viewer with file set: {:?}",
+                        file_set
+                    );
+                    let init_model = DocumentViewerInit {
+                        view_model_service: Arc::clone(&self.view_model_service),
+                        repository_manager: Arc::clone(&self.repository_manager),
+                        settings: Arc::clone(&self.settings),
+                        file_set: file_set.clone(),
+                    };
+                    let document_file_set_viewer = DocumentViewer::builder()
+                        .transient_for(root)
+                        .launch(init_model)
+                        .detach();
+
+                    self.document_file_set_viewer = Some(document_file_set_viewer);
+                    self.document_file_set_viewer
+                        .as_ref()
+                        .expect("Document file set viewer should be set already")
+                        .widget()
+                        .present();
+                }
+            }
             ReleaseMsg::UpdateRelease(release_list_model) => {
                 println!("Updating release with model: {:?}", release_list_model);
                 // TODO
@@ -283,7 +341,7 @@ impl Component for ReleaseModel {
                 }
             }
             ReleaseMsg::ImageFileSetSelected { index } => {
-                println!("File set selected with index: {}", index);
+                println!("Image file set selected with index: {}", index);
                 let selected = self.image_file_set_list_view_wrapper.get(index);
                 if let Some(file_set_list_item) = selected {
                     let file_set_id = file_set_list_item.borrow().id;
@@ -296,9 +354,28 @@ impl Component for ReleaseModel {
                     });
 
                     self.selected_image_file_set = file_set;
-                    println!("Selected file set: {:?}", self.selected_file_set);
+                    println!("Selected image file set: {:?}", self.selected_file_set);
                 } else {
-                    println!("No file set found at index: {}", index);
+                    println!("No image file set found at index: {}", index);
+                }
+            }
+            ReleaseMsg::DocumentFileSetSelected { index } => {
+                println!("Document file set selected with index: {}", index);
+                let selected = self.document_file_set_list_view_wrapper.get(index);
+                if let Some(file_set_list_item) = selected {
+                    let file_set_id = file_set_list_item.borrow().id;
+                    let file_set = self.selected_release.as_ref().and_then(|release| {
+                        release
+                            .file_sets
+                            .iter()
+                            .find(|fs| fs.id == file_set_id)
+                            .cloned()
+                    });
+
+                    self.selected_document_file_set = file_set;
+                    println!("Selected document file set: {:?}", self.selected_file_set);
+                } else {
+                    println!("No document file set found at index: {}", index);
                 }
             }
 
@@ -388,6 +465,40 @@ impl Component for ReleaseModel {
                     self.selected_image_file_set = file_set.cloned();
                 } else {
                     self.selected_image_file_set = None;
+                }
+
+                // document file sets
+
+                let document_file_sets = release
+                    .file_sets
+                    .iter()
+                    .filter(|fs| DOCUMENT_FILE_TYPES.contains(&fs.file_type.into()))
+                    .cloned()
+                    .collect::<Vec<_>>();
+
+                let document_file_set_list_items = document_file_sets.iter().map(|fs| ListItem {
+                    id: fs.id,
+                    name: fs.file_set_name.clone(),
+                });
+
+                self.document_file_set_list_view_wrapper.clear();
+                self.document_file_set_list_view_wrapper
+                    .extend_from_iter(document_file_set_list_items);
+
+                let selected_index = self
+                    .document_file_set_list_view_wrapper
+                    .selection_model
+                    .selected();
+
+                let selected_document_file_set_list_item =
+                    self.document_file_set_list_view_wrapper.get(selected_index);
+                if let Some(file_set_list_item) = selected_document_file_set_list_item {
+                    let file_set = document_file_sets
+                        .iter()
+                        .find(|fs| fs.id == file_set_list_item.borrow().id);
+                    self.selected_document_file_set = file_set.cloned();
+                } else {
+                    self.selected_document_file_set = None;
                 }
 
                 // Update the selected release

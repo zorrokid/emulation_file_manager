@@ -108,8 +108,6 @@ impl Component for ImageFilesetViewer {
     view! {
         gtk::Window {
             set_title: Some("Image Fileset Viewer"),
-            set_default_width: 800,
-            set_default_height: 600,
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
                 gtk::Label {
@@ -128,10 +126,9 @@ impl Component for ImageFilesetViewer {
 
                 gtk::ScrolledWindow {
                     set_vexpand: true,
+                    set_hexpand: true,
                     #[name = "selected_image"]
                     gtk::Image {
-                        set_pixel_size: 300,
-                        set_valign: gtk::Align::Center,
                         #[watch]
                         set_from_file: Some(&model.selected_image),
                     }
