@@ -172,40 +172,30 @@ impl Component for ReleasesModel {
             }
 
             ReleasesMsg::StartAddRelease => {
-                if let Some(software_title_id) = self.selected_software_title_id {
-                    println!(
-                        "Starting to add release for software title ID: {}",
-                        software_title_id
-                    );
+                let release_form_init_model = ReleaseFormInit {
+                    view_model_service: Arc::clone(&self.view_model_service),
+                    repository_manager: Arc::clone(&self.repository_manager),
+                    settings: Arc::clone(&self.settings),
+                    release: None,
+                };
 
-                    let release_form_init_model = ReleaseFormInit {
-                        view_model_service: Arc::clone(&self.view_model_service),
-                        repository_manager: Arc::clone(&self.repository_manager),
-                        settings: Arc::clone(&self.settings),
-                        release: None,
-                    };
+                let form_window = ReleaseFormModel::builder()
+                    .transient_for(root)
+                    .launch(release_form_init_model)
+                    .forward(sender.input_sender(), |msg| match msg {
+                        ReleaseFormOutputMsg::ReleaseCreatedOrUpdated { id } => {
+                            println!("Release created or updated with ID: {}", id);
+                            ReleasesMsg::FetchReleases
+                        }
+                    });
 
-                    let form_window = ReleaseFormModel::builder()
-                        .transient_for(root)
-                        .launch(release_form_init_model)
-                        .forward(sender.input_sender(), |msg| match msg {
-                            ReleaseFormOutputMsg::ReleaseCreatedOrUpdated { id } => {
-                                println!("Release created or updated with ID: {}", id);
-                                ReleasesMsg::FetchReleases
-                            }
-                        });
+                self.form_window = Some(form_window);
 
-                    self.form_window = Some(form_window);
-
-                    self.form_window
-                        .as_ref()
-                        .expect("Form window should be set already")
-                        .widget()
-                        .present();
-                } else {
-                    eprintln!("No software title selected for adding a release.");
-                    return;
-                }
+                self.form_window
+                    .as_ref()
+                    .expect("Form window should be set already")
+                    .widget()
+                    .present();
             }
             ReleasesMsg::AddRelease(release_list_model) => {
                 println!("Release added: {:?}", release_list_model);
