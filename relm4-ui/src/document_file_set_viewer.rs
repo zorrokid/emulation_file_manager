@@ -214,6 +214,7 @@ impl Component for DocumentViewer {
                         .arguments
                         .split("|")
                         .map(|s| s.to_string())
+                        .filter(|s| !s.is_empty())
                         .collect::<Vec<_>>();
 
                     sender.oneshot_command(async move {
