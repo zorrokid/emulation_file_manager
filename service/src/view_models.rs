@@ -16,21 +16,14 @@ pub struct EmulatorViewModel {
     pub name: String,
     pub executable: String,
     pub extract_files: bool,
-    pub systems: Vec<EmulatorSystemViewModel>,
+    pub arguments: Vec<String>,
+    pub system: SystemListModel,
 }
 
 impl Display for EmulatorViewModel {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.name)
     }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct EmulatorSystemViewModel {
-    pub id: i64,
-    pub system_id: i64,
-    pub system_name: String,
-    pub arguments: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -52,12 +45,6 @@ impl Display for EmulatorListModel {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.name)
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct EmulatorSystemListModel {
-    pub id: i64,
-    pub system_name: String,
 }
 
 #[derive(Debug, Clone)]

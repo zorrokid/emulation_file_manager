@@ -25,7 +25,7 @@ pub mod error;
 ///
 pub async fn run_with_emulator(
     executable: String,
-    arguments: String,
+    arguments: Vec<String>,
     file_names: Vec<String>,    // list of files selected for running
     selected_file_name: String, // entry point file in possible set of files
     source_path: PathBuf,       // where to find files
@@ -34,19 +34,29 @@ pub async fn run_with_emulator(
         return Err(EmulatorRunnerError::NoFileSelected);
     }
     let file_path = Path::new(&source_path).join(&selected_file_name);
-    println!("Running emulator with file: {}", file_path.display());
+    println!(
+        "Running emulator with file: {} and arguments: {}",
+        file_path.display(),
+        arguments.join(" ")
+    );
     if !file_path.exists() {
         return Err(EmulatorRunnerError::FileNotFound);
     }
 
     let mut command = Command::new(&executable);
 
-    command.arg(&file_path).current_dir(source_path);
-
-    if !arguments.is_empty() {
-        // TODO: should use command.args() instead and emulator arguments should be split into separate strings
-        command.arg(&arguments);
+    if arguments.is_empty() {
+        println!("No arguments provided, running with file only.");
+        command.arg(&file_path).current_dir(&source_path);
+    } else {
+        println!("Running with arguments: {}", arguments.join(" "));
+        command
+            .args(&arguments)
+            .arg(&file_path)
+            .current_dir(&source_path);
     }
+
+    println!("Executing command: {:?}", command);
 
     let status = command.status().await.map_err(|e| {
         EmulatorRunnerError::IoError(format!("Failed to get status of emulator: {}", e))

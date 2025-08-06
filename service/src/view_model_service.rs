@@ -5,9 +5,8 @@ use database::{models::FileType, repository_manager::RepositoryManager};
 use crate::{
     error::Error,
     view_models::{
-        DocumentViewerListModel, EmulatorListModel, EmulatorSystemViewModel, EmulatorViewModel,
-        FileSetListModel, FileSetViewModel, ReleaseListModel, ReleaseViewModel, Settings,
-        SoftwareTitleListModel, SystemListModel,
+        DocumentViewerListModel, EmulatorViewModel, FileSetListModel, FileSetViewModel,
+        ReleaseListModel, ReleaseViewModel, Settings, SoftwareTitleListModel, SystemListModel,
     },
 };
 
@@ -31,44 +30,39 @@ impl ViewModelService {
         &self,
         emulator_id: i64,
     ) -> Result<EmulatorViewModel, Error> {
-        let (emulator, emulator_systems) = self
+        let emulator = self
             .repository_manager
             .get_emulator_repository()
-            .get_emulator_with_systems(emulator_id)
+            .get_emulator(emulator_id)
             .await?;
 
-        println!("Emulator: {:?}", emulator);
-        println!("Emulator Systems: {:?}", emulator_systems);
+        let system = self
+            .repository_manager
+            .get_system_repository()
+            .get_system(emulator.system_id)
+            .await?;
+
+        let system = SystemListModel {
+            id: system.id,
+            name: system.name,
+            can_delete: false,
+        };
+
+        let arguments = emulator
+            .arguments
+            .split('|')
+            .filter(|arg| !arg.trim().is_empty())
+            .map(String::from)
+            .collect::<Vec<String>>();
 
         Ok(EmulatorViewModel {
             id: emulator.id,
             name: emulator.name,
             executable: emulator.executable,
             extract_files: emulator.extract_files,
-            systems: emulator_systems
-                .into_iter()
-                .map(|es| EmulatorSystemViewModel {
-                    id: es.id,
-                    system_id: es.system_id,
-                    system_name: es.system_name,
-                    arguments: es.arguments,
-                })
-                .collect(),
+            arguments,
+            system,
         })
-    }
-
-    pub async fn get_emulator_list_models(&self) -> Result<Vec<EmulatorListModel>, Error> {
-        let emulators = self
-            .repository_manager
-            .get_emulator_repository()
-            .get_emulators()
-            .await
-            .map_err(|err| Error::DbError(err.to_string()))?;
-
-        let list_models: Vec<EmulatorListModel> =
-            emulators.iter().map(EmulatorListModel::from).collect();
-
-        Ok(list_models)
     }
 
     pub async fn get_document_viewer_list_models(
@@ -103,27 +97,40 @@ impl ViewModelService {
         let mut emulator_view_models: Vec<EmulatorViewModel> = vec![];
 
         for emulator in emulators {
-            let (emulator, emulator_systems) = self
+            let emulator = self
                 .repository_manager
                 .get_emulator_repository()
-                .get_emulator_with_systems(emulator.id)
+                .get_emulator(emulator.id)
                 .await
                 .map_err(|err| Error::DbError(err.to_string()))?;
+
+            let system = self
+                .repository_manager
+                .get_system_repository()
+                .get_system(emulator.system_id)
+                .await
+                .map_err(|err| Error::DbError(err.to_string()))?;
+
+            let system = SystemListModel {
+                id: system.id,
+                name: system.name,
+                can_delete: false,
+            };
+
+            let arguments = emulator
+                .arguments
+                .split('|')
+                .filter(|arg| !arg.trim().is_empty())
+                .map(String::from)
+                .collect::<Vec<String>>();
 
             let view_model = EmulatorViewModel {
                 id: emulator.id,
                 name: emulator.name,
                 executable: emulator.executable,
                 extract_files: emulator.extract_files,
-                systems: emulator_systems
-                    .into_iter()
-                    .map(|es| EmulatorSystemViewModel {
-                        id: es.id,
-                        system_id: es.system_id,
-                        system_name: es.system_name,
-                        arguments: es.arguments,
-                    })
-                    .collect(),
+                system,
+                arguments,
             };
 
             emulator_view_models.push(view_model);
@@ -304,10 +311,7 @@ mod tests {
     use std::path::PathBuf;
 
     use super::*;
-    use database::{
-        models::{EmulatorSystemUpdateModel, SettingName},
-        setup_test_db,
-    };
+    use database::{models::SettingName, setup_test_db};
 
     #[async_std::test]
     async fn test_get_emulator_view_model() {
@@ -320,19 +324,15 @@ mod tests {
             .add_system(&"Test System".to_string())
             .await
             .unwrap();
-        let emulator_systems = vec![EmulatorSystemUpdateModel {
-            id: None,
-            system_id,
-            arguments: "args".to_string(),
-        }];
 
         let emulator_id = repository_manager
             .get_emulator_repository()
-            .add_emulator_with_systems(
+            .add_emulator(
                 "Test Emulator".to_string(),
                 "temu".to_string(),
                 false,
-                emulator_systems,
+                "args".to_string(),
+                system_id,
             )
             .await
             .unwrap();
@@ -345,11 +345,10 @@ mod tests {
         assert_eq!(emulator_view_model.id, emulator_id);
         assert_eq!(emulator_view_model.name, "Test Emulator");
         assert_eq!(emulator_view_model.executable, "temu");
+        assert_eq!(emulator_view_model.arguments, vec!["args"]);
         assert!(!emulator_view_model.extract_files);
-        assert_eq!(emulator_view_model.systems.len(), 1);
-        assert_eq!(emulator_view_model.systems[0].system_id, system_id);
-        assert_eq!(emulator_view_model.systems[0].system_name, "Test System");
-        assert_eq!(emulator_view_model.systems[0].arguments, "args");
+        assert_eq!(emulator_view_model.system.id, system_id);
+        assert_eq!(emulator_view_model.system.name, "Test System");
     }
 
     #[async_std::test]
