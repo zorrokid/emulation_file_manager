@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use crate::{database_error::Error, models::System};
+use crate::{
+    database_error::{DatabaseError, Error},
+    models::System,
+};
 use sqlx::{Pool, Sqlite};
 
 #[derive(Debug)]
@@ -12,7 +15,7 @@ impl SystemRepository {
     pub fn new(pool: Arc<Pool<Sqlite>>) -> Self {
         Self { pool }
     }
-    pub async fn get_system(&self, id: i64) -> Result<System, Error> {
+    pub async fn get_system(&self, id: i64) -> Result<System, DatabaseError> {
         let system = sqlx::query_as!(
             System,
             "SELECT id, name 
@@ -55,16 +58,7 @@ impl SystemRepository {
         .fetch_one(&*self.pool)
         .await?;
 
-        let emulators_count = sqlx::query_scalar!(
-            "SELECT COUNT(*) 
-             FROM emulator_system 
-             WHERE system_id = ?",
-            system_id
-        )
-        .fetch_one(&*self.pool)
-        .await?;
-
-        Ok(releases_count > 0 || emulators_count > 0)
+        Ok(releases_count > 0)
     }
 
     pub async fn add_system(&self, name: &String) -> Result<i64, Error> {

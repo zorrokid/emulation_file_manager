@@ -218,66 +218,59 @@ impl Component for EmulatorRunnerModel {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         match msg {
             EmulatorRunnerMsg::RunEmulator => {
-                if let (Some(emulator), Some(selected_file), Some(system)) = (
-                    self.selected_emulator.clone(),
-                    self.selected_file.clone(),
-                    self.selected_system.clone(),
-                ) {
-                    let emulator_system =
-                        emulator.systems.iter().find(|s| s.system_id == system.id);
+                if let (Some(emulator), Some(selected_file)) =
+                    (self.selected_emulator.clone(), self.selected_file.clone())
+                {
+                    let temp_dir = std::env::temp_dir();
+                    let export_model = prepare_fileset_for_export(
+                        &self.file_set,
+                        &self.settings.collection_root_dir,
+                        temp_dir.as_path(),
+                        emulator.extract_files,
+                    );
 
-                    if let Some(emulator_system) = emulator_system {
-                        let temp_dir = std::env::temp_dir();
-                        let export_model = prepare_fileset_for_export(
-                            &self.file_set,
-                            &self.settings.collection_root_dir,
-                            temp_dir.as_path(),
-                            emulator.extract_files,
-                        );
+                    println!("Export model prepared: {:?}", export_model);
 
-                        println!("Export model prepared: {:?}", export_model);
+                    let files_in_fileset = self
+                        .file_set
+                        .files
+                        .iter()
+                        .map(|f| f.file_name.clone())
+                        .collect::<Vec<_>>();
 
-                        let files_in_fileset = self
-                            .file_set
-                            .files
-                            .iter()
-                            .map(|f| f.file_name.clone())
-                            .collect::<Vec<_>>();
+                    let extract_files = emulator.extract_files;
+                    println!(
+                        "Extract files: {}, Files in fileset: {:?}",
+                        extract_files, files_in_fileset
+                    );
+                    let starting_file = if extract_files {
+                        selected_file.file_name.clone()
+                    } else {
+                        export_model.exported_zip_file_name.clone()
+                    };
 
-                        let extract_files = emulator.extract_files;
-                        println!(
-                            "Extract files: {}, Files in fileset: {:?}",
-                            extract_files, files_in_fileset
-                        );
-                        let starting_file = if extract_files {
-                            selected_file.file_name.clone()
-                        } else {
-                            export_model.exported_zip_file_name.clone()
+                    let executable = emulator.executable.clone();
+                    let arguments = emulator.arguments.clone();
+
+                    sender.oneshot_command(async move {
+                        let res = match export_files_zipped_or_non_zipped(&export_model) {
+                            Ok(()) => {
+                                run_with_emulator(
+                                    executable,
+                                    arguments,
+                                    files_in_fileset,
+                                    starting_file,
+                                    temp_dir,
+                                )
+                                .await
+                            }
+                            Err(e) => Err(EmulatorRunnerError::IoError(format!(
+                                "Failed to export files: {}",
+                                e
+                            ))),
                         };
-
-                        let executable = emulator.executable.clone();
-                        let arguments = emulator_system.arguments.clone();
-
-                        sender.oneshot_command(async move {
-                            let res = match export_files_zipped_or_non_zipped(&export_model) {
-                                Ok(()) => {
-                                    run_with_emulator(
-                                        executable,
-                                        arguments,
-                                        files_in_fileset,
-                                        starting_file,
-                                        temp_dir,
-                                    )
-                                    .await
-                                }
-                                Err(e) => Err(EmulatorRunnerError::IoError(format!(
-                                    "Failed to export files: {}",
-                                    e
-                                ))),
-                            };
-                            EmulatorRunnerCommandMsg::FinishedRunningEmulator(res)
-                        });
-                    }
+                        EmulatorRunnerCommandMsg::FinishedRunningEmulator(res)
+                    });
                 } else {
                     // Handle the case where no emulator or file is selected
                     eprintln!("No emulator or file selected");

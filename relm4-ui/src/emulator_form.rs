@@ -1,8 +1,6 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
-use database::{
-    database_error::Error, models::EmulatorSystemUpdateModel, repository_manager::RepositoryManager,
-};
+use database::{database_error::Error, repository_manager::RepositoryManager};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, FactorySender,
     gtk::{
@@ -115,12 +113,10 @@ pub struct EmulatorFormModel {
     pub name: String,
     pub executable: String,
     pub extract_files: bool,
-    pub selected_systems: Vec<SystemListModel>,
-    pub selected_systems_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
+    pub selected_system: Option<SystemListModel>,
     system_selector: Option<Controller<SystemSelectModel>>,
     pub command_line_arguments: FactoryVecDeque<CommandLineArgument>,
-    pub currently_selected_system: Option<SystemListModel>,
-    pub system_arguments: HashMap<i64, Vec<String>>,
+    pub arguments: Vec<String>,
 }
 
 #[relm4::component(pub)]
@@ -174,8 +170,16 @@ impl Component for EmulatorFormModel {
                     connect_toggled => EmulatorFormMsg::ExtractFilesToggled
                 },
 
-                #[local_ref]
-                selected_systems_list_view -> gtk::ListView { },
+                gtk::Label {
+                    set_label: "Select system:",
+                },
+
+                gtk::Label {
+                    #[watch]
+                    set_label: model.selected_system.as_ref()
+                        .map_or("No system selected", |s| s.name.as_str()),
+                },
+
 
                 gtk::Button {
                     set_label: "Select System",
@@ -188,7 +192,7 @@ impl Component for EmulatorFormModel {
 
                 gtk::Entry {
                     #[watch]
-                    set_sensitive: model.currently_selected_system.is_some(),
+                    set_sensitive: model.selected_system.is_some(),
                     connect_activate[sender] => move |entry| {
                         let buffer = entry.buffer();
                         sender.input(EmulatorFormMsg::AddCommandLineArgument(buffer.text().into()));
@@ -208,7 +212,7 @@ impl Component for EmulatorFormModel {
                 gtk::Button {
                     set_label: "Submit",
                     #[watch]
-                    set_sensitive: !model.executable.is_empty() && !model.selected_systems.is_empty(),
+                    set_sensitive: !model.executable.is_empty() && model.selected_system.is_some(),
                     connect_clicked => EmulatorFormMsg::Submit,
                 }
             }
@@ -226,28 +230,20 @@ impl Component for EmulatorFormModel {
                 println!("Extract files toggled: {}", self.extract_files);
             }
             EmulatorFormMsg::SystemSelected(system) => {
-                self.selected_systems_list_view_wrapper.append(ListItem {
-                    name: system.name.clone(),
-                    id: system.id,
-                });
                 println!("System selected: {}", system.name);
-                self.selected_systems.push(system);
-                let selected_index = self
-                    .selected_systems_list_view_wrapper
-                    .selection_model
-                    .selected();
-
-                if let Some(system) = self.selected_systems_list_view_wrapper.get(selected_index) {
-                    let id = system.borrow().id;
-                    let system = self.selected_systems.iter().find(|s| s.id == id).cloned();
-                    self.currently_selected_system = system;
-                }
+                self.selected_system = Some(system);
             }
             EmulatorFormMsg::OpenSystemSelector => {
+                let selected_system_ids = self
+                    .selected_system
+                    .as_ref()
+                    .map(|s| s.id)
+                    .into_iter()
+                    .collect::<Vec<_>>();
                 let init_model = SystemSelectInit {
                     view_model_service: Arc::clone(&self.view_model_service),
                     repository_manager: Arc::clone(&self.repository_manager),
-                    selected_system_ids: self.selected_systems.iter().map(|s| s.id).collect(),
+                    selected_system_ids,
                 };
                 let system_selector = SystemSelectModel::builder()
                     .transient_for(root)
@@ -266,69 +262,38 @@ impl Component for EmulatorFormModel {
                     .present();
             }
             EmulatorFormMsg::AddCommandLineArgument(argument) => {
-                if let Some(system) = self.currently_selected_system.clone() {
-                    self.command_line_arguments
-                        .guard()
-                        .push_back(argument.clone());
-                    self.system_arguments
-                        .entry(system.id)
-                        .or_default()
-                        .push(argument);
-                }
+                self.command_line_arguments
+                    .guard()
+                    .push_back(argument.clone());
+                self.arguments.push(argument);
             }
             EmulatorFormMsg::DeleteCommandLineArgument(index) => {
                 self.command_line_arguments
                     .guard()
                     .remove(index.current_index());
             }
-            EmulatorFormMsg::SystemFocused { index } => {
-                let system_list_item = self.selected_systems_list_view_wrapper.get(index);
-                if let Some(system_list_item) = system_list_item {
-                    let system_id = system_list_item.borrow().id;
-                    let arguments = self.system_arguments.get(&system_id);
-                    if let Some(arguments) = arguments {
-                        self.command_line_arguments.guard().clear();
-                        for arg in arguments {
-                            self.command_line_arguments.guard().push_back(arg.clone());
-                        }
-                    }
-                }
-            }
 
             EmulatorFormMsg::Submit => {
-                println!(
-                    "Submitting Emulator: {}, Extract Files: {}, Systems: {:?}",
-                    self.executable, self.extract_files, self.selected_systems
-                );
-                let repository_manager = Arc::clone(&self.repository_manager);
-                let executable = self.executable.clone();
-                let name = self.name.clone();
-                let extract_files = self.extract_files;
+                if let Some(system) = &self.selected_system {
+                    println!(
+                        "Submitting Emulator: {}, Extract Files: {}, System: {:?}",
+                        self.executable, self.extract_files, self.selected_system
+                    );
+                    let repository_manager = Arc::clone(&self.repository_manager);
+                    let executable = self.executable.clone();
+                    let name = self.name.clone();
+                    let extract_files = self.extract_files;
+                    let system_id = system.id;
+                    let arguments = self.arguments.join("|");
 
-                let systems = self
-                    .selected_systems
-                    .iter()
-                    .map(|s| {
-                        let system_id = s.id;
-                        let arguments = self.system_arguments.get(&system_id);
-                        let arguments_string = arguments
-                            .map(|args| args.join("|"))
-                            .unwrap_or("".to_string());
-                        EmulatorSystemUpdateModel {
-                            id: None,
-                            system_id,
-                            arguments: arguments_string,
-                        }
-                    })
-                    .collect();
-
-                sender.oneshot_command(async move {
-                    let res = repository_manager
-                        .get_emulator_repository()
-                        .add_emulator_with_systems(name, executable, extract_files, systems)
-                        .await;
-                    EmulatorFormCommandMsg::EmulatorSubmitted(res)
-                });
+                    sender.oneshot_command(async move {
+                        let res = repository_manager
+                            .get_emulator_repository()
+                            .add_emulator(name, executable, extract_files, arguments, system_id)
+                            .await;
+                        EmulatorFormCommandMsg::EmulatorSubmitted(res)
+                    });
+                }
             }
             EmulatorFormMsg::NameChanged(name) => {
                 self.name = name;
@@ -405,16 +370,13 @@ impl Component for EmulatorFormModel {
             repository_manager: init.repository_manager,
             executable: String::new(),
             extract_files: false,
-            selected_systems: Vec::new(),
-            selected_systems_list_view_wrapper,
+            selected_system: None,
             system_selector: None,
             command_line_arguments,
-            currently_selected_system: None,
-            system_arguments: HashMap::<i64, Vec<String>>::new(),
+            arguments: Vec::new(),
             name: String::new(),
         };
 
-        let selected_systems_list_view = &model.selected_systems_list_view_wrapper.view;
         let command_line_argument_list_box = model.command_line_arguments.widget();
         let widgets = view_output!();
 

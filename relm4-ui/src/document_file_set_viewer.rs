@@ -208,7 +208,13 @@ impl Component for DocumentViewer {
                     let starting_file = selected_file.file_name.clone();
 
                     let executable = viewer.executable.clone();
-                    let arguments = viewer.arguments.clone();
+                    // TODO: create a viewer view model that has processed arguments already to
+                    // correct format
+                    let arguments = viewer
+                        .arguments
+                        .split("|")
+                        .map(|s| s.to_string())
+                        .collect::<Vec<_>>();
 
                     sender.oneshot_command(async move {
                         let res = match export_files(&export_model) {

@@ -9,15 +9,9 @@ CREATE TABLE emulator (
     id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
     name TEXT NOT NULL,
     executable TEXT NOT NULL,
-    extract_files INTEGER NOT NULL
-);
-
-CREATE TABLE emulator_system (
-    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-    emulator_id INTEGER NOT NULL,
+    extract_files INTEGER NOT NULL,
+    arguments TEXT NOT NULL,
     system_id INTEGER NOT NULL,
-    arguments TEXT,
-    FOREIGN key (emulator_id) REFERENCES emulator(id) ON DELETE CASCADE,
     FOREIGN KEY (system_id) REFERENCES system(id) ON DELETE CASCADE
 );
 
