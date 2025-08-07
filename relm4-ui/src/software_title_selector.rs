@@ -28,6 +28,7 @@ pub enum SoftwareTitleSelectMsg {
 #[derive(Debug)]
 pub enum SoftwareTitleSelectOutputMsg {
     SoftwareTitleSelected(SoftwareTitleListModel),
+    SoftwareTitleCreated(SoftwareTitleListModel),
 }
 
 #[derive(Debug)]
@@ -216,6 +217,11 @@ impl Component for SoftwareTitleSelectModel {
                     software_title_list_model.name
                 );
                 sender.input(SoftwareTitleSelectMsg::FetchSoftwareTitles);
+                sender
+                    .output(SoftwareTitleSelectOutputMsg::SoftwareTitleCreated(
+                        software_title_list_model,
+                    ))
+                    .expect("Failed to send software_title selection output");
             }
             CommandMsg::AddingSoftwareTitleFailed(error) => {
                 eprintln!("Error adding software_title: {:?}", error);

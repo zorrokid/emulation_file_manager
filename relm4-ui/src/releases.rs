@@ -9,12 +9,12 @@ use relm4::{
 use service::{
     error::Error,
     view_model_service::{ReleaseFilter, ViewModelService},
-    view_models::{ReleaseListModel, Settings},
+    view_models::{ReleaseListModel, Settings, SoftwareTitleListModel},
 };
 
 use crate::{
     list_item::ListItem,
-    release::{ReleaseInitModel, ReleaseModel, ReleaseMsg},
+    release::{ReleaseInitModel, ReleaseModel, ReleaseMsg, ReleaseOutputMsg},
     release_form::{ReleaseFormInit, ReleaseFormModel, ReleaseFormOutputMsg},
 };
 
@@ -25,6 +25,8 @@ pub enum ReleasesMsg {
     StartAddRelease,
     AddRelease(ReleaseListModel),
     FetchReleases,
+    ReleaseCreatedOrUpdated { id: i64 },
+    SofwareTitleCreated(SoftwareTitleListModel),
 }
 
 #[derive(Debug)]
@@ -50,10 +52,17 @@ pub struct ReleasesInit {
     pub settings: Arc<Settings>,
 }
 
+#[derive(Debug)]
+pub enum ReleasesOutputMsg {
+    SoftwareTitleCreated {
+        software_title_list_model: SoftwareTitleListModel,
+    },
+}
+
 #[relm4::component(pub)]
 impl Component for ReleasesModel {
     type Input = ReleasesMsg;
-    type Output = ();
+    type Output = ReleasesOutputMsg;
     type CommandOutput = CommandMsg;
     type Init = ReleasesInit;
 
@@ -100,7 +109,14 @@ impl Component for ReleasesModel {
             repository_manager: Arc::clone(&init_model.repository_manager),
             settings: Arc::clone(&init_model.settings),
         };
-        let release_model = ReleaseModel::builder().launch(release_init_model).detach();
+        let release_model = ReleaseModel::builder().launch(release_init_model).forward(
+            sender.input_sender(),
+            |msg| match msg {
+                ReleaseOutputMsg::SoftwareTitleCreated(software_title_list_model) => {
+                    ReleasesMsg::SofwareTitleCreated(software_title_list_model)
+                }
+            },
+        );
 
         let model = ReleasesModel {
             view_model_service: init_model.view_model_service,
@@ -185,7 +201,12 @@ impl Component for ReleasesModel {
                     .forward(sender.input_sender(), |msg| match msg {
                         ReleaseFormOutputMsg::ReleaseCreatedOrUpdated { id } => {
                             println!("Release created or updated with ID: {}", id);
-                            ReleasesMsg::FetchReleases
+                            //ReleasesMsg::FetchReleases
+                            ReleasesMsg::ReleaseCreatedOrUpdated { id }
+                        }
+                        ReleaseFormOutputMsg::SoftwareTitleCreated(software_title_list_model) => {
+                            println!("Software title created: {:?}", software_title_list_model);
+                            ReleasesMsg::SofwareTitleCreated(software_title_list_model)
                         }
                     });
 
@@ -202,6 +223,16 @@ impl Component for ReleasesModel {
                 self.releases_list_view_wrapper.append(ListItem {
                     id: release_list_model.id,
                     name: release_list_model.name,
+                });
+            }
+            ReleasesMsg::ReleaseCreatedOrUpdated { id } => {
+                println!("Release created or updated with ID: {}", id);
+                // TODO fetch only the created of rupdated release
+                sender.input(ReleasesMsg::FetchReleases);
+            }
+            ReleasesMsg::SofwareTitleCreated(software_title_list_model) => {
+                sender.output(ReleasesOutputMsg::SoftwareTitleCreated {
+                    software_title_list_model,
                 });
             }
         }

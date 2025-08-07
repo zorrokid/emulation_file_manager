@@ -18,7 +18,7 @@ use std::sync::Arc;
 
 use database::{get_db_pool, repository_manager::RepositoryManager};
 use list_item::ListItem;
-use releases::{ReleasesInit, ReleasesModel, ReleasesMsg};
+use releases::{ReleasesInit, ReleasesModel, ReleasesMsg, ReleasesOutputMsg};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmApp,
     gtk::{self, glib::clone, prelude::*},
@@ -43,7 +43,7 @@ enum AppMsg {
     Initialize,
     SoftwareTitleSelected { index: u32 },
     AddSoftwareTitle { name: String },
-    Dummy,
+    SoftwareTitleCreated(SoftwareTitleListModel),
 }
 
 #[derive(Debug)]
@@ -229,8 +229,12 @@ impl Component for AppModel {
                     }
                 ));
             }
-            AppMsg::Dummy => {
-                println!("Dummy message received");
+            AppMsg::SoftwareTitleCreated(software_title_list_model) => {
+                self.list_view_wrapper.append(ListItem {
+                    id: software_title_list_model.id,
+                    name: software_title_list_model.name.clone(),
+                });
+                self.software_titles.push(software_title_list_model);
             }
         }
     }
@@ -267,7 +271,9 @@ impl Component for AppModel {
                 let releases = ReleasesModel::builder().launch(releases_init).forward(
                     sender.input_sender(),
                     |msg| match msg {
-                        _ => AppMsg::Dummy, // Example message forwarding
+                        ReleasesOutputMsg::SoftwareTitleCreated {
+                            software_title_list_model,
+                        } => AppMsg::SoftwareTitleCreated(software_title_list_model),
                     },
                 );
                 self.releases_view.append(releases.widget());

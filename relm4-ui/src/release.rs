@@ -14,7 +14,9 @@ use relm4::{
 use service::{
     error::Error,
     view_model_service::ViewModelService,
-    view_models::{FileSetViewModel, ReleaseListModel, ReleaseViewModel, Settings},
+    view_models::{
+        FileSetViewModel, ReleaseListModel, ReleaseViewModel, Settings, SoftwareTitleListModel,
+    },
 };
 
 use crate::{
@@ -58,17 +60,33 @@ pub struct ReleaseInitModel {
 
 #[derive(Debug)]
 pub enum ReleaseMsg {
-    ReleaseSelected { id: i64 },
-    FetchRelease { id: i64 },
+    ReleaseSelected {
+        id: i64,
+    },
+    FetchRelease {
+        id: i64,
+    },
     StartEmulatorRunner,
     StartImageFileSetViewer,
     StartDocumentFileSetViewer,
     StartEditRelease,
     UpdateRelease(ReleaseListModel),
     Clear,
-    FileSetSelected { index: u32 },
-    ImageFileSetSelected { index: u32 },
-    DocumentFileSetSelected { index: u32 },
+    FileSetSelected {
+        index: u32,
+    },
+    ImageFileSetSelected {
+        index: u32,
+    },
+    DocumentFileSetSelected {
+        index: u32,
+    },
+    ReleaseCreatedOrUpdated {
+        id: i64,
+    },
+    SoftwareTitleCreated {
+        software_title_list_model: SoftwareTitleListModel,
+    },
 }
 
 #[derive(Debug)]
@@ -76,10 +94,15 @@ pub enum ReleaseCommandMsg {
     FetchedRelease(Result<ReleaseViewModel, Error>),
 }
 
+#[derive(Debug)]
+pub enum ReleaseOutputMsg {
+    SoftwareTitleCreated(SoftwareTitleListModel),
+}
+
 #[relm4::component(pub)]
 impl Component for ReleaseModel {
     type Input = ReleaseMsg;
-    type Output = ();
+    type Output = ReleaseOutputMsg;
     type CommandOutput = ReleaseCommandMsg;
     type Init = ReleaseInitModel;
 
@@ -356,6 +379,14 @@ impl Component for ReleaseModel {
                             ReleaseFormOutputMsg::ReleaseCreatedOrUpdated { id } => {
                                 ReleaseMsg::FetchRelease { id }
                             }
+                            ReleaseFormOutputMsg::SoftwareTitleCreated(
+                                software_title_list_model,
+                            ) => {
+                                println!("Software title created: {:?}", software_title_list_model);
+                                ReleaseMsg::SoftwareTitleCreated {
+                                    software_title_list_model,
+                                }
+                            }
                         });
 
                     self.form_window = Some(form_window);
@@ -431,6 +462,17 @@ impl Component for ReleaseModel {
                 } else {
                     println!("No document file set found at index: {}", index);
                 }
+            }
+            ReleaseMsg::ReleaseCreatedOrUpdated { id } => {
+                println!("Release created or updated with ID: {}", id);
+                sender.input(ReleaseMsg::FetchRelease { id });
+            }
+            ReleaseMsg::SoftwareTitleCreated {
+                software_title_list_model,
+            } => {
+                sender.output(ReleaseOutputMsg::SoftwareTitleCreated(
+                    software_title_list_model,
+                ));
             }
 
             _ => (),
