@@ -118,6 +118,7 @@ impl TryFrom<i64> for FileType {
             10 => Ok(FileType::ManualScan),
             11 => Ok(FileType::MediaScan),
             12 => Ok(FileType::PackageScan),
+            13 => Ok(FileType::InlayScan),
             _ => Err(sqlx::Error::ColumnDecode {
                 index: "file_type".into(),
                 source: Box::new(std::io::Error::new(

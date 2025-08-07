@@ -88,9 +88,11 @@ impl Component for ReleaseModel {
         gtk::Box {
             set_orientation: gtk::Orientation::Vertical,
             append = model.image_viewer.widget(),
+            set_spacing: 5,
 
             gtk::Box {
                 set_orientation: gtk::Orientation::Horizontal,
+                set_spacing: 5,
                 gtk::Label {
                     set_label: "Systems:",
                 },
@@ -100,43 +102,74 @@ impl Component for ReleaseModel {
                 },
             },
 
-            gtk::Label {
-                set_label: "Emulator File Sets:",
-            },
-            #[local_ref]
-            file_set_list_view -> gtk::ListView { },
+            gtk::Box {
+                set_orientation: gtk::Orientation::Horizontal,
+                set_spacing: 5,
 
-            gtk::Button {
-                set_label: "Run with Emulator",
-                #[watch]
-                set_sensitive: model.selected_file_set.is_some(),
-                connect_clicked => ReleaseMsg::StartEmulatorRunner,
-            },
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Vertical,
+                    set_hexpand: true,
+                    set_spacing: 5,
 
-            gtk::Label {
-                set_label: "Image File Sets:",
-            },
-            #[local_ref]
-            image_file_set_list_view -> gtk::ListView { },
+                    gtk::Label {
+                        set_label: "Emulator File Sets:",
+                    },
+                    #[local_ref]
+                    file_set_list_view -> gtk::ListView {
+                        set_vexpand: true,
+                    },
 
-            gtk::Button {
-                set_label: "View Image File Set",
-                #[watch]
-                set_sensitive: model.selected_image_file_set.is_some(),
-                connect_clicked => ReleaseMsg::StartImageFileSetViewer,
-            },
+                    gtk::Button {
+                        set_label: "Run with Emulator",
+                        #[watch]
+                        set_sensitive: model.selected_file_set.is_some(),
+                        connect_clicked => ReleaseMsg::StartEmulatorRunner,
+                    },
+                },
 
-            gtk::Label {
-                set_label: "Document File Sets:",
-            },
-            #[local_ref]
-            document_file_set_list_view -> gtk::ListView { },
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Vertical,
+                    set_hexpand: true,
 
-            gtk::Button {
-                set_label: "View Document Set",
-                #[watch]
-                set_sensitive: model.selected_document_file_set.is_some(),
-                connect_clicked => ReleaseMsg::StartDocumentFileSetViewer,
+                    set_spacing: 5,
+
+                    gtk::Label {
+                        set_label: "Image File Sets:",
+                    },
+                    #[local_ref]
+                    image_file_set_list_view -> gtk::ListView {
+                        set_vexpand: true,
+                    },
+
+                    gtk::Button {
+                        set_label: "View Image File Set",
+                        #[watch]
+                        set_sensitive: model.selected_image_file_set.is_some(),
+                        connect_clicked => ReleaseMsg::StartImageFileSetViewer,
+                    },
+                },
+
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Vertical,
+                    set_hexpand: true,
+
+                    set_spacing: 5,
+
+                    gtk::Label {
+                        set_label: "Document File Sets:",
+                    },
+                    #[local_ref]
+                    document_file_set_list_view -> gtk::ListView {
+                        set_vexpand: true,
+                    },
+
+                    gtk::Button {
+                        set_label: "View Document Set",
+                        #[watch]
+                        set_sensitive: model.selected_document_file_set.is_some(),
+                        connect_clicked => ReleaseMsg::StartDocumentFileSetViewer,
+                    },
+                }
             },
 
             gtk::Button {
