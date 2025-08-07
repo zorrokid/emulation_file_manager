@@ -18,6 +18,8 @@ pub enum FileType {
     TitleScreen = 9,
     ManualScan = 10,
     MediaScan = 11,
+    PackageScan = 12,
+    InlayScan = 13,
 }
 
 impl From<FileType> for CoreFileType {
@@ -34,6 +36,8 @@ impl From<FileType> for CoreFileType {
             FileType::TitleScreen => CoreFileType::TitleScreen,
             FileType::ManualScan => CoreFileType::ManualScan,
             FileType::MediaScan => CoreFileType::MediaScan,
+            FileType::PackageScan => CoreFileType::PackageScan,
+            FileType::InlayScan => CoreFileType::InlayScan,
         }
     }
 }
@@ -52,6 +56,8 @@ impl From<CoreFileType> for FileType {
             CoreFileType::TitleScreen => FileType::TitleScreen,
             CoreFileType::ManualScan => FileType::ManualScan,
             CoreFileType::MediaScan => FileType::MediaScan,
+            CoreFileType::PackageScan => FileType::PackageScan,
+            CoreFileType::InlayScan => FileType::InlayScan,
         }
     }
 }
@@ -70,6 +76,8 @@ impl FileType {
             FileType::TitleScreen => "title_screen",
             FileType::ManualScan => "manual_scan",
             FileType::MediaScan => "media_scan",
+            FileType::PackageScan => "package_scan",
+            FileType::InlayScan => "inlay_scan",
         }
     }
 }
@@ -88,6 +96,8 @@ impl From<FileType> for i64 {
             FileType::TitleScreen => 9,
             FileType::ManualScan => 10,
             FileType::MediaScan => 11,
+            FileType::PackageScan => 12,
+            FileType::InlayScan => 13,
         }
     }
 }
@@ -107,6 +117,7 @@ impl TryFrom<i64> for FileType {
             9 => Ok(FileType::TitleScreen),
             10 => Ok(FileType::ManualScan),
             11 => Ok(FileType::MediaScan),
+            12 => Ok(FileType::PackageScan),
             _ => Err(sqlx::Error::ColumnDecode {
                 index: "file_type".into(),
                 source: Box::new(std::io::Error::new(
@@ -132,6 +143,8 @@ impl Display for FileType {
             FileType::TitleScreen => write!(f, "Title Screen"),
             FileType::ManualScan => write!(f, "Manual Scan"),
             FileType::MediaScan => write!(f, "Media Scan"),
+            FileType::PackageScan => write!(f, "Package Scan"),
+            FileType::InlayScan => write!(f, "Inlay Scan"),
         }
     }
 }

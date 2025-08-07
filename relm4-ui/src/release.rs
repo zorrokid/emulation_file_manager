@@ -7,7 +7,7 @@ use relm4::{
     gtk::{
         self,
         glib::clone,
-        prelude::{ButtonExt, GtkWindowExt, OrientableExt, WidgetExt},
+        prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt},
     },
     typed_view::list::TypedListView,
 };
@@ -21,6 +21,7 @@ use crate::{
     document_file_set_viewer::{DocumentViewer, DocumentViewerInit},
     emulator_runner::{EmulatorRunnerInit, EmulatorRunnerModel},
     image_fileset_viewer::{ImageFileSetViewerInit, ImageFilesetViewer},
+    image_viewer::{ImageViewer, ImageViewerInit, ImageViewerMsg},
     list_item::ListItem,
     release_form::{ReleaseFormInit, ReleaseFormModel, ReleaseFormOutputMsg},
 };
@@ -45,6 +46,7 @@ pub struct ReleaseModel {
     image_file_set_viewer: Option<Controller<ImageFilesetViewer>>,
     document_file_set_viewer: Option<Controller<DocumentViewer>>,
     form_window: Option<Controller<ReleaseFormModel>>,
+    image_viewer: Controller<ImageViewer>,
 }
 
 #[derive(Debug)]
@@ -85,14 +87,22 @@ impl Component for ReleaseModel {
         #[root]
         gtk::Box {
             set_orientation: gtk::Orientation::Vertical,
-            gtk::Label {
-                set_label: "Release widget",
-            },
-            gtk::Label {
-                #[watch]
-                set_label: model.selected_release_system_names.as_str(),
+            append = model.image_viewer.widget(),
+
+            gtk::Box {
+                set_orientation: gtk::Orientation::Horizontal,
+                gtk::Label {
+                    set_label: "Systems:",
+                },
+                gtk::Label {
+                    #[watch]
+                    set_label: model.selected_release_system_names.as_str(),
+                },
             },
 
+            gtk::Label {
+                set_label: "Emulator File Sets:",
+            },
             #[local_ref]
             file_set_list_view -> gtk::ListView { },
 
@@ -103,6 +113,9 @@ impl Component for ReleaseModel {
                 connect_clicked => ReleaseMsg::StartEmulatorRunner,
             },
 
+            gtk::Label {
+                set_label: "Image File Sets:",
+            },
             #[local_ref]
             image_file_set_list_view -> gtk::ListView { },
 
@@ -113,6 +126,9 @@ impl Component for ReleaseModel {
                 connect_clicked => ReleaseMsg::StartImageFileSetViewer,
             },
 
+            gtk::Label {
+                set_label: "Document File Sets:",
+            },
             #[local_ref]
             document_file_set_list_view -> gtk::ListView { },
 
@@ -124,7 +140,7 @@ impl Component for ReleaseModel {
             },
 
             gtk::Button {
-                set_label: "Edit",
+                set_label: "Edit release",
                 connect_clicked => ReleaseMsg::StartEditRelease,
             }
         }
@@ -135,6 +151,10 @@ impl Component for ReleaseModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let image_viewer_init = ImageViewerInit {
+            settings: Arc::clone(&init_model.settings),
+        };
+        let image_viewer = ImageViewer::builder().launch(image_viewer_init).detach();
         let model = ReleaseModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
@@ -151,6 +171,7 @@ impl Component for ReleaseModel {
             selected_document_file_set: None,
             emulator_runner: None,
             image_file_set_viewer: None,
+            image_viewer,
             document_file_set_viewer: None,
             form_window: None,
         };
@@ -398,6 +419,20 @@ impl Component for ReleaseModel {
                     .map(|s| s.name.clone())
                     .collect::<Vec<_>>()
                     .join(", ");
+
+                // box cover scans
+
+                let cover_scan = release
+                    .file_sets
+                    .iter()
+                    .find(|fs| fs.file_type == core_types::FileType::CoverScan.into())
+                    .cloned();
+
+                if let Some(cover_scan) = cover_scan {
+                    self.image_viewer.emit(ImageViewerMsg::SetFileSet {
+                        file_set: cover_scan,
+                    })
+                }
 
                 // emulator file sets
 

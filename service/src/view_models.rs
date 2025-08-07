@@ -50,6 +50,7 @@ impl Display for EmulatorListModel {
 #[derive(Debug, Clone)]
 pub struct Settings {
     pub collection_root_dir: PathBuf,
+    pub temp_output_dir: PathBuf,
 }
 
 impl From<HashMap<String, String>> for Settings {
@@ -60,6 +61,7 @@ impl From<HashMap<String, String>> for Settings {
             .unwrap_or_else(get_files_root_dir);
         Self {
             collection_root_dir,
+            temp_output_dir: std::env::temp_dir(),
         }
     }
 }

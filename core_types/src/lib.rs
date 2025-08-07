@@ -71,6 +71,10 @@ pub enum FileType {
     ManualScan = 10,
     #[strum(serialize = "Media Scan")]
     MediaScan = 11,
+    #[strum(serialize = "Package Scan")]
+    PackageScan = 12,
+    #[strum(serialize = "Inlay Scan")]
+    InlayScan = 13,
 }
 
 impl FileType {
@@ -87,6 +91,8 @@ impl FileType {
             FileType::TitleScreen => "title_screen",
             FileType::ManualScan => "manual_scan",
             FileType::MediaScan => "media_scan",
+            FileType::PackageScan => "package_scan",
+            FileType::InlayScan => "inlay_scan",
         }
     }
 }
@@ -105,6 +111,8 @@ pub const IMAGE_FILE_TYPES: &[FileType] = &[
     FileType::MediaScan,
     FileType::LoadingScreen,
     FileType::TitleScreen,
+    FileType::PackageScan,
+    FileType::InlayScan,
 ];
 
 pub const DOCUMENT_FILE_TYPES: &[FileType] = &[FileType::Manual];

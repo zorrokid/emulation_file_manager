@@ -135,7 +135,6 @@ impl Component for ImageFilesetViewer {
                 }
 
            },
-           // TODO: add grid of thumbnail links and show selected image in scrolled view
         }
     }
 
