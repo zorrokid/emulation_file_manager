@@ -16,8 +16,8 @@ use relm4::{
         gio::prelude::FileExt,
         glib::clone,
         prelude::{
-            BoxExt, ButtonExt, CheckButtonExt, DialogExt, FileChooserExt, GtkWindowExt,
-            OrientableExt, WidgetExt,
+            BoxExt, ButtonExt, CheckButtonExt, DialogExt, EditableExt, EntryBufferExtManual,
+            EntryExt, FileChooserExt, GtkWindowExt, OrientableExt, WidgetExt,
         },
     },
     prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque},
@@ -115,6 +115,7 @@ pub enum FileSetFormMsg {
         sha1_checksum: Sha1Checksum,
         selected: bool,
     },
+    NameChanged(String),
 }
 
 #[derive(Debug)]
@@ -145,6 +146,7 @@ pub struct FileSetFormModel {
     files: FactoryVecDeque<File>,
     selected_file_type: FileType,
     selected_system_ids: Vec<i64>,
+    file_set_name: String,
 }
 
 #[relm4::component(pub)]
@@ -185,6 +187,17 @@ impl Component for FileSetFormModel {
                     files_list_box -> gtk::ListBox {}
                 },
 
+                gtk::Entry {
+                    set_placeholder_text: Some("File Set Name"),
+                    set_text: &model.file_set_name,
+                    connect_activate[sender] => move |entry| {
+                        let buffer = entry.buffer();
+                        sender.input(
+                            FileSetFormMsg::NameChanged(buffer.text().into()),
+                        );
+                    }
+                },
+
                 gtk::Button {
                     set_label: "Create File Set",
                     connect_clicked => FileSetFormMsg::CreateFileSetFromSelectedFiles,
@@ -220,6 +233,7 @@ impl Component for FileSetFormModel {
             files,
             selected_file_type: init_model.selected_file_type,
             selected_system_ids: init_model.selected_system_ids,
+            file_set_name: String::new(),
         };
         let files_list_box = model.files.widget();
 
@@ -360,14 +374,16 @@ impl Component for FileSetFormModel {
 
                     let files_in_file_set = self.file_importer.get_files_selected_for_file_set();
                     let file_type = self.selected_file_type;
+                    let file_set_name = self.file_set_name.clone();
                     sender.oneshot_command(async move {
                         let result = repo
                             .get_file_set_repository()
                             .add_file_set(
-                                file_set_name,
-                                file_type.into(),
-                                files_in_file_set,
+                                &file_set_name,
+                                &file_type.into(),
+                                &files_in_file_set,
                                 &system_ids,
+                                &file_set_name,
                             )
                             .await;
                         CommandMsg::FilesSavedToDatabase(result)
@@ -383,8 +399,9 @@ impl Component for FileSetFormModel {
                 if let Some(file_set_name) = self.file_importer.get_file_set_name() {
                     let file_set_list_model = FileSetListModel {
                         id,
-                        file_set_name,
+                        file_set_name: self.file_set_name.clone(),
                         file_type: self.selected_file_type.into(),
+                        file_name: file_set_name,
                     };
                     let res =
                         sender.output(FileSetFormOutputMsg::FileSetCreated(file_set_list_model));

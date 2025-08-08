@@ -142,10 +142,11 @@ mod tests {
         let file_info_id_2 = result.last_insert_rowid();
 
         let result = query!(
-            "INSERT INTO file_set (file_name, file_type) 
-             VALUES (?, ?)",
+            "INSERT INTO file_set (file_name, file_type, name) 
+             VALUES (?, ?, ?)",
             "test_file_set",
             FileType::Rom as i32,
+            "test_file_set_name"
         )
         .execute(&*pool)
         .await

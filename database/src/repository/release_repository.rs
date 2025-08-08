@@ -539,45 +539,48 @@ mod tests {
         let file_set_repository = FileSetRepository::new(pool.clone());
         let file_set_1_id = file_set_repository
             .add_file_set(
-                "File Set 1".to_string(),
-                FileType::Rom,
-                vec![ImportedFile {
+                &"File Set 1".to_string(),
+                &FileType::Rom,
+                &[ImportedFile {
                     original_file_name: "File1.bin".to_string(),
                     archive_file_name: "File1.zst".to_string(),
                     file_size: 1024,
                     sha1_checksum: [0; 20],
                 }],
                 &[system_1_id],
+                &"Test file set".to_string(),
             )
             .await
             .unwrap();
 
         let file_set_2_id = file_set_repository
             .add_file_set(
-                "File Set 2".to_string(),
-                FileType::Rom,
-                vec![ImportedFile {
+                &"File Set 2".to_string(),
+                &FileType::Rom,
+                &[ImportedFile {
                     original_file_name: "File2.bin".to_string(),
                     archive_file_name: "File1.zst".to_string(),
                     file_size: 1024,
                     sha1_checksum: [1; 20],
                 }],
                 &[system_2_id],
+                &"Test file set 2".to_string(),
             )
             .await
             .unwrap();
 
         let file_set_3_id = file_set_repository
             .add_file_set(
-                "File Set 3".to_string(),
-                FileType::Rom,
-                vec![ImportedFile {
+                &"File Set 3".to_string(),
+                &FileType::Rom,
+                &[ImportedFile {
                     original_file_name: "File3.bin".to_string(),
                     archive_file_name: "File1.zst".to_string(),
                     file_size: 1024,
                     sha1_checksum: [2; 20],
                 }],
                 &[system_3_id],
+                &"Test file set 3".to_string(),
             )
             .await
             .unwrap();

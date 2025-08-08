@@ -215,8 +215,9 @@ impl Component for FileSelectModel {
                     );
                     let file_set_list_model = FileSetListModel {
                         id: selected_item.id,
-                        file_set_name: selected_item.name.clone(),
+                        file_set_name: selected_item.name.clone(), // TODO
                         file_type: file_type.into(),
+                        file_name: selected_item.name.clone(),
                     };
                     let res =
                         sender.output(FileSelectOutputMsg::FileSetSelected(file_set_list_model));
@@ -245,6 +246,7 @@ impl Component for FileSelectModel {
                         id: file_set.id,
                         file_set_name: file_set.name.clone(),
                         file_type: file_type.into(),
+                        file_name: file_set.name.clone(), // TODO?
                     };
                     self.selected_file_set = Some(file_set_list_model);
                 } else {

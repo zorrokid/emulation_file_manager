@@ -26,6 +26,7 @@ impl FromRow<'_, SqliteRow> for FileSet {
             id: row.try_get("id")?,
             file_name: row.try_get("file_name")?,
             file_type,
+            name: row.try_get("name")?,
         })
     }
 }
@@ -36,7 +37,7 @@ impl FileSetRepository {
         release_id: i64,
     ) -> Result<Vec<FileSet>, DatabaseError> {
         let file_sets = sqlx::query_as(
-            "SELECT c.id, c.file_name, c.file_type 
+            "SELECT c.id, c.file_name, c.file_type, c.name
              FROM file_set c 
              INNER JOIN release_file_set rcf
              ON c.id = rcf.file_set_id
@@ -63,7 +64,7 @@ impl FileSetRepository {
     pub async fn get_file_sets(&self, ids: Vec<i64>) -> Result<Vec<FileSet>, DatabaseError> {
         let placeholders = ids.iter().map(|_| "?").collect::<Vec<&str>>().join(",");
         let query = format!(
-            "SELECT id, file_name, file_type 
+            "SELECT id, file_name, file_type, name 
              FROM file_set
              WHERE id IN ({})",
             placeholders
@@ -83,7 +84,7 @@ impl FileSetRepository {
         release_id: i64,
     ) -> Result<Vec<FileSet>, DatabaseError> {
         let file_sets = sqlx::query_as(
-            "SELECT c.id, c.file_name, c.file_type 
+            "SELECT c.id, c.file_name, c.file_type, c.name
              FROM file_set c 
              INNER JOIN release_file_set rcf
              ON c.id = rcf.file_set_id
@@ -97,7 +98,7 @@ impl FileSetRepository {
 
     pub async fn get_all_file_sets(&self) -> Result<Vec<FileSet>, DatabaseError> {
         let file_sets = sqlx::query_as(
-            "SELECT id, file_name, file_type 
+            "SELECT id, file_name, file_type, name 
              FROM file_set",
         )
         .fetch_all(&*self.pool)
@@ -121,7 +122,7 @@ impl FileSetRepository {
             .join(", ");
 
         let file_sets_query = format!(
-            "SELECT DISTINCT fs.id, fs.file_name, fs.file_type 
+            "SELECT DISTINCT fs.id, fs.file_name, fs.file_type, fs.name 
              FROM file_set fs
              INNER JOIN file_set_file_info fsfi ON fs.id = fsfi.file_set_id
              INNER JOIN file_info_system fis ON fsfi.file_info_id = fis.file_info_id
@@ -140,26 +141,29 @@ impl FileSetRepository {
     // TODO: update file set
     pub async fn add_file_set(
         &self,
-        file_set_name: String,
-        file_type: FileType,
-        files_in_fileset: Vec<ImportedFile>,
+        file_set_name: &String,
+        file_type: &FileType,
+        files_in_fileset: &[ImportedFile],
         system_ids: &[i64],
+        name: &String,
     ) -> Result<i64, Error> {
         println!(
             "Adding file set: {}, file type: {:?}, files: {:?}, systems: {:?}",
             file_set_name, file_type, files_in_fileset, system_ids
         );
-        let file_type = file_type as i64;
+        let file_type = *file_type as i64;
 
         let mut transaction = self.pool.begin().await?;
 
         let result = sqlx::query!(
             "INSERT INTO file_set(
                 file_name, 
-                file_type) 
-             VALUES (?, ?)",
+                file_type,
+                name) 
+             VALUES (?, ?, ?)",
             file_set_name,
-            file_type
+            file_type,
+            name
         )
         .execute(&mut *transaction)
         .await?;
@@ -183,7 +187,7 @@ impl FileSetRepository {
                 checksum, existing_file_info
             );
 
-            let archive_file_name = file.archive_file_name;
+            let archive_file_name = &file.archive_file_name;
 
             let file_info_id = match existing_file_info {
                 Some(id) => id,
@@ -338,20 +342,23 @@ mod tests {
     #[async_std::test]
     async fn test_get_file_sets_for_release() {
         let pool = setup_test_db().await;
-        let collection_file = FileSet {
+        let file_set = FileSet {
             id: 1,
             file_name: "test.zip".to_string(),
             file_type: FileType::Rom,
+            name: "Test file set".to_string(),
         };
-        let file_type = collection_file.file_type as i64;
+        let file_type = file_set.file_type as i64;
 
         let result = query!(
             "INSERT INTO file_set (
                 file_name,
-                file_type
-            ) VALUES (?, ?)",
-            collection_file.file_name,
-            file_type
+                file_type,
+                name
+            ) VALUES (?, ?, ?)",
+            file_set.file_name,
+            file_type,
+            file_set.name,
         )
         .execute(&pool)
         .await
@@ -385,10 +392,12 @@ mod tests {
         let result = query!(
             "INSERT INTO file_set (
                 file_name,
-                file_type
-            ) VALUES (?, ?)",
+                file_type,
+                name
+            ) VALUES (?, ?, ?)",
             "test",
             FileType::Rom as i64,
+            "Test File Set"
         )
         .execute(&pool)
         .await
@@ -446,7 +455,13 @@ mod tests {
             .unwrap();
 
         let file_set_id = FileSetRepository { pool: pool.clone() }
-            .add_file_set(file_name, file_type, files, &[system_id])
+            .add_file_set(
+                &file_name,
+                &file_type,
+                &files,
+                &[system_id],
+                &"Test File Set".to_string(),
+            )
             .await
             .unwrap();
 
@@ -506,12 +521,24 @@ mod tests {
             .unwrap();
 
         let _file_set_1_id = repo
-            .add_file_set(file_set_1_name, file_type, file_set_1_files, &[system_1_id])
+            .add_file_set(
+                &file_set_1_name,
+                &file_type,
+                &file_set_1_files,
+                &[system_1_id],
+                &"Test File Set 1".to_string(),
+            )
             .await
             .unwrap();
 
         let _file_set_2_id = repo
-            .add_file_set(file_set_2_name, file_type, file_set_2_files, &[system_1_id])
+            .add_file_set(
+                &file_set_2_name,
+                &file_type,
+                &file_set_2_files,
+                &[system_1_id],
+                &"Test File Set 2".to_string(),
+            )
             .await
             .unwrap();
 
@@ -538,13 +565,16 @@ mod tests {
         let pool = setup_test_db().await;
         let file_name = "test file".to_string();
         let file_type = FileType::Rom as i64;
+        let file_set_name = "Test File Set".to_string();
         let result = query!(
             "INSERT INTO file_set (
                 file_name,
-                file_type
-            ) VALUES (?, ?)",
+                file_type,
+                name
+            ) VALUES (?, ?, ?)",
             file_name,
-            file_type
+            file_type,
+            file_set_name
         )
         .execute(&pool)
         .await
@@ -567,13 +597,16 @@ mod tests {
         let pool = setup_test_db().await;
         let file_name = "test file".to_string();
         let file_type = FileType::Rom as i64;
+        let filet_set_name = "Test File Set".to_string();
         let result = query!(
             "INSERT INTO file_set (
                 file_name,
-                file_type
-            ) VALUES (?, ?)",
+                file_type,
+                name
+            ) VALUES (?, ?, ?)",
             file_name,
-            file_type
+            file_type,
+            filet_set_name
         )
         .execute(&pool)
         .await

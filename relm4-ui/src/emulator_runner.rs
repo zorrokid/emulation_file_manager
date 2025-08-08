@@ -35,8 +35,11 @@ pub enum EmulatorRunnerMsg {
     EmulatorSelected { index: u32 },
     SystemSelected { index: u32 },
 
-    OpenEmulatorForm,
+    StartAddEmulator,
+    StartEditEmulator,
+    OpenEmulatorForm(EmulatorFormInit),
     AddEmulator(EmulatorListModel),
+    UpdateEmulator(EmulatorListModel),
 
     RunEmulator,
 }
@@ -104,8 +107,14 @@ impl Component for EmulatorRunnerModel {
 
                 gtk::Button {
                     set_label: "Add emulator",
-                    connect_clicked => EmulatorRunnerMsg::OpenEmulatorForm,
+                    connect_clicked => EmulatorRunnerMsg::StartAddEmulator,
+                },
 
+                gtk::Button {
+                    set_label: "Edit emulator",
+                    connect_clicked => EmulatorRunnerMsg::StartEditEmulator,
+                    #[watch]
+                    set_sensitive: model.selected_emulator.is_some()
                 },
 
                 gtk::Button {
@@ -304,18 +313,35 @@ impl Component for EmulatorRunnerModel {
                     sender.input(EmulatorRunnerMsg::FetchEmulators { system_id: id });
                 }
             }
-            EmulatorRunnerMsg::OpenEmulatorForm => {
-                println!("Open Emulator Form");
-                let init_model = EmulatorFormInit {
+            EmulatorRunnerMsg::StartAddEmulator => {
+                sender.input(EmulatorRunnerMsg::OpenEmulatorForm(EmulatorFormInit {
                     view_model_service: Arc::clone(&self.view_model_service),
                     repository_manager: Arc::clone(&self.repository_manager),
-                };
+                    editable_emulator: None,
+                }));
+            }
+            EmulatorRunnerMsg::StartEditEmulator => {
+                if let Some(selected_emulator) = &self.selected_emulator {
+                    println!("Editing Emulator: {}", selected_emulator.name);
+                    sender.input(EmulatorRunnerMsg::OpenEmulatorForm(EmulatorFormInit {
+                        view_model_service: Arc::clone(&self.view_model_service),
+                        repository_manager: Arc::clone(&self.repository_manager),
+                        editable_emulator: self.selected_emulator.clone(),
+                    }));
+                } else {
+                    eprintln!("No emulator selected for editing");
+                }
+            }
+            EmulatorRunnerMsg::OpenEmulatorForm(init_model) => {
                 let emulator_form = EmulatorFormModel::builder()
                     .transient_for(root)
                     .launch(init_model)
                     .forward(sender.input_sender(), |msg| match msg {
                         EmulatorFormOutputMsg::EmulatorAdded(emulator_list_model) => {
                             EmulatorRunnerMsg::AddEmulator(emulator_list_model)
+                        }
+                        EmulatorFormOutputMsg::EmulatorUpdated(emulator_list_model) => {
+                            EmulatorRunnerMsg::UpdateEmulator(emulator_list_model)
                         }
                     });
 
@@ -327,6 +353,13 @@ impl Component for EmulatorRunnerModel {
                     .present();
             }
             EmulatorRunnerMsg::AddEmulator(_emulator_list_model) => {
+                if let Some(system) = &self.selected_system {
+                    sender.input(EmulatorRunnerMsg::FetchEmulators {
+                        system_id: system.id,
+                    });
+                }
+            }
+            EmulatorRunnerMsg::UpdateEmulator(_emulator_list_model) => {
                 if let Some(system) = &self.selected_system {
                     sender.input(EmulatorRunnerMsg::FetchEmulators {
                         system_id: system.id,
@@ -364,6 +397,7 @@ impl Component for EmulatorRunnerModel {
                     })
                     .collect::<Vec<_>>();
                 self.emulators = emulator_view_models;
+                self.emulator_list_view_wrapper.clear();
                 self.emulator_list_view_wrapper
                     .extend_from_iter(emulator_list_items);
             }

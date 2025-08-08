@@ -173,6 +173,7 @@ pub struct FileSet {
     pub id: i64,
     pub file_name: String,
     pub file_type: FileType,
+    pub name: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -160,6 +160,7 @@ impl Component for ReleaseFormModel {
                     id: fs.id,
                     file_set_name: fs.file_set_name.clone(),
                     file_type: fs.file_type,
+                    file_name: fs.file_name.clone(),
                 })
                 .collect();
             selected_software_titles = release
