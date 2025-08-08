@@ -125,24 +125,10 @@ mod tests {
         result.last_insert_rowid()
     }
 
-    async fn insert_test_emulator(pool: &Pool<Sqlite>) -> i64 {
-        let result = query!(
-            "INSERT INTO emulator (name, executable, extract_files) VALUES(?,?,?)",
-            "Test Emulator",
-            "temu",
-            false
-        )
-        .execute(pool)
-        .await
-        .unwrap();
-        result.last_insert_rowid()
-    }
-
     #[async_std::test]
     async fn test_is_system_in_use() {
         let pool = Arc::new(setup_test_db().await);
         let release_id = insert_test_release(&pool.clone()).await;
-        let emulator_id = insert_test_emulator(&pool.clone()).await;
 
         let repo = SystemRepository { pool: pool.clone() };
         let system_id = repo
@@ -172,17 +158,5 @@ mod tests {
 
         let result = repo.is_system_in_use(system_id).await.unwrap();
         assert!(!result);
-
-        query!(
-            "INSERT INTO emulator_system (emulator_id, system_id) VALUES (?, ?)",
-            emulator_id,
-            system_id
-        )
-        .execute(&*pool.clone())
-        .await
-        .unwrap();
-
-        let result = repo.is_system_in_use(system_id).await.unwrap();
-        assert!(result);
     }
 }

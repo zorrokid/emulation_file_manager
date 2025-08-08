@@ -69,7 +69,7 @@ impl EmulatorRepository {
         extract_files: bool,
         arguments: String,
         system_id: i64,
-    ) -> Result<i64, Error> {
+    ) -> Result<i64, DatabaseError> {
         let result = sqlx::query!(
             "INSERT INTO emulator (
                 name, 
@@ -98,13 +98,14 @@ impl EmulatorRepository {
     }
 
     pub async fn update_emulator(&self, emulator: &Emulator) -> Result<i64, DatabaseError> {
+        println!("Updating emulator: {:?}", emulator);
         let result = sqlx::query!(
-            "UPDATE emulator SET 
+            "UPDATE emulator SET
              name = ?, 
              executable = ?, 
+             extract_files = ?,
              arguments = ?,
-             system_id = ?,
-             extract_files = ?
+             system_id = ?
              WHERE id = ?",
             emulator.name,
             emulator.executable,
@@ -131,20 +132,14 @@ mod tests {
         let pool = Arc::new(pool);
         let repo = EmulatorRepository::new(pool.clone());
         let system_repo = SystemRepository::new(pool.clone());
-        let system_1_id = system_repo
+        let system_id = system_repo
             .add_system(&"Test System 1".to_string())
             .await
             .unwrap();
 
-        let system_2_id = system_repo
-            .add_system(&"Test System 2".to_string())
-            .await
-            .unwrap();
-
-        let system_3_id = system_repo
-            .add_system(&"Test System 3".to_string())
-            .await
-            .unwrap();
+        let system = system_repo.get_system(system_id).await.unwrap();
+        assert_eq!(system.name, "Test System 1");
+        assert_eq!(system.id, system_id);
 
         let emulator_id = repo
             .add_emulator(
@@ -152,7 +147,7 @@ mod tests {
                 "test_executable".to_string(),
                 true,
                 "".to_string(),
-                system_1_id,
+                system_id,
             )
             .await
             .unwrap();
@@ -161,7 +156,7 @@ mod tests {
         let mut emulator = repo.get_emulator(emulator_id).await.unwrap();
         assert_eq!(emulator.name, "Test Emulator");
         assert_eq!(emulator.executable, "test_executable");
-        assert_eq!(emulator.system_id, system_1_id);
+        assert_eq!(emulator.system_id, system_id);
 
         // Test get_emulators
         let emulators = repo.get_emulators().await.unwrap();

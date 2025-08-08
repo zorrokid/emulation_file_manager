@@ -117,14 +117,16 @@ pub struct FileSetListModel {
     pub id: i64,
     pub file_set_name: String,
     pub file_type: FileType,
+    pub file_name: String,
 }
 
 impl From<&FileSet> for FileSetListModel {
     fn from(file_set: &FileSet) -> Self {
         FileSetListModel {
             id: file_set.id,
-            file_set_name: file_set.file_name.clone(),
+            file_name: file_set.file_name.clone(),
             file_type: file_set.file_type,
+            file_set_name: file_set.name.clone(),
         }
     }
 }
@@ -141,6 +143,7 @@ pub struct FileSetViewModel {
     pub file_set_name: String,
     pub file_type: FileType,
     pub files: Vec<FileSetFileInfo>,
+    pub file_name: String,
 }
 
 impl Display for FileSetViewModel {

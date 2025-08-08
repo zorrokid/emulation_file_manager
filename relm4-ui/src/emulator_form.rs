@@ -1,28 +1,25 @@
 use std::sync::Arc;
 
-use database::{database_error::Error, repository_manager::RepositoryManager};
+use database::{
+    database_error::DatabaseError, models::Emulator, repository_manager::RepositoryManager,
+};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, FactorySender,
     gtk::{
         self,
-        glib::clone,
         prelude::{
             ButtonExt, CheckButtonExt, EditableExt, EntryBufferExtManual, EntryExt, GtkWindowExt,
             OrientableExt, WidgetExt,
         },
     },
     prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque},
-    typed_view::list::TypedListView,
 };
 use service::{
     view_model_service::ViewModelService,
-    view_models::{EmulatorListModel, SystemListModel},
+    view_models::{EmulatorListModel, EmulatorViewModel, SystemListModel},
 };
 
-use crate::{
-    list_item::ListItem,
-    system_selector::{SystemSelectInit, SystemSelectModel, SystemSelectOutputMsg},
-};
+use crate::system_selector::{SystemSelectInit, SystemSelectModel, SystemSelectOutputMsg};
 
 #[derive(Debug)]
 pub struct CommandLineArgument {
@@ -84,7 +81,6 @@ pub enum EmulatorFormMsg {
     NameChanged(String),
     ExtractFilesToggled,
     SystemSelected(SystemListModel),
-    SystemFocused { index: u32 },
     OpenSystemSelector,
     AddCommandLineArgument(String),
     DeleteCommandLineArgument(DynamicIndex),
@@ -94,16 +90,20 @@ pub enum EmulatorFormMsg {
 #[derive(Debug)]
 pub enum EmulatorFormOutputMsg {
     EmulatorAdded(EmulatorListModel),
+    EmulatorUpdated(EmulatorListModel),
 }
 
 #[derive(Debug)]
 pub enum EmulatorFormCommandMsg {
-    EmulatorSubmitted(Result<i64, Error>),
+    EmulatorSubmitted(Result<i64, DatabaseError>),
+    EmulatorUpdated(Result<i64, DatabaseError>),
 }
 
+#[derive(Debug)]
 pub struct EmulatorFormInit {
     pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
+    pub editable_emulator: Option<EmulatorViewModel>,
 }
 
 #[derive(Debug)]
@@ -116,7 +116,7 @@ pub struct EmulatorFormModel {
     pub selected_system: Option<SystemListModel>,
     system_selector: Option<Controller<SystemSelectModel>>,
     pub command_line_arguments: FactoryVecDeque<CommandLineArgument>,
-    pub arguments: Vec<String>,
+    editable_emulator_id: Option<i64>,
 }
 
 #[relm4::component(pub)]
@@ -265,7 +265,6 @@ impl Component for EmulatorFormModel {
                 self.command_line_arguments
                     .guard()
                     .push_back(argument.clone());
-                self.arguments.push(argument);
             }
             EmulatorFormMsg::DeleteCommandLineArgument(index) => {
                 self.command_line_arguments
@@ -284,15 +283,40 @@ impl Component for EmulatorFormModel {
                     let name = self.name.clone();
                     let extract_files = self.extract_files;
                     let system_id = system.id;
-                    let arguments = self.arguments.join("|");
+                    let arguments = self
+                        .command_line_arguments
+                        .guard()
+                        .iter()
+                        .map(|arg| arg.value.clone())
+                        .collect::<Vec<_>>();
 
-                    sender.oneshot_command(async move {
-                        let res = repository_manager
-                            .get_emulator_repository()
-                            .add_emulator(name, executable, extract_files, arguments, system_id)
-                            .await;
-                        EmulatorFormCommandMsg::EmulatorSubmitted(res)
-                    });
+                    let arguments = arguments.join("|");
+                    if let Some(editable_emulator_id) = self.editable_emulator_id {
+                        // Update existing emulator
+                        sender.oneshot_command(async move {
+                            let update_emulator = Emulator {
+                                id: editable_emulator_id,
+                                name,
+                                executable,
+                                extract_files,
+                                arguments,
+                                system_id,
+                            };
+                            let res = repository_manager
+                                .get_emulator_repository()
+                                .update_emulator(&update_emulator)
+                                .await;
+                            EmulatorFormCommandMsg::EmulatorUpdated(res)
+                        });
+                    } else {
+                        sender.oneshot_command(async move {
+                            let res = repository_manager
+                                .get_emulator_repository()
+                                .add_emulator(name, executable, extract_files, arguments, system_id)
+                                .await;
+                            EmulatorFormCommandMsg::EmulatorSubmitted(res)
+                        });
+                    }
                 }
             }
             EmulatorFormMsg::NameChanged(name) => {
@@ -326,9 +350,30 @@ impl Component for EmulatorFormModel {
                     }
                 }
             }
+            EmulatorFormCommandMsg::EmulatorUpdated(Ok(id)) => {
+                println!("Emulator updated with id {}", id);
+                let name = self.name.clone();
+                let res =
+                    sender.output(EmulatorFormOutputMsg::EmulatorUpdated(EmulatorListModel {
+                        id,
+                        name,
+                    }));
+
+                match res {
+                    Ok(()) => {
+                        root.close();
+                    }
+                    Err(error) => {
+                        eprintln!("Sending message failed: {:?}", error);
+                    }
+                }
+            }
             EmulatorFormCommandMsg::EmulatorSubmitted(Err(error)) => {
                 eprintln!("Error in submitting emulator: {}", error);
                 // TODO: show error to user
+            }
+            EmulatorFormCommandMsg::EmulatorUpdated(Err(error)) => {
+                eprintln!("Error in updating emulator: {}", error);
             }
             _ => {
                 // Handle command outputs if necessary
@@ -341,22 +386,7 @@ impl Component for EmulatorFormModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let selected_systems_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
-            TypedListView::new();
-
-        selected_systems_list_view_wrapper
-            .selection_model
-            .connect_selected_notify(clone!(
-                #[strong]
-                sender,
-                move |s| {
-                    let index = s.selected();
-                    println!("Selected index: {}", index);
-                    sender.input(EmulatorFormMsg::SystemFocused { index });
-                }
-            ));
-
-        let command_line_arguments =
+        let mut command_line_arguments =
             FactoryVecDeque::builder()
                 .launch_default()
                 .forward(sender.input_sender(), |msg| match msg {
@@ -365,16 +395,35 @@ impl Component for EmulatorFormModel {
                     }
                 });
 
-        let model = Self {
-            view_model_service: init.view_model_service,
-            repository_manager: init.repository_manager,
-            executable: String::new(),
-            extract_files: false,
-            selected_system: None,
-            system_selector: None,
-            command_line_arguments,
-            arguments: Vec::new(),
-            name: String::new(),
+        let model = match init.editable_emulator {
+            Some(editable_emulator) => {
+                editable_emulator.arguments.iter().for_each(|arg| {
+                    command_line_arguments.guard().push_back(arg.clone());
+                });
+
+                Self {
+                    view_model_service: init.view_model_service,
+                    repository_manager: init.repository_manager,
+                    executable: editable_emulator.executable.clone(),
+                    extract_files: editable_emulator.extract_files,
+                    selected_system: Some(editable_emulator.system.clone()),
+                    system_selector: None,
+                    command_line_arguments,
+                    name: editable_emulator.name.clone(),
+                    editable_emulator_id: Some(editable_emulator.id),
+                }
+            }
+            None => Self {
+                view_model_service: init.view_model_service,
+                repository_manager: init.repository_manager,
+                executable: String::new(),
+                extract_files: false,
+                selected_system: None,
+                system_selector: None,
+                command_line_arguments,
+                name: String::new(),
+                editable_emulator_id: None,
+            },
         };
 
         let command_line_argument_list_box = model.command_line_arguments.widget();

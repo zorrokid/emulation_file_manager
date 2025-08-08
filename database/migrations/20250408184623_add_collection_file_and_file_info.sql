@@ -66,7 +66,8 @@ CREATE TABLE file_info_system (
 CREATE TABLE file_set (
     id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
     file_name TEXT NOT NULL,
-    file_type INTEGER NOT NULL
+    file_type INTEGER NOT NULL,
+    name TEXT NOT NULL
  );
 
 CREATE TABLE file_set_file_info (
