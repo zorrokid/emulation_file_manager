@@ -1,32 +1,25 @@
 use std::sync::Arc;
 
 use database::{
-    database_error::{DatabaseError, Error},
-    models::Emulator,
-    repository_manager::RepositoryManager,
+    database_error::DatabaseError, models::Emulator, repository_manager::RepositoryManager,
 };
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, FactorySender,
     gtk::{
         self,
-        glib::clone,
         prelude::{
             ButtonExt, CheckButtonExt, EditableExt, EntryBufferExtManual, EntryExt, GtkWindowExt,
             OrientableExt, WidgetExt,
         },
     },
     prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque},
-    typed_view::list::TypedListView,
 };
 use service::{
     view_model_service::ViewModelService,
     view_models::{EmulatorListModel, EmulatorViewModel, SystemListModel},
 };
 
-use crate::{
-    list_item::ListItem,
-    system_selector::{SystemSelectInit, SystemSelectModel, SystemSelectOutputMsg},
-};
+use crate::system_selector::{SystemSelectInit, SystemSelectModel, SystemSelectOutputMsg};
 
 #[derive(Debug)]
 pub struct CommandLineArgument {
@@ -88,7 +81,6 @@ pub enum EmulatorFormMsg {
     NameChanged(String),
     ExtractFilesToggled,
     SystemSelected(SystemListModel),
-    SystemFocused { index: u32 },
     OpenSystemSelector,
     AddCommandLineArgument(String),
     DeleteCommandLineArgument(DynamicIndex),
@@ -124,7 +116,6 @@ pub struct EmulatorFormModel {
     pub selected_system: Option<SystemListModel>,
     system_selector: Option<Controller<SystemSelectModel>>,
     pub command_line_arguments: FactoryVecDeque<CommandLineArgument>,
-    pub arguments: Vec<String>,
     editable_emulator_id: Option<i64>,
 }
 
@@ -274,13 +265,11 @@ impl Component for EmulatorFormModel {
                 self.command_line_arguments
                     .guard()
                     .push_back(argument.clone());
-                self.arguments.push(argument);
             }
             EmulatorFormMsg::DeleteCommandLineArgument(index) => {
                 self.command_line_arguments
                     .guard()
                     .remove(index.current_index());
-                self.arguments.remove(index.current_index());
             }
 
             EmulatorFormMsg::Submit => {
@@ -294,7 +283,14 @@ impl Component for EmulatorFormModel {
                     let name = self.name.clone();
                     let extract_files = self.extract_files;
                     let system_id = system.id;
-                    let arguments = self.arguments.join("|");
+                    let arguments = self
+                        .command_line_arguments
+                        .guard()
+                        .iter()
+                        .map(|arg| arg.value.clone())
+                        .collect::<Vec<_>>();
+
+                    let arguments = arguments.join("|");
                     if let Some(editable_emulator_id) = self.editable_emulator_id {
                         // Update existing emulator
                         sender.oneshot_command(async move {
@@ -413,7 +409,6 @@ impl Component for EmulatorFormModel {
                     selected_system: Some(editable_emulator.system.clone()),
                     system_selector: None,
                     command_line_arguments,
-                    arguments: editable_emulator.arguments.clone(),
                     name: editable_emulator.name.clone(),
                     editable_emulator_id: Some(editable_emulator.id),
                 }
@@ -426,7 +421,6 @@ impl Component for EmulatorFormModel {
                 selected_system: None,
                 system_selector: None,
                 command_line_arguments,
-                arguments: Vec::new(),
                 name: String::new(),
                 editable_emulator_id: None,
             },
