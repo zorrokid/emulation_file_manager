@@ -17,6 +17,7 @@ pub enum ImageViewerMsg {
     ShowPrevious,
     ShowNext,
     SetFileSet { file_set: FileSetViewModel },
+    Clear,
 }
 
 #[derive(Debug)]
@@ -128,6 +129,11 @@ impl Component for ImageViewer {
                         self.selected_image = file_path;
                     }
                 }
+            }
+            ImageViewerMsg::Clear => {
+                self.file_set = None;
+                self.current_file_index = None;
+                self.selected_image = PathBuf::new();
             }
         }
     }

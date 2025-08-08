@@ -47,17 +47,26 @@ impl FileImporter {
     pub fn get_selected_files_from_current_picked_file_that_are_new(&self) -> Vec<ReadFile> {
         let existing_files_checksums: HashSet<Sha1Checksum> =
             self.existing_files.keys().cloned().collect();
+        println!("Existing files checksums: {:?}", existing_files_checksums);
         let checksums_for_new_files: HashSet<Sha1Checksum> = self
             .selected_files_from_current_picked_file
             .difference(&existing_files_checksums)
             .cloned()
             .collect();
+        println!("Checksums for new files: {:?}", checksums_for_new_files);
 
-        self.current_picked_file_content
+        let new_files_from_current_picked_files = self
+            .current_picked_file_content
             .iter()
             .filter(|(sha1_checksum, _)| checksums_for_new_files.contains(*sha1_checksum))
             .map(|(_, read_file)| read_file.clone())
-            .collect()
+            .collect();
+
+        println!(
+            "New files from current picked file: {:?}",
+            new_files_from_current_picked_files
+        );
+        new_files_from_current_picked_files
     }
     pub fn is_selected_files(&self) -> bool {
         self.current_picked_file.is_some()
@@ -135,6 +144,9 @@ impl FileImporter {
             })
             .map(|(_, imported_file)| imported_file.clone())
             .collect::<Vec<ImportedFile>>();
+
+        println!("Selected existing files: {:?}", selected_existing_files);
+        println!("Imported files: {:?}", &self.imported_files.values());
 
         selected_existing_files.extend(self.imported_files.values().cloned());
         selected_existing_files

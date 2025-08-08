@@ -177,14 +177,14 @@ impl Component for FileSelectModel {
                         selected_system_ids: self.selected_system_ids.clone(),
                         selected_file_type,
                     };
-                    let file_set_form = FileSetFormModel::builder().launch(init_model).forward(
-                        sender.input_sender(),
-                        |msg| match msg {
+                    let file_set_form = FileSetFormModel::builder()
+                        .transient_for(root)
+                        .launch(init_model)
+                        .forward(sender.input_sender(), |msg| match msg {
                             FileSetFormOutputMsg::FileSetCreated(file_set_liset_model) => {
                                 FileSelectMsg::FileSetCreated(file_set_liset_model)
                             }
-                        },
-                    );
+                        });
                     self.file_set_form = Some(file_set_form);
 
                     self.file_set_form

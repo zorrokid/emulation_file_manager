@@ -145,6 +145,10 @@ impl FileSetRepository {
         files_in_fileset: Vec<ImportedFile>,
         system_ids: &[i64],
     ) -> Result<i64, Error> {
+        println!(
+            "Adding file set: {}, file type: {:?}, files: {:?}, systems: {:?}",
+            file_set_name, file_type, files_in_fileset, system_ids
+        );
         let file_type = file_type as i64;
 
         let mut transaction = self.pool.begin().await?;
@@ -159,7 +163,8 @@ impl FileSetRepository {
         )
         .execute(&mut *transaction)
         .await?;
-        let collection_file_id = result.last_insert_rowid();
+        let file_set_id = result.last_insert_rowid();
+        println!("File set created with ID: {}", file_set_id);
 
         for file in files_in_fileset {
             let checksum = file.sha1_checksum.to_vec();
@@ -172,6 +177,11 @@ impl FileSetRepository {
             )
             .fetch_optional(&mut *transaction)
             .await?;
+
+            println!(
+                "Existing file info for checksum {:?}: {:?}",
+                checksum, existing_file_info
+            );
 
             let archive_file_name = file.archive_file_name;
 
@@ -196,6 +206,11 @@ impl FileSetRepository {
                 }
             };
 
+            println!(
+                "File info ID for file {}: {}",
+                file.original_file_name, file_info_id
+            );
+
             // insert new systems for file_info
 
             let file_info_systems = sqlx::query!(
@@ -209,9 +224,19 @@ impl FileSetRepository {
             .map(|row| row.system_id)
             .collect::<HashSet<_>>();
 
+            println!(
+                "Existing systems for file info ID {}: {:?}",
+                file_info_id, file_info_systems
+            );
+
             let system_ids: HashSet<i64> = system_ids.iter().copied().collect();
 
             let new_system_ids = system_ids.difference(&file_info_systems);
+
+            println!(
+                "New systems to add for file info ID {}: {:?}",
+                file_info_id, new_system_ids
+            );
 
             for system_id in new_system_ids {
                 sqlx::query!(
@@ -232,7 +257,7 @@ impl FileSetRepository {
                     file_info_id, 
                     file_name
                  ) VALUES (?, ?, ?)",
-                collection_file_id,
+                file_set_id,
                 file_info_id,
                 file.original_file_name
             )
@@ -242,7 +267,9 @@ impl FileSetRepository {
 
         transaction.commit().await?;
 
-        Ok(collection_file_id)
+        println!("File set with ID {} added successfully", file_set_id);
+
+        Ok(file_set_id)
     }
 
     pub async fn delete_file_set(&self, id: i64) -> Result<i64, DatabaseError> {

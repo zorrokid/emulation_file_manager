@@ -61,22 +61,14 @@ struct AppModel {
     releases: OnceCell<Controller<ReleasesModel>>,
 }
 
-struct AppWidgets {
-    //label: gtk::Label,
-    //releases_view: gtk::Box,
-}
+struct AppWidgets {}
 
 impl Component for AppModel {
-    /// The type of the messages that this component can receive.
     type Input = AppMsg;
-    /// The type of the messages that this component can send.
     type Output = ();
     type CommandOutput = CommandMsg;
-    /// The type of data with which this component will be initialized.
     type Init = u8;
-    /// The root GTK widget that this component will create.
     type Root = gtk::Window;
-    /// A data structure that contains the widgets that you will need to update.
     type Widgets = AppWidgets;
 
     fn init_root() -> Self::Root {
@@ -292,12 +284,7 @@ impl Component for AppModel {
         }
     }
 
-    fn update_view(&self, _widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
-        // Update the label with the current counter value
-        //widgets.label.set_label(&format!("Counter: {}", self.counter));
-        // Update the releases view if needed
-        //widgets.releases_view.set_child(Some(self.releases.widget()));
-    }
+    fn update_view(&self, _widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {}
 }
 
 fn main() {

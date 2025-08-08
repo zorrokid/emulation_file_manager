@@ -61,11 +61,13 @@ pub fn prepare_file_import(
     file_importer: &FileImporter,
 ) -> FileImportModel {
     let target_path = resolve_file_type_path(collection_root_dir, &file_type);
-    let file_name_filter = file_importer
+    let new_files_filter = file_importer
         .get_selected_files_from_current_picked_file_that_are_new()
         .iter()
         .map(|file| file.file_name.clone())
         .collect::<HashSet<String>>();
+
+    println!("New files filter for import: {:?}", new_files_filter);
 
     let is_zip_file = file_importer.is_zip_file();
     let file_name = file_path
@@ -78,7 +80,7 @@ pub fn prepare_file_import(
         file_path: file_path.to_path_buf(),
         file_type,
         output_dir: target_path.to_path_buf(),
-        file_name_filter,
+        new_files_file_name_filter: new_files_filter,
         file_name,
         is_zip_file,
     }

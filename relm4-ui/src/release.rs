@@ -406,6 +406,7 @@ impl Component for ReleaseModel {
                 self.selected_file_set = None;
                 self.emulator_runner = None;
                 self.form_window = None;
+                self.image_viewer.emit(ImageViewerMsg::Clear);
             }
             ReleaseMsg::FileSetSelected { index } => {
                 println!("File set selected with index: {}", index);

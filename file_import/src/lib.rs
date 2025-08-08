@@ -29,8 +29,7 @@ pub struct FileImportModel {
     pub output_dir: PathBuf,
     pub file_name: String,
     pub file_type: FileType,
-    // used when importing files from zip archive
-    pub file_name_filter: HashSet<String>,
+    pub new_files_file_name_filter: HashSet<String>,
     pub is_zip_file: bool,
 }
 
@@ -60,20 +59,40 @@ pub fn get_compression_level(file_type: &FileType) -> CompressionLevel {
 pub fn import(
     file_import_model: &FileImportModel,
 ) -> Result<HashMap<Sha1Checksum, ImportedFile>, FileImportError> {
+    println!(
+        "Importing file: {} with file type: {} from path: {} to output directory: {} with filter: {:?}",
+        file_import_model.file_name, file_import_model.file_type, 
+        file_import_model.file_path.display(),
+        file_import_model.output_dir.display(),
+        file_import_model.new_files_file_name_filter
+    );
     if file_import_model.is_zip_file {
         import_files_from_zip(
             &file_import_model.file_path,
             &file_import_model.output_dir,
-            &file_import_model.file_name_filter,
+            &file_import_model.new_files_file_name_filter,
             &file_import_model.file_type,
         )
-    } else {
+    } else if file_import_model
+        .new_files_file_name_filter
+        .contains(&file_import_model.file_name)
+    {
+        println!(
+            "Importing file: {} with file type: {}",
+            file_import_model.file_name, file_import_model.file_type
+        );
         import_file(
             &file_import_model.file_path,
             &file_import_model.output_dir,
             &file_import_model.file_name,
             &file_import_model.file_type,
         )
+    } else {
+        println!(
+            "File: {} is not in the new files filter, skipping import.",
+            file_import_model.file_name
+        );
+        Ok(HashMap::new())
     }
 }
 
