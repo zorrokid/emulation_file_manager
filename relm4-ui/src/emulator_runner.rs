@@ -266,8 +266,8 @@ impl Component for EmulatorRunnerModel {
                             Ok(()) => {
                                 run_with_emulator(
                                     executable,
-                                    arguments,
-                                    files_in_fileset,
+                                    &arguments,
+                                    &files_in_fileset,
                                     starting_file,
                                     temp_dir,
                                 )

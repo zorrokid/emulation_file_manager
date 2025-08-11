@@ -12,6 +12,8 @@ pub enum DatabaseError {
     InUse,
     #[error("Database error")]
     DbError(String),
+    #[error("Parse error: {0}")]
+    SerializationError(String),
 }
 
 impl PartialEq for DatabaseError {

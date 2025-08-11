@@ -63,6 +63,7 @@ impl Component for DocumentViewerFormModel {
 
     view! {
         gtk::Window {
+            set_title: Some("Document viewer form"),
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
                 set_margin_top: 10,
