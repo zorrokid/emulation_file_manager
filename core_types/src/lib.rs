@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use std::string::ToString;
 use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumIter};
@@ -8,6 +9,16 @@ pub type FileSize = u64;
 #[derive(Debug, Clone)]
 pub enum CoreTypeError {
     ConversionError(String),
+    InvalidArgumentType(String),
+}
+
+impl std::fmt::Display for CoreTypeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CoreTypeError::ConversionError(msg) => write!(f, "Conversion Error: {}", msg),
+            CoreTypeError::InvalidArgumentType(msg) => write!(f, "Invalid Argument Type: {}", msg),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
@@ -116,3 +127,110 @@ pub const IMAGE_FILE_TYPES: &[FileType] = &[
 ];
 
 pub const DOCUMENT_FILE_TYPES: &[FileType] = &[FileType::Manual];
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Display, Serialize, Deserialize)]
+pub enum ArgumentType {
+    #[strum(to_string = "{name}")]
+    Flag { name: String },
+    #[strum(to_string = "{name} {value}")]
+    FlagWithValue { name: String, value: String },
+    #[strum(to_string = "{name}={value}")]
+    FlagEqualsValue { name: String, value: String },
+    // TODO: add more types as needed
+}
+
+impl TryFrom<&str> for ArgumentType {
+    type Error = CoreTypeError;
+    fn try_from(argument_string: &str) -> Result<Self, Self::Error> {
+        parse_argument(argument_string)
+    }
+}
+
+fn parse_argument(argument_string: &str) -> Result<ArgumentType, CoreTypeError> {
+    if argument_string.contains('=') {
+        // Handle flag with value (e.g. --flag=value)
+        let parts: Vec<&str> = argument_string.splitn(2, '=').collect();
+        if parts.len() != 2 {
+            return Err(CoreTypeError::InvalidArgumentType(
+                "Invalid flag equals value format".to_string(),
+            ));
+        }
+        return Ok(ArgumentType::FlagEqualsValue {
+            name: parts[0].to_string(),
+            value: parts[1].to_string(),
+        });
+    } else if argument_string.contains(' ') {
+        // Handle flag with value (e.g. -f 1 -f 1 --flag 1)
+        let parts: Vec<&str> = argument_string.splitn(2, ' ').collect();
+        if parts.len() != 2 {
+            return Err(CoreTypeError::InvalidArgumentType(
+                "Invalid flag with value format".to_string(),
+            ));
+        }
+        return Ok(ArgumentType::FlagWithValue {
+            name: parts[0].to_string(),
+            value: parts[1].to_string(),
+        });
+    }
+
+    Ok(ArgumentType::Flag {
+        name: argument_string.to_string(),
+    })
+}
+
+// TODO add test for From<&str> for ArgumentType
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_parse_argument() {
+        assert_eq!(
+            parse_argument("--flag").unwrap(),
+            ArgumentType::Flag {
+                name: "--flag".to_string()
+            }
+        );
+        assert_eq!(
+            parse_argument("-f 1").unwrap(),
+            ArgumentType::FlagWithValue {
+                name: "-f".to_string(),
+                value: "1".to_string()
+            }
+        );
+        assert_eq!(
+            parse_argument("--flag=1").unwrap(),
+            ArgumentType::FlagEqualsValue {
+                name: "--flag".to_string(),
+                value: "1".to_string()
+            }
+        );
+        assert!(parse_argument("invalid").is_err());
+    }
+    #[test]
+    fn test_argument_type_from_str() {
+        assert_eq!(
+            ArgumentType::from("--flag"),
+            ArgumentType::Flag {
+                name: "--flag".to_string()
+            }
+        );
+        assert_eq!(
+            ArgumentType::from("-f 1"),
+            ArgumentType::FlagWithValue {
+                name: "-f".to_string(),
+                value: "1".to_string()
+            }
+        );
+        assert_eq!(
+            ArgumentType::from("--flag=1"),
+            ArgumentType::FlagEqualsValue {
+                name: "--flag".to_string(),
+                value: "1".to_string()
+            }
+        );
+        assert!(matches!(
+            ArgumentType::from("invalid"),
+            ArgumentType::Flag { name } if name == "invalid"
+        ));
+    }
+}

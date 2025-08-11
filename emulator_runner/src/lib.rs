@@ -1,4 +1,5 @@
 use async_process::Command;
+use core_types::ArgumentType;
 use std::path::{Path, PathBuf};
 
 use error::EmulatorRunnerError;
@@ -25,8 +26,8 @@ pub mod error;
 ///
 pub async fn run_with_emulator(
     executable: String,
-    arguments: Vec<String>,
-    file_names: Vec<String>,    // list of files selected for running
+    arguments: &[ArgumentType],
+    file_names: &[String],      // list of files selected for running
     selected_file_name: String, // entry point file in possible set of files
     source_path: PathBuf,       // where to find files
 ) -> Result<(), EmulatorRunnerError> {
@@ -35,9 +36,9 @@ pub async fn run_with_emulator(
     }
     let file_path = Path::new(&source_path).join(&selected_file_name);
     println!(
-        "Running emulator with file: {} and arguments: {}",
+        "Running emulator with file: {} and arguments: {:?}",
         file_path.display(),
-        arguments.join(" ")
+        arguments
     );
     if !file_path.exists() {
         return Err(EmulatorRunnerError::FileNotFound);
@@ -49,9 +50,25 @@ pub async fn run_with_emulator(
         println!("No arguments provided, running with file only.");
         command.arg(&file_path).current_dir(&source_path);
     } else {
-        println!("Running with arguments: {}", arguments.join(" "));
+        println!("Running with arguments: {:?}", arguments);
+
+        let mut args = Vec::new();
+
+        arguments.iter().for_each(|arg| match arg {
+            ArgumentType::Flag { name } => {
+                args.push(name.clone());
+            }
+            ArgumentType::FlagWithValue { name, value } => {
+                args.extend_from_slice(&[name.clone(), value.clone()]);
+            }
+            ArgumentType::FlagEqualsValue { name, value } => {
+                // TODO: check if this is working as expected
+                args.push(format!("{}={}", name, value));
+            }
+        });
+
         command
-            .args(&arguments)
+            .args(&args)
             .arg(&file_path)
             .current_dir(&source_path);
     }
@@ -85,14 +102,16 @@ mod tests {
         let file_path = output_path.join(file_name);
         std::fs::write(&file_path, "test data").unwrap();
         let executable = "echo".to_string();
-        let arguments = "Hello, world!".to_string();
+        let arguments = ArgumentType::Flag {
+            name: "hello".into(),
+        };
         let file_names = vec![file_name.to_string()];
         let selected_file_name = file_name.to_string();
         let source_path = output_path.to_path_buf();
         let result = run_with_emulator(
             executable,
-            arguments,
-            file_names,
+            &[arguments],
+            &file_names,
             selected_file_name,
             source_path,
         )

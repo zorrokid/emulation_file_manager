@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use core_types::ArgumentType;
 use sqlx::{Pool, Sqlite};
 
 use crate::{
@@ -64,12 +65,15 @@ impl EmulatorRepository {
 
     pub async fn add_emulator(
         &self,
-        name: String,
-        executable: String,
+        name: &String,
+        executable: &String,
         extract_files: bool,
-        arguments: String,
+        arguments: &[ArgumentType],
         system_id: i64,
     ) -> Result<i64, DatabaseError> {
+        let serialized_arguments = serde_json::to_string(&arguments)
+            .map_err(|e| DatabaseError::SerializationError(e.to_string()))?;
+
         let result = sqlx::query!(
             "INSERT INTO emulator (
                 name, 
@@ -81,7 +85,7 @@ impl EmulatorRepository {
             name,
             executable,
             extract_files,
-            arguments,
+            serialized_arguments,
             system_id,
         )
         .execute(&*self.pool)
@@ -97,8 +101,18 @@ impl EmulatorRepository {
         Ok(id)
     }
 
-    pub async fn update_emulator(&self, emulator: &Emulator) -> Result<i64, DatabaseError> {
-        println!("Updating emulator: {:?}", emulator);
+    pub async fn update_emulator(
+        &self,
+        id: i64,
+        name: &String,
+        executable: &String,
+        extract_files: bool,
+        arguments: &Vec<ArgumentType>,
+        system_id: i64,
+    ) -> Result<i64, DatabaseError> {
+        println!("Updating emulator with id: {:?}", id);
+        let arguments = serde_json::to_string(&arguments)
+            .map_err(|e| DatabaseError::SerializationError(e.to_string()))?;
         let result = sqlx::query!(
             "UPDATE emulator SET
              name = ?, 
@@ -107,12 +121,12 @@ impl EmulatorRepository {
              arguments = ?,
              system_id = ?
              WHERE id = ?",
-            emulator.name,
-            emulator.executable,
-            emulator.extract_files,
-            emulator.arguments,
-            emulator.system_id,
-            emulator.id
+            name,
+            executable,
+            extract_files,
+            arguments,
+            system_id,
+            id
         )
         .execute(&*self.pool)
         .await?;
@@ -141,12 +155,16 @@ mod tests {
         assert_eq!(system.name, "Test System 1");
         assert_eq!(system.id, system_id);
 
+        let arguments = vec![ArgumentType::Flag {
+            name: "arg1".to_string(),
+        }];
+
         let emulator_id = repo
             .add_emulator(
-                "Test Emulator".to_string(),
-                "test_executable".to_string(),
+                &"Test Emulator".to_string(),
+                &"test_executable".to_string(),
                 true,
-                "".to_string(),
+                &arguments,
                 system_id,
             )
             .await
@@ -164,7 +182,16 @@ mod tests {
 
         // Test update_emulator
         emulator.name = "Updated Emulator".to_string();
-        repo.update_emulator(&emulator).await.unwrap();
+        repo.update_emulator(
+            emulator_id,
+            &emulator.name,
+            &emulator.executable,
+            emulator.extract_files,
+            &arguments,
+            emulator.system_id,
+        )
+        .await
+        .unwrap();
         let updated_emulator = repo.get_emulator(emulator_id).await.unwrap();
         assert_eq!(updated_emulator.name, "Updated Emulator");
 

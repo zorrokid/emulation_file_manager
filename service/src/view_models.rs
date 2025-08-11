@@ -4,6 +4,7 @@ use std::{
     path::PathBuf,
 };
 
+use core_types::ArgumentType;
 use database::models::{
     DocumentViewer, Emulator, FileSet, FileSetFileInfo, FileType, ReleaseExtended, SettingName,
     SoftwareTitle, System,
@@ -16,7 +17,7 @@ pub struct EmulatorViewModel {
     pub name: String,
     pub executable: String,
     pub extract_files: bool,
-    pub arguments: Vec<String>,
+    pub arguments: Vec<ArgumentType>,
     pub system: SystemListModel,
 }
 

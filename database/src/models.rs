@@ -226,7 +226,7 @@ pub struct Emulator {
     pub executable: String,
     pub extract_files: bool,
     pub system_id: i64,
-    pub arguments: String,
+    pub arguments: String, // as JSON string
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow)]

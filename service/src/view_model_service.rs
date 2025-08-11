@@ -10,6 +10,8 @@ use crate::{
     },
 };
 
+use core_types::ArgumentType;
+
 #[derive(Debug, Clone)]
 pub struct ReleaseFilter {
     pub system_id: Option<i64>,
@@ -48,12 +50,13 @@ impl ViewModelService {
             can_delete: false,
         };
 
-        let arguments = emulator
-            .arguments
-            .split('|')
-            .filter(|arg| !arg.trim().is_empty())
-            .map(String::from)
-            .collect::<Vec<String>>();
+        let arguments: Vec<ArgumentType> =
+            serde_json::from_str(&emulator.arguments).map_err(|_| {
+                Error::DeserializationError(format!(
+                    "Invalid argument format for emulator {}: {}",
+                    emulator.name, emulator.arguments
+                ))
+            })?;
 
         Ok(EmulatorViewModel {
             id: emulator.id,
@@ -117,13 +120,13 @@ impl ViewModelService {
                 can_delete: false,
             };
 
-            let arguments = emulator
-                .arguments
-                .split('|')
-                .filter(|arg| !arg.trim().is_empty())
-                .map(String::from)
-                .collect::<Vec<String>>();
-
+            let arguments: Vec<ArgumentType> =
+                serde_json::from_str(&emulator.arguments).map_err(|_| {
+                    Error::DeserializationError(format!(
+                        "Invalid argument format for emulator {}: {}",
+                        emulator.name, emulator.arguments
+                    ))
+                })?;
             let view_model = EmulatorViewModel {
                 id: emulator.id,
                 name: emulator.name,
@@ -329,10 +332,12 @@ mod tests {
         let emulator_id = repository_manager
             .get_emulator_repository()
             .add_emulator(
-                "Test Emulator".to_string(),
-                "temu".to_string(),
+                &"Test Emulator".to_string(),
+                &"temu".to_string(),
                 false,
-                "args".to_string(),
+                &[ArgumentType::Flag {
+                    name: "args".into(),
+                }],
                 system_id,
             )
             .await
@@ -346,7 +351,12 @@ mod tests {
         assert_eq!(emulator_view_model.id, emulator_id);
         assert_eq!(emulator_view_model.name, "Test Emulator");
         assert_eq!(emulator_view_model.executable, "temu");
-        assert_eq!(emulator_view_model.arguments, vec!["args"]);
+        assert_eq!(
+            emulator_view_model.arguments,
+            vec![ArgumentType::Flag {
+                name: "args".into(),
+            }]
+        );
         assert!(!emulator_view_model.extract_files);
         assert_eq!(emulator_view_model.system.id, system_id);
         assert_eq!(emulator_view_model.system.name, "Test System");

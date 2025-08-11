@@ -1,8 +1,7 @@
 use std::sync::Arc;
 
-use database::{
-    database_error::DatabaseError, models::Emulator, repository_manager::RepositoryManager,
-};
+use core_types::ArgumentType;
+use database::{database_error::DatabaseError, repository_manager::RepositoryManager};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, FactorySender,
     gtk::{
@@ -12,7 +11,8 @@ use relm4::{
             OrientableExt, WidgetExt,
         },
     },
-    prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque},
+    prelude::{DynamicIndex, FactoryComponent},
+    typed_view::list::{RelmListItem, TypedListView},
 };
 use service::{
     view_model_service::ViewModelService,
@@ -21,6 +21,38 @@ use service::{
 
 use crate::system_selector::{SystemSelectInit, SystemSelectModel, SystemSelectOutputMsg};
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArgumentListItem {
+    pub argument: ArgumentType,
+}
+
+pub struct ListItemWidgets {
+    label: gtk::Label,
+}
+
+impl RelmListItem for ArgumentListItem {
+    type Root = gtk::Box;
+    type Widgets = ListItemWidgets;
+
+    fn setup(_item: &gtk::ListItem) -> (gtk::Box, ListItemWidgets) {
+        relm4::view! {
+            my_box = gtk::Box {
+                set_orientation: gtk::Orientation::Horizontal,
+                #[name = "label"]
+                gtk::Label,
+            }
+        }
+
+        let widgets = ListItemWidgets { label };
+
+        (my_box, widgets)
+    }
+
+    fn bind(&mut self, widgets: &mut Self::Widgets, _root: &mut Self::Root) {
+        let ListItemWidgets { label } = widgets;
+        label.set_label(self.argument.to_string().as_str());
+    }
+}
 #[derive(Debug)]
 pub struct CommandLineArgument {
     value: String,
@@ -82,9 +114,13 @@ pub enum EmulatorFormMsg {
     ExtractFilesToggled,
     SystemSelected(SystemListModel),
     OpenSystemSelector,
+    OpenArgumentSelector,
     AddCommandLineArgument(String),
-    DeleteCommandLineArgument(DynamicIndex),
+    DeleteCommandLineArgument { position: u32 },
     Submit,
+    MoveArgumentUp,
+    MoveArgumentDown,
+    Delete,
 }
 
 #[derive(Debug)]
@@ -115,8 +151,9 @@ pub struct EmulatorFormModel {
     pub extract_files: bool,
     pub selected_system: Option<SystemListModel>,
     system_selector: Option<Controller<SystemSelectModel>>,
-    pub command_line_arguments: FactoryVecDeque<CommandLineArgument>,
+    //pub command_line_arguments: FactoryVecDeque<CommandLineArgument>,
     editable_emulator_id: Option<i64>,
+    list_view_wrapper: TypedListView<ArgumentListItem, gtk::SingleSelection>,
 }
 
 #[relm4::component(pub)]
@@ -187,26 +224,59 @@ impl Component for EmulatorFormModel {
                 },
 
                 gtk::Label {
-                    set_label: "Add command line argument",
+                    set_label: "Add flag command line argument",
                 },
 
-                gtk::Entry {
-                    #[watch]
-                    set_sensitive: model.selected_system.is_some(),
-                    connect_activate[sender] => move |entry| {
-                        let buffer = entry.buffer();
-                        sender.input(EmulatorFormMsg::AddCommandLineArgument(buffer.text().into()));
-                        buffer.delete_text(0, None);
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    gtk::Entry {
+                        #[watch]
+                        set_sensitive: model.selected_system.is_some(),
+                        connect_activate[sender] => move |entry| {
+                            let buffer = entry.buffer();
+                            sender.input(EmulatorFormMsg::AddCommandLineArgument(buffer.text().into()));
+                            buffer.delete_text(0, None);
+                        }
+                    },
+                },
+
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    gtk::ScrolledWindow {
+                        set_hscrollbar_policy: gtk::PolicyType::Never,
+                        set_min_content_height: 360,
+                        set_vexpand: true,
+                        set_hexpand: true,
+
+                        //#[local_ref]
+                        //command_line_argument_list_box -> gtk::ListBox {}
+                        #[local_ref]
+                        arguments_list_view -> gtk::ListView{}
+
+                    },
+                    gtk::Box {
+                        set_orientation: gtk::Orientation::Vertical,
+
+                        gtk::Button {
+                            set_label: "Up",
+                            #[watch]
+                            set_sensitive: model.list_view_wrapper.len() > 1,
+                            connect_clicked => EmulatorFormMsg::MoveArgumentUp,
+                        },
+                         gtk::Button {
+                            set_label: "Delete",
+                            #[watch]
+                            set_sensitive: !model.list_view_wrapper.is_empty(),
+                             connect_clicked => EmulatorFormMsg::Delete,
+                        },
+                       gtk::Button {
+                            set_label: "Down",
+                            #[watch]
+                            set_sensitive: model.list_view_wrapper.len() > 1,
+                             connect_clicked => EmulatorFormMsg::MoveArgumentDown,
+                        }
+
                     }
-                },
-
-                gtk::ScrolledWindow {
-                    set_hscrollbar_policy: gtk::PolicyType::Never,
-                    set_min_content_height: 360,
-                    set_vexpand: true,
-
-                    #[local_ref]
-                    command_line_argument_list_box -> gtk::ListBox {}
                 },
 
                 gtk::Button {
@@ -261,15 +331,20 @@ impl Component for EmulatorFormModel {
                     .widget()
                     .present();
             }
-            EmulatorFormMsg::AddCommandLineArgument(argument) => {
-                self.command_line_arguments
-                    .guard()
-                    .push_back(argument.clone());
+            EmulatorFormMsg::AddCommandLineArgument(argument_string) => {
+                let argument = ArgumentType::try_from(argument_string.as_str());
+                match argument {
+                    Ok(argument) => {
+                        println!("Adding command line argument: {}", argument);
+                        self.list_view_wrapper.append(ArgumentListItem { argument });
+                    }
+                    Err(e) => {
+                        eprintln!("Error parsing command line argument: {}", e);
+                    }
+                }
             }
-            EmulatorFormMsg::DeleteCommandLineArgument(index) => {
-                self.command_line_arguments
-                    .guard()
-                    .remove(index.current_index());
+            EmulatorFormMsg::DeleteCommandLineArgument { position } => {
+                self.list_view_wrapper.remove(position);
             }
 
             EmulatorFormMsg::Submit => {
@@ -283,28 +358,28 @@ impl Component for EmulatorFormModel {
                     let name = self.name.clone();
                     let extract_files = self.extract_files;
                     let system_id = system.id;
-                    let arguments = self
-                        .command_line_arguments
-                        .guard()
-                        .iter()
-                        .map(|arg| arg.value.clone())
-                        .collect::<Vec<_>>();
+                    let mut arguments: Vec<ArgumentType> = Vec::new();
 
-                    let arguments = arguments.join("|");
+                    for i in 0..self.list_view_wrapper.len() {
+                        let item = self.list_view_wrapper.get(i);
+                        if let Some(item) = item {
+                            arguments.push(item.borrow().argument.clone());
+                        }
+                    }
+
                     if let Some(editable_emulator_id) = self.editable_emulator_id {
                         // Update existing emulator
                         sender.oneshot_command(async move {
-                            let update_emulator = Emulator {
-                                id: editable_emulator_id,
-                                name,
-                                executable,
-                                extract_files,
-                                arguments,
-                                system_id,
-                            };
                             let res = repository_manager
                                 .get_emulator_repository()
-                                .update_emulator(&update_emulator)
+                                .update_emulator(
+                                    editable_emulator_id,
+                                    &name,
+                                    &executable,
+                                    extract_files,
+                                    &arguments,
+                                    system_id,
+                                )
                                 .await;
                             EmulatorFormCommandMsg::EmulatorUpdated(res)
                         });
@@ -312,7 +387,13 @@ impl Component for EmulatorFormModel {
                         sender.oneshot_command(async move {
                             let res = repository_manager
                                 .get_emulator_repository()
-                                .add_emulator(name, executable, extract_files, arguments, system_id)
+                                .add_emulator(
+                                    &name,
+                                    &executable,
+                                    extract_files,
+                                    &arguments,
+                                    system_id,
+                                )
                                 .await;
                             EmulatorFormCommandMsg::EmulatorSubmitted(res)
                         });
@@ -321,6 +402,40 @@ impl Component for EmulatorFormModel {
             }
             EmulatorFormMsg::NameChanged(name) => {
                 self.name = name;
+            }
+            EmulatorFormMsg::MoveArgumentUp => {
+                let index = self.list_view_wrapper.selection_model.selected();
+                if index > 0 {
+                    if let Some(item) = self.list_view_wrapper.get(index) {
+                        let argument = item.borrow().argument.clone();
+                        self.list_view_wrapper.remove(index);
+                        self.list_view_wrapper
+                            .insert(index - 1, ArgumentListItem { argument });
+                        self.list_view_wrapper
+                            .selection_model
+                            .set_selected(index - 1);
+                    }
+                }
+            }
+            EmulatorFormMsg::MoveArgumentDown => {
+                let index = self.list_view_wrapper.selection_model.selected();
+                if index < self.list_view_wrapper.len() - 1 {
+                    if let Some(item) = self.list_view_wrapper.get(index) {
+                        let argument = item.borrow().argument.clone();
+                        self.list_view_wrapper.remove(index);
+                        self.list_view_wrapper
+                            .insert(index + 1, ArgumentListItem { argument });
+                        self.list_view_wrapper
+                            .selection_model
+                            .set_selected(index + 1);
+                    }
+                }
+            }
+            EmulatorFormMsg::Delete => {
+                let index = self.list_view_wrapper.selection_model.selected();
+                if index < self.list_view_wrapper.len() {
+                    self.list_view_wrapper.remove(index);
+                }
             }
             _ => {}
         }
@@ -386,20 +501,32 @@ impl Component for EmulatorFormModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let mut command_line_arguments =
-            FactoryVecDeque::builder()
-                .launch_default()
-                .forward(sender.input_sender(), |msg| match msg {
-                    CommandLineArgumentOutput::Delete(index) => {
-                        EmulatorFormMsg::DeleteCommandLineArgument(index)
-                    }
-                });
+        let mut list_view_wrapper: TypedListView<ArgumentListItem, gtk::SingleSelection> =
+            TypedListView::new();
+        /*let mut command_line_arguments =
+        FactoryVecDeque::builder()
+            .launch_default()
+            .forward(sender.input_sender(), |msg| match msg {
+                CommandLineArgumentOutput::Delete(index) => {
+                    EmulatorFormMsg::DeleteCommandLineArgument(index)
+                }
+            });*/
 
         let model = match init.editable_emulator {
             Some(editable_emulator) => {
-                editable_emulator.arguments.iter().for_each(|arg| {
+                /*editable_emulator.arguments.iter().for_each(|arg| {
                     command_line_arguments.guard().push_back(arg.clone());
-                });
+                });*/
+
+                let argument_list_items =
+                    editable_emulator
+                        .arguments
+                        .iter()
+                        .map(|arg| ArgumentListItem {
+                            argument: arg.clone(),
+                        });
+
+                list_view_wrapper.extend_from_iter(argument_list_items);
 
                 Self {
                     view_model_service: init.view_model_service,
@@ -408,9 +535,10 @@ impl Component for EmulatorFormModel {
                     extract_files: editable_emulator.extract_files,
                     selected_system: Some(editable_emulator.system.clone()),
                     system_selector: None,
-                    command_line_arguments,
+                    //command_line_arguments,
                     name: editable_emulator.name.clone(),
                     editable_emulator_id: Some(editable_emulator.id),
+                    list_view_wrapper,
                 }
             }
             None => Self {
@@ -420,13 +548,15 @@ impl Component for EmulatorFormModel {
                 extract_files: false,
                 selected_system: None,
                 system_selector: None,
-                command_line_arguments,
+                //command_line_arguments,
                 name: String::new(),
                 editable_emulator_id: None,
+                list_view_wrapper,
             },
         };
 
-        let command_line_argument_list_box = model.command_line_arguments.widget();
+        //let command_line_argument_list_box = model.command_line_arguments.widget();
+        let arguments_list_view = &model.list_view_wrapper.view;
         let widgets = view_output!();
 
         ComponentParts { model, widgets }

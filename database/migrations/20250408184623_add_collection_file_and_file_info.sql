@@ -10,7 +10,7 @@ CREATE TABLE emulator (
     name TEXT NOT NULL,
     executable TEXT NOT NULL,
     extract_files INTEGER NOT NULL,
-    arguments TEXT NOT NULL,
+    arguments TEXT NOT NULL, -- arguments as JSON string 
     system_id INTEGER NOT NULL,
     FOREIGN KEY (system_id) REFERENCES system(id) ON DELETE CASCADE
 );

@@ -210,20 +210,15 @@ impl Component for DocumentViewer {
                     let executable = viewer.executable.clone();
                     // TODO: create a viewer view model that has processed arguments already to
                     // correct format
-                    let arguments = viewer
-                        .arguments
-                        .split("|")
-                        .map(|s| s.to_string())
-                        .filter(|s| !s.is_empty())
-                        .collect::<Vec<_>>();
+                    let arguments = Vec::new(); // TODO: viewer.arguments.clone();
 
                     sender.oneshot_command(async move {
                         let res = match export_files(&export_model) {
                             Ok(()) => {
                                 run_with_emulator(
                                     executable,
-                                    arguments,
-                                    files_in_fileset,
+                                    &arguments,
+                                    &files_in_fileset,
                                     starting_file,
                                     temp_dir,
                                 )

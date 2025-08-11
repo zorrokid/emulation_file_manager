@@ -541,6 +541,8 @@ checksum = "7c74b8349d32d297c9134b8c88677813a227df8f779daa29bfc29c183fe3dca6"
 name = "core_types"
 version = "0.1.0"
 dependencies = [
+ "serde",
+ "serde_json",
  "strum",
  "strum_macros",
 ]
@@ -637,6 +639,7 @@ dependencies = [
  "directories-next",
  "dotenvy",
  "file_system",
+ "serde_json",
  "sqlx",
  "thiserror 2.0.12",
 ]
@@ -743,6 +746,7 @@ version = "0.1.0"
 dependencies = [
  "async-process",
  "async-std",
+ "core_types",
  "tempfile",
  "thiserror 2.0.12",
 ]
@@ -2656,9 +2660,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.140"
+version = "1.0.142"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20068b6e96dc6c9bd23e01df8827e6c7e1f2fddd43c21810382803c136b99373"
+checksum = "030fedb782600dcbd6f02d479bf0d817ac3bb40d644745b769d6a96bc3afc5a7"
 dependencies = [
  "itoa",
  "memchr",
@@ -2692,8 +2696,10 @@ name = "service"
 version = "0.1.0"
 dependencies = [
  "async-std",
+ "core_types",
  "database",
  "file_system",
+ "serde_json",
 ]
 
 [[package]]
