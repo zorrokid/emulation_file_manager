@@ -141,15 +141,15 @@ impl FileSetRepository {
     // TODO: update file set
     pub async fn add_file_set(
         &self,
-        file_set_name: &String,
+        file_set_name: &str,
+        file_set_file_name: &str,
         file_type: &FileType,
         files_in_fileset: &[ImportedFile],
         system_ids: &[i64],
-        name: &String,
     ) -> Result<i64, Error> {
         println!(
-            "Adding file set: {}, file type: {:?}, files: {:?}, systems: {:?}",
-            file_set_name, file_type, files_in_fileset, system_ids
+            "Adding file set: {}, {} file type: {:?}, files: {:?}, systems: {:?}",
+            file_set_name, file_set_file_name, file_type, files_in_fileset, system_ids
         );
         let file_type = *file_type as i64;
 
@@ -161,9 +161,9 @@ impl FileSetRepository {
                 file_type,
                 name) 
              VALUES (?, ?, ?)",
-            file_set_name,
+            file_set_file_name,
             file_type,
-            name
+            file_set_name,
         )
         .execute(&mut *transaction)
         .await?;

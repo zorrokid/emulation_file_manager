@@ -115,7 +115,8 @@ pub enum FileSetFormMsg {
         sha1_checksum: Sha1Checksum,
         selected: bool,
     },
-    NameChanged(String),
+    FileSetNameChanged(String),
+    FileSetFileNameChanged(String),
 }
 
 #[derive(Debug)]
@@ -147,6 +148,7 @@ pub struct FileSetFormModel {
     selected_file_type: FileType,
     selected_system_ids: Vec<i64>,
     file_set_name: String,
+    file_set_file_name: String,
 }
 
 #[relm4::component(pub)]
@@ -188,12 +190,26 @@ impl Component for FileSetFormModel {
                 },
 
                 gtk::Entry {
-                    set_placeholder_text: Some("File Set Name"),
+                    set_placeholder_text: Some("File Set File Name"),
+                    #[watch]
+                    set_text: &model.file_set_file_name,
+                    connect_activate[sender] => move |entry| {
+                        let buffer = entry.buffer();
+                        sender.input(
+                            FileSetFormMsg::FileSetFileNameChanged(buffer.text().into()),
+                        );
+                    }
+                },
+
+
+                gtk::Entry {
+                    set_placeholder_text: Some("File Set Description"),
+                    #[watch]
                     set_text: &model.file_set_name,
                     connect_activate[sender] => move |entry| {
                         let buffer = entry.buffer();
                         sender.input(
-                            FileSetFormMsg::NameChanged(buffer.text().into()),
+                            FileSetFormMsg::FileSetNameChanged(buffer.text().into()),
                         );
                     }
                 },
@@ -234,6 +250,7 @@ impl Component for FileSetFormModel {
             selected_file_type: init_model.selected_file_type,
             selected_system_ids: init_model.selected_system_ids,
             file_set_name: String::new(),
+            file_set_file_name: String::new(),
         };
         let files_list_box = model.files.widget();
 
@@ -273,6 +290,8 @@ impl Component for FileSetFormModel {
             FileSetFormMsg::FileSelected(path) => {
                 println!("File selected: {:?}", path);
                 self.file_importer.set_current_picked_file(path.clone());
+                let file_name = self.file_importer.get_file_set_name();
+                self.file_set_file_name = file_name.unwrap_or("".to_string());
                 let is_zip_file = self.file_importer.is_zip_file();
                 sender.oneshot_command(async move {
                     // TODO: combine this in file_import
@@ -304,6 +323,7 @@ impl Component for FileSetFormModel {
                         self.selected_file_type,
                         &self.settings.collection_root_dir,
                         &self.file_importer,
+                        &self.file_set_name,
                     );
                     println!("Prepared file import model: {:?}", file_import_model);
                     sender.oneshot_command(async move {
@@ -312,7 +332,12 @@ impl Component for FileSetFormModel {
                     });
                 }
             }
-            _ => {}
+            FileSetFormMsg::FileSetNameChanged(name) => {
+                self.file_set_name = name;
+            }
+            FileSetFormMsg::FileSetFileNameChanged(name) => {
+                self.file_set_file_name = name;
+            }
         }
     }
 
@@ -364,31 +389,31 @@ impl Component for FileSetFormModel {
             }
             CommandMsg::FilesImported(Ok(imported_files_map)) => {
                 println!("Files imported successfully: {:?}", imported_files_map);
-                if let Some(file_set_name) = self.file_importer.get_file_set_name() {
-                    println!("File set name: {}", file_set_name);
-                    self.file_importer
-                        .set_imported_files(imported_files_map.clone());
+                self.file_importer
+                    .set_imported_files(imported_files_map.clone());
 
-                    let system_ids = self.selected_system_ids.clone();
-                    let repo = Arc::clone(&self.repository_manager);
+                let system_ids = self.selected_system_ids.clone();
+                let repo = Arc::clone(&self.repository_manager);
 
-                    let files_in_file_set = self.file_importer.get_files_selected_for_file_set();
-                    let file_type = self.selected_file_type;
-                    let file_set_name = self.file_set_name.clone();
-                    sender.oneshot_command(async move {
-                        let result = repo
-                            .get_file_set_repository()
-                            .add_file_set(
-                                &file_set_name,
-                                &file_type.into(),
-                                &files_in_file_set,
-                                &system_ids,
-                                &file_set_name,
-                            )
-                            .await;
-                        CommandMsg::FilesSavedToDatabase(result)
-                    });
-                }
+                let files_in_file_set = self.file_importer.get_files_selected_for_file_set();
+                let file_type = self.selected_file_type;
+                let file_set_name = self.file_set_name.clone();
+                let file_set_file_name = self.file_set_file_name.clone();
+                assert!(!files_in_file_set.is_empty());
+                assert!(!file_set_file_name.is_empty());
+                sender.oneshot_command(async move {
+                    let result = repo
+                        .get_file_set_repository()
+                        .add_file_set(
+                            &file_set_name,
+                            &file_set_file_name,
+                            &file_type.into(),
+                            &files_in_file_set,
+                            &system_ids,
+                        )
+                        .await;
+                    CommandMsg::FilesSavedToDatabase(result)
+                });
             }
             CommandMsg::FilesImported(Err(e)) => {
                 eprintln!("Error importing files: {:?}", e);

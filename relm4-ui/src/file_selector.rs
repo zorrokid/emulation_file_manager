@@ -307,7 +307,7 @@ impl Component for FileSelectModel {
                     .filter(|f| !self.selected_file_set_ids.contains(&f.id))
                     .map(|file_set| ListItem {
                         id: file_set.id,
-                        name: file_set.file_set_name.clone(),
+                        name: format!("{} [{}]", file_set.file_set_name, file_set.file_name),
                     });
                 self.list_view_wrapper.extend_from_iter(list_items);
             }

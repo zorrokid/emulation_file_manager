@@ -93,6 +93,7 @@ impl FileImporter {
     }
 
     pub fn set_current_picked_file_content(&mut self, content: HashMap<Sha1Checksum, ReadFile>) {
+        println!("Setting selected: {:?}", content.keys());
         self.selected_files_from_current_picked_file
             .extend(content.keys());
         self.current_picked_file_content = content;
