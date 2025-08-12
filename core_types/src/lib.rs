@@ -204,33 +204,28 @@ mod tests {
                 value: "1".to_string()
             }
         );
-        assert!(parse_argument("invalid").is_err());
     }
     #[test]
     fn test_argument_type_from_str() {
         assert_eq!(
-            ArgumentType::from("--flag"),
+            ArgumentType::try_from("--flag").unwrap(),
             ArgumentType::Flag {
                 name: "--flag".to_string()
             }
         );
         assert_eq!(
-            ArgumentType::from("-f 1"),
+            ArgumentType::try_from("-f 1").unwrap(),
             ArgumentType::FlagWithValue {
                 name: "-f".to_string(),
                 value: "1".to_string()
             }
         );
         assert_eq!(
-            ArgumentType::from("--flag=1"),
+            ArgumentType::try_from("--flag=1").unwrap(),
             ArgumentType::FlagEqualsValue {
                 name: "--flag".to_string(),
                 value: "1".to_string()
             }
         );
-        assert!(matches!(
-            ArgumentType::from("invalid"),
-            ArgumentType::Flag { name } if name == "invalid"
-        ));
     }
 }

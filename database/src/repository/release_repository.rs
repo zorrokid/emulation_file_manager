@@ -539,6 +539,7 @@ mod tests {
         let file_set_repository = FileSetRepository::new(pool.clone());
         let file_set_1_id = file_set_repository
             .add_file_set(
+                &"Test file set".to_string(),
                 &"File Set 1".to_string(),
                 &FileType::Rom,
                 &[ImportedFile {
@@ -548,13 +549,13 @@ mod tests {
                     sha1_checksum: [0; 20],
                 }],
                 &[system_1_id],
-                &"Test file set".to_string(),
             )
             .await
             .unwrap();
 
         let file_set_2_id = file_set_repository
             .add_file_set(
+                &"Test file set 2".to_string(),
                 &"File Set 2".to_string(),
                 &FileType::Rom,
                 &[ImportedFile {
@@ -564,13 +565,13 @@ mod tests {
                     sha1_checksum: [1; 20],
                 }],
                 &[system_2_id],
-                &"Test file set 2".to_string(),
             )
             .await
             .unwrap();
 
         let file_set_3_id = file_set_repository
             .add_file_set(
+                &"Test file set 3".to_string(),
                 &"File Set 3".to_string(),
                 &FileType::Rom,
                 &[ImportedFile {
@@ -580,7 +581,6 @@ mod tests {
                     sha1_checksum: [2; 20],
                 }],
                 &[system_3_id],
-                &"Test file set 3".to_string(),
             )
             .await
             .unwrap();

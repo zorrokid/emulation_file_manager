@@ -290,7 +290,7 @@ impl ViewModelService {
 
             file_set_view_models.push(FileSetViewModel {
                 id: file_set.id,
-                file_set_name: file_set.file_name.clone(),
+                file_set_name: file_set.name.clone(),
                 file_type: file_set.file_type,
                 files,
                 file_name: file_set.file_name.clone(),

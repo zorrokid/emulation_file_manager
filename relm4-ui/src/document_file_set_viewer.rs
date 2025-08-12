@@ -13,7 +13,7 @@ use database::{
     repository_manager::RepositoryManager,
 };
 use emulator_runner::{error::EmulatorRunnerError, run_with_emulator};
-use file_export::{export_files, export_files_zipped_or_non_zipped};
+use file_export::export_files;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
