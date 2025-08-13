@@ -5,7 +5,6 @@ use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
         self,
-        glib::clone,
         prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt},
     },
     typed_view::list::TypedListView,
@@ -37,6 +36,8 @@ pub enum ReleaseFormMsg {
     OpenSoftwareTitleSelector,
     SoftwareTitleCreated(SoftwareTitleListModel),
     RemoveSoftwareTitle,
+    RemoveSystem,
+    RemoveFileSet,
 }
 
 #[derive(Debug)]
@@ -124,10 +125,19 @@ impl Component for ReleaseFormModel {
                         #[local_ref]
                         selected_systems_list_view -> gtk::ListView {}
                     },
-                    gtk::Button {
-                        set_label: "Select System",
-                        connect_clicked => ReleaseFormMsg::OpenSystemSelector,
+                    gtk::Box {
+                        set_orientation: gtk::Orientation::Horizontal,
+
+                        gtk::Button {
+                            set_label: "Select System",
+                            connect_clicked => ReleaseFormMsg::OpenSystemSelector,
+                        },
+                        gtk::Button {
+                            set_label: "Remove System",
+                            connect_clicked => ReleaseFormMsg::RemoveSystem,
+                        },
                     },
+
                 },
 
                 gtk::Box {
@@ -144,10 +154,18 @@ impl Component for ReleaseFormModel {
                         selected_file_sets_list_view -> gtk::ListView {}
 
                     },
-                    gtk::Button {
-                        set_label: "Select File Set",
-                        connect_clicked => ReleaseFormMsg::OpenFileSelector,
+                    gtk::Box {
+                        set_orientation: gtk::Orientation::Horizontal,
+                         gtk::Button {
+                            set_label: "Select File Set",
+                            connect_clicked => ReleaseFormMsg::OpenFileSelector,
+                        },
+                        gtk::Button {
+                            set_label: "Remove File Set",
+                            connect_clicked => ReleaseFormMsg::RemoveFileSet,
+                        },
                     },
+
                 },
 
 
@@ -408,13 +426,13 @@ impl Component for ReleaseFormModel {
                 }
             }
             ReleaseFormMsg::RemoveSoftwareTitle => {
-                println!("Remove selected software title");
-                let selected_position = self
-                    .selected_software_titles_list_view_wrapper
-                    .selection_model
-                    .selected();
-                self.selected_software_titles_list_view_wrapper
-                    .remove(selected_position);
+                remove_selected(&mut self.selected_software_titles_list_view_wrapper);
+            }
+            ReleaseFormMsg::RemoveSystem => {
+                remove_selected(&mut self.selected_systems_list_view_wrapper);
+            }
+            ReleaseFormMsg::RemoveFileSet => {
+                remove_selected(&mut self.selected_file_sets_list_view_wrapper);
             }
         }
     }
@@ -449,4 +467,8 @@ fn get_item_ids(list_view_wrapper: &TypedListView<ListItem, gtk::SingleSelection
     (0..list_view_wrapper.len())
         .filter_map(|i| list_view_wrapper.get(i).map(|st| st.borrow().id))
         .collect()
+}
+
+fn remove_selected(list_view_wrapper: &mut TypedListView<ListItem, gtk::SingleSelection>) {
+    list_view_wrapper.remove(list_view_wrapper.selection_model.selected());
 }
