@@ -1,9 +1,6 @@
 use std::sync::Arc;
 
-use database::{
-    database_error::{DatabaseError, Error},
-    repository_manager::RepositoryManager,
-};
+use database::{database_error::Error, repository_manager::RepositoryManager};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
@@ -40,7 +37,6 @@ pub enum ReleaseFormMsg {
     OpenSoftwareTitleSelector,
     SoftwareTitleCreated(SoftwareTitleListModel),
     RemoveSoftwareTitle,
-    SoftwareTitleSelectedFromList { index: u32 },
 }
 
 #[derive(Debug)]
@@ -65,7 +61,6 @@ pub struct ReleaseFormModel {
     selected_software_titles_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     selected_systems_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     selected_file_sets_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
-    selected_software_title: Option<i64>,
     release: Option<ReleaseViewModel>,
 }
 
@@ -113,7 +108,6 @@ impl Component for ReleaseFormModel {
                         gtk::Button {
                             set_label: "Remove Software Title",
                             connect_clicked => ReleaseFormMsg::RemoveSoftwareTitle,
-                            set_sensitive: model.selected_software_title.is_some()
                         },
                     },
                 },
@@ -239,23 +233,6 @@ impl Component for ReleaseFormModel {
             }),
         );
 
-        let software_titles_selection_model =
-            &selected_software_titles_list_view_wrapper.selection_model;
-
-        software_titles_selection_model.connect_selected_notify(clone!(
-            #[strong]
-            sender,
-            move |selection| {
-                sender.input(ReleaseFormMsg::SoftwareTitleSelectedFromList {
-                    index: selection.selected(),
-                });
-            }
-        ));
-
-        let selected_software_title = selected_software_titles_list_view_wrapper
-            .get(software_titles_selection_model.selected())
-            .map(|t| t.borrow().id);
-
         let model = ReleaseFormModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
@@ -267,7 +244,6 @@ impl Component for ReleaseFormModel {
             selected_software_titles_list_view_wrapper,
             selected_systems_list_view_wrapper,
             selected_file_sets_list_view_wrapper,
-            selected_software_title,
         };
 
         let selected_systems_list_view = &model.selected_systems_list_view_wrapper.view;
@@ -431,13 +407,8 @@ impl Component for ReleaseFormModel {
                     eprintln!("Error in sending message {:?}", msg);
                 }
             }
-            ReleaseFormMsg::SoftwareTitleSelectedFromList { index } => {
-                self.selected_software_title = self
-                    .selected_software_titles_list_view_wrapper
-                    .get(index)
-                    .map(|t| t.borrow().id);
-            }
             ReleaseFormMsg::RemoveSoftwareTitle => {
+                println!("Remove selected software title");
                 let selected_position = self
                     .selected_software_titles_list_view_wrapper
                     .selection_model
