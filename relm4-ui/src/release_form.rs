@@ -5,15 +5,14 @@ use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
         self,
-        prelude::{ButtonExt, GtkWindowExt, OrientableExt, WidgetExt},
+        prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt},
     },
     typed_view::list::TypedListView,
 };
 use service::{
     view_model_service::ViewModelService,
     view_models::{
-        FileSetListModel, ReleaseListModel, ReleaseViewModel, Settings, SoftwareTitleListModel,
-        SystemListModel,
+        FileSetListModel, ReleaseViewModel, Settings, SoftwareTitleListModel, SystemListModel,
     },
 };
 
@@ -36,6 +35,9 @@ pub enum ReleaseFormMsg {
     StartSaveRelease,
     OpenSoftwareTitleSelector,
     SoftwareTitleCreated(SoftwareTitleListModel),
+    RemoveSoftwareTitle,
+    RemoveSystem,
+    RemoveFileSet,
 }
 
 #[derive(Debug)]
@@ -53,9 +55,6 @@ pub enum CommandMsg {
 pub struct ReleaseFormModel {
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
-    selected_software_titles: Vec<SoftwareTitleListModel>,
-    selected_systems: Vec<SystemListModel>,
-    selected_file_sets: Vec<FileSetListModel>,
     settings: Arc<Settings>,
     system_selector: Option<Controller<SystemSelectModel>>,
     file_selector: Option<Controller<FileSelectModel>>,
@@ -88,41 +87,85 @@ impl Component for ReleaseFormModel {
             set_title: Some("Release Form"),
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
+                set_spacing: 10,
 
-                gtk::ScrolledWindow {
-                    set_vexpand: true,
-                    #[local_ref]
-                    selected_software_titles_list_view -> gtk::ListView {}
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Vertical,
+                    gtk::Label {
+                        set_label: "Software titles",
+                    },
+                    gtk::ScrolledWindow {
+                        set_vexpand: true,
+                        #[local_ref]
+                        selected_software_titles_list_view -> gtk::ListView {}
+                    },
+                    gtk::Box {
+                        set_orientation: gtk::Orientation::Horizontal,
+
+                        gtk::Button {
+                            set_label: "Select Software Title",
+                            connect_clicked => ReleaseFormMsg::OpenSoftwareTitleSelector,
+                        },
+                        gtk::Button {
+                            set_label: "Remove Software Title",
+                            connect_clicked => ReleaseFormMsg::RemoveSoftwareTitle,
+                        },
+                    },
                 },
-                gtk::Button {
-                    set_label: "Select Software Title",
-                    connect_clicked => ReleaseFormMsg::OpenSoftwareTitleSelector,
+
+
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Vertical,
+                    gtk::Label {
+                        set_label: "Systems",
+                    },
+
+                    gtk::ScrolledWindow {
+                        set_vexpand: true,
+                        #[local_ref]
+                        selected_systems_list_view -> gtk::ListView {}
+                    },
+                    gtk::Box {
+                        set_orientation: gtk::Orientation::Horizontal,
+
+                        gtk::Button {
+                            set_label: "Select System",
+                            connect_clicked => ReleaseFormMsg::OpenSystemSelector,
+                        },
+                        gtk::Button {
+                            set_label: "Remove System",
+                            connect_clicked => ReleaseFormMsg::RemoveSystem,
+                        },
+                    },
+
                 },
 
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Vertical,
+                    gtk::Label {
+                        set_label: "File sets",
+                    },
 
-                gtk::ScrolledWindow {
-                    set_vexpand: true,
-                    #[local_ref]
-                    selected_systems_list_view -> gtk::ListView {}
-                },
-                gtk::Button {
-                    set_label: "Select System",
-                    connect_clicked => ReleaseFormMsg::OpenSystemSelector,
-                },
+                   gtk::ScrolledWindow {
+                        set_min_content_height: 360,
+                        set_vexpand: true,
 
+                        #[local_ref]
+                        selected_file_sets_list_view -> gtk::ListView {}
 
+                    },
+                    gtk::Box {
+                        set_orientation: gtk::Orientation::Horizontal,
+                         gtk::Button {
+                            set_label: "Select File Set",
+                            connect_clicked => ReleaseFormMsg::OpenFileSelector,
+                        },
+                        gtk::Button {
+                            set_label: "Remove File Set",
+                            connect_clicked => ReleaseFormMsg::RemoveFileSet,
+                        },
+                    },
 
-               gtk::ScrolledWindow {
-                    set_min_content_height: 360,
-                    set_vexpand: true,
-
-                    #[local_ref]
-                    selected_file_sets_list_view -> gtk::ListView {}
-
-                },
-                gtk::Button {
-                    set_label: "Select File Set",
-                    connect_clicked => ReleaseFormMsg::OpenFileSelector,
                 },
 
 
@@ -219,9 +262,6 @@ impl Component for ReleaseFormModel {
             selected_software_titles_list_view_wrapper,
             selected_systems_list_view_wrapper,
             selected_file_sets_list_view_wrapper,
-            selected_systems,
-            selected_file_sets,
-            selected_software_titles,
         };
 
         let selected_systems_list_view = &model.selected_systems_list_view_wrapper.view;
@@ -238,7 +278,7 @@ impl Component for ReleaseFormModel {
                 let init_model = SystemSelectInit {
                     view_model_service: Arc::clone(&self.view_model_service),
                     repository_manager: Arc::clone(&self.repository_manager),
-                    selected_system_ids: self.selected_systems.iter().map(|s| s.id).collect(),
+                    selected_system_ids: get_item_ids(&self.selected_systems_list_view_wrapper),
                 };
                 let system_selector = SystemSelectModel::builder()
                     .transient_for(root)
@@ -261,8 +301,8 @@ impl Component for ReleaseFormModel {
                     view_model_service: Arc::clone(&self.view_model_service),
                     repository_manager: Arc::clone(&self.repository_manager),
                     settings: Arc::clone(&self.settings),
-                    selected_system_ids: self.selected_systems.iter().map(|s| s.id).collect(),
-                    selected_file_set_ids: self.selected_file_sets.iter().map(|fs| fs.id).collect(),
+                    selected_system_ids: get_item_ids(&self.selected_systems_list_view_wrapper),
+                    selected_file_set_ids: get_item_ids(&self.selected_file_sets_list_view_wrapper),
                 };
                 let file_selector = FileSelectModel::builder()
                     .transient_for(root)
@@ -286,11 +326,9 @@ impl Component for ReleaseFormModel {
                     .launch(SoftwareTitleSelectInit {
                         view_model_service: Arc::clone(&self.view_model_service),
                         repository_manager: Arc::clone(&self.repository_manager),
-                        selected_software_title_ids: self
-                            .selected_software_titles
-                            .iter()
-                            .map(|st| st.id)
-                            .collect(),
+                        selected_software_title_ids: get_item_ids(
+                            &self.selected_software_titles_list_view_wrapper,
+                        ),
                     })
                     .forward(sender.input_sender(), |msg| match msg {
                         SoftwareTitleSelectOutputMsg::SoftwareTitleSelected(software_title) => {
@@ -314,7 +352,6 @@ impl Component for ReleaseFormModel {
                     name: system.name.clone(),
                     id: system.id,
                 });
-                self.selected_systems.push(system);
             }
             ReleaseFormMsg::FileSetSelected(file_set) => {
                 println!("File set selected: {:?}", &file_set);
@@ -322,7 +359,6 @@ impl Component for ReleaseFormModel {
                     name: file_set.file_set_name.clone(),
                     id: file_set.id,
                 });
-                self.selected_file_sets.push(file_set);
             }
             ReleaseFormMsg::SoftwareTitleSelected(software_title) => {
                 println!("Software title selected: {:?}", &software_title);
@@ -331,38 +367,23 @@ impl Component for ReleaseFormModel {
                         name: software_title.name.clone(),
                         id: software_title.id,
                     });
-                self.selected_software_titles.push(software_title);
             }
             ReleaseFormMsg::StartSaveRelease => {
                 println!("Starting to save release with selected systems and file sets");
                 let repository_manager = Arc::clone(&self.repository_manager);
-                if self.selected_systems.is_empty() {
+                let software_title_ids =
+                    get_item_ids(&self.selected_software_titles_list_view_wrapper);
+                let system_ids = get_item_ids(&self.selected_systems_list_view_wrapper);
+
+                let file_set_ids = get_item_ids(&self.selected_file_sets_list_view_wrapper);
+
+                if system_ids.is_empty() {
                     println!("No systems selected, cannot create release.");
-                } else if self.selected_file_sets.is_empty() {
+                } else if file_set_ids.is_empty() {
                     println!("No file sets selected, cannot create release.");
-                } else if self.selected_software_titles.is_empty() {
+                } else if software_title_ids.is_empty() {
                     println!("No software titles selected, cannot create release.");
                 } else {
-                    println!(
-                        "Selected systems: {:?}, Selected file sets: {:?}",
-                        self.selected_systems, self.selected_file_sets
-                    );
-
-                    let software_title_ids: Vec<i64> = self
-                        .selected_software_titles
-                        .iter()
-                        .map(|title| title.id)
-                        .collect();
-
-                    let file_set_ids: Vec<i64> =
-                        self.selected_file_sets.iter().map(|fs| fs.id).collect();
-
-                    let system_ids: Vec<i64> = self
-                        .selected_systems
-                        .iter()
-                        .map(|system| system.id)
-                        .collect();
-
                     let release_id = self.release.as_ref().map(|r| r.id);
 
                     sender.oneshot_command(async move {
@@ -399,7 +420,19 @@ impl Component for ReleaseFormModel {
             }
             ReleaseFormMsg::SoftwareTitleCreated(software_title) => {
                 println!("Software title created: {:?}", &software_title);
-                sender.output(ReleaseFormOutputMsg::SoftwareTitleCreated(software_title));
+                let res = sender.output(ReleaseFormOutputMsg::SoftwareTitleCreated(software_title));
+                if let Err(msg) = res {
+                    eprintln!("Error in sending message {:?}", msg);
+                }
+            }
+            ReleaseFormMsg::RemoveSoftwareTitle => {
+                remove_selected(&mut self.selected_software_titles_list_view_wrapper);
+            }
+            ReleaseFormMsg::RemoveSystem => {
+                remove_selected(&mut self.selected_systems_list_view_wrapper);
+            }
+            ReleaseFormMsg::RemoveFileSet => {
+                remove_selected(&mut self.selected_file_sets_list_view_wrapper);
             }
         }
     }
@@ -413,20 +446,6 @@ impl Component for ReleaseFormModel {
         match message {
             CommandMsg::ReleaseCreatedOrUpdated(Ok(id)) => {
                 println!("Release created or updated with ID: {}", id);
-                /*let release_list_model = ReleaseListModel {
-                    id,
-                    name: "New Release".to_string(),
-                    system_names: self
-                        .selected_systems
-                        .iter()
-                        .map(|s| s.name.clone())
-                        .collect(),
-                    file_types: self
-                        .selected_file_sets
-                        .iter()
-                        .map(|fs| fs.file_type.to_string())
-                        .collect(),
-                };*/
                 let res = sender.output(ReleaseFormOutputMsg::ReleaseCreatedOrUpdated { id });
                 if let Err(e) = res {
                     eprintln!("Failed to send output message: {:?}", e);
@@ -442,4 +461,14 @@ impl Component for ReleaseFormModel {
             }
         }
     }
+}
+
+fn get_item_ids(list_view_wrapper: &TypedListView<ListItem, gtk::SingleSelection>) -> Vec<i64> {
+    (0..list_view_wrapper.len())
+        .filter_map(|i| list_view_wrapper.get(i).map(|st| st.borrow().id))
+        .collect()
+}
+
+fn remove_selected(list_view_wrapper: &mut TypedListView<ListItem, gtk::SingleSelection>) {
+    list_view_wrapper.remove(list_view_wrapper.selection_model.selected());
 }
