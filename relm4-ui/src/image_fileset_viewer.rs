@@ -5,13 +5,14 @@ use relm4::{
     Component, ComponentParts, ComponentSender, RelmWidgetExt,
     gtk::{
         self,
+        gio::File,
         glib::clone,
         prelude::{BoxExt, GtkWindowExt, OrientableExt, WidgetExt},
     },
     typed_view::grid::{RelmGridItem, TypedGridView},
 };
 use service::view_models::{FileSetViewModel, Settings};
-use thumbnails::{ThumbnailPathMap, prepare_thumbnails};
+use thumbnails::{ThumbnailPathMap, get_image_size, prepare_thumbnails};
 
 use crate::utils::prepare_fileset_for_export;
 
@@ -96,6 +97,7 @@ pub struct ImageFilesetViewer {
     thumbnails_mapping: ThumbnailPathMap,
     grid_view_wrapper: TypedGridView<MyGridItem, gtk::SingleSelection>,
     selected_image: PathBuf,
+    image_dimensions: (u32, u32),
 }
 
 #[relm4::component(pub)]
@@ -115,29 +117,31 @@ impl Component for ImageFilesetViewer {
                     set_label: &format!("Viewing fileset: {}", model.file_set.file_set_name),
                 },
 
-                gtk::ScrolledWindow {
-                    set_vexpand: true,
+                gtk::Paned {
+                    set_orientation: gtk::Orientation::Vertical,
+                    set_start_child: Some(&thumbnails_grid),
+                    set_end_child: Some(&image_view),
+                },
 
+                #[name = "thumbnails_grid"]
+                gtk::ScrolledWindow {
                     #[local_ref]
                     my_view -> gtk::GridView {
                         set_orientation: gtk::Orientation::Vertical,
                         set_max_columns: 3,
-                    }
+                    },
                 },
 
+                #[name = "image_view"]
                 gtk::ScrolledWindow {
                     set_vexpand: true,
                     set_hexpand: true,
                     #[name = "selected_image"]
-                    gtk::Image {
+                    gtk::Picture{
                          #[watch]
-                        set_from_file: Some(&model.selected_image),
-                        set_pixel_size: 2200,
-                        set_valign: gtk::Align::Start,
-                        set_halign: gtk::Align::Start,
+                        set_file: Some(&File::for_path(&model.selected_image)),
                     }
                 }
-
            },
         }
     }
@@ -175,6 +179,7 @@ impl Component for ImageFilesetViewer {
             thumbnails_mapping: ThumbnailPathMap::new(),
             grid_view_wrapper,
             selected_image: PathBuf::new(),
+            image_dimensions: (0, 0),
         };
         let my_view = &model.grid_view_wrapper.view;
 
@@ -200,7 +205,10 @@ impl Component for ImageFilesetViewer {
                     println!("Selected file: {:?}", image_path);
                     let temp_dir = std::env::temp_dir();
                     let path = temp_dir.join(&image_path);
+                    let image_size = get_image_size(&path).unwrap_or((0, 0));
+
                     self.selected_image = path;
+                    self.image_dimensions = image_size;
                 } else {
                     println!("No item found at index {}", index);
                 }

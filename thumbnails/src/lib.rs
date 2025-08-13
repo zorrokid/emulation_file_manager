@@ -4,6 +4,7 @@ use std::{
 };
 
 use file_export::FileSetExportModel;
+use image::GenericImageView;
 
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
@@ -77,4 +78,15 @@ pub fn prepare_thumbnails(
         }
     }
     Ok(thumbnail_path_mapp)
+}
+
+pub fn get_image_size(image_path: &Path) -> Result<(u32, u32), ThumbnailsError> {
+    let image = image::open(image_path).map_err(|err| {
+        ThumbnailsError::IoError(format!(
+            "Failed opening image {} with error: {}",
+            image_path.display(),
+            &err
+        ))
+    })?;
+    Ok(image.dimensions())
 }
