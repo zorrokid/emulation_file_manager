@@ -8,7 +8,7 @@ use core_types::{FileType, ImportedFile, ReadFile, Sha1Checksum};
 use database::{
     database_error::Error as DatabaseError, models::FileInfo, repository_manager::RepositoryManager,
 };
-use file_import::FileImportError;
+use file_import::{FileImportError, FileImportModel};
 use relm4::{
     Component, ComponentParts, ComponentSender, FactorySender, RelmWidgetExt,
     gtk::{
@@ -24,7 +24,7 @@ use relm4::{
 };
 use service::view_models::{FileSetListModel, Settings};
 
-use crate::{file_importer::FileImporter, utils::prepare_file_import};
+use crate::{file_importer::FileImporter, utils::resolve_file_type_path};
 
 #[derive(Debug, Clone)]
 struct File {
@@ -126,8 +126,15 @@ pub enum FileSetFormOutputMsg {
 
 #[derive(Debug)]
 pub enum CommandMsg {
-    FileContentsRead(Result<HashMap<Sha1Checksum, ReadFile>, FileImportError>),
-    ExistingFilesRead(Result<Vec<FileInfo>, DatabaseError>),
+    FileContentsRead(
+        PathBuf,
+        Result<HashMap<Sha1Checksum, ReadFile>, FileImportError>,
+    ),
+    ExistingFilesRead {
+        path: PathBuf,
+        content: HashMap<Sha1Checksum, ReadFile>,
+        result: Result<Vec<FileInfo>, DatabaseError>,
+    },
     FilesImported(Result<HashMap<Sha1Checksum, ImportedFile>, FileImportError>),
     FilesSavedToDatabase(Result<i64, DatabaseError>),
 }
@@ -289,17 +296,21 @@ impl Component for FileSetFormModel {
             }
             FileSetFormMsg::FileSelected(path) => {
                 println!("File selected: {:?}", path);
-                self.file_importer.set_current_picked_file(path.clone());
-                let file_name = self.file_importer.get_file_set_name();
-                self.file_set_file_name = file_name.unwrap_or("".to_string());
-                let is_zip_file = self.file_importer.is_zip_file();
+                let file_set_name = self.file_importer.get_file_set_name(&path);
+                let file_set_file_name = self.file_importer.get_file_set_file_name(&path);
+                if self.file_set_name.is_empty() {
+                    self.file_set_name = file_set_name.clone().unwrap_or_default();
+                }
+                if self.file_set_file_name.is_empty() {
+                    self.file_set_file_name = file_set_file_name.unwrap_or_default();
+                }
+                let is_zip_file = self.file_importer.is_zip_file(&path);
                 sender.oneshot_command(async move {
-                    // TODO: combine this in file_import
                     let res = match is_zip_file {
-                        true => file_import::read_zip_contents_with_checksums(path),
-                        false => file_import::read_file_checksum(path),
+                        true => file_import::read_zip_contents_with_checksums(&path),
+                        false => file_import::read_file_checksum(&path),
                     };
-                    CommandMsg::FileContentsRead(res)
+                    CommandMsg::FileContentsRead(path, res)
                 });
             }
             FileSetFormMsg::SetFileSelected {
@@ -317,14 +328,32 @@ impl Component for FileSetFormModel {
                 }
             }
             FileSetFormMsg::CreateFileSetFromSelectedFiles => {
-                if let Some(file_path) = self.file_importer.get_current_picked_file() {
-                    let file_import_model = prepare_file_import(
-                        file_path,
-                        self.selected_file_type,
+                if self.file_importer.is_selected_files() {
+                    let target_path = resolve_file_type_path(
                         &self.settings.collection_root_dir,
-                        &self.file_importer,
-                        &self.file_set_name,
+                        &self.selected_file_type,
                     );
+                    let new_files_file_name_filter = self
+                        .file_importer
+                        .get_selected_files_from_current_picked_files_that_are_new()
+                        .iter()
+                        .map(|file| file.file_name.clone())
+                        .collect::<HashSet<String>>();
+
+                    let file_import_model = FileImportModel {
+                        file_path: self
+                            .file_importer
+                            .get_current_picked_files()
+                            .iter()
+                            .map(|f| f.path.clone())
+                            .collect::<Vec<PathBuf>>(),
+                        output_dir: target_path.to_path_buf(),
+                        file_name: self.file_set_file_name.clone(),
+                        file_set_name: self.file_set_name.clone(),
+                        file_type: self.selected_file_type,
+                        new_files_file_name_filter,
+                    };
+
                     println!("Prepared file import model: {:?}", file_import_model);
                     sender.oneshot_command(async move {
                         let res = file_import::import(&file_import_model);
@@ -348,45 +377,49 @@ impl Component for FileSetFormModel {
         root: &Self::Root,
     ) {
         match message {
-            CommandMsg::FileContentsRead(Ok(file_contents)) => {
-                println!("File contents read successfully: {:?}", file_contents);
-                let file_checksums = file_contents.keys().cloned().collect::<Vec<Sha1Checksum>>();
-                self.file_importer
-                    .set_current_picked_file_content(file_contents);
-
+            CommandMsg::FileContentsRead(path, Ok(content)) => {
+                println!("File contents read successfully: {:?}", &content);
+                let file_checksums = content.keys().cloned().collect::<Vec<Sha1Checksum>>();
                 let repository_manager = Arc::clone(&self.repository_manager);
                 sender.oneshot_command(async move {
                     let existing_files_file_info = repository_manager
                         .get_file_info_repository()
                         .get_file_infos_by_sha1_checksums(file_checksums)
                         .await;
-                    CommandMsg::ExistingFilesRead(existing_files_file_info)
+                    CommandMsg::ExistingFilesRead {
+                        path,
+                        content,
+                        result: existing_files_file_info,
+                    }
                 });
             }
-            CommandMsg::FileContentsRead(Err(e)) => {
+            CommandMsg::FileContentsRead(path, Err(e)) => {
                 eprintln!("Error reading file contents: {:?}", e);
                 // TODO: show error to user
             }
-            CommandMsg::ExistingFilesRead(Ok(existing_files_file_info)) => {
-                println!(
-                    "Existing files read successfully: {:?}",
-                    existing_files_file_info
-                );
-                self.file_importer
-                    .set_existing_files(existing_files_file_info);
-
-                for file in self
-                    .file_importer
-                    .get_current_picked_file_content()
-                    .values()
-                {
-                    self.files.guard().push_back(file.clone());
+            CommandMsg::ExistingFilesRead {
+                path,
+                content,
+                result,
+            } => match result {
+                Ok(existing_files_file_info) => {
+                    println!(
+                        "Existing files read successfully: {:?}",
+                        existing_files_file_info
+                    );
+                    for file in content.values() {
+                        self.files.guard().push_back(file.clone());
+                    }
+                    self.file_importer.add_new_picked_file(
+                        &path,
+                        &content,
+                        &existing_files_file_info,
+                    );
                 }
-            }
-            CommandMsg::ExistingFilesRead(Err(e)) => {
-                eprintln!("Error reading existing files: {:?}", e);
-                // TODO: show error to user
-            }
+                Err(e) => {
+                    eprintln!("Error reading existing files: {:?}", e);
+                }
+            },
             CommandMsg::FilesImported(Ok(imported_files_map)) => {
                 println!("Files imported successfully: {:?}", imported_files_map);
                 self.file_importer
@@ -421,22 +454,19 @@ impl Component for FileSetFormModel {
             }
             CommandMsg::FilesSavedToDatabase(Ok(id)) => {
                 println!("Files saved to database successfully with ID: {}", id);
-                if let Some(file_set_name) = self.file_importer.get_file_set_name() {
-                    let file_set_list_model = FileSetListModel {
-                        id,
-                        file_set_name: self.file_set_name.clone(),
-                        file_type: self.selected_file_type.into(),
-                        file_name: file_set_name,
-                    };
-                    let res =
-                        sender.output(FileSetFormOutputMsg::FileSetCreated(file_set_list_model));
-                    if let Err(e) = res {
-                        eprintln!("Error sending output: {:?}", e);
-                        // TODO: show error to user
-                    } else {
-                        println!("File set created successfully");
-                        root.close();
-                    }
+                let file_set_list_model = FileSetListModel {
+                    id,
+                    file_set_name: self.file_set_name.clone(),
+                    file_type: self.selected_file_type.into(),
+                    file_name: self.file_set_file_name.clone(),
+                };
+                let res = sender.output(FileSetFormOutputMsg::FileSetCreated(file_set_list_model));
+                if let Err(e) = res {
+                    eprintln!("Error sending output: {:?}", e);
+                    // TODO: show error to user
+                } else {
+                    println!("File set created successfully");
+                    root.close();
                 }
             }
             CommandMsg::FilesSavedToDatabase(Err(e)) => {

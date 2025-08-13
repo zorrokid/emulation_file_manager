@@ -130,10 +130,7 @@ pub fn export_files_zipped(export_model: &FileSetExportModel) -> Result<(), File
         // Add to combined zip archive
 
         zip_writer
-            .start_file(
-                format!("{}.zip", &output_file.output_file_name),
-                file_options,
-            )
+            .start_file(&output_file.output_file_name, file_options)
             .map_err(|e| {
                 FileExportError::ZipError(format!("Failed starting the zip file: {}", e))
             })?;

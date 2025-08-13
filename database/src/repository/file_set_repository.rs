@@ -312,6 +312,14 @@ impl FileSetRepository {
         &self,
         file_set_id: i64,
     ) -> Result<Vec<FileSetFileInfo>, DatabaseError> {
+        let test = sqlx::query!(
+            "SELECT * 
+             FROM file_set_file_info 
+             WHERE file_set_id = ?",
+            file_set_id
+        );
+        let test = test.fetch_all(&*self.pool).await;
+        println!("Query result: {:?}", test);
         let file_infos = sqlx::query_as!(
             FileSetFileInfo,
             "SELECT 
@@ -328,6 +336,10 @@ impl FileSetRepository {
         )
         .fetch_all(&*self.pool)
         .await?;
+        println!(
+            "Retrieved {:?} file infos for file set ID {}",
+            file_infos, file_set_id
+        );
         Ok(file_infos)
     }
 }
@@ -456,11 +468,11 @@ mod tests {
 
         let file_set_id = FileSetRepository { pool: pool.clone() }
             .add_file_set(
+                "Test File Set",
                 &file_name,
                 &file_type,
                 &files,
                 &[system_id],
-                &"Test File Set".to_string(),
             )
             .await
             .unwrap();
@@ -522,22 +534,22 @@ mod tests {
 
         let _file_set_1_id = repo
             .add_file_set(
+                &"Test File Set 1".to_string(),
                 &file_set_1_name,
                 &file_type,
                 &file_set_1_files,
                 &[system_1_id],
-                &"Test File Set 1".to_string(),
             )
             .await
             .unwrap();
 
         let _file_set_2_id = repo
             .add_file_set(
+                &"Test File Set 2".to_string(),
                 &file_set_2_name,
                 &file_type,
                 &file_set_2_files,
                 &[system_1_id],
-                &"Test File Set 2".to_string(),
             )
             .await
             .unwrap();

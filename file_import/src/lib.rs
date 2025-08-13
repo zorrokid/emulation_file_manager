@@ -12,7 +12,7 @@ use std::{
     io::Read,
     path::{Path, PathBuf},
 };
-use utils::file_util;
+use utils::file_util::{self, is_zip_file};
 use zip::ZipArchive;
 
 use uuid::Uuid;
@@ -25,13 +25,12 @@ pub enum FileImportError {
 
 #[derive(Debug)]
 pub struct FileImportModel {
-    pub file_path: PathBuf,
+    pub file_path: Vec<PathBuf>,
     pub output_dir: PathBuf,
     pub file_name: String,
     pub file_set_name: String,
     pub file_type: FileType,
     pub new_files_file_name_filter: HashSet<String>,
-    pub is_zip_file: bool,
 }
 
 impl Display for FileImportError {
@@ -60,52 +59,55 @@ pub fn get_compression_level(file_type: &FileType) -> CompressionLevel {
 pub fn import(
     file_import_model: &FileImportModel,
 ) -> Result<HashMap<Sha1Checksum, ImportedFile>, FileImportError> {
-    println!(
-        "Importing file: {} with file type: {} from path: {} to output directory: {} with filter: {:?}",
-        file_import_model.file_name, file_import_model.file_type, 
-        file_import_model.file_path.display(),
-        file_import_model.output_dir.display(),
-        file_import_model.new_files_file_name_filter
-    );
-    if file_import_model.is_zip_file {
-        import_files_from_zip(
-            &file_import_model.file_path,
-            &file_import_model.output_dir,
-            &file_import_model.new_files_file_name_filter,
-            &file_import_model.file_type,
-        )
-    } else if file_import_model
-        .new_files_file_name_filter
-        .contains(&file_import_model.file_name)
-    {
+    let mut imported_files_map: HashMap<Sha1Checksum, ImportedFile> = HashMap::new();
+    for file_path in &file_import_model.file_path {
         println!(
-            "Importing file: {} with file type: {}",
-            file_import_model.file_name, file_import_model.file_type
+            "Importing file: {} with file type: {} from path: {} to output directory: {} with filter: {:?}",
+            file_import_model.file_name, file_import_model.file_type, 
+            file_path.display(),
+            file_import_model.output_dir.display(),
+            file_import_model.new_files_file_name_filter
         );
-        import_file(
-            &file_import_model.file_path,
-            &file_import_model.output_dir,
-            &file_import_model.file_name,
-            &file_import_model.file_type,
-        )
-    } else {
-        println!(
-            "File: {} is not in the new files filter, skipping import.",
-            file_import_model.file_name
-        );
-        Ok(HashMap::new())
-    }
+
+        let is_zip = file_util::is_zip_file(file_path)
+            .map_err(|e| FileImportError::FileIoError(format!("Failed checking if file is zip: {}", e)))?;
+
+        if is_zip {
+            let res = import_files_from_zip(
+                file_path,
+                &file_import_model.output_dir,
+                &file_import_model.new_files_file_name_filter,
+                &file_import_model.file_type,
+            )?;
+            imported_files_map.extend(res);
+        } else {
+            println!(
+                "Importing file: {} with file type: {}",
+                file_import_model.file_name, file_import_model.file_type
+            );
+            let res = import_file(
+                file_path,
+                &file_import_model.output_dir,
+                &file_import_model.file_type,
+            )?;
+            imported_files_map.extend(res);
+        }   
+    } 
+    Ok(imported_files_map)
 }
 
 /// Import single-non zipped file.
 pub fn import_file(
     file_path: &Path,
     output_dir: &Path,
-    file_name: &str,
     file_type: &FileType,
 ) -> Result<HashMap<Sha1Checksum, ImportedFile>, FileImportError> {
     let mut file = File::open(file_path)
         .map_err(|e| FileImportError::FileIoError(format!("Failed opening file: {}", e)))?;
+    let file_name = file_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| FileImportError::FileIoError("Failed to get file name".to_string()))?;
     let archive_file_name = generate_archive_file_name();
     let (sha1_checksum, file_size) = output_zstd_compressed(
         output_dir,
@@ -235,7 +237,7 @@ pub fn read_zip_contents(file_path: PathBuf) -> Result<HashSet<String>, FileImpo
 ///
 /// A `Result` containing hash map from sha1 key to ImportFile with file name, sha1 checksum and size from files in the archive or an error if the operation fails.
 pub fn read_zip_contents_with_checksums(
-    file_path: PathBuf,
+    file_path: &PathBuf,
 ) -> Result<HashMap<Sha1Checksum, ReadFile>, FileImportError> {
     let file = File::open(file_path)
         .map_err(|e| FileImportError::FileIoError(format!("Failed opening file: {}", e)))?;
@@ -277,7 +279,7 @@ pub fn read_zip_contents_with_checksums(
 }
 
 pub fn read_file_checksum(
-    file_path: PathBuf,
+    file_path: &PathBuf,
 ) -> Result<HashMap<Sha1Checksum, ReadFile>, FileImportError> {
     let sha1 = file_util::get_file_sha1(&file_path);
     match sha1 {
@@ -385,7 +387,7 @@ mod tests {
         zip_writer.write_all(TEST_FILE_CONTENT.as_bytes()).unwrap();
         zip_writer.finish().unwrap();
 
-        let result = read_zip_contents_with_checksums(zip_file_path);
+        let result = read_zip_contents_with_checksums(&zip_file_path);
         assert!(result.is_ok());
         let hash_map = result.unwrap();
         assert_eq!(hash_map.len(), 1);
