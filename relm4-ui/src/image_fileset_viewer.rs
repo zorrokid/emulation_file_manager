@@ -7,7 +7,7 @@ use relm4::{
         self,
         gio::File,
         glib::clone,
-        prelude::{BoxExt, GtkWindowExt, OrientableExt, WidgetExt},
+        prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt},
     },
     typed_view::grid::{RelmGridItem, TypedGridView},
 };
@@ -77,6 +77,7 @@ impl RelmGridItem for MyGridItem {
 #[derive(Debug)]
 pub enum ImageFilesetViewerMsg {
     FileSelected { index: u32 },
+    ZoomIn,
 }
 
 #[derive(Debug)]
@@ -123,6 +124,11 @@ impl Component for ImageFilesetViewer {
                     set_end_child: Some(&image_view),
                 },
 
+                gtk::Button {
+                    set_label: "Zoom in",
+                    connect_clicked => ImageFilesetViewerMsg::ZoomIn,
+                },
+
                 #[name = "thumbnails_grid"]
                 gtk::ScrolledWindow {
                     #[local_ref]
@@ -138,7 +144,7 @@ impl Component for ImageFilesetViewer {
                     set_hexpand: true,
                     #[name = "selected_image"]
                     gtk::Picture{
-                         #[watch]
+                        #[watch]
                         set_file: Some(&File::for_path(&model.selected_image)),
                     }
                 }
@@ -213,6 +219,7 @@ impl Component for ImageFilesetViewer {
                     println!("No item found at index {}", index);
                 }
             }
+            ImageFilesetViewerMsg::ZoomIn => {}
         }
     }
 
