@@ -403,6 +403,8 @@ impl Component for ReleaseModel {
                 self.selected_release = None;
                 self.selected_release_system_names.clear();
                 self.emulator_file_set_list_view_wrapper.clear();
+                self.image_file_set_list_view_wrapper.clear();
+                self.document_file_set_list_view_wrapper.clear();
                 self.selected_file_set = None;
                 self.emulator_runner = None;
                 self.form_window = None;
@@ -471,9 +473,12 @@ impl Component for ReleaseModel {
             ReleaseMsg::SoftwareTitleCreated {
                 software_title_list_model,
             } => {
-                sender.output(ReleaseOutputMsg::SoftwareTitleCreated(
+                let res = sender.output(ReleaseOutputMsg::SoftwareTitleCreated(
                     software_title_list_model,
                 ));
+                if let Err(err) = res {
+                    eprintln!("Error sending SoftwareTitleCreated output: {:?}", err);
+                }
             }
 
             _ => (),
