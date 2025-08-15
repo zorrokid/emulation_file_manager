@@ -42,18 +42,15 @@ struct InitResult {
 enum AppMsg {
     Initialize,
     SoftwareTitleSelected { index: u32 },
-    AddSoftwareTitle { name: String },
     SoftwareTitleCreated(SoftwareTitleListModel),
 }
 
 #[derive(Debug)]
 enum CommandMsg {
     InitializationDone(InitResult),
-    SoftwareTitleAdded(ListItem),
 }
 
 struct AppModel {
-    software_titles: Vec<SoftwareTitleListModel>,
     repository_manager: OnceCell<Arc<RepositoryManager>>,
     view_model_service: OnceCell<Arc<ViewModelService>>,
     list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
@@ -110,24 +107,6 @@ impl Component for AppModel {
         let title_label = gtk::Label::builder().label("Software Titles").build();
         left_vbox.append(&title_label);
 
-        let add_new_software_title_entry = gtk::Entry::builder()
-            .placeholder_text("Add new software title")
-            .build();
-
-        add_new_software_title_entry.connect_activate(clone!(
-            #[strong]
-            sender,
-            move |entry| {
-                let buffer = entry.buffer();
-                sender.input(AppMsg::AddSoftwareTitle {
-                    name: buffer.text().into(),
-                });
-                buffer.delete_text(0, None);
-            }
-        ));
-
-        left_vbox.append(&add_new_software_title_entry);
-
         let software_titles_list_container = gtk::ScrolledWindow::builder().vexpand(true).build();
 
         let software_titles_view = &list_view_wrapper.view;
@@ -152,7 +131,6 @@ impl Component for AppModel {
         let widgets = AppWidgets {};
 
         let model = AppModel {
-            software_titles: vec![],
             repository_manager: OnceCell::new(),
             view_model_service: OnceCell::new(),
             list_view_wrapper,
@@ -201,32 +179,11 @@ impl Component for AppModel {
                     println!("No software title found at index {}", index);
                 }
             }
-            AppMsg::AddSoftwareTitle { name } => {
-                let repository_manager = self
-                    .repository_manager
-                    .get()
-                    .expect("RepositoryManager not initialized");
-
-                sender.oneshot_command(clone!(
-                    #[strong]
-                    repository_manager,
-                    async move {
-                        let id = repository_manager
-                            .get_software_title_repository()
-                            .add_software_title(&name, None)
-                            .await
-                            .expect("Failed to add software title");
-
-                        CommandMsg::SoftwareTitleAdded(ListItem { id, name })
-                    }
-                ));
-            }
             AppMsg::SoftwareTitleCreated(software_title_list_model) => {
                 self.list_view_wrapper.append(ListItem {
                     id: software_title_list_model.id,
                     name: software_title_list_model.name.clone(),
                 });
-                self.software_titles.push(software_title_list_model);
             }
         }
     }
@@ -247,8 +204,7 @@ impl Component for AppModel {
                 self.repository_manager
                     .set(init_result.repository_manager)
                     .expect("repository manger already initialized");
-                self.software_titles = init_result.software_titles;
-                let list_items = self.software_titles.iter().map(|title| ListItem {
+                let list_items = init_result.software_titles.iter().map(|title| ListItem {
                     name: title.name.clone(),
                     id: title.id,
                 });
@@ -273,18 +229,8 @@ impl Component for AppModel {
                     .set(releases)
                     .expect("ReleasesModel already initialized");
             }
-            CommandMsg::SoftwareTitleAdded(item) => {
-                self.software_titles.push(SoftwareTitleListModel {
-                    id: item.id,
-                    name: item.name.clone(),
-                    can_delete: false,
-                });
-                self.list_view_wrapper.append(item);
-            }
         }
     }
-
-    fn update_view(&self, _widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {}
 }
 
 fn main() {
