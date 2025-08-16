@@ -208,9 +208,6 @@ impl Component for ReleaseModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let image_viewer_init = ImageViewerInit {
-            settings: Arc::clone(&init_model.settings),
-        };
         let tabbed_image_viewer_init = TabbedImageViewerInit {
             settings: Arc::clone(&init_model.settings),
         };
