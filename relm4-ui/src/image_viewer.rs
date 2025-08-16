@@ -2,15 +2,18 @@ use std::{path::PathBuf, sync::Arc};
 
 use file_export::{FileExportError, FileSetExportModel, export_files};
 use relm4::{
-    Component, ComponentParts, ComponentSender,
+    Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
         self,
-        prelude::{ButtonExt, OrientableExt, WidgetExt},
+        prelude::{ButtonExt, GtkWindowExt, OrientableExt, WidgetExt},
     },
 };
 use service::view_models::{FileSetViewModel, Settings};
 
-use crate::utils::prepare_fileset_for_export;
+use crate::{
+    image_fileset_viewer::{ImageFileSetViewerInit, ImageFilesetViewer},
+    utils::prepare_fileset_for_export,
+};
 
 #[derive(Debug)]
 pub enum ImageViewerMsg {
@@ -18,6 +21,7 @@ pub enum ImageViewerMsg {
     ShowNext,
     SetFileSet { file_set: FileSetViewModel },
     Clear,
+    View,
 }
 
 #[derive(Debug)]
@@ -25,8 +29,10 @@ pub enum ImageViewerCommandMsg {
     ExportedImageFileSet(Result<(), FileExportError>, FileSetExportModel),
 }
 
+#[derive(Debug, Clone)]
 pub struct ImageViewerInit {
     pub settings: Arc<Settings>,
+    pub file_set: Option<FileSetViewModel>,
 }
 
 #[derive(Debug)]
@@ -35,6 +41,7 @@ pub struct ImageViewer {
     current_file_index: Option<usize>,
     settings: Arc<Settings>,
     selected_image: PathBuf,
+    image_file_set_viewer: Option<Controller<ImageFilesetViewer>>,
 }
 
 #[relm4::component(pub)]
@@ -47,11 +54,7 @@ impl Component for ImageViewer {
     view! {
         #[root]
         gtk::Box {
-            set_orientation: gtk::Orientation::Horizontal,
-            gtk::Button {
-                set_label: "<",
-                connect_clicked => ImageViewerMsg::ShowPrevious,
-            },
+            set_orientation: gtk::Orientation::Vertical,
             gtk::ScrolledWindow {
                 set_vexpand: true,
                 set_hexpand: true,
@@ -61,9 +64,23 @@ impl Component for ImageViewer {
                     set_from_file: Some(&model.selected_image),
                 }
             },
-            gtk::Button {
-                set_label: ">",
-                connect_clicked => ImageViewerMsg::ShowNext,
+            gtk::Box {
+                set_orientation: gtk::Orientation::Horizontal,
+                set_hexpand: true,
+                gtk::Button {
+                    set_label: "<",
+                    connect_clicked => ImageViewerMsg::ShowPrevious,
+                },
+                gtk::Button {
+                    set_hexpand: true,
+                    set_label: "View",
+                    connect_clicked => ImageViewerMsg::View,
+                },
+                gtk::Button {
+                    set_label: ">",
+                    connect_clicked => ImageViewerMsg::ShowNext,
+                },
+
             },
        },
     }
@@ -78,7 +95,11 @@ impl Component for ImageViewer {
             settings: init.settings,
             selected_image: PathBuf::new(),
             current_file_index: None,
+            image_file_set_viewer: None,
         };
+        if let Some(file_set) = init.file_set {
+            sender.input(ImageViewerMsg::SetFileSet { file_set });
+        }
 
         let widgets = view_output!();
         ComponentParts { model, widgets }
@@ -113,7 +134,7 @@ impl Component for ImageViewer {
                     if index + 1 < file_set.files.len() {
                         let new_index = index + 1;
                         self.current_file_index = Some(new_index);
-                        let next_image = file_set.files[new_index].archive_file_name.clone();
+                        let next_image = file_set.files[new_index].file_name.clone();
                         let file_path = self.settings.temp_output_dir.join(&next_image);
                         self.selected_image = file_path;
                     }
@@ -124,7 +145,7 @@ impl Component for ImageViewer {
                     if index > 0 {
                         let new_index = index - 1;
                         self.current_file_index = Some(new_index);
-                        let previous_image = file_set.files[new_index].archive_file_name.clone();
+                        let previous_image = file_set.files[new_index].file_name.clone();
                         let file_path = self.settings.temp_output_dir.join(&previous_image);
                         self.selected_image = file_path;
                     }
@@ -134,6 +155,25 @@ impl Component for ImageViewer {
                 self.file_set = None;
                 self.current_file_index = None;
                 self.selected_image = PathBuf::new();
+            }
+            ImageViewerMsg::View => {
+                if let Some(file_set) = &self.file_set {
+                    let init_model = ImageFileSetViewerInit {
+                        file_set: file_set.clone(),
+                        settings: Arc::clone(&self.settings),
+                    };
+                    let image_file_set_viewer = ImageFilesetViewer::builder()
+                        .transient_for(root)
+                        .launch(init_model)
+                        .detach();
+
+                    self.image_file_set_viewer = Some(image_file_set_viewer);
+                    self.image_file_set_viewer
+                        .as_ref()
+                        .expect("Image file set viewer should be set already")
+                        .widget()
+                        .present();
+                }
             }
         }
     }

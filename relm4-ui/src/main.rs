@@ -13,6 +13,7 @@ mod release_form;
 mod releases;
 mod software_title_selector;
 mod system_selector;
+mod tabbed_image_viewer;
 mod utils;
 use std::sync::Arc;
 
@@ -64,7 +65,7 @@ impl Component for AppModel {
     type Input = AppMsg;
     type Output = ();
     type CommandOutput = CommandMsg;
-    type Init = u8;
+    type Init = ();
     type Root = gtk::Window;
     type Widgets = AppWidgets;
 
@@ -235,5 +236,5 @@ impl Component for AppModel {
 
 fn main() {
     let app = RelmApp::new("org.zorrokid.efcm");
-    app.run::<AppModel>(0);
+    app.run::<AppModel>(());
 }
