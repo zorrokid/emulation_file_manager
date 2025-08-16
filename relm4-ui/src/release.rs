@@ -26,6 +26,7 @@ use crate::{
     image_viewer::{ImageViewer, ImageViewerInit, ImageViewerMsg},
     list_item::ListItem,
     release_form::{ReleaseFormInit, ReleaseFormModel, ReleaseFormOutputMsg},
+    tabbed_image_viewer::TabbedImageViewer,
 };
 
 #[derive(Debug)]
@@ -49,6 +50,7 @@ pub struct ReleaseModel {
     document_file_set_viewer: Option<Controller<DocumentViewer>>,
     form_window: Option<Controller<ReleaseFormModel>>,
     image_viewer: Controller<ImageViewer>,
+    tabbed_image_viewer: Controller<TabbedImageViewer>,
 }
 
 #[derive(Debug)]
@@ -111,6 +113,7 @@ impl Component for ReleaseModel {
         gtk::Box {
             set_orientation: gtk::Orientation::Vertical,
             append = model.image_viewer.widget(),
+            append = model.tabbed_image_viewer.widget(),
             set_spacing: 5,
 
             gtk::Box {
@@ -211,6 +214,7 @@ impl Component for ReleaseModel {
             settings: Arc::clone(&init_model.settings),
         };
         let image_viewer = ImageViewer::builder().launch(image_viewer_init).detach();
+        let tabbed_image_viewer = TabbedImageViewer::builder().launch(()).detach();
         let model = ReleaseModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
@@ -228,6 +232,7 @@ impl Component for ReleaseModel {
             emulator_runner: None,
             image_file_set_viewer: None,
             image_viewer,
+            tabbed_image_viewer,
             document_file_set_viewer: None,
             form_window: None,
         };
