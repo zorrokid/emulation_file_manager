@@ -26,7 +26,7 @@ use crate::{
     image_viewer::{ImageViewer, ImageViewerInit, ImageViewerMsg},
     list_item::ListItem,
     release_form::{ReleaseFormInit, ReleaseFormModel, ReleaseFormOutputMsg},
-    tabbed_image_viewer::{TabbedImageViewer, TabbedImageViewerInit},
+    tabbed_image_viewer::{TabbedImageViewer, TabbedImageViewerInit, TabbedImageViewerMsg},
 };
 
 #[derive(Debug)]
@@ -49,7 +49,6 @@ pub struct ReleaseModel {
     image_file_set_viewer: Option<Controller<ImageFilesetViewer>>,
     document_file_set_viewer: Option<Controller<DocumentViewer>>,
     form_window: Option<Controller<ReleaseFormModel>>,
-    image_viewer: Controller<ImageViewer>,
     tabbed_image_viewer: Controller<TabbedImageViewer>,
 }
 
@@ -112,7 +111,6 @@ impl Component for ReleaseModel {
         #[root]
         gtk::Box {
             set_orientation: gtk::Orientation::Vertical,
-            append = model.image_viewer.widget(),
             append = model.tabbed_image_viewer.widget(),
             set_spacing: 5,
 
@@ -213,7 +211,6 @@ impl Component for ReleaseModel {
         let image_viewer_init = ImageViewerInit {
             settings: Arc::clone(&init_model.settings),
         };
-        let image_viewer = ImageViewer::builder().launch(image_viewer_init).detach();
         let tabbed_image_viewer_init = TabbedImageViewerInit {
             settings: Arc::clone(&init_model.settings),
         };
@@ -236,7 +233,6 @@ impl Component for ReleaseModel {
             selected_document_file_set: None,
             emulator_runner: None,
             image_file_set_viewer: None,
-            image_viewer,
             tabbed_image_viewer,
             document_file_set_viewer: None,
             form_window: None,
@@ -418,7 +414,7 @@ impl Component for ReleaseModel {
                 self.selected_file_set = None;
                 self.emulator_runner = None;
                 self.form_window = None;
-                self.image_viewer.emit(ImageViewerMsg::Clear);
+                self.tabbed_image_viewer.emit(TabbedImageViewerMsg::Clear);
             }
             ReleaseMsg::FileSetSelected { index } => {
                 println!("File set selected with index: {}", index);
@@ -511,19 +507,17 @@ impl Component for ReleaseModel {
                     .collect::<Vec<_>>()
                     .join(", ");
 
-                // box cover scans
-
-                let cover_scan = release
+                let image_file_sets = release
                     .file_sets
                     .iter()
-                    .find(|fs| fs.file_type == core_types::FileType::CoverScan.into())
-                    .cloned();
+                    .filter(|fs| IMAGE_FILE_TYPES.contains(&fs.file_type.into()))
+                    .cloned()
+                    .collect::<Vec<_>>();
 
-                if let Some(cover_scan) = cover_scan {
-                    self.image_viewer.emit(ImageViewerMsg::SetFileSet {
-                        file_set: cover_scan,
-                    })
-                }
+                self.tabbed_image_viewer
+                    .emit(TabbedImageViewerMsg::SetFileSets {
+                        file_sets: image_file_sets,
+                    });
 
                 // emulator file sets
 

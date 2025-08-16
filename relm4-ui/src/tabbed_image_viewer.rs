@@ -1,17 +1,19 @@
 use std::sync::Arc;
 
+use core_types::FileType;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmApp,
-    gtk::{self, glib::clone, prelude::*},
-    once_cell::sync::OnceCell,
-    typed_view::list::TypedListView,
+    gtk::{self, prelude::*},
 };
-use service::view_models::Settings;
+use service::view_models::{FileSetViewModel, Settings};
 
-use crate::image_viewer::{ImageViewer, ImageViewerInit};
+use crate::image_viewer::{ImageViewer, ImageViewerInit, ImageViewerMsg};
 
 #[derive(Debug)]
-pub enum TabbedImageViewerMsg {}
+pub enum TabbedImageViewerMsg {
+    SetFileSets { file_sets: Vec<FileSetViewModel> },
+    Clear,
+}
 
 #[derive(Debug)]
 pub struct TabbedImageViewer {
@@ -78,6 +80,46 @@ impl Component for TabbedImageViewer {
                 screenshots_image_viewer,
             },
             widgets,
+        }
+    }
+
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
+        match msg {
+            TabbedImageViewerMsg::SetFileSets { file_sets } => {
+                // NOTE: currentely only the first file set of each type is used
+                if let Some(file_set) = file_sets
+                    .iter()
+                    .find(|fs| fs.file_type == FileType::CoverScan.into())
+                {
+                    self.box_scan_image_viewer
+                        .sender()
+                        .send(ImageViewerMsg::SetFileSet {
+                            file_set: file_set.clone(),
+                        })
+                        .unwrap();
+                }
+                if let Some(file_set) = file_sets
+                    .iter()
+                    .find(|fs| fs.file_type == FileType::Screenshot.into())
+                {
+                    self.screenshots_image_viewer
+                        .sender()
+                        .send(ImageViewerMsg::SetFileSet {
+                            file_set: file_set.clone(),
+                        })
+                        .unwrap();
+                }
+            }
+            TabbedImageViewerMsg::Clear => {
+                self.box_scan_image_viewer
+                    .sender()
+                    .send(ImageViewerMsg::Clear)
+                    .unwrap();
+                self.screenshots_image_viewer
+                    .sender()
+                    .send(ImageViewerMsg::Clear)
+                    .unwrap();
+            }
         }
     }
 }
