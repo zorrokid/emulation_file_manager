@@ -25,6 +25,7 @@ pub enum ImageViewerCommandMsg {
     ExportedImageFileSet(Result<(), FileExportError>, FileSetExportModel),
 }
 
+#[derive(Debug, Clone)]
 pub struct ImageViewerInit {
     pub settings: Arc<Settings>,
 }

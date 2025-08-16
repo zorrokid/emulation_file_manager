@@ -26,7 +26,7 @@ use crate::{
     image_viewer::{ImageViewer, ImageViewerInit, ImageViewerMsg},
     list_item::ListItem,
     release_form::{ReleaseFormInit, ReleaseFormModel, ReleaseFormOutputMsg},
-    tabbed_image_viewer::TabbedImageViewer,
+    tabbed_image_viewer::{TabbedImageViewer, TabbedImageViewerInit},
 };
 
 #[derive(Debug)]
@@ -214,7 +214,12 @@ impl Component for ReleaseModel {
             settings: Arc::clone(&init_model.settings),
         };
         let image_viewer = ImageViewer::builder().launch(image_viewer_init).detach();
-        let tabbed_image_viewer = TabbedImageViewer::builder().launch(()).detach();
+        let tabbed_image_viewer_init = TabbedImageViewerInit {
+            settings: Arc::clone(&init_model.settings),
+        };
+        let tabbed_image_viewer = TabbedImageViewer::builder()
+            .launch(tabbed_image_viewer_init)
+            .detach();
         let model = ReleaseModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
