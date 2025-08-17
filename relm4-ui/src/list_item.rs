@@ -33,6 +33,6 @@ impl RelmListItem for ListItem {
 
     fn bind(&mut self, widgets: &mut Self::Widgets, _root: &mut Self::Root) {
         let ListItemWidgets { label } = widgets;
-        label.set_label(&format!("Name: {} ", self.name));
+        label.set_label(&self.name);
     }
 }
