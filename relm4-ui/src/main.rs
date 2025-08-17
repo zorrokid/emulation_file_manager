@@ -82,8 +82,8 @@ impl Component for AppModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        // Initialize the ListView wrapper
-        let list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> = TypedListView::new();
+        let list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
+            TypedListView::with_sorting();
 
         let main_layout_hbox = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
@@ -169,7 +169,7 @@ impl Component for AppModel {
                 });
             }
             AppMsg::SoftwareTitleSelected { index } => {
-                if let Some(title) = self.list_view_wrapper.get(index) {
+                if let Some(title) = self.list_view_wrapper.get_visible(index) {
                     let title = title.borrow();
                     println!("Selected software title: {}", title.name);
                     self.releases
