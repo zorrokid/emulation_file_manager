@@ -100,7 +100,7 @@ impl Component for TabbedImageViewer {
                 }
             }
             TabbedImageViewerMsg::Clear => {
-                for page_number in self.page_numbers.iter() {
+                for page_number in self.page_numbers.iter().rev() {
                     root.remove_page(Some(*page_number));
                 }
                 self.page_numbers.clear();
