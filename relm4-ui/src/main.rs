@@ -19,6 +19,7 @@ use std::sync::Arc;
 
 use database::{get_db_pool, repository_manager::RepositoryManager};
 use list_item::ListItem;
+use release::{ReleaseInitModel, ReleaseModel, ReleaseMsg, ReleaseOutputMsg};
 use releases::{ReleasesInit, ReleasesModel, ReleasesMsg, ReleasesOutputMsg};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmApp,
@@ -36,7 +37,7 @@ struct InitResult {
     repository_manager: Arc<RepositoryManager>,
     view_model_service: Arc<ViewModelService>,
     software_titles: Vec<SoftwareTitleListModel>,
-    settings: Settings,
+    settings: Arc<Settings>,
 }
 
 #[derive(Debug)]
@@ -44,6 +45,7 @@ enum AppMsg {
     Initialize,
     SoftwareTitleSelected { index: u32 },
     SoftwareTitleCreated(SoftwareTitleListModel),
+    ReleaseSelected { id: i64 },
 }
 
 #[derive(Debug)]
@@ -57,6 +59,8 @@ struct AppModel {
     list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     releases_view: gtk::Box,
     releases: OnceCell<Controller<ReleasesModel>>,
+    release_view: gtk::Box,
+    release: OnceCell<Controller<ReleaseModel>>,
 }
 
 struct AppWidgets {}
@@ -135,8 +139,10 @@ impl Component for AppModel {
             repository_manager: OnceCell::new(),
             view_model_service: OnceCell::new(),
             list_view_wrapper,
-            releases_view: right_vbox,
+            releases_view: left_vbox,
+            release_view: right_vbox,
             releases: OnceCell::new(),
+            release: OnceCell::new(),
         };
 
         sender.input(AppMsg::Initialize);
@@ -160,6 +166,7 @@ impl Component for AppModel {
                         .get_settings()
                         .await
                         .expect("Failed to get config");
+                    let settings = Arc::new(settings);
                     CommandMsg::InitializationDone(InitResult {
                         repository_manager,
                         view_model_service,
@@ -186,6 +193,12 @@ impl Component for AppModel {
                     name: software_title_list_model.name.clone(),
                 });
             }
+            AppMsg::ReleaseSelected { id } => {
+                self.release
+                    .get()
+                    .expect("ReleasesModel not initialized")
+                    .emit(ReleaseMsg::ReleaseSelected { id });
+            }
         }
     }
 
@@ -199,12 +212,6 @@ impl Component for AppModel {
             CommandMsg::InitializationDone(init_result) => {
                 let view_model_service = Arc::clone(&init_result.view_model_service);
                 let repository_manager = Arc::clone(&init_result.repository_manager);
-                self.view_model_service
-                    .set(init_result.view_model_service)
-                    .expect("view model service already initialized?");
-                self.repository_manager
-                    .set(init_result.repository_manager)
-                    .expect("repository manger already initialized");
                 let list_items = init_result.software_titles.iter().map(|title| ListItem {
                     name: title.name.clone(),
                     id: title.id,
@@ -214,7 +221,7 @@ impl Component for AppModel {
                 let releases_init = ReleasesInit {
                     view_model_service,
                     repository_manager,
-                    settings: Arc::new(init_result.settings),
+                    settings: Arc::clone(&init_result.settings),
                 };
 
                 let releases = ReleasesModel::builder().launch(releases_init).forward(
@@ -223,12 +230,40 @@ impl Component for AppModel {
                         ReleasesOutputMsg::SoftwareTitleCreated {
                             software_title_list_model,
                         } => AppMsg::SoftwareTitleCreated(software_title_list_model),
+                        ReleasesOutputMsg::ReleaseSelected { id } => AppMsg::ReleaseSelected { id },
                     },
                 );
                 self.releases_view.append(releases.widget());
+
+                let release_init_model = ReleaseInitModel {
+                    view_model_service: Arc::clone(&init_result.view_model_service),
+                    repository_manager: Arc::clone(&init_result.repository_manager),
+                    settings: Arc::clone(&init_result.settings),
+                };
+                let release_model = ReleaseModel::builder().launch(release_init_model).forward(
+                    sender.input_sender(),
+                    |msg| match msg {
+                        ReleaseOutputMsg::SoftwareTitleCreated(software_title_list_model) => {
+                            AppMsg::SoftwareTitleCreated(software_title_list_model)
+                        }
+                    },
+                );
+                self.release_view.append(release_model.widget());
+
+                self.view_model_service
+                    .set(init_result.view_model_service)
+                    .expect("view model service already initialized?");
+                self.repository_manager
+                    .set(init_result.repository_manager)
+                    .expect("repository manger already initialized");
+
                 self.releases
                     .set(releases)
                     .expect("ReleasesModel already initialized");
+
+                self.release
+                    .set(release_model)
+                    .expect("ReleaseModel already initialized");
             }
         }
     }

@@ -57,6 +57,9 @@ pub enum ReleasesOutputMsg {
     SoftwareTitleCreated {
         software_title_list_model: SoftwareTitleListModel,
     },
+    ReleaseSelected {
+        id: i64,
+    },
 }
 
 #[relm4::component(pub)]
@@ -70,6 +73,7 @@ impl Component for ReleasesModel {
         #[root]
         gtk::Box {
             set_orientation: gtk::Orientation::Horizontal,
+            set_hexpand: true,
 
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
@@ -182,6 +186,10 @@ impl Component for ReleasesModel {
                     self.release
                         .sender()
                         .emit(ReleaseMsg::ReleaseSelected { id: selected_id });
+                    let res = sender.output(ReleasesOutputMsg::ReleaseSelected { id: selected_id });
+                    if let Err(err) = res {
+                        eprintln!("Error sending ReleaseSelected message: {:?}", err);
+                    }
                 } else {
                     println!("No item found at index: {}", index);
                 }
@@ -231,9 +239,12 @@ impl Component for ReleasesModel {
                 sender.input(ReleasesMsg::FetchReleases);
             }
             ReleasesMsg::SofwareTitleCreated(software_title_list_model) => {
-                sender.output(ReleasesOutputMsg::SoftwareTitleCreated {
+                let res = sender.output(ReleasesOutputMsg::SoftwareTitleCreated {
                     software_title_list_model,
                 });
+                if let Err(err) = res {
+                    eprintln!("Error sending SoftwareTitleCreated message: {:?}", err);
+                }
             }
         }
     }
@@ -250,9 +261,22 @@ impl Component for ReleasesModel {
                         println!("Releases fetched successfully: {:?}", releases);
                         let items: Vec<ListItem> = releases
                             .into_iter()
-                            .map(|release| ListItem {
-                                id: release.id,
-                                name: release.name,
+                            .map(|release| {
+                                let name_string = if !release.name.is_empty() {
+                                    format!("{} ", release.name)
+                                } else {
+                                    String::new()
+                                };
+
+                                ListItem {
+                                    id: release.id,
+                                    name: format!(
+                                        "{}{} {}",
+                                        release.system_names.join(", "),
+                                        release.file_types.join(", "),
+                                        name_string,
+                                    ),
+                                }
                             })
                             .collect();
                         self.releases_list_view_wrapper.clear();
