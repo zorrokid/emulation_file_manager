@@ -102,6 +102,8 @@ impl Component for AppModel {
             .margin_start(10)
             .build();
 
+        left_vbox.set_width_request(300);
+
         let right_vbox = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
             .build();
@@ -183,6 +185,11 @@ impl Component for AppModel {
                         .get()
                         .expect("ReleasesModel not initialized")
                         .emit(ReleasesMsg::SoftwareTitleSelected { id: title.id });
+                    self.release
+                        .get()
+                        .expect("Release widget not initialized")
+                        .sender()
+                        .emit(ReleaseMsg::Clear);
                 } else {
                     println!("No software title found at index {}", index);
                 }

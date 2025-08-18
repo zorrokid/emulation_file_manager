@@ -14,7 +14,6 @@ use service::{
 
 use crate::{
     list_item::ListItem,
-    release::{ReleaseInitModel, ReleaseModel, ReleaseMsg, ReleaseOutputMsg},
     release_form::{ReleaseFormInit, ReleaseFormModel, ReleaseFormOutputMsg},
 };
 
@@ -42,8 +41,6 @@ pub struct ReleasesModel {
     form_window: Option<Controller<ReleaseFormModel>>,
     releases_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     selected_software_title_id: Option<i64>,
-
-    release: Controller<ReleaseModel>,
 }
 
 pub struct ReleasesInit {
@@ -72,35 +69,26 @@ impl Component for ReleasesModel {
     view! {
         #[root]
         gtk::Box {
-            set_orientation: gtk::Orientation::Horizontal,
-            set_hexpand: true,
+            set_orientation: gtk::Orientation::Vertical,
+            set_spacing: 10,
+            set_margin_all: 10,
 
-            gtk::Box {
-                set_orientation: gtk::Orientation::Vertical,
-                set_spacing: 10,
-                set_margin_all: 10,
-
-                gtk::Label {
-                    set_label: "Releases",
-                },
-
-                gtk::ScrolledWindow {
-                    set_vexpand: true,
-                    #[local_ref]
-                    releases_list_view -> gtk::ListView {}
-                },
-
-                gtk::Button {
-                    set_label: "Add Release",
-                    connect_clicked => ReleasesMsg::StartAddRelease,
-                },
-
+            gtk::Label {
+                set_label: "Releases",
             },
 
-            gtk::Box {
-                append = model.release.widget(),
-            }
-        }
+            gtk::ScrolledWindow {
+                set_vexpand: true,
+                #[local_ref]
+                releases_list_view -> gtk::ListView {}
+            },
+
+            gtk::Button {
+                set_label: "Add Release",
+                connect_clicked => ReleasesMsg::StartAddRelease,
+            },
+
+        },
     }
 
     fn init(
@@ -108,27 +96,12 @@ impl Component for ReleasesModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let release_init_model = ReleaseInitModel {
-            view_model_service: Arc::clone(&init_model.view_model_service),
-            repository_manager: Arc::clone(&init_model.repository_manager),
-            settings: Arc::clone(&init_model.settings),
-        };
-        let release_model = ReleaseModel::builder().launch(release_init_model).forward(
-            sender.input_sender(),
-            |msg| match msg {
-                ReleaseOutputMsg::SoftwareTitleCreated(software_title_list_model) => {
-                    ReleasesMsg::SofwareTitleCreated(software_title_list_model)
-                }
-            },
-        );
-
         let model = ReleasesModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
             settings: init_model.settings,
             form_window: None,
             releases_list_view_wrapper: TypedListView::new(),
-            release: release_model,
             selected_software_title_id: None,
         };
         let releases_list_view = &model.releases_list_view_wrapper.view;
@@ -152,7 +125,6 @@ impl Component for ReleasesModel {
             ReleasesMsg::SoftwareTitleSelected { id } => {
                 println!("Software title selected with ID: {}", id);
                 self.selected_software_title_id = Some(id);
-                self.release.sender().emit(ReleaseMsg::Clear);
                 sender.input(ReleasesMsg::FetchReleases);
             }
             ReleasesMsg::FetchReleases => {
@@ -183,9 +155,6 @@ impl Component for ReleasesModel {
                 if let Some(item) = selected {
                     println!("Selected item: {:?}", item);
                     let selected_id = item.borrow().id;
-                    self.release
-                        .sender()
-                        .emit(ReleaseMsg::ReleaseSelected { id: selected_id });
                     let res = sender.output(ReleasesOutputMsg::ReleaseSelected { id: selected_id });
                     if let Err(err) = res {
                         eprintln!("Error sending ReleaseSelected message: {:?}", err);
@@ -209,7 +178,6 @@ impl Component for ReleasesModel {
                     .forward(sender.input_sender(), |msg| match msg {
                         ReleaseFormOutputMsg::ReleaseCreatedOrUpdated { id } => {
                             println!("Release created or updated with ID: {}", id);
-                            //ReleasesMsg::FetchReleases
                             ReleasesMsg::ReleaseCreatedOrUpdated { id }
                         }
                         ReleaseFormOutputMsg::SoftwareTitleCreated(software_title_list_model) => {
