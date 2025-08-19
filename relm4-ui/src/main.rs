@@ -89,9 +89,9 @@ impl Component for AppModel {
         let list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
             TypedListView::with_sorting();
 
-        let main_layout_hbox = gtk::Box::builder()
+        let main_layout_hbox = gtk::Paned::builder()
             .orientation(gtk::Orientation::Horizontal)
-            .spacing(10)
+            .vexpand(true)
             .build();
 
         let left_vbox = gtk::Box::builder()
@@ -102,14 +102,12 @@ impl Component for AppModel {
             .margin_start(10)
             .build();
 
-        left_vbox.set_width_request(300);
-
         let right_vbox = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
             .build();
 
-        main_layout_hbox.append(&left_vbox);
-        main_layout_hbox.append(&right_vbox);
+        main_layout_hbox.set_start_child(Some(&left_vbox));
+        main_layout_hbox.set_end_child(Some(&right_vbox));
 
         let title_label = gtk::Label::builder().label("Software Titles").build();
         left_vbox.append(&title_label);
