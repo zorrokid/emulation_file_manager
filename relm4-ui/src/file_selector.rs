@@ -20,6 +20,7 @@ use strum::IntoEnumIterator;
 
 use crate::{
     file_set_form::{FileSetFormInit, FileSetFormModel, FileSetFormOutputMsg},
+    file_types_dropdown::{self, create_file_types_dropdown},
     list_item::ListItem,
 };
 
@@ -123,19 +124,8 @@ impl Component for FileSelectModel {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> = TypedListView::new();
-        let file_types: Vec<FileType> = FileType::iter().collect();
 
-        let file_types_dropdown = gtk::DropDown::builder().build();
-        let file_types_to_drop_down: Vec<String> =
-            file_types.iter().map(|ft| ft.to_string()).collect();
-        let file_types_str: Vec<&str> =
-            file_types_to_drop_down.iter().map(|s| s.as_str()).collect();
-
-        let file_types_drop_down_model = gtk::StringList::new(&file_types_str);
-
-        file_types_dropdown.set_model(Some(&file_types_drop_down_model));
-        file_types_dropdown.set_selected(0);
-
+        let (file_types_dropdown, file_types) = create_file_types_dropdown();
         let model = FileSelectModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,

@@ -24,7 +24,11 @@ use relm4::{
 };
 use service::view_models::{FileSetListModel, Settings};
 
-use crate::{file_importer::FileImporter, utils::resolve_file_type_path};
+use crate::{
+    file_importer::FileImporter,
+    file_types_dropdown::{self, create_file_types_dropdown},
+    utils::resolve_file_type_path,
+};
 
 #[derive(Debug, Clone)]
 struct File {
@@ -117,6 +121,9 @@ pub enum FileSetFormMsg {
     },
     FileSetNameChanged(String),
     FileSetFileNameChanged(String),
+    SetFileTypeSelected {
+        index: u32,
+    },
 }
 
 #[derive(Debug)]
@@ -174,6 +181,17 @@ impl Component for FileSetFormModel {
                 set_orientation: gtk::Orientation::Vertical,
                 set_spacing: 5,
                 set_margin_all: 5,
+
+                #[local_ref]
+                file_types_dropdown -> gtk::DropDown {
+                    connect_selected_notify[sender] => move |dropdown| {
+                        sender.input(FileSetFormMsg::SetFileTypeSelected {
+                            index: dropdown.selected(),
+                        });
+                    }
+
+                },
+
 
                 gtk::Button {
                     set_label: "Open file selector",
@@ -248,6 +266,8 @@ impl Component for FileSetFormModel {
                         selected,
                     },
                 });
+
+        let (file_types_dropdown, file_types) = create_file_types_dropdown();
 
         let model = FileSetFormModel {
             repository_manager: init_model.repository_manager,
