@@ -104,7 +104,8 @@ impl Component for SystemSelectModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> = TypedListView::new();
+        let list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
+            TypedListView::with_sorting();
 
         let model = SystemSelectModel {
             view_model_service: init_model.view_model_service,
@@ -154,7 +155,7 @@ impl Component for SystemSelectModel {
             }
             SystemSelectMsg::SelectClicked => {
                 let selected = self.list_view_wrapper.selection_model.selected();
-                if let Some(system) = self.list_view_wrapper.get(selected) {
+                if let Some(system) = self.list_view_wrapper.get_visible(selected) {
                     let system = system.borrow();
                     println!("System selected: {} with ID: {}", system.name, system.id);
                     let res =
@@ -198,6 +199,7 @@ impl Component for SystemSelectModel {
                         name: system.name.clone(),
                         id: system.id,
                     });
+                self.list_view_wrapper.clear();
                 self.list_view_wrapper.extend_from_iter(list_items);
             }
             CommandMsg::SystemsFetched(Err(e)) => {
