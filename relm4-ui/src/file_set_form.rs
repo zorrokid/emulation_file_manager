@@ -10,7 +10,8 @@ use database::{
 };
 use file_import::{FileImportError, FileImportModel};
 use relm4::{
-    Component, ComponentParts, ComponentSender, FactorySender, RelmWidgetExt,
+    Component, ComponentController, ComponentParts, ComponentSender, Controller, FactorySender,
+    RelmWidgetExt,
     gtk::{
         self, FileChooserDialog,
         gio::prelude::FileExt,
@@ -23,6 +24,7 @@ use relm4::{
     prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque},
 };
 use service::view_models::{FileSetListModel, Settings};
+use ui_components::{DropDownOutputMsg, FileTypeDropDown, FileTypeSelectedMsg};
 
 use crate::{file_importer::FileImporter, utils::resolve_file_type_path};
 
@@ -117,6 +119,7 @@ pub enum FileSetFormMsg {
     },
     FileSetNameChanged(String),
     FileSetFileNameChanged(String),
+    FileTypeChanged(FileType),
 }
 
 #[derive(Debug)]
@@ -156,6 +159,7 @@ pub struct FileSetFormModel {
     selected_system_ids: Vec<i64>,
     file_set_name: String,
     file_set_file_name: String,
+    dropdown: Controller<FileTypeDropDown>,
 }
 
 #[relm4::component(pub)]
@@ -174,6 +178,9 @@ impl Component for FileSetFormModel {
                 set_orientation: gtk::Orientation::Vertical,
                 set_spacing: 5,
                 set_margin_all: 5,
+
+                #[local_ref]
+                file_types_dropdown -> gtk::Box,
 
                 gtk::Button {
                     set_label: "Open file selector",
@@ -249,6 +256,18 @@ impl Component for FileSetFormModel {
                     },
                 });
 
+        let dropdown = FileTypeDropDown::builder()
+            .launch(Some(init_model.selected_file_type))
+            .forward(
+                sender.input_sender(),
+                |msg| match msg {
+                    DropDownOutputMsg::ItemSelected(FileTypeSelectedMsg::FileTypeSelected(
+                        file_type,
+                    )) => FileSetFormMsg::FileTypeChanged(file_type),
+                    _ => unreachable!(),
+                },
+            );
+
         let model = FileSetFormModel {
             repository_manager: init_model.repository_manager,
             settings: init_model.settings,
@@ -258,7 +277,10 @@ impl Component for FileSetFormModel {
             selected_system_ids: init_model.selected_system_ids,
             file_set_name: String::new(),
             file_set_file_name: String::new(),
+            dropdown,
         };
+        let file_types_dropdown = model.dropdown.widget();
+
         let files_list_box = model.files.widget();
 
         let widgets = view_output!();
@@ -366,6 +388,10 @@ impl Component for FileSetFormModel {
             }
             FileSetFormMsg::FileSetFileNameChanged(name) => {
                 self.file_set_file_name = name;
+            }
+            FileSetFormMsg::FileTypeChanged(file_type) => {
+                println!("File type changed: {:?}", file_type);
+                self.selected_file_type = file_type;
             }
         }
     }

@@ -81,8 +81,7 @@ impl Component for ImageViewer {
                 gtk::Button {
                     set_label: ">",
                     connect_clicked => ImageViewerMsg::ShowNext,
-                    #[watch]
-                    set_sensitive: model.current_file_index.unwrap_or(usize::MAX) <
+                    #[watch] set_sensitive: model.current_file_index.unwrap_or(usize::MAX) <
                         model.file_set.as_ref().map_or(0, |fs| fs.files.len() - 1),
                 },
 

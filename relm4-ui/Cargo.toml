@@ -14,7 +14,9 @@ core_types = { path = "../core_types" }
 emulator_runner = { path = "../emulator_runner" }
 thumbnails = { path = "../thumbnails" }
 utils = { path = "../utils" }
+ui-components = { path = "../ui-components" }
 strum = "0.27"
 strum_macros = "0.27"
+
 
 
