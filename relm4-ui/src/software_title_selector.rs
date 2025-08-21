@@ -101,7 +101,8 @@ impl Component for SoftwareTitleSelectModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> = TypedListView::new();
+        let list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
+            TypedListView::with_sorting();
 
         let model = SoftwareTitleSelectModel {
             view_model_service: init_model.view_model_service,
@@ -152,7 +153,7 @@ impl Component for SoftwareTitleSelectModel {
             }
             SoftwareTitleSelectMsg::SelectClicked => {
                 let selected = self.list_view_wrapper.selection_model.selected();
-                if let Some(software_title) = self.list_view_wrapper.get(selected) {
+                if let Some(software_title) = self.list_view_wrapper.get_visible(selected) {
                     let software_title = software_title.borrow();
                     println!(
                         "SoftwareTitle selected: {} with ID: {}",
@@ -205,6 +206,7 @@ impl Component for SoftwareTitleSelectModel {
                         name: software_title.name.clone(),
                         id: software_title.id,
                     });
+                self.list_view_wrapper.clear();
                 self.list_view_wrapper.extend_from_iter(list_items);
             }
             CommandMsg::SoftwareTitlesFetched(Err(e)) => {
