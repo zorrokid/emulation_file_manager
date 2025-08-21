@@ -1,0 +1,17 @@
+[package]
+name = "ui-components"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "ui_components"
+path = "src/lib.rs"
+
+[dependencies]
+relm4 = "0.9.1"
+core_types = { path = "../core_types" }
+strum = "0.27"
+
+[[example]]
+name = "dropdown_test"
+path = "examples/dropdown_test.rs"

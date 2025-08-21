@@ -16,11 +16,10 @@ use service::{
     view_model_service::ViewModelService,
     view_models::{FileSetListModel, Settings},
 };
-use strum::IntoEnumIterator;
+use ui_components::{DropDownOutputMsg, FileTypeDropDown, FileTypeSelectedMsg};
 
 use crate::{
     file_set_form::{FileSetFormInit, FileSetFormModel, FileSetFormOutputMsg},
-    file_types_dropdown::{self, create_file_types_dropdown},
     list_item::ListItem,
 };
 
@@ -31,7 +30,7 @@ pub enum FileSelectMsg {
     OpenFileSetForm,
     FileSetCreated(FileSetListModel),
     FileSetSelected { index: u32 },
-    SetFileTypeSelected { index: u32 },
+    FileTypeChanged(FileType),
 }
 
 #[derive(Debug)]
@@ -65,8 +64,8 @@ pub struct FileSelectModel {
     selected_system_ids: Vec<i64>,
     selected_file_type: Option<FileType>,
     selected_file_set: Option<FileSetListModel>,
-    file_types: Vec<FileType>,
     selected_file_set_ids: Vec<i64>,
+    dropdown: Controller<FileTypeDropDown>,
 }
 
 #[relm4::component(pub)]
@@ -87,16 +86,7 @@ impl Component for FileSelectModel {
                     set_label: "File Selector Component",
                 },
                 #[local_ref]
-                file_types_dropdown -> gtk::DropDown {
-                    connect_selected_notify[sender] => move |dropdown| {
-                        sender.input(FileSelectMsg::SetFileTypeSelected {
-                            index: dropdown.selected(),
-                        });
-                    }
-
-                },
-
-
+                file_types_dropdown -> gtk::Box {},
                 gtk::Button {
                     set_label: "Add File Set",
                     connect_clicked => FileSelectMsg::OpenFileSetForm,
@@ -125,7 +115,16 @@ impl Component for FileSelectModel {
     ) -> ComponentParts<Self> {
         let list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> = TypedListView::new();
 
-        let (file_types_dropdown, file_types) = create_file_types_dropdown();
+        let dropdown = FileTypeDropDown::builder().launch(None).forward(
+            sender.input_sender(),
+            |msg| match msg {
+                DropDownOutputMsg::ItemSelected(FileTypeSelectedMsg::FileTypeSelected(
+                    file_type,
+                )) => FileSelectMsg::FileTypeChanged(file_type),
+                _ => unreachable!(),
+            },
+        );
+
         let model = FileSelectModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
@@ -134,11 +133,12 @@ impl Component for FileSelectModel {
             list_view_wrapper,
             file_set_form: None,
             selected_system_ids: init_model.selected_system_ids,
-            selected_file_type: file_types.first().cloned(),
+            selected_file_type: None,
             selected_file_set: None,
-            file_types,
             selected_file_set_ids: init_model.selected_file_set_ids,
+            dropdown,
         };
+        let file_types_dropdown = model.dropdown.widget();
         let file_set_list_view = &model.list_view_wrapper.view;
         model
             .list_view_wrapper
@@ -243,14 +243,8 @@ impl Component for FileSelectModel {
                     eprintln!("No file set found at index {}", index);
                 }
             }
-            FileSelectMsg::SetFileTypeSelected { index } => {
-                println!("File type selected from index: {}", index);
-                let file_type = self
-                    .file_types
-                    .get(index as usize)
-                    .cloned()
-                    .expect("Invalid file type index");
-                println!("Selected file type: {:?}", file_type);
+            FileSelectMsg::FileTypeChanged(file_type) => {
+                println!("File type changed to: {:?}", file_type);
                 self.selected_file_type = Some(file_type);
                 sender.input(FileSelectMsg::FetchFiles);
             }
