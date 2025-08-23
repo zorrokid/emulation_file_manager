@@ -1,14 +1,11 @@
 use std::sync::Arc;
 
-use database::{database_error::Error as DatabaseError, repository_manager::RepositoryManager};
+use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
         self,
-        prelude::{
-            BoxExt, ButtonExt, EntryBufferExtManual, EntryExt, GtkWindowExt, OrientableExt,
-            WidgetExt,
-        },
+        prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt},
     },
     typed_view::list::TypedListView,
 };
@@ -27,24 +24,24 @@ use crate::{
 #[derive(Debug)]
 pub enum SoftwareTitleSelectMsg {
     FetchSoftwareTitles,
-    AddSoftwareTitle { name: String },
     SelectClicked,
     EditClicked,
     AddClicked,
     DeleteClicked,
+    SoftwareTitleAdded(SoftwareTitleListModel),
+    SoftwareTitleUpdated(SoftwareTitleListModel),
 }
 
 #[derive(Debug)]
 pub enum SoftwareTitleSelectOutputMsg {
-    SoftwareTitleSelected(SoftwareTitleListModel),
-    SoftwareTitleCreated(SoftwareTitleListModel),
+    Selected(SoftwareTitleListModel),
+    Created(SoftwareTitleListModel),
+    Updated(SoftwareTitleListModel),
 }
 
 #[derive(Debug)]
 pub enum CommandMsg {
     SoftwareTitlesFetched(Result<Vec<SoftwareTitleListModel>, ServiceError>),
-    SoftwareTitleAdded(SoftwareTitleListModel),
-    AddingSoftwareTitleFailed(DatabaseError),
 }
 
 pub struct SoftwareTitleSelectInit {
@@ -77,12 +74,11 @@ impl SoftwareTitleSelectModel {
                 edit_software_title,
             })
             .forward(sender.input_sender(), |msg| match msg {
-                // Forward messages from the form if needed
-                SoftwareTitleFormOutputMsg::SoftwareTitleAdded(_software_title_list_model) => {
-                    SoftwareTitleSelectMsg::FetchSoftwareTitles // Just refetch for now
+                SoftwareTitleFormOutputMsg::SoftwareTitleAdded(software_title_list_model) => {
+                    SoftwareTitleSelectMsg::SoftwareTitleAdded(software_title_list_model)
                 }
-                SoftwareTitleFormOutputMsg::SoftwareTitleUpdated(_software_title_list_model) => {
-                    SoftwareTitleSelectMsg::FetchSoftwareTitles // Just refetch for now
+                SoftwareTitleFormOutputMsg::SoftwareTitleUpdated(software_title_list_model) => {
+                    SoftwareTitleSelectMsg::SoftwareTitleUpdated(software_title_list_model)
                 }
             });
         self.software_title_form_controller = Some(software_title_form);
@@ -111,18 +107,6 @@ impl Component for SoftwareTitleSelectModel {
                 set_orientation: gtk::Orientation::Vertical,
                 set_margin_all: 10,
                 set_spacing: 10,
-
-                gtk::Entry {
-                    connect_activate[sender] => move |entry|  {
-                        let buffer = entry.buffer();
-                        sender.input(
-                            SoftwareTitleSelectMsg::AddSoftwareTitle {
-                                name: buffer.text().into(),
-                            }
-                        );
-                        buffer.delete_text(0, None);
-                    }
-                },
 
                 gtk::ScrolledWindow {
                     set_vexpand: true,
@@ -190,27 +174,6 @@ impl Component for SoftwareTitleSelectModel {
                     CommandMsg::SoftwareTitlesFetched(software_titles_result)
                 });
             }
-            SoftwareTitleSelectMsg::AddSoftwareTitle { name } => {
-                println!("Adding new software_title: {}", name);
-                let repository_manager = Arc::clone(&self.repository_manager);
-                sender.oneshot_command(async move {
-                    let result = repository_manager
-                        .get_software_title_repository()
-                        .add_software_title(&name, None) // TODO: franchise_id
-                        .await;
-                    match result {
-                        Ok(id) => {
-                            let software_title_list_model = SoftwareTitleListModel {
-                                id,
-                                name: name.clone(),
-                                can_delete: true, // OK to delete since this was just added
-                            };
-                            CommandMsg::SoftwareTitleAdded(software_title_list_model)
-                        }
-                        Err(e) => CommandMsg::AddingSoftwareTitleFailed(e),
-                    }
-                });
-            }
             SoftwareTitleSelectMsg::SelectClicked => {
                 let selected = self.list_view_wrapper.selection_model.selected();
                 if let Some(software_title) = self.list_view_wrapper.get_visible(selected) {
@@ -219,7 +182,7 @@ impl Component for SoftwareTitleSelectModel {
                         "SoftwareTitle selected: {} with ID: {}",
                         software_title.name, software_title.id
                     );
-                    let res = sender.output(SoftwareTitleSelectOutputMsg::SoftwareTitleSelected(
+                    let res = sender.output(SoftwareTitleSelectOutputMsg::Selected(
                         SoftwareTitleListModel {
                             id: software_title.id,
                             name: software_title.name.clone(),
@@ -259,13 +222,33 @@ impl Component for SoftwareTitleSelectModel {
             SoftwareTitleSelectMsg::DeleteClicked => {
                 // TODO: ask confirmation and delete
             }
+            SoftwareTitleSelectMsg::SoftwareTitleAdded(software_title_list_model) => {
+                println!(
+                    "Successfully added software_title: {}",
+                    software_title_list_model.name
+                );
+                sender
+                    .output(SoftwareTitleSelectOutputMsg::Created(
+                        software_title_list_model,
+                    ))
+                    .expect("Failed to send software_title selection output");
+                sender.input(SoftwareTitleSelectMsg::FetchSoftwareTitles);
+            }
+            SoftwareTitleSelectMsg::SoftwareTitleUpdated(_software_title_list_model) => {
+                sender
+                    .output(SoftwareTitleSelectOutputMsg::Updated(
+                        _software_title_list_model,
+                    ))
+                    .expect("Failed to send software_title update output");
+                sender.input(SoftwareTitleSelectMsg::FetchSoftwareTitles);
+            }
         }
     }
 
     fn update_cmd(
         &mut self,
         message: Self::CommandOutput,
-        sender: ComponentSender<Self>,
+        _sender: ComponentSender<Self>,
         _: &Self::Root,
     ) {
         match message {
@@ -291,22 +274,6 @@ impl Component for SoftwareTitleSelectModel {
             }
             CommandMsg::SoftwareTitlesFetched(Err(e)) => {
                 eprintln!("Error fetching software_titles: {:?}", e);
-                // TODO: show error to user
-            }
-            CommandMsg::SoftwareTitleAdded(software_title_list_model) => {
-                println!(
-                    "Successfully added software_title: {}",
-                    software_title_list_model.name
-                );
-                sender.input(SoftwareTitleSelectMsg::FetchSoftwareTitles);
-                sender
-                    .output(SoftwareTitleSelectOutputMsg::SoftwareTitleCreated(
-                        software_title_list_model,
-                    ))
-                    .expect("Failed to send software_title selection output");
-            }
-            CommandMsg::AddingSoftwareTitleFailed(error) => {
-                eprintln!("Error adding software_title: {:?}", error);
                 // TODO: show error to user
             }
         }

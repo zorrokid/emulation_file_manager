@@ -88,6 +88,9 @@ pub enum ReleaseMsg {
     SoftwareTitleCreated {
         software_title_list_model: SoftwareTitleListModel,
     },
+    SoftwareTitleUpdated {
+        software_title_list_model: SoftwareTitleListModel,
+    },
 }
 
 #[derive(Debug)]
@@ -387,6 +390,14 @@ impl Component for ReleaseModel {
                             ) => {
                                 println!("Software title created: {:?}", software_title_list_model);
                                 ReleaseMsg::SoftwareTitleCreated {
+                                    software_title_list_model,
+                                }
+                            }
+                            ReleaseFormOutputMsg::SoftwareTitleUpdated(
+                                software_title_list_model,
+                            ) => {
+                                println!("Software title updated: {:?}", software_title_list_model);
+                                ReleaseMsg::SoftwareTitleUpdated {
                                     software_title_list_model,
                                 }
                             }
