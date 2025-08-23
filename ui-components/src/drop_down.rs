@@ -98,7 +98,7 @@ where
         let string_list = gtk::StringList::new(&string_refs);
 
         widgets.dropdown.set_model(Some(&string_list));
-        
+
         // Set initial selection
         if let Some(index) = initial_index {
             widgets.dropdown.set_selected(index);

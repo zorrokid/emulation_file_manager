@@ -2,11 +2,12 @@ use std::sync::Arc;
 
 use database::{database_error::Error as DatabaseError, repository_manager::RepositoryManager};
 use relm4::{
-    Component, ComponentParts, ComponentSender,
+    Component, ComponentParts, ComponentSender, RelmWidgetExt,
     gtk::{
         self,
         prelude::{
-            ButtonExt, EntryBufferExtManual, EntryExt, GtkWindowExt, OrientableExt, WidgetExt,
+            BoxExt, ButtonExt, EntryBufferExtManual, EntryExt, GtkWindowExt, OrientableExt,
+            WidgetExt,
         },
     },
     typed_view::list::TypedListView,
@@ -63,11 +64,13 @@ impl Component for SoftwareTitleSelectModel {
     view! {
         #[root]
         gtk::Window {
-            set_default_width: 800,
-            set_default_height: 800,
+            set_default_width: 400,
+            set_default_height: 600,
             set_title: Some("SoftwareTitle Selector"),
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
+                set_margin_all: 10,
+                set_spacing: 10,
 
                 gtk::Entry {
                     connect_activate[sender] => move |entry|  {
