@@ -11,6 +11,7 @@ mod list_item;
 mod release;
 mod release_form;
 mod releases;
+mod software_title_form;
 mod software_title_selector;
 mod system_selector;
 mod tabbed_image_viewer;

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use database::{database_error::Error as DatabaseError, repository_manager::RepositoryManager};
 use relm4::{
-    Component, ComponentParts, ComponentSender, RelmWidgetExt,
+    Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
         self,
         prelude::{
@@ -17,13 +17,21 @@ use service::{
     view_models::SoftwareTitleListModel,
 };
 
-use crate::list_item::ListItem;
+use crate::{
+    list_item::ListItem,
+    software_title_form::{
+        SoftwareTitleFormInit, SoftwareTitleFormModel, SoftwareTitleFormOutputMsg,
+    },
+};
 
 #[derive(Debug)]
 pub enum SoftwareTitleSelectMsg {
     FetchSoftwareTitles,
     AddSoftwareTitle { name: String },
     SelectClicked,
+    EditClicked,
+    AddClicked,
+    DeleteClicked,
 }
 
 #[derive(Debug)]
@@ -52,6 +60,7 @@ pub struct SoftwareTitleSelectModel {
     software_titles: Vec<SoftwareTitleListModel>,
     list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     selected_software_title_ids: Vec<i64>,
+    software_title_form_controller: Option<Controller<SoftwareTitleFormModel>>,
 }
 
 #[relm4::component(pub)]
@@ -90,11 +99,27 @@ impl Component for SoftwareTitleSelectModel {
                     software_titles_list_view -> gtk::ListView {}
                 },
 
-                gtk::Button {
-                    set_label: "Select SoftwareTitle",
-                    connect_clicked => SoftwareTitleSelectMsg::SelectClicked,
-                },
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    set_spacing: 6,
 
+                    gtk::Button {
+                        set_label: "Add",
+                        connect_clicked => SoftwareTitleSelectMsg::AddClicked,
+                    },
+                    gtk::Button {
+                        set_label: "Edit",
+                        connect_clicked => SoftwareTitleSelectMsg::EditClicked,
+                    },
+                    gtk::Button {
+                        set_label: "Delete",
+                        connect_clicked => SoftwareTitleSelectMsg::DeleteClicked,
+                    },
+                    gtk::Button {
+                        set_label: "Select",
+                        connect_clicked => SoftwareTitleSelectMsg::SelectClicked,
+                    },
+                },
             }
         }
     }
@@ -113,6 +138,7 @@ impl Component for SoftwareTitleSelectModel {
             software_titles: Vec::new(),
             list_view_wrapper,
             selected_software_title_ids: init_model.selected_software_title_ids,
+            software_title_form_controller: None,
         };
 
         let software_titles_list_view = &model.list_view_wrapper.view;
@@ -181,6 +207,63 @@ impl Component for SoftwareTitleSelectModel {
                 } else {
                     eprintln!("No software_title found at selected index {}", selected);
                 }
+            }
+            SoftwareTitleSelectMsg::AddClicked => {
+                let software_title_form = SoftwareTitleFormModel::builder()
+                    .transient_for(root)
+                    .launch(SoftwareTitleFormInit {
+                        repository_manager: Arc::clone(&self.repository_manager),
+                        edit_software_title: None,
+                    })
+                    .forward(sender.input_sender(), |msg| match msg {
+                        // Forward messages from the form if needed
+                        SoftwareTitleFormOutputMsg::SoftwareTitleAdded(
+                            _software_title_list_model,
+                        ) => SoftwareTitleSelectMsg::FetchSoftwareTitles, // Just refetch for now
+                        SoftwareTitleFormOutputMsg::SoftwareTitleUpdated(
+                            _software_title_list_model,
+                        ) => SoftwareTitleSelectMsg::FetchSoftwareTitles, // Just refetch for now
+                    });
+                self.software_title_form_controller = Some(software_title_form);
+                self.software_title_form_controller
+                    .as_ref()
+                    .expect("SoftwareTitle form controller should be initialized")
+                    .widget()
+                    .present();
+            }
+
+            SoftwareTitleSelectMsg::EditClicked => {
+                let software_title_form = SoftwareTitleFormModel::builder()
+                    .transient_for(root)
+                    .launch(SoftwareTitleFormInit {
+                        repository_manager: Arc::clone(&self.repository_manager),
+                        edit_software_title: self
+                            .list_view_wrapper
+                            .get_visible(self.list_view_wrapper.selection_model.selected())
+                            .and_then(|st| {
+                                self.software_titles
+                                    .iter()
+                                    .find(|s| s.id == st.borrow().id)
+                                    .cloned()
+                            }),
+                    })
+                    .forward(sender.input_sender(), |msg| match msg {
+                        SoftwareTitleFormOutputMsg::SoftwareTitleAdded(
+                            _software_title_list_model,
+                        ) => SoftwareTitleSelectMsg::FetchSoftwareTitles, // Just refetch for now
+                        SoftwareTitleFormOutputMsg::SoftwareTitleUpdated(
+                            _software_title_list_model,
+                        ) => SoftwareTitleSelectMsg::FetchSoftwareTitles, // Just refetch for now
+                    });
+                self.software_title_form_controller = Some(software_title_form);
+                self.software_title_form_controller
+                    .as_ref()
+                    .expect("SoftwareTitle form controller should be initialized")
+                    .widget()
+                    .present();
+            }
+            SoftwareTitleSelectMsg::DeleteClicked => {
+                // TODO: ask confirmation and delete
             }
         }
     }
