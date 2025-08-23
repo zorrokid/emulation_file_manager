@@ -11,6 +11,7 @@ mod list_item;
 mod release;
 mod release_form;
 mod releases;
+mod software_title_form;
 mod software_title_selector;
 mod system_selector;
 mod tabbed_image_viewer;
@@ -45,6 +46,7 @@ enum AppMsg {
     Initialize,
     SoftwareTitleSelected { index: u32 },
     SoftwareTitleCreated(SoftwareTitleListModel),
+    SoftwareTitleUpdated(SoftwareTitleListModel),
     ReleaseSelected { id: i64 },
 }
 
@@ -198,6 +200,9 @@ impl Component for AppModel {
                     name: software_title_list_model.name.clone(),
                 });
             }
+            AppMsg::SoftwareTitleUpdated(_software_title_list_model) => {
+                // TODO: update software title in list
+            }
             AppMsg::ReleaseSelected { id } => {
                 self.release
                     .get()
@@ -235,6 +240,9 @@ impl Component for AppModel {
                         ReleasesOutputMsg::SoftwareTitleCreated {
                             software_title_list_model,
                         } => AppMsg::SoftwareTitleCreated(software_title_list_model),
+                        ReleasesOutputMsg::SoftwareTitleUpdated {
+                            software_title_list_model,
+                        } => AppMsg::SoftwareTitleUpdated(software_title_list_model),
                         ReleasesOutputMsg::ReleaseSelected { id } => AppMsg::ReleaseSelected { id },
                     },
                 );

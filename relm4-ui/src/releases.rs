@@ -26,6 +26,7 @@ pub enum ReleasesMsg {
     FetchReleases,
     ReleaseCreatedOrUpdated { id: i64 },
     SofwareTitleCreated(SoftwareTitleListModel),
+    SofwareTitleUpdated(SoftwareTitleListModel),
 }
 
 #[derive(Debug)]
@@ -52,6 +53,9 @@ pub struct ReleasesInit {
 #[derive(Debug)]
 pub enum ReleasesOutputMsg {
     SoftwareTitleCreated {
+        software_title_list_model: SoftwareTitleListModel,
+    },
+    SoftwareTitleUpdated {
         software_title_list_model: SoftwareTitleListModel,
     },
     ReleaseSelected {
@@ -184,6 +188,10 @@ impl Component for ReleasesModel {
                             println!("Software title created: {:?}", software_title_list_model);
                             ReleasesMsg::SofwareTitleCreated(software_title_list_model)
                         }
+                        ReleaseFormOutputMsg::SoftwareTitleUpdated(software_title_list_model) => {
+                            println!("Software title updated: {:?}", software_title_list_model);
+                            ReleasesMsg::SofwareTitleUpdated(software_title_list_model)
+                        }
                     });
 
                 self.form_window = Some(form_window);
@@ -212,6 +220,14 @@ impl Component for ReleasesModel {
                 });
                 if let Err(err) = res {
                     eprintln!("Error sending SoftwareTitleCreated message: {:?}", err);
+                }
+            }
+            ReleasesMsg::SofwareTitleUpdated(software_title_list_model) => {
+                let res = sender.output(ReleasesOutputMsg::SoftwareTitleUpdated {
+                    software_title_list_model,
+                });
+                if let Err(err) = res {
+                    eprintln!("Error sending SoftwareTitleUpdated message: {:?}", err);
                 }
             }
         }
