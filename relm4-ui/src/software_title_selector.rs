@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use database::repository_manager::RepositoryManager;
+use database::{database_error::DatabaseError, repository_manager::RepositoryManager};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
@@ -20,6 +20,8 @@ use crate::{
         SoftwareTitleFormInit, SoftwareTitleFormModel, SoftwareTitleFormOutputMsg,
     },
 };
+
+use ui_components::confirm_dialog::{ConfirmDialog, ConfirmDialogInit};
 
 #[derive(Debug)]
 pub enum SoftwareTitleSelectMsg {
@@ -42,6 +44,8 @@ pub enum SoftwareTitleSelectOutputMsg {
 #[derive(Debug)]
 pub enum CommandMsg {
     SoftwareTitlesFetched(Result<Vec<SoftwareTitleListModel>, ServiceError>),
+    Deleted(Result<i64, DatabaseError>),
+    Canceled,
 }
 
 pub struct SoftwareTitleSelectInit {
@@ -220,7 +224,38 @@ impl Component for SoftwareTitleSelectModel {
                 }
             }
             SoftwareTitleSelectMsg::DeleteClicked => {
-                // TODO: ask confirmation and delete
+                let repository_manager = Arc::clone(&self.repository_manager);
+                let selected = self.list_view_wrapper.selection_model.selected();
+                let software_title = self.list_view_wrapper.get_visible(selected);
+                let id = software_title.as_ref().map(|st| st.borrow().id);
+                if let Some(id) = id {
+                    let stream = ConfirmDialog::builder()
+                        .transient_for(root)
+                        .launch(ConfirmDialogInit {
+                            title: "Confirm Deletion".to_string(),
+                        })
+                        .into_stream();
+                    sender.oneshot_command(async move {
+                        let result = stream.recv_one().await;
+
+                        if let Some(will_delete) = result {
+                            if will_delete {
+                                println!("Deleting software_title with ID {}", id);
+                                let result = repository_manager
+                                    .get_software_title_repository()
+                                    .delete_software_title(id)
+                                    .await;
+                                CommandMsg::Deleted(result)
+                            } else {
+                                println!("User canceled deletion");
+                                CommandMsg::Canceled
+                            }
+                        } else {
+                            println!("Dialog was closed without confirmation");
+                            CommandMsg::Canceled
+                        }
+                    });
+                }
             }
             SoftwareTitleSelectMsg::SoftwareTitleAdded(software_title_list_model) => {
                 println!(
@@ -248,7 +283,7 @@ impl Component for SoftwareTitleSelectModel {
     fn update_cmd(
         &mut self,
         message: Self::CommandOutput,
-        _sender: ComponentSender<Self>,
+        sender: ComponentSender<Self>,
         _: &Self::Root,
     ) {
         match message {
@@ -275,6 +310,16 @@ impl Component for SoftwareTitleSelectModel {
             CommandMsg::SoftwareTitlesFetched(Err(e)) => {
                 eprintln!("Error fetching software_titles: {:?}", e);
                 // TODO: show error to user
+            }
+            CommandMsg::Deleted(Ok(_id)) => {
+                println!("Successfully deleted software_title");
+                sender.input(SoftwareTitleSelectMsg::FetchSoftwareTitles);
+            }
+            CommandMsg::Deleted(Err(error)) => {
+                eprintln!("Error deleting software_title: {:?}", error);
+            }
+            CommandMsg::Canceled => {
+                // No action needed
             }
         }
     }
