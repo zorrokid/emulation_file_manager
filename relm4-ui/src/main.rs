@@ -12,6 +12,7 @@ mod release;
 mod release_form;
 mod releases;
 mod software_title_form;
+mod software_title_list;
 mod software_title_selector;
 mod system_selector;
 mod tabbed_image_viewer;
@@ -32,19 +33,19 @@ use service::{
     view_model_service::ViewModelService,
     view_models::{Settings, SoftwareTitleListModel},
 };
+use software_title_list::{SoftwareTitleList, SoftwareTitleListInit, SoftwareTitleListOutputMsg};
 
 #[derive(Debug)]
 struct InitResult {
     repository_manager: Arc<RepositoryManager>,
     view_model_service: Arc<ViewModelService>,
-    software_titles: Vec<SoftwareTitleListModel>,
     settings: Arc<Settings>,
 }
 
 #[derive(Debug)]
 enum AppMsg {
     Initialize,
-    SoftwareTitleSelected { index: u32 },
+    SoftwareTitleSelected { id: i64 },
     SoftwareTitleCreated(SoftwareTitleListModel),
     SoftwareTitleUpdated(SoftwareTitleListModel),
     ReleaseSelected { id: i64 },
@@ -58,11 +59,11 @@ enum CommandMsg {
 struct AppModel {
     repository_manager: OnceCell<Arc<RepositoryManager>>,
     view_model_service: OnceCell<Arc<ViewModelService>>,
-    list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     releases_view: gtk::Box,
     releases: OnceCell<Controller<ReleasesModel>>,
     release_view: gtk::Box,
     release: OnceCell<Controller<ReleaseModel>>,
+    software_titles_list: OnceCell<Controller<SoftwareTitleList>>,
 }
 
 struct AppWidgets {}
@@ -88,9 +89,6 @@ impl Component for AppModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
-            TypedListView::with_sorting();
-
         let main_layout_hbox = gtk::Paned::builder()
             .orientation(gtk::Orientation::Horizontal)
             .vexpand(true)
@@ -114,25 +112,6 @@ impl Component for AppModel {
         let title_label = gtk::Label::builder().label("Software Titles").build();
         left_vbox.append(&title_label);
 
-        let software_titles_list_container = gtk::ScrolledWindow::builder().vexpand(true).build();
-
-        let software_titles_view = &list_view_wrapper.view;
-
-        let selection_model = &list_view_wrapper.selection_model;
-        selection_model.connect_selected_notify(clone!(
-            #[strong]
-            sender,
-            move |selection| {
-                sender.input(AppMsg::SoftwareTitleSelected {
-                    index: selection.selected(),
-                });
-            }
-        ));
-
-        software_titles_list_container.set_child(Some(software_titles_view));
-
-        left_vbox.append(&software_titles_list_container);
-
         root.set_child(Some(&main_layout_hbox));
 
         let widgets = AppWidgets {};
@@ -140,11 +119,11 @@ impl Component for AppModel {
         let model = AppModel {
             repository_manager: OnceCell::new(),
             view_model_service: OnceCell::new(),
-            list_view_wrapper,
             releases_view: left_vbox,
             release_view: right_vbox,
             releases: OnceCell::new(),
             release: OnceCell::new(),
+            software_titles_list: OnceCell::new(),
         };
 
         sender.input(AppMsg::Initialize);
@@ -160,10 +139,10 @@ impl Component for AppModel {
                     let repository_manager = Arc::new(RepositoryManager::new(pool));
                     let view_model_service =
                         Arc::new(ViewModelService::new(Arc::clone(&repository_manager)));
-                    let software_titles = view_model_service
-                        .get_software_title_list_models()
-                        .await
-                        .expect("Fetching software titles failed");
+                    /*let software_titles = view_model_service
+                    .get_software_title_list_models()
+                    .await
+                    .expect("Fetching software titles failed");*/
                     let settings = view_model_service
                         .get_settings()
                         .await
@@ -172,36 +151,31 @@ impl Component for AppModel {
                     CommandMsg::InitializationDone(InitResult {
                         repository_manager,
                         view_model_service,
-                        software_titles,
+                        //software_titles,
                         settings,
                     })
                 });
             }
-            AppMsg::SoftwareTitleSelected { index } => {
-                if let Some(title) = self.list_view_wrapper.get_visible(index) {
-                    let title = title.borrow();
-                    println!("Selected software title: {}", title.name);
-                    self.releases
-                        .get()
-                        .expect("ReleasesModel not initialized")
-                        .emit(ReleasesMsg::SoftwareTitleSelected { id: title.id });
-                    self.release
-                        .get()
-                        .expect("Release widget not initialized")
-                        .sender()
-                        .emit(ReleaseMsg::Clear);
-                } else {
-                    println!("No software title found at index {}", index);
-                }
+            AppMsg::SoftwareTitleSelected { id } => {
+                self.releases
+                    .get()
+                    .expect("ReleasesModel not initialized")
+                    .emit(ReleasesMsg::SoftwareTitleSelected { id });
+                self.release
+                    .get()
+                    .expect("Release widget not initialized")
+                    .sender()
+                    .emit(ReleaseMsg::Clear);
             }
             AppMsg::SoftwareTitleCreated(software_title_list_model) => {
-                self.list_view_wrapper.append(ListItem {
+                // TODO: notify software title list of new software title
+                /*self.list_view_wrapper.append(ListItem {
                     id: software_title_list_model.id,
                     name: software_title_list_model.name.clone(),
-                });
+                });*/
             }
             AppMsg::SoftwareTitleUpdated(_software_title_list_model) => {
-                // TODO: update software title in list
+                // TODO: notify software title list of updated software title
             }
             AppMsg::ReleaseSelected { id } => {
                 self.release
@@ -222,11 +196,25 @@ impl Component for AppModel {
             CommandMsg::InitializationDone(init_result) => {
                 let view_model_service = Arc::clone(&init_result.view_model_service);
                 let repository_manager = Arc::clone(&init_result.repository_manager);
-                let list_items = init_result.software_titles.iter().map(|title| ListItem {
-                    name: title.name.clone(),
-                    id: title.id,
-                });
-                self.list_view_wrapper.extend_from_iter(list_items);
+
+                let software_title_list = SoftwareTitleList::builder()
+                    .launch(SoftwareTitleListInit {
+                        view_model_service: Arc::clone(&view_model_service),
+                    })
+                    .forward(sender.input_sender(), |msg| match msg {
+                        SoftwareTitleListOutputMsg::SoftwareTitleSelected { id } => {
+                            AppMsg::SoftwareTitleSelected { id }
+                        }
+                    });
+
+                software_title_list
+                    .emit(software_title_list::SoftwareTitleListMsg::FetchSoftwareTitles);
+
+                self.releases_view.append(software_title_list.widget());
+
+                self.software_titles_list
+                    .set(software_title_list)
+                    .expect("Software titles list already initialized");
 
                 let releases_init = ReleasesInit {
                     view_model_service,
