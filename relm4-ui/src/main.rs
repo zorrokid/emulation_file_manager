@@ -24,7 +24,8 @@ use list_item::ListItem;
 use release::{ReleaseInitModel, ReleaseModel, ReleaseMsg, ReleaseOutputMsg};
 use releases::{ReleasesInit, ReleasesModel, ReleasesMsg, ReleasesOutputMsg};
 use relm4::{
-    Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmApp,
+    Component, ComponentController, ComponentParts, ComponentSender, Controller, MessageBroker,
+    RelmApp,
     gtk::{self, glib::clone, prelude::*},
     once_cell::sync::OnceCell,
     typed_view::list::TypedListView,
@@ -33,7 +34,11 @@ use service::{
     view_model_service::ViewModelService,
     view_models::{Settings, SoftwareTitleListModel},
 };
-use software_title_list::{SoftwareTitleList, SoftwareTitleListInit, SoftwareTitleListOutputMsg};
+use software_title_list::{
+    SoftwareTitleList, SoftwareTitleListInit, SoftwareTitleListMsg, SoftwareTitleListOutputMsg,
+};
+
+pub static SOFTWARE_TITLE_LIST_BROKER: MessageBroker<SoftwareTitleListMsg> = MessageBroker::new();
 
 #[derive(Debug)]
 struct InitResult {
@@ -46,8 +51,6 @@ struct InitResult {
 enum AppMsg {
     Initialize,
     SoftwareTitleSelected { id: i64 },
-    SoftwareTitleCreated(SoftwareTitleListModel),
-    SoftwareTitleUpdated(SoftwareTitleListModel),
     ReleaseSelected { id: i64 },
 }
 
@@ -139,10 +142,6 @@ impl Component for AppModel {
                     let repository_manager = Arc::new(RepositoryManager::new(pool));
                     let view_model_service =
                         Arc::new(ViewModelService::new(Arc::clone(&repository_manager)));
-                    /*let software_titles = view_model_service
-                    .get_software_title_list_models()
-                    .await
-                    .expect("Fetching software titles failed");*/
                     let settings = view_model_service
                         .get_settings()
                         .await
@@ -151,7 +150,6 @@ impl Component for AppModel {
                     CommandMsg::InitializationDone(InitResult {
                         repository_manager,
                         view_model_service,
-                        //software_titles,
                         settings,
                     })
                 });
@@ -166,16 +164,6 @@ impl Component for AppModel {
                     .expect("Release widget not initialized")
                     .sender()
                     .emit(ReleaseMsg::Clear);
-            }
-            AppMsg::SoftwareTitleCreated(software_title_list_model) => {
-                // TODO: notify software title list of new software title
-                /*self.list_view_wrapper.append(ListItem {
-                    id: software_title_list_model.id,
-                    name: software_title_list_model.name.clone(),
-                });*/
-            }
-            AppMsg::SoftwareTitleUpdated(_software_title_list_model) => {
-                // TODO: notify software title list of updated software title
             }
             AppMsg::ReleaseSelected { id } => {
                 self.release
@@ -198,9 +186,12 @@ impl Component for AppModel {
                 let repository_manager = Arc::clone(&init_result.repository_manager);
 
                 let software_title_list = SoftwareTitleList::builder()
-                    .launch(SoftwareTitleListInit {
-                        view_model_service: Arc::clone(&view_model_service),
-                    })
+                    .launch_with_broker(
+                        SoftwareTitleListInit {
+                            view_model_service: Arc::clone(&view_model_service),
+                        },
+                        &SOFTWARE_TITLE_LIST_BROKER,
+                    )
                     .forward(sender.input_sender(), |msg| match msg {
                         SoftwareTitleListOutputMsg::SoftwareTitleSelected { id } => {
                             AppMsg::SoftwareTitleSelected { id }
@@ -225,12 +216,6 @@ impl Component for AppModel {
                 let releases = ReleasesModel::builder().launch(releases_init).forward(
                     sender.input_sender(),
                     |msg| match msg {
-                        ReleasesOutputMsg::SoftwareTitleCreated {
-                            software_title_list_model,
-                        } => AppMsg::SoftwareTitleCreated(software_title_list_model),
-                        ReleasesOutputMsg::SoftwareTitleUpdated {
-                            software_title_list_model,
-                        } => AppMsg::SoftwareTitleUpdated(software_title_list_model),
                         ReleasesOutputMsg::ReleaseSelected { id } => AppMsg::ReleaseSelected { id },
                     },
                 );
@@ -241,14 +226,9 @@ impl Component for AppModel {
                     repository_manager: Arc::clone(&init_result.repository_manager),
                     settings: Arc::clone(&init_result.settings),
                 };
-                let release_model = ReleaseModel::builder().launch(release_init_model).forward(
-                    sender.input_sender(),
-                    |msg| match msg {
-                        ReleaseOutputMsg::SoftwareTitleCreated(software_title_list_model) => {
-                            AppMsg::SoftwareTitleCreated(software_title_list_model)
-                        }
-                    },
-                );
+                let release_model = ReleaseModel::builder()
+                    .launch(release_init_model)
+                    .forward(sender.input_sender(), |msg| match msg {});
                 self.release_view.append(release_model.widget());
 
                 self.view_model_service

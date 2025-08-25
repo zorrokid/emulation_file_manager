@@ -9,7 +9,7 @@ use relm4::{
 use service::{
     error::Error,
     view_model_service::{ReleaseFilter, ViewModelService},
-    view_models::{ReleaseListModel, Settings, SoftwareTitleListModel},
+    view_models::{ReleaseListModel, Settings},
 };
 
 use crate::{
@@ -25,8 +25,6 @@ pub enum ReleasesMsg {
     AddRelease(ReleaseListModel),
     FetchReleases,
     ReleaseCreatedOrUpdated { id: i64 },
-    SofwareTitleCreated(SoftwareTitleListModel),
-    SofwareTitleUpdated(SoftwareTitleListModel),
 }
 
 #[derive(Debug)]
@@ -52,15 +50,7 @@ pub struct ReleasesInit {
 
 #[derive(Debug)]
 pub enum ReleasesOutputMsg {
-    SoftwareTitleCreated {
-        software_title_list_model: SoftwareTitleListModel,
-    },
-    SoftwareTitleUpdated {
-        software_title_list_model: SoftwareTitleListModel,
-    },
-    ReleaseSelected {
-        id: i64,
-    },
+    ReleaseSelected { id: i64 },
 }
 
 #[relm4::component(pub)]
@@ -184,14 +174,6 @@ impl Component for ReleasesModel {
                             println!("Release created or updated with ID: {}", id);
                             ReleasesMsg::ReleaseCreatedOrUpdated { id }
                         }
-                        ReleaseFormOutputMsg::SoftwareTitleCreated(software_title_list_model) => {
-                            println!("Software title created: {:?}", software_title_list_model);
-                            ReleasesMsg::SofwareTitleCreated(software_title_list_model)
-                        }
-                        ReleaseFormOutputMsg::SoftwareTitleUpdated(software_title_list_model) => {
-                            println!("Software title updated: {:?}", software_title_list_model);
-                            ReleasesMsg::SofwareTitleUpdated(software_title_list_model)
-                        }
                     });
 
                 self.form_window = Some(form_window);
@@ -213,22 +195,6 @@ impl Component for ReleasesModel {
                 println!("Release created or updated with ID: {}", id);
                 // TODO fetch only the created of rupdated release
                 sender.input(ReleasesMsg::FetchReleases);
-            }
-            ReleasesMsg::SofwareTitleCreated(software_title_list_model) => {
-                let res = sender.output(ReleasesOutputMsg::SoftwareTitleCreated {
-                    software_title_list_model,
-                });
-                if let Err(err) = res {
-                    eprintln!("Error sending SoftwareTitleCreated message: {:?}", err);
-                }
-            }
-            ReleasesMsg::SofwareTitleUpdated(software_title_list_model) => {
-                let res = sender.output(ReleasesOutputMsg::SoftwareTitleUpdated {
-                    software_title_list_model,
-                });
-                if let Err(err) = res {
-                    eprintln!("Error sending SoftwareTitleUpdated message: {:?}", err);
-                }
             }
         }
     }

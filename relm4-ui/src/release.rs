@@ -23,7 +23,6 @@ use crate::{
     document_file_set_viewer::{DocumentViewer, DocumentViewerInit},
     emulator_runner::{EmulatorRunnerInit, EmulatorRunnerModel},
     image_fileset_viewer::{ImageFileSetViewerInit, ImageFilesetViewer},
-    image_viewer::{ImageViewer, ImageViewerInit, ImageViewerMsg},
     list_item::ListItem,
     release_form::{ReleaseFormInit, ReleaseFormModel, ReleaseFormOutputMsg},
     tabbed_image_viewer::{TabbedImageViewer, TabbedImageViewerInit, TabbedImageViewerMsg},
@@ -61,36 +60,18 @@ pub struct ReleaseInitModel {
 
 #[derive(Debug)]
 pub enum ReleaseMsg {
-    ReleaseSelected {
-        id: i64,
-    },
-    FetchRelease {
-        id: i64,
-    },
+    ReleaseSelected { id: i64 },
+    FetchRelease { id: i64 },
     StartEmulatorRunner,
     StartImageFileSetViewer,
     StartDocumentFileSetViewer,
     StartEditRelease,
     UpdateRelease(ReleaseListModel),
     Clear,
-    FileSetSelected {
-        index: u32,
-    },
-    ImageFileSetSelected {
-        index: u32,
-    },
-    DocumentFileSetSelected {
-        index: u32,
-    },
-    ReleaseCreatedOrUpdated {
-        id: i64,
-    },
-    SoftwareTitleCreated {
-        software_title_list_model: SoftwareTitleListModel,
-    },
-    SoftwareTitleUpdated {
-        software_title_list_model: SoftwareTitleListModel,
-    },
+    FileSetSelected { index: u32 },
+    ImageFileSetSelected { index: u32 },
+    DocumentFileSetSelected { index: u32 },
+    ReleaseCreatedOrUpdated { id: i64 },
 }
 
 #[derive(Debug)]
@@ -99,9 +80,7 @@ pub enum ReleaseCommandMsg {
 }
 
 #[derive(Debug)]
-pub enum ReleaseOutputMsg {
-    SoftwareTitleCreated(SoftwareTitleListModel),
-}
+pub enum ReleaseOutputMsg {}
 
 #[relm4::component(pub)]
 impl Component for ReleaseModel {
@@ -385,22 +364,6 @@ impl Component for ReleaseModel {
                             ReleaseFormOutputMsg::ReleaseCreatedOrUpdated { id } => {
                                 ReleaseMsg::FetchRelease { id }
                             }
-                            ReleaseFormOutputMsg::SoftwareTitleCreated(
-                                software_title_list_model,
-                            ) => {
-                                println!("Software title created: {:?}", software_title_list_model);
-                                ReleaseMsg::SoftwareTitleCreated {
-                                    software_title_list_model,
-                                }
-                            }
-                            ReleaseFormOutputMsg::SoftwareTitleUpdated(
-                                software_title_list_model,
-                            ) => {
-                                println!("Software title updated: {:?}", software_title_list_model);
-                                ReleaseMsg::SoftwareTitleUpdated {
-                                    software_title_list_model,
-                                }
-                            }
                         });
 
                     self.form_window = Some(form_window);
@@ -484,17 +447,6 @@ impl Component for ReleaseModel {
                 println!("Release created or updated with ID: {}", id);
                 sender.input(ReleaseMsg::FetchRelease { id });
             }
-            ReleaseMsg::SoftwareTitleCreated {
-                software_title_list_model,
-            } => {
-                let res = sender.output(ReleaseOutputMsg::SoftwareTitleCreated(
-                    software_title_list_model,
-                ));
-                if let Err(err) = res {
-                    eprintln!("Error sending SoftwareTitleCreated output: {:?}", err);
-                }
-            }
-
             _ => (),
         }
     }

@@ -15,6 +15,8 @@ use relm4::{
 };
 use service::view_models::SoftwareTitleListModel;
 
+use crate::{SOFTWARE_TITLE_LIST_BROKER, software_title_list::SoftwareTitleListMsg};
+
 #[derive(Debug)]
 pub struct SoftwareTitleFormModel {
     pub name: String,
@@ -145,6 +147,7 @@ impl Component for SoftwareTitleFormModel {
                         can_delete: false,
                     })
                 });
+                SOFTWARE_TITLE_LIST_BROKER.send(SoftwareTitleListMsg::FetchSoftwareTitles);
                 if let Err(e) = res {
                     eprintln!("Failed to send output message: {:?}", e);
                 }

@@ -15,10 +15,12 @@ use service::{
 };
 
 use crate::{
+    SOFTWARE_TITLE_LIST_BROKER,
     list_item::ListItem,
     software_title_form::{
         SoftwareTitleFormInit, SoftwareTitleFormModel, SoftwareTitleFormOutputMsg,
     },
+    software_title_list::SoftwareTitleListMsg,
 };
 
 use ui_components::confirm_dialog::{ConfirmDialog, ConfirmDialogInit};
@@ -37,8 +39,6 @@ pub enum SoftwareTitleSelectMsg {
 #[derive(Debug)]
 pub enum SoftwareTitleSelectOutputMsg {
     Selected(SoftwareTitleListModel),
-    Created(SoftwareTitleListModel),
-    Updated(SoftwareTitleListModel),
 }
 
 #[derive(Debug)]
@@ -262,19 +262,9 @@ impl Component for SoftwareTitleSelectModel {
                     "Successfully added software_title: {}",
                     software_title_list_model.name
                 );
-                sender
-                    .output(SoftwareTitleSelectOutputMsg::Created(
-                        software_title_list_model,
-                    ))
-                    .expect("Failed to send software_title selection output");
                 sender.input(SoftwareTitleSelectMsg::FetchSoftwareTitles);
             }
             SoftwareTitleSelectMsg::SoftwareTitleUpdated(_software_title_list_model) => {
-                sender
-                    .output(SoftwareTitleSelectOutputMsg::Updated(
-                        _software_title_list_model,
-                    ))
-                    .expect("Failed to send software_title update output");
                 sender.input(SoftwareTitleSelectMsg::FetchSoftwareTitles);
             }
         }
@@ -288,7 +278,6 @@ impl Component for SoftwareTitleSelectModel {
     ) {
         match message {
             CommandMsg::SoftwareTitlesFetched(Ok(software_titles)) => {
-                // Handle the fetched software_titles, e.g., populate a dropdown or list
                 for software_title in &software_titles {
                     println!(
                         "Fetched software_title: {} with ID: {}",
@@ -314,6 +303,7 @@ impl Component for SoftwareTitleSelectModel {
             CommandMsg::Deleted(Ok(_id)) => {
                 println!("Successfully deleted software_title");
                 sender.input(SoftwareTitleSelectMsg::FetchSoftwareTitles);
+                SOFTWARE_TITLE_LIST_BROKER.send(SoftwareTitleListMsg::FetchSoftwareTitles);
             }
             CommandMsg::Deleted(Err(error)) => {
                 eprintln!("Error deleting software_title: {:?}", error);

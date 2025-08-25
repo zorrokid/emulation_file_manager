@@ -34,8 +34,6 @@ pub enum ReleaseFormMsg {
     SoftwareTitleSelected(SoftwareTitleListModel),
     StartSaveRelease,
     OpenSoftwareTitleSelector,
-    SoftwareTitleCreated(SoftwareTitleListModel),
-    SoftwareTitleUpdated(SoftwareTitleListModel),
     RemoveSoftwareTitle,
     RemoveSystem,
     RemoveFileSet,
@@ -44,8 +42,6 @@ pub enum ReleaseFormMsg {
 #[derive(Debug)]
 pub enum ReleaseFormOutputMsg {
     ReleaseCreatedOrUpdated { id: i64 },
-    SoftwareTitleCreated(SoftwareTitleListModel),
-    SoftwareTitleUpdated(SoftwareTitleListModel),
 }
 
 #[derive(Debug)]
@@ -336,12 +332,6 @@ impl Component for ReleaseFormModel {
                         SoftwareTitleSelectOutputMsg::Selected(software_title) => {
                             ReleaseFormMsg::SoftwareTitleSelected(software_title)
                         }
-                        SoftwareTitleSelectOutputMsg::Created(software_title) => {
-                            ReleaseFormMsg::SoftwareTitleCreated(software_title)
-                        }
-                        SoftwareTitleSelectOutputMsg::Updated(software_title) => {
-                            ReleaseFormMsg::SoftwareTitleUpdated(software_title)
-                        }
                     });
                 self.software_title_selector = Some(software_title_selector);
                 self.software_title_selector
@@ -421,20 +411,6 @@ impl Component for ReleaseFormModel {
                         };
                         CommandMsg::ReleaseCreatedOrUpdated(res)
                     });
-                }
-            }
-            ReleaseFormMsg::SoftwareTitleCreated(software_title) => {
-                println!("Software title created: {:?}", &software_title);
-                let res = sender.output(ReleaseFormOutputMsg::SoftwareTitleCreated(software_title));
-                if let Err(msg) = res {
-                    eprintln!("Error in sending message {:?}", msg);
-                }
-            }
-            ReleaseFormMsg::SoftwareTitleUpdated(software_title) => {
-                println!("Software title updated: {:?}", &software_title);
-                let res = sender.output(ReleaseFormOutputMsg::SoftwareTitleUpdated(software_title));
-                if let Err(msg) = res {
-                    eprintln!("Error in sending message {:?}", msg);
                 }
             }
             ReleaseFormMsg::RemoveSoftwareTitle => {
