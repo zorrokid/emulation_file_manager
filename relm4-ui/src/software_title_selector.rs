@@ -21,7 +21,9 @@ use crate::{
     },
 };
 
-use ui_components::confirm_dialog::{ConfirmDialog, ConfirmDialogInit};
+use ui_components::confirm_dialog::{
+    ConfirmDialog, ConfirmDialogInit, ConfirmDialogMsg, ConfirmDialogOutputMsg,
+};
 
 #[derive(Debug)]
 pub enum SoftwareTitleSelectMsg {
@@ -32,6 +34,8 @@ pub enum SoftwareTitleSelectMsg {
     DeleteClicked,
     SoftwareTitleAdded(SoftwareTitleListModel),
     SoftwareTitleUpdated(SoftwareTitleListModel),
+    DeleteConfirmed,
+    DeleteCanceled,
 }
 
 #[derive(Debug)]
@@ -62,6 +66,7 @@ pub struct SoftwareTitleSelectModel {
     list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     selected_software_title_ids: Vec<i64>,
     software_title_form_controller: Option<Controller<SoftwareTitleFormModel>>,
+    confirm_dialog_controller: Controller<ConfirmDialog>,
 }
 
 impl SoftwareTitleSelectModel {
@@ -151,6 +156,17 @@ impl Component for SoftwareTitleSelectModel {
         let list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
             TypedListView::with_sorting();
 
+        let confirm_dialog_controller = ConfirmDialog::builder()
+            .transient_for(&root)
+            .launch(ConfirmDialogInit {
+                title: "Confirm Deletion".to_string(),
+                hidden: true,
+            })
+            .forward(sender.input_sender(), |msg| match msg {
+                ConfirmDialogOutputMsg::Confirmed => SoftwareTitleSelectMsg::DeleteConfirmed,
+                ConfirmDialogOutputMsg::Canceled => SoftwareTitleSelectMsg::DeleteCanceled,
+            });
+
         let model = SoftwareTitleSelectModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
@@ -158,6 +174,7 @@ impl Component for SoftwareTitleSelectModel {
             list_view_wrapper,
             selected_software_title_ids: init_model.selected_software_title_ids,
             software_title_form_controller: None,
+            confirm_dialog_controller,
         };
 
         let software_titles_list_view = &model.list_view_wrapper.view;
@@ -224,36 +241,25 @@ impl Component for SoftwareTitleSelectModel {
                 }
             }
             SoftwareTitleSelectMsg::DeleteClicked => {
+                println!("Delete clicked");
+                self.confirm_dialog_controller.emit(ConfirmDialogMsg::Show);
+            }
+            SoftwareTitleSelectMsg::DeleteCanceled => {
+                println!("Canceled deletion");
+            }
+            SoftwareTitleSelectMsg::DeleteConfirmed => {
                 let repository_manager = Arc::clone(&self.repository_manager);
                 let selected = self.list_view_wrapper.selection_model.selected();
                 let software_title = self.list_view_wrapper.get_visible(selected);
                 let id = software_title.as_ref().map(|st| st.borrow().id);
                 if let Some(id) = id {
-                    let stream = ConfirmDialog::builder()
-                        .transient_for(root)
-                        .launch(ConfirmDialogInit {
-                            title: "Confirm Deletion".to_string(),
-                        })
-                        .into_stream();
                     sender.oneshot_command(async move {
-                        let result = stream.recv_one().await;
-
-                        if let Some(will_delete) = result {
-                            if will_delete {
-                                println!("Deleting software_title with ID {}", id);
-                                let result = repository_manager
-                                    .get_software_title_repository()
-                                    .delete_software_title(id)
-                                    .await;
-                                CommandMsg::Deleted(result)
-                            } else {
-                                println!("User canceled deletion");
-                                CommandMsg::Canceled
-                            }
-                        } else {
-                            println!("Dialog was closed without confirmation");
-                            CommandMsg::Canceled
-                        }
+                        println!("Deleting software_title with ID {}", id);
+                        let result = repository_manager
+                            .get_software_title_repository()
+                            .delete_software_title(id)
+                            .await;
+                        CommandMsg::Deleted(result)
                     });
                 }
             }

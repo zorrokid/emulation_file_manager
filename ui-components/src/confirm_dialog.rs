@@ -1,25 +1,36 @@
 use gtk::prelude::*;
 use relm4::{prelude::*, Sender};
 
+#[derive(Debug)]
 pub struct ConfirmDialog {
     title: String,
+    hidden: bool,
 }
 
 #[derive(Debug)]
 pub enum ConfirmDialogMsg {
     Accept,
     Cancel,
+    Show,
+    Hide,
 }
 
 pub struct ConfirmDialogInit {
     pub title: String,
+    pub hidden: bool,
+}
+
+#[derive(Debug)]
+pub enum ConfirmDialogOutputMsg {
+    Confirmed,
+    Canceled,
 }
 
 #[relm4::component(pub)]
 impl SimpleComponent for ConfirmDialog {
     type Init = ConfirmDialogInit;
     type Input = ConfirmDialogMsg;
-    type Output = bool;
+    type Output = ConfirmDialogOutputMsg;
     type Widgets = ConfirmDialogWidgets;
 
     view! {
@@ -30,7 +41,8 @@ impl SimpleComponent for ConfirmDialog {
             set_text: Some(model.title.as_str()),
             add_button: ("Cancel", gtk::ResponseType::Cancel),
             add_button: ("Confirm", gtk::ResponseType::Accept),
-            present: (),
+            #[watch]
+            set_visible: !model.hidden,
 
             connect_response[sender] => move |dialog, resp| {
                 dialog.set_visible(false);
@@ -53,7 +65,10 @@ impl SimpleComponent for ConfirmDialog {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let model = ConfirmDialog { title: init.title };
+        let model = ConfirmDialog {
+            title: init.title,
+            hidden: init.hidden,
+        };
         let widgets = view_output!();
 
         ComponentParts { model, widgets }
@@ -62,10 +77,19 @@ impl SimpleComponent for ConfirmDialog {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         match msg {
             ConfirmDialogMsg::Accept => {
-                sender.output(true).unwrap();
+                sender.output(ConfirmDialogOutputMsg::Confirmed).unwrap();
+                self.hidden = true;
             }
             ConfirmDialogMsg::Cancel => {
-                sender.output(false).unwrap();
+                sender.output(ConfirmDialogOutputMsg::Canceled).unwrap();
+                self.hidden = true;
+            }
+            ConfirmDialogMsg::Show => {
+                println!("Show message caught");
+                self.hidden = false;
+            }
+            ConfirmDialogMsg::Hide => {
+                self.hidden = true;
             }
         }
     }
