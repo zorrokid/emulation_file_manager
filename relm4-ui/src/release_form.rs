@@ -4,7 +4,7 @@ use database::{database_error::Error, repository_manager::RepositoryManager};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
-        self,
+        self, glib,
         prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt},
     },
     typed_view::list::TypedListView,
@@ -92,6 +92,13 @@ impl Component for ReleaseFormModel {
             set_default_width: 800,
             set_default_height: 600,
             set_title: Some("Release Form"),
+
+            connect_close_request[sender] => move |_| {
+                sender.input(ReleaseFormMsg::Hide);
+                glib::Propagation::Proceed
+            },
+
+
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
                 set_spacing: 10,

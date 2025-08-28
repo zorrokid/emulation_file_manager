@@ -15,7 +15,7 @@ use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
         self,
-        glib::clone,
+        glib::{self, clone},
         prelude::{ButtonExt, GtkWindowExt, OrientableExt, WidgetExt},
     },
     typed_view::list::TypedListView,
@@ -105,6 +105,11 @@ impl Component for EmulatorRunnerModel {
 
     view! {
         gtk::Window {
+            connect_close_request[sender] => move |_| {
+                sender.input(EmulatorRunnerMsg::Hide);
+                glib::Propagation::Proceed
+            },
+
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
 
@@ -417,7 +422,7 @@ impl Component for EmulatorRunnerModel {
     fn update_cmd(
         &mut self,
         message: Self::CommandOutput,
-        _sender: ComponentSender<Self>,
+        sender: ComponentSender<Self>,
         root: &Self::Root,
     ) {
         match message {
@@ -441,7 +446,7 @@ impl Component for EmulatorRunnerModel {
             }
             EmulatorRunnerCommandMsg::FinishedRunningEmulator(Ok(())) => {
                 println!("Emulator ran successfully");
-                root.close();
+                sender.input(EmulatorRunnerMsg::Hide);
             }
             EmulatorRunnerCommandMsg::FinishedRunningEmulator(Err(error)) => {
                 eprintln!("Error running emulator: {:?}", error);
