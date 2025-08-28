@@ -23,7 +23,9 @@ use crate::{
         SoftwareTitleSelectInit, SoftwareTitleSelectModel, SoftwareTitleSelectMsg,
         SoftwareTitleSelectOutputMsg,
     },
-    system_selector::{SystemSelectInit, SystemSelectModel, SystemSelectOutputMsg},
+    system_selector::{
+        SystemSelectInit, SystemSelectModel, SystemSelectMsg, SystemSelectOutputMsg,
+    },
 };
 
 #[derive(Debug)]
@@ -59,7 +61,7 @@ pub struct ReleaseFormModel {
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
     settings: Arc<Settings>,
-    system_selector: Option<Controller<SystemSelectModel>>,
+    system_selector: Controller<SystemSelectModel>,
     file_selector: Option<Controller<FileSelectModel>>,
     software_title_selector: Controller<SoftwareTitleSelectModel>,
     selected_software_titles_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
@@ -272,12 +274,26 @@ impl Component for ReleaseFormModel {
                 }
             });
 
+        let system_selector_init_model = SystemSelectInit {
+            view_model_service: Arc::clone(&init_model.view_model_service),
+            repository_manager: Arc::clone(&init_model.repository_manager),
+        };
+
+        let system_selector = SystemSelectModel::builder()
+            .transient_for(&root)
+            .launch(system_selector_init_model)
+            .forward(sender.input_sender(), |msg| match msg {
+                SystemSelectOutputMsg::SystemSelected(system_list_model) => {
+                    ReleaseFormMsg::SystemSelected(system_list_model)
+                }
+            });
+
         let model = ReleaseFormModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
             settings: init_model.settings,
             release: init_model.release,
-            system_selector: None,
+            system_selector,
             file_selector: None,
             software_title_selector,
             selected_software_titles_list_view_wrapper,
@@ -296,26 +312,9 @@ impl Component for ReleaseFormModel {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         match msg {
             ReleaseFormMsg::OpenSystemSelector => {
-                let init_model = SystemSelectInit {
-                    view_model_service: Arc::clone(&self.view_model_service),
-                    repository_manager: Arc::clone(&self.repository_manager),
+                self.system_selector.emit(SystemSelectMsg::Show {
                     selected_system_ids: get_item_ids(&self.selected_systems_list_view_wrapper),
-                };
-                let system_selector = SystemSelectModel::builder()
-                    .transient_for(root)
-                    .launch(init_model)
-                    .forward(sender.input_sender(), |msg| match msg {
-                        SystemSelectOutputMsg::SystemSelected(system_list_model) => {
-                            ReleaseFormMsg::SystemSelected(system_list_model)
-                        }
-                    });
-                self.system_selector = Some(system_selector);
-
-                self.system_selector
-                    .as_ref()
-                    .expect("System selector should be set")
-                    .widget()
-                    .present();
+                });
             }
             ReleaseFormMsg::OpenFileSelector => {
                 let init_model = FileSelectInit {
