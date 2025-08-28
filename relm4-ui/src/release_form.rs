@@ -20,7 +20,8 @@ use crate::{
     file_selector::{FileSelectInit, FileSelectModel, FileSelectOutputMsg},
     list_item::ListItem,
     software_title_selector::{
-        SoftwareTitleSelectInit, SoftwareTitleSelectModel, SoftwareTitleSelectOutputMsg,
+        SoftwareTitleSelectInit, SoftwareTitleSelectModel, SoftwareTitleSelectMsg,
+        SoftwareTitleSelectOutputMsg,
     },
     system_selector::{SystemSelectInit, SystemSelectModel, SystemSelectOutputMsg},
 };
@@ -60,7 +61,7 @@ pub struct ReleaseFormModel {
     settings: Arc<Settings>,
     system_selector: Option<Controller<SystemSelectModel>>,
     file_selector: Option<Controller<FileSelectModel>>,
-    software_title_selector: Option<Controller<SoftwareTitleSelectModel>>,
+    software_title_selector: Controller<SoftwareTitleSelectModel>,
     selected_software_titles_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     selected_systems_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     selected_file_sets_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
@@ -253,6 +254,24 @@ impl Component for ReleaseFormModel {
             }),
         );
 
+        let software_title_selector = SoftwareTitleSelectModel::builder()
+            .transient_for(&root)
+            .launch(SoftwareTitleSelectInit {
+                view_model_service: Arc::clone(&init_model.view_model_service),
+                repository_manager: Arc::clone(&init_model.repository_manager),
+            })
+            .forward(sender.input_sender(), |msg| match msg {
+                SoftwareTitleSelectOutputMsg::Selected(software_title) => {
+                    ReleaseFormMsg::SoftwareTitleSelected(software_title)
+                }
+                SoftwareTitleSelectOutputMsg::Created(software_title) => {
+                    ReleaseFormMsg::SoftwareTitleCreated(software_title)
+                }
+                SoftwareTitleSelectOutputMsg::Updated(software_title) => {
+                    ReleaseFormMsg::SoftwareTitleUpdated(software_title)
+                }
+            });
+
         let model = ReleaseFormModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
@@ -260,7 +279,7 @@ impl Component for ReleaseFormModel {
             release: init_model.release,
             system_selector: None,
             file_selector: None,
-            software_title_selector: None,
+            software_title_selector,
             selected_software_titles_list_view_wrapper,
             selected_systems_list_view_wrapper,
             selected_file_sets_list_view_wrapper,
@@ -323,32 +342,12 @@ impl Component for ReleaseFormModel {
                     .present();
             }
             ReleaseFormMsg::OpenSoftwareTitleSelector => {
-                let software_title_selector = SoftwareTitleSelectModel::builder()
-                    .transient_for(root)
-                    .launch(SoftwareTitleSelectInit {
-                        view_model_service: Arc::clone(&self.view_model_service),
-                        repository_manager: Arc::clone(&self.repository_manager),
+                self.software_title_selector
+                    .emit(SoftwareTitleSelectMsg::Show {
                         selected_software_title_ids: get_item_ids(
                             &self.selected_software_titles_list_view_wrapper,
                         ),
-                    })
-                    .forward(sender.input_sender(), |msg| match msg {
-                        SoftwareTitleSelectOutputMsg::Selected(software_title) => {
-                            ReleaseFormMsg::SoftwareTitleSelected(software_title)
-                        }
-                        SoftwareTitleSelectOutputMsg::Created(software_title) => {
-                            ReleaseFormMsg::SoftwareTitleCreated(software_title)
-                        }
-                        SoftwareTitleSelectOutputMsg::Updated(software_title) => {
-                            ReleaseFormMsg::SoftwareTitleUpdated(software_title)
-                        }
                     });
-                self.software_title_selector = Some(software_title_selector);
-                self.software_title_selector
-                    .as_ref()
-                    .expect("Software title selector should be set")
-                    .widget()
-                    .present();
             }
 
             ReleaseFormMsg::SystemSelected(system) => {

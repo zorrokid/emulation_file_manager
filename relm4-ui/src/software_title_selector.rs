@@ -4,7 +4,7 @@ use database::{database_error::DatabaseError, repository_manager::RepositoryMana
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
-        self,
+        self, glib,
         prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt},
     },
     typed_view::list::TypedListView,
@@ -36,6 +36,10 @@ pub enum SoftwareTitleSelectMsg {
     SoftwareTitleUpdated(SoftwareTitleListModel),
     DeleteConfirmed,
     DeleteCanceled,
+    Show {
+        selected_software_title_ids: Vec<i64>,
+    },
+    Hide,
 }
 
 #[derive(Debug)]
@@ -55,7 +59,7 @@ pub enum CommandMsg {
 pub struct SoftwareTitleSelectInit {
     pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
-    pub selected_software_title_ids: Vec<i64>,
+    //pub selected_software_title_ids: Vec<i64>,
 }
 
 #[derive(Debug)]
@@ -112,6 +116,11 @@ impl Component for SoftwareTitleSelectModel {
             set_default_width: 400,
             set_default_height: 600,
             set_title: Some("SoftwareTitle Selector"),
+
+            connect_close_request[sender] => move |_| {
+                sender.input(SoftwareTitleSelectMsg::Hide);
+                glib::Propagation::Proceed
+            },
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
                 set_margin_all: 10,
@@ -160,7 +169,7 @@ impl Component for SoftwareTitleSelectModel {
             .transient_for(&root)
             .launch(ConfirmDialogInit {
                 title: "Confirm Deletion".to_string(),
-                hidden: true,
+                visible: false,
             })
             .forward(sender.input_sender(), |msg| match msg {
                 ConfirmDialogOutputMsg::Confirmed => SoftwareTitleSelectMsg::DeleteConfirmed,
@@ -172,7 +181,7 @@ impl Component for SoftwareTitleSelectModel {
             repository_manager: init_model.repository_manager,
             software_titles: Vec::new(),
             list_view_wrapper,
-            selected_software_title_ids: init_model.selected_software_title_ids,
+            selected_software_title_ids: Vec::new(),
             software_title_form_controller: None,
             confirm_dialog_controller,
         };
@@ -213,7 +222,7 @@ impl Component for SoftwareTitleSelectModel {
                     match res {
                         Ok(_) => {
                             println!("SoftwareTitle selection output sent successfully.");
-                            root.close();
+                            sender.input(SoftwareTitleSelectMsg::Hide);
                         }
                         Err(e) => {
                             eprintln!("Failed to send software_title selection output: {:?}", e)
@@ -283,6 +292,16 @@ impl Component for SoftwareTitleSelectModel {
                     .expect("Failed to send software_title update output");
                 sender.input(SoftwareTitleSelectMsg::FetchSoftwareTitles);
             }
+            SoftwareTitleSelectMsg::Show {
+                selected_software_title_ids,
+            } => {
+                self.selected_software_title_ids = selected_software_title_ids;
+                sender.input(SoftwareTitleSelectMsg::FetchSoftwareTitles);
+                root.show();
+            }
+            SoftwareTitleSelectMsg::Hide => {
+                root.hide();
+            }
         }
     }
 
@@ -294,13 +313,6 @@ impl Component for SoftwareTitleSelectModel {
     ) {
         match message {
             CommandMsg::SoftwareTitlesFetched(Ok(software_titles)) => {
-                // Handle the fetched software_titles, e.g., populate a dropdown or list
-                for software_title in &software_titles {
-                    println!(
-                        "Fetched software_title: {} with ID: {}",
-                        software_title.name, software_title.id
-                    );
-                }
                 self.software_titles = software_titles;
                 let list_items = self
                     .software_titles

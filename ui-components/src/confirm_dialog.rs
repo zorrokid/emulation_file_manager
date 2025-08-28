@@ -4,7 +4,7 @@ use relm4::{prelude::*, Sender};
 #[derive(Debug)]
 pub struct ConfirmDialog {
     title: String,
-    hidden: bool,
+    visible: bool,
 }
 
 #[derive(Debug)]
@@ -17,7 +17,7 @@ pub enum ConfirmDialogMsg {
 
 pub struct ConfirmDialogInit {
     pub title: String,
-    pub hidden: bool,
+    pub visible: bool,
 }
 
 #[derive(Debug)]
@@ -42,7 +42,7 @@ impl SimpleComponent for ConfirmDialog {
             add_button: ("Cancel", gtk::ResponseType::Cancel),
             add_button: ("Confirm", gtk::ResponseType::Accept),
             #[watch]
-            set_visible: !model.hidden,
+            set_visible: model.visible,
 
             connect_response[sender] => move |dialog, resp| {
                 dialog.set_visible(false);
@@ -67,7 +67,7 @@ impl SimpleComponent for ConfirmDialog {
     ) -> ComponentParts<Self> {
         let model = ConfirmDialog {
             title: init.title,
-            hidden: init.hidden,
+            visible: init.visible,
         };
         let widgets = view_output!();
 
@@ -78,18 +78,17 @@ impl SimpleComponent for ConfirmDialog {
         match msg {
             ConfirmDialogMsg::Accept => {
                 sender.output(ConfirmDialogOutputMsg::Confirmed).unwrap();
-                self.hidden = true;
+                self.visible = false;
             }
             ConfirmDialogMsg::Cancel => {
                 sender.output(ConfirmDialogOutputMsg::Canceled).unwrap();
-                self.hidden = true;
+                self.visible = false;
             }
             ConfirmDialogMsg::Show => {
-                println!("Show message caught");
-                self.hidden = false;
+                self.visible = true;
             }
             ConfirmDialogMsg::Hide => {
-                self.hidden = true;
+                self.visible = false;
             }
         }
     }
