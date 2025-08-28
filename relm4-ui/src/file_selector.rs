@@ -29,8 +29,15 @@ pub enum FileSelectMsg {
     SelectClicked,
     OpenFileSetForm,
     FileSetCreated(FileSetListModel),
-    FileSetSelected { index: u32 },
+    FileSetSelected {
+        index: u32,
+    },
     FileTypeChanged(FileType),
+    Show {
+        selected_system_ids: Vec<i64>,
+        selected_file_set_ids: Vec<i64>,
+    },
+    Hide,
 }
 
 #[derive(Debug)]
@@ -49,8 +56,8 @@ pub struct FileSelectInit {
     pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
     pub settings: Arc<Settings>,
-    pub selected_system_ids: Vec<i64>,
-    pub selected_file_set_ids: Vec<i64>,
+    //pub selected_system_ids: Vec<i64>,
+    //pub selected_file_set_ids: Vec<i64>,
 }
 
 #[derive(Debug)]
@@ -132,10 +139,10 @@ impl Component for FileSelectModel {
             file_sets: Vec::new(),
             list_view_wrapper,
             file_set_form: None,
-            selected_system_ids: init_model.selected_system_ids,
+            selected_system_ids: Vec::new(),
             selected_file_type: None,
             selected_file_set: None,
-            selected_file_set_ids: init_model.selected_file_set_ids,
+            selected_file_set_ids: Vec::new(),
             dropdown,
         };
         let file_types_dropdown = model.dropdown.widget();
@@ -267,7 +274,18 @@ impl Component for FileSelectModel {
                     ));
                 }
             }
-
+            FileSelectMsg::Show {
+                selected_system_ids,
+                selected_file_set_ids,
+            } => {
+                self.selected_system_ids = selected_system_ids;
+                self.selected_file_set_ids = selected_file_set_ids;
+                sender.input(FileSelectMsg::FetchFiles);
+                root.show();
+            }
+            FileSelectMsg::Hide => {
+                root.hide();
+            }
             _ => {
                 // Handle other messages here
             }

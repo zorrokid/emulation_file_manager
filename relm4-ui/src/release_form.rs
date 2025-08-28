@@ -17,7 +17,7 @@ use service::{
 };
 
 use crate::{
-    file_selector::{FileSelectInit, FileSelectModel, FileSelectOutputMsg},
+    file_selector::{FileSelectInit, FileSelectModel, FileSelectMsg, FileSelectOutputMsg},
     list_item::ListItem,
     software_title_selector::{
         SoftwareTitleSelectInit, SoftwareTitleSelectModel, SoftwareTitleSelectMsg,
@@ -62,7 +62,7 @@ pub struct ReleaseFormModel {
     repository_manager: Arc<RepositoryManager>,
     settings: Arc<Settings>,
     system_selector: Controller<SystemSelectModel>,
-    file_selector: Option<Controller<FileSelectModel>>,
+    file_selector: Controller<FileSelectModel>,
     software_title_selector: Controller<SoftwareTitleSelectModel>,
     selected_software_titles_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     selected_systems_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
@@ -288,13 +288,30 @@ impl Component for ReleaseFormModel {
                 }
             });
 
+        let file_selector_init_model = FileSelectInit {
+            view_model_service: Arc::clone(&init_model.view_model_service),
+            repository_manager: Arc::clone(&init_model.repository_manager),
+            settings: Arc::clone(&init_model.settings),
+            // TODO pass these in Show message
+            /*selected_system_ids: get_item_ids(&self.selected_systems_list_view_wrapper),
+            selected_file_set_ids: get_item_ids(&self.selected_file_sets_list_view_wrapper),*/
+        };
+        let file_selector = FileSelectModel::builder()
+            .transient_for(&root)
+            .launch(file_selector_init_model)
+            .forward(sender.input_sender(), |msg| match msg {
+                FileSelectOutputMsg::FileSetSelected(file_set_liset_model) => {
+                    ReleaseFormMsg::FileSetSelected(file_set_liset_model)
+                }
+            });
+
         let model = ReleaseFormModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
             settings: init_model.settings,
             release: init_model.release,
             system_selector,
-            file_selector: None,
+            file_selector,
             software_title_selector,
             selected_software_titles_list_view_wrapper,
             selected_systems_list_view_wrapper,
@@ -309,7 +326,7 @@ impl Component for ReleaseFormModel {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match msg {
             ReleaseFormMsg::OpenSystemSelector => {
                 self.system_selector.emit(SystemSelectMsg::Show {
@@ -317,28 +334,10 @@ impl Component for ReleaseFormModel {
                 });
             }
             ReleaseFormMsg::OpenFileSelector => {
-                let init_model = FileSelectInit {
-                    view_model_service: Arc::clone(&self.view_model_service),
-                    repository_manager: Arc::clone(&self.repository_manager),
-                    settings: Arc::clone(&self.settings),
+                self.file_selector.emit(FileSelectMsg::Show {
                     selected_system_ids: get_item_ids(&self.selected_systems_list_view_wrapper),
                     selected_file_set_ids: get_item_ids(&self.selected_file_sets_list_view_wrapper),
-                };
-                let file_selector = FileSelectModel::builder()
-                    .transient_for(root)
-                    .launch(init_model)
-                    .forward(sender.input_sender(), |msg| match msg {
-                        FileSelectOutputMsg::FileSetSelected(file_set_liset_model) => {
-                            ReleaseFormMsg::FileSetSelected(file_set_liset_model)
-                        }
-                    });
-                self.file_selector = Some(file_selector);
-
-                self.file_selector
-                    .as_ref()
-                    .expect("File selector should be set")
-                    .widget()
-                    .present();
+                });
             }
             ReleaseFormMsg::OpenSoftwareTitleSelector => {
                 self.software_title_selector
