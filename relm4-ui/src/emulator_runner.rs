@@ -28,12 +28,20 @@ use service::{
 
 #[derive(Debug)]
 pub enum EmulatorRunnerMsg {
-    FetchEmulators { system_id: i64 },
+    FetchEmulators {
+        system_id: i64,
+    },
 
     // list selection messages
-    FileSelected { index: u32 },
-    EmulatorSelected { index: u32 },
-    SystemSelected { index: u32 },
+    FileSelected {
+        index: u32,
+    },
+    EmulatorSelected {
+        index: u32,
+    },
+    SystemSelected {
+        index: u32,
+    },
 
     StartAddEmulator,
     StartEditEmulator,
@@ -42,6 +50,12 @@ pub enum EmulatorRunnerMsg {
     UpdateEmulator(EmulatorListModel),
 
     RunEmulator,
+
+    Show {
+        file_set: FileSetViewModel,
+        systems: Vec<System>,
+    },
+    Hide,
 }
 
 #[derive(Debug)]
@@ -54,8 +68,6 @@ pub struct EmulatorRunnerInit {
     pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
     pub settings: Arc<Settings>,
-    pub systems: Vec<System>,
-    pub file_set: FileSetViewModel,
 }
 
 #[derive(Debug)]
@@ -78,7 +90,7 @@ pub struct EmulatorRunnerModel {
 
     // needed for running the emulator:
     settings: Arc<Settings>,
-    file_set: FileSetViewModel,
+    file_set: Option<FileSetViewModel>,
     selected_file: Option<FileSetFileInfo>,
     selected_system: Option<System>,
     selected_emulator: Option<EmulatorViewModel>,
@@ -132,41 +144,18 @@ impl Component for EmulatorRunnerModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let mut file_list_view_wrapper = TypedListView::<ListItem, gtk::SingleSelection>::new();
+        let file_list_view_wrapper = TypedListView::<ListItem, gtk::SingleSelection>::new();
         let emulator_list_view_wrapper = TypedListView::<ListItem, gtk::SingleSelection>::new();
-
-        let file_list_items = init
-            .file_set
-            .files
-            .iter()
-            .map(|file| ListItem {
-                id: file.file_info_id,
-                name: file.file_name.clone(),
-            })
-            .collect::<Vec<_>>();
-
-        file_list_view_wrapper.extend_from_iter(file_list_items);
-
-        let mut system_list_view_wrapper = TypedListView::<ListItem, gtk::SingleSelection>::new();
-
-        let system_list_items = init
-            .systems
-            .iter()
-            .map(|system| ListItem {
-                id: system.id,
-                name: system.name.clone(),
-            })
-            .collect::<Vec<_>>();
-        system_list_view_wrapper.extend_from_iter(system_list_items);
+        let system_list_view_wrapper = TypedListView::<ListItem, gtk::SingleSelection>::new();
 
         let model = EmulatorRunnerModel {
             view_model_service: init.view_model_service,
             repository_manager: init.repository_manager,
 
-            systems: init.systems,
+            systems: Vec::new(),
             emulators: Vec::new(),
             settings: init.settings,
-            file_set: init.file_set,
+            file_set: None,
 
             file_list_view_wrapper,
             emulator_list_view_wrapper,
@@ -227,12 +216,14 @@ impl Component for EmulatorRunnerModel {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         match msg {
             EmulatorRunnerMsg::RunEmulator => {
-                if let (Some(emulator), Some(selected_file)) =
-                    (self.selected_emulator.clone(), self.selected_file.clone())
-                {
+                if let (Some(emulator), Some(selected_file), Some(file_set)) = (
+                    self.selected_emulator.clone(),
+                    self.selected_file.clone(),
+                    self.file_set.clone(),
+                ) {
                     let temp_dir = std::env::temp_dir();
                     let export_model = prepare_fileset_for_export(
-                        &self.file_set,
+                        &file_set,
                         &self.settings.collection_root_dir,
                         temp_dir.as_path(),
                         emulator.extract_files,
@@ -240,8 +231,7 @@ impl Component for EmulatorRunnerModel {
 
                     println!("Export model prepared: {:?}", export_model);
 
-                    let files_in_fileset = self
-                        .file_set
+                    let files_in_fileset = file_set
                         .files
                         .iter()
                         .map(|f| f.file_name.clone())
@@ -288,9 +278,10 @@ impl Component for EmulatorRunnerModel {
             EmulatorRunnerMsg::FileSelected { index } => {
                 println!("File selected at index: {}", index);
                 let file_list_item = self.file_list_view_wrapper.get(index);
-                if let Some(item) = file_list_item {
+                if let (Some(item), Some(file_set)) = (file_list_item, &self.file_set) {
                     let id = item.borrow().id;
-                    let file_info = self.file_set.files.iter().find(|f| f.file_info_id == id);
+                    let file_info = file_set.files.iter().find(|f| f.file_info_id == id);
+                    println!("Selected file info: {:?}", file_info);
                     self.selected_file = file_info.cloned();
                 }
             }
@@ -300,6 +291,7 @@ impl Component for EmulatorRunnerModel {
                 if let Some(item) = emulator_list_item {
                     let id = item.borrow().id;
                     let emulator = self.emulators.iter().find(|e| e.id == id);
+                    println!("Selected emulator: {:?}", emulator);
                     self.selected_emulator = emulator.cloned();
                 }
             }
@@ -309,6 +301,7 @@ impl Component for EmulatorRunnerModel {
                 if let Some(item) = system_list_item {
                     let id = item.borrow().id;
                     let system = self.systems.iter().find(|s| s.id == id);
+                    println!("Selected system: {:?}", system);
                     self.selected_system = system.cloned();
                     sender.input(EmulatorRunnerMsg::FetchEmulators { system_id: id });
                 }
@@ -375,6 +368,47 @@ impl Component for EmulatorRunnerModel {
                         .await;
                     EmulatorRunnerCommandMsg::EmulatorsFetched(emulators_result)
                 });
+            }
+            EmulatorRunnerMsg::Show { file_set, systems } => {
+                let file_list_items = file_set
+                    .files
+                    .iter()
+                    .map(|file| ListItem {
+                        id: file.file_info_id,
+                        name: file.file_name.clone(),
+                    })
+                    .collect::<Vec<_>>();
+
+                self.file_list_view_wrapper.clear();
+                self.file_list_view_wrapper
+                    .extend_from_iter(file_list_items);
+
+                sender.input(EmulatorRunnerMsg::FileSelected {
+                    index: self.file_list_view_wrapper.selection_model.selected(),
+                });
+
+                let system_list_items = systems
+                    .iter()
+                    .map(|system| ListItem {
+                        id: system.id,
+                        name: system.name.clone(),
+                    })
+                    .collect::<Vec<_>>();
+
+                self.system_list_view_wrapper.clear();
+                self.system_list_view_wrapper
+                    .extend_from_iter(system_list_items);
+
+                sender.input(EmulatorRunnerMsg::FetchEmulators {
+                    system_id: systems.first().map_or(0, |s| s.id),
+                });
+
+                self.systems = systems;
+                self.file_set = Some(file_set);
+                root.show();
+            }
+            EmulatorRunnerMsg::Hide => {
+                root.hide();
             }
             _ => {}
         }

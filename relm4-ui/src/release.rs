@@ -21,7 +21,7 @@ use service::{
 
 use crate::{
     document_file_set_viewer::{DocumentViewer, DocumentViewerInit},
-    emulator_runner::{EmulatorRunnerInit, EmulatorRunnerModel},
+    emulator_runner::{EmulatorRunnerInit, EmulatorRunnerModel, EmulatorRunnerMsg},
     image_fileset_viewer::{ImageFileSetViewerInit, ImageFilesetViewer},
     list_item::ListItem,
     release_form::{ReleaseFormInit, ReleaseFormModel, ReleaseFormMsg, ReleaseFormOutputMsg},
@@ -44,7 +44,7 @@ pub struct ReleaseModel {
     selected_file_set: Option<FileSetViewModel>,
     selected_image_file_set: Option<FileSetViewModel>,
     selected_document_file_set: Option<FileSetViewModel>,
-    emulator_runner: Option<Controller<EmulatorRunnerModel>>,
+    emulator_runner: Controller<EmulatorRunnerModel>,
     image_file_set_viewer: Option<Controller<ImageFilesetViewer>>,
     document_file_set_viewer: Option<Controller<DocumentViewer>>,
     release_form: Controller<ReleaseFormModel>,
@@ -243,6 +243,16 @@ impl Component for ReleaseModel {
                 }
             });
 
+        let emulator_runner_init_model = EmulatorRunnerInit {
+            view_model_service: Arc::clone(&init_model.view_model_service),
+            repository_manager: Arc::clone(&init_model.repository_manager),
+            settings: Arc::clone(&init_model.settings),
+        };
+        let emulator_runner = EmulatorRunnerModel::builder()
+            .transient_for(&root)
+            .launch(emulator_runner_init_model)
+            .detach();
+
         let model = ReleaseModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
@@ -257,7 +267,7 @@ impl Component for ReleaseModel {
             selected_file_set: None,
             selected_image_file_set: None,
             selected_document_file_set: None,
-            emulator_runner: None,
+            emulator_runner,
             image_file_set_viewer: None,
             tabbed_image_viewer,
             document_file_set_viewer: None,
@@ -322,25 +332,10 @@ impl Component for ReleaseModel {
                 if let (Some(file_set), Some(release)) =
                     (&self.selected_file_set, &self.selected_release)
                 {
-                    println!("Starting emulator runner with file set: {:?}", file_set);
-                    let init_model = EmulatorRunnerInit {
-                        view_model_service: Arc::clone(&self.view_model_service),
-                        repository_manager: Arc::clone(&self.repository_manager),
-                        settings: Arc::clone(&self.settings),
+                    self.emulator_runner.emit(EmulatorRunnerMsg::Show {
                         file_set: file_set.clone(),
                         systems: release.systems.clone(),
-                    };
-                    let emulator_runner = EmulatorRunnerModel::builder()
-                        .transient_for(root)
-                        .launch(init_model)
-                        .detach();
-
-                    self.emulator_runner = Some(emulator_runner);
-                    self.emulator_runner
-                        .as_ref()
-                        .expect("Emulator runner should be set already")
-                        .widget()
-                        .present();
+                    });
                 }
             }
             ReleaseMsg::StartImageFileSetViewer => {
@@ -400,45 +395,6 @@ impl Component for ReleaseModel {
                     self.release_form.emit(ReleaseFormMsg::Show {
                         release: Some(release.clone()),
                     });
-
-                    /* println!("Starting edit release for: {:?}", release);
-                    let release_form_init_model = ReleaseFormInit {
-                        view_model_service: Arc::clone(&self.view_model_service),
-                        repository_manager: Arc::clone(&self.repository_manager),
-                        settings: Arc::clone(&self.settings),
-                    };
-                    let release_form = ReleaseFormModel::builder()
-                        .transient_for(root)
-                        .launch(release_form_init_model)
-                        .forward(sender.input_sender(), |msg| match msg {
-                            ReleaseFormOutputMsg::ReleaseCreatedOrUpdated { id } => {
-                                ReleaseMsg::FetchRelease { id }
-                            }
-                            ReleaseFormOutputMsg::SoftwareTitleCreated(
-                                software_title_list_model,
-                            ) => {
-                                println!("Software title created: {:?}", software_title_list_model);
-                                ReleaseMsg::SoftwareTitleCreated {
-                                    software_title_list_model,
-                                }
-                            }
-                            ReleaseFormOutputMsg::SoftwareTitleUpdated(
-                                software_title_list_model,
-                            ) => {
-                                println!("Software title updated: {:?}", software_title_list_model);
-                                ReleaseMsg::SoftwareTitleUpdated {
-                                    software_title_list_model,
-                                }
-                            }
-                        });
-
-                    self.release_form = Some(release_form);
-
-                    self.release_form
-                        .as_ref()
-                        .expect("Form window should be set already")
-                        .widget()
-                        .present();*/
                 }
             }
             ReleaseMsg::Clear => {
@@ -449,7 +405,6 @@ impl Component for ReleaseModel {
                 self.image_file_set_list_view_wrapper.clear();
                 self.document_file_set_list_view_wrapper.clear();
                 self.selected_file_set = None;
-                self.emulator_runner = None;
                 self.tabbed_image_viewer.emit(TabbedImageViewerMsg::Clear);
             }
             ReleaseMsg::FileSetSelected { index } => {
