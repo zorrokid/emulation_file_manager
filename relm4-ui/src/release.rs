@@ -22,7 +22,7 @@ use service::{
 use crate::{
     document_file_set_viewer::{DocumentViewer, DocumentViewerInit, DocumentViewerMsg},
     emulator_runner::{EmulatorRunnerInit, EmulatorRunnerModel, EmulatorRunnerMsg},
-    image_fileset_viewer::{ImageFileSetViewerInit, ImageFilesetViewer},
+    image_fileset_viewer::{ImageFileSetViewerInit, ImageFilesetViewer, ImageFilesetViewerMsg},
     list_item::ListItem,
     release_form::{ReleaseFormInit, ReleaseFormModel, ReleaseFormMsg, ReleaseFormOutputMsg},
     tabbed_image_viewer::{TabbedImageViewer, TabbedImageViewerInit, TabbedImageViewerMsg},
@@ -45,7 +45,7 @@ pub struct ReleaseModel {
     selected_image_file_set: Option<FileSetViewModel>,
     selected_document_file_set: Option<FileSetViewModel>,
     emulator_runner: Controller<EmulatorRunnerModel>,
-    image_file_set_viewer: Option<Controller<ImageFilesetViewer>>,
+    image_file_set_viewer: Controller<ImageFilesetViewer>,
     document_file_set_viewer: Controller<DocumentViewer>,
     release_form: Controller<ReleaseFormModel>,
     tabbed_image_viewer: Controller<TabbedImageViewer>,
@@ -263,6 +263,14 @@ impl Component for ReleaseModel {
             .launch(document_viewer_init_model)
             .detach();
 
+        let image_file_set_viewer_init_model = ImageFileSetViewerInit {
+            settings: Arc::clone(&init_model.settings),
+        };
+        let image_file_set_viewer = ImageFilesetViewer::builder()
+            .transient_for(&root)
+            .launch(image_file_set_viewer_init_model)
+            .detach();
+
         let model = ReleaseModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
@@ -278,7 +286,7 @@ impl Component for ReleaseModel {
             selected_image_file_set: None,
             selected_document_file_set: None,
             emulator_runner,
-            image_file_set_viewer: None,
+            image_file_set_viewer,
             tabbed_image_viewer,
             document_file_set_viewer,
             release_form,
@@ -350,25 +358,10 @@ impl Component for ReleaseModel {
             }
             ReleaseMsg::StartImageFileSetViewer => {
                 if let Some(file_set) = &self.selected_image_file_set {
-                    println!(
-                        "Starting image file set viewer with file set: {:?}",
-                        file_set
-                    );
-                    let init_model = ImageFileSetViewerInit {
-                        file_set: file_set.clone(),
-                        settings: Arc::clone(&self.settings),
-                    };
-                    let image_file_set_viewer = ImageFilesetViewer::builder()
-                        .transient_for(root)
-                        .launch(init_model)
-                        .detach();
-
-                    self.image_file_set_viewer = Some(image_file_set_viewer);
                     self.image_file_set_viewer
-                        .as_ref()
-                        .expect("Image file set viewer should be set already")
-                        .widget()
-                        .present();
+                        .emit(ImageFilesetViewerMsg::Show {
+                            file_set: file_set.clone(),
+                        });
                 }
             }
             ReleaseMsg::StartDocumentFileSetViewer => {

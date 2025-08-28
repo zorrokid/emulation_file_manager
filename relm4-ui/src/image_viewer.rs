@@ -11,7 +11,7 @@ use relm4::{
 use service::view_models::{FileSetViewModel, Settings};
 
 use crate::{
-    image_fileset_viewer::{ImageFileSetViewerInit, ImageFilesetViewer},
+    image_fileset_viewer::{ImageFileSetViewerInit, ImageFilesetViewer, ImageFilesetViewerMsg},
     utils::prepare_fileset_for_export,
 };
 
@@ -41,7 +41,7 @@ pub struct ImageViewer {
     current_file_index: Option<usize>,
     settings: Arc<Settings>,
     selected_image: PathBuf,
-    image_file_set_viewer: Option<Controller<ImageFilesetViewer>>,
+    image_file_set_viewer: Controller<ImageFilesetViewer>,
 }
 
 #[relm4::component(pub)]
@@ -94,12 +94,20 @@ impl Component for ImageViewer {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let init_model = ImageFileSetViewerInit {
+            settings: Arc::clone(&init.settings),
+        };
+        let image_file_set_viewer = ImageFilesetViewer::builder()
+            .transient_for(&root)
+            .launch(init_model)
+            .detach();
+
         let model = ImageViewer {
             file_set: None,
             settings: init.settings,
             selected_image: PathBuf::new(),
             current_file_index: None,
-            image_file_set_viewer: None,
+            image_file_set_viewer,
         };
         if let Some(file_set) = init.file_set {
             sender.input(ImageViewerMsg::SetFileSet { file_set });
@@ -162,21 +170,10 @@ impl Component for ImageViewer {
             }
             ImageViewerMsg::View => {
                 if let Some(file_set) = &self.file_set {
-                    let init_model = ImageFileSetViewerInit {
-                        file_set: file_set.clone(),
-                        settings: Arc::clone(&self.settings),
-                    };
-                    let image_file_set_viewer = ImageFilesetViewer::builder()
-                        .transient_for(root)
-                        .launch(init_model)
-                        .detach();
-
-                    self.image_file_set_viewer = Some(image_file_set_viewer);
                     self.image_file_set_viewer
-                        .as_ref()
-                        .expect("Image file set viewer should be set already")
-                        .widget()
-                        .present();
+                        .emit(ImageFilesetViewerMsg::Show {
+                            file_set: file_set.clone(),
+                        });
                 }
             }
         }
@@ -185,7 +182,7 @@ impl Component for ImageViewer {
     fn update_cmd(
         &mut self,
         message: Self::CommandOutput,
-        sender: ComponentSender<Self>,
+        _sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
         match message {
