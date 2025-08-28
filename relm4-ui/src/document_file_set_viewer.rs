@@ -40,6 +40,9 @@ pub enum DocumentViewerMsg {
     AddViewer(DocumentViewerListModel),
 
     StartViewer,
+
+    Show { file_set: FileSetViewModel },
+    Hide,
 }
 
 #[derive(Debug)]
@@ -52,7 +55,6 @@ pub struct DocumentViewerInit {
     pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
     pub settings: Arc<Settings>,
-    pub file_set: FileSetViewModel,
 }
 
 #[derive(Debug)]
@@ -73,7 +75,7 @@ pub struct DocumentViewer {
 
     // needed for running the viewer:
     settings: Arc<Settings>,
-    file_set: FileSetViewModel,
+    file_set: Option<FileSetViewModel>,
     selected_file: Option<FileSetFileInfo>,
     selected_viewer: Option<DocumentViewerDbModel>,
 }
@@ -117,20 +119,8 @@ impl Component for DocumentViewer {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let mut file_list_view_wrapper = TypedListView::<ListItem, gtk::SingleSelection>::new();
+        let file_list_view_wrapper = TypedListView::<ListItem, gtk::SingleSelection>::new();
         let viewer_list_view_wrapper = TypedListView::<ListItem, gtk::SingleSelection>::new();
-
-        let file_list_items = init
-            .file_set
-            .files
-            .iter()
-            .map(|file| ListItem {
-                id: file.file_info_id,
-                name: file.file_name.clone(),
-            })
-            .collect::<Vec<_>>();
-
-        file_list_view_wrapper.extend_from_iter(file_list_items);
 
         let model = DocumentViewer {
             view_model_service: init.view_model_service,
@@ -138,7 +128,7 @@ impl Component for DocumentViewer {
 
             viewers: Vec::new(),
             settings: init.settings,
-            file_set: init.file_set,
+            file_set: None,
 
             file_list_view_wrapper,
             viewer_list_view_wrapper,
@@ -185,12 +175,14 @@ impl Component for DocumentViewer {
         match msg {
             DocumentViewerMsg::StartViewer => {
                 println!("Starting viewer...");
-                if let (Some(viewer), Some(selected_file)) =
-                    (self.selected_viewer.clone(), self.selected_file.clone())
-                {
+                if let (Some(viewer), Some(selected_file), Some(file_set)) = (
+                    self.selected_viewer.clone(),
+                    self.selected_file.clone(),
+                    self.file_set.clone(),
+                ) {
                     let temp_dir = std::env::temp_dir();
                     let export_model = prepare_fileset_for_export(
-                        &self.file_set,
+                        &file_set,
                         &self.settings.collection_root_dir,
                         temp_dir.as_path(),
                         true,
@@ -198,8 +190,7 @@ impl Component for DocumentViewer {
 
                     println!("Export model prepared: {:?}", export_model);
 
-                    let files_in_fileset = self
-                        .file_set
+                    let files_in_fileset = file_set
                         .files
                         .iter()
                         .map(|f| f.file_name.clone())
@@ -239,9 +230,9 @@ impl Component for DocumentViewer {
             DocumentViewerMsg::FileSelected { index } => {
                 println!("File selected at index: {}", index);
                 let file_list_item = self.file_list_view_wrapper.get(index);
-                if let Some(item) = file_list_item {
+                if let (Some(item), Some(file_set)) = (file_list_item, &self.file_set) {
                     let id = item.borrow().id;
-                    let file_info = self.file_set.files.iter().find(|f| f.file_info_id == id);
+                    let file_info = file_set.files.iter().find(|f| f.file_info_id == id);
                     self.selected_file = file_info.cloned();
                 }
             }
@@ -276,7 +267,7 @@ impl Component for DocumentViewer {
                     .widget()
                     .present();
             }
-            DocumentViewerMsg::AddViewer(viewer_list_model) => {
+            DocumentViewerMsg::AddViewer(_viewer_list_model) => {
                 sender.input(DocumentViewerMsg::FetchViewers);
             }
             DocumentViewerMsg::FetchViewers => {
@@ -289,6 +280,26 @@ impl Component for DocumentViewer {
                         .await;
                     DocumentViewerCommandMsg::ViewersFetched(viewers_result)
                 });
+            }
+            DocumentViewerMsg::Show { file_set } => {
+                let file_list_items = file_set
+                    .files
+                    .iter()
+                    .map(|file| ListItem {
+                        id: file.file_info_id,
+                        name: file.file_name.clone(),
+                    })
+                    .collect::<Vec<_>>();
+
+                self.file_list_view_wrapper.clear();
+                self.file_list_view_wrapper
+                    .extend_from_iter(file_list_items);
+
+                self.file_set = Some(file_set);
+                root.show();
+            }
+            DocumentViewerMsg::Hide => {
+                root.hide();
             }
             _ => {}
         }

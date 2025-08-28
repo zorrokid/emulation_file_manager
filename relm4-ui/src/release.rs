@@ -20,7 +20,7 @@ use service::{
 };
 
 use crate::{
-    document_file_set_viewer::{DocumentViewer, DocumentViewerInit},
+    document_file_set_viewer::{DocumentViewer, DocumentViewerInit, DocumentViewerMsg},
     emulator_runner::{EmulatorRunnerInit, EmulatorRunnerModel, EmulatorRunnerMsg},
     image_fileset_viewer::{ImageFileSetViewerInit, ImageFilesetViewer},
     list_item::ListItem,
@@ -46,7 +46,7 @@ pub struct ReleaseModel {
     selected_document_file_set: Option<FileSetViewModel>,
     emulator_runner: Controller<EmulatorRunnerModel>,
     image_file_set_viewer: Option<Controller<ImageFilesetViewer>>,
-    document_file_set_viewer: Option<Controller<DocumentViewer>>,
+    document_file_set_viewer: Controller<DocumentViewer>,
     release_form: Controller<ReleaseFormModel>,
     tabbed_image_viewer: Controller<TabbedImageViewer>,
 }
@@ -253,6 +253,16 @@ impl Component for ReleaseModel {
             .launch(emulator_runner_init_model)
             .detach();
 
+        let document_viewer_init_model = DocumentViewerInit {
+            view_model_service: Arc::clone(&init_model.view_model_service),
+            repository_manager: Arc::clone(&init_model.repository_manager),
+            settings: Arc::clone(&init_model.settings),
+        };
+        let document_file_set_viewer = DocumentViewer::builder()
+            .transient_for(&root)
+            .launch(document_viewer_init_model)
+            .detach();
+
         let model = ReleaseModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
@@ -270,7 +280,7 @@ impl Component for ReleaseModel {
             emulator_runner,
             image_file_set_viewer: None,
             tabbed_image_viewer,
-            document_file_set_viewer: None,
+            document_file_set_viewer,
             release_form,
         };
 
@@ -367,23 +377,9 @@ impl Component for ReleaseModel {
                         "Starting document file set viewer with file set: {:?}",
                         file_set
                     );
-                    let init_model = DocumentViewerInit {
-                        view_model_service: Arc::clone(&self.view_model_service),
-                        repository_manager: Arc::clone(&self.repository_manager),
-                        settings: Arc::clone(&self.settings),
+                    self.document_file_set_viewer.emit(DocumentViewerMsg::Show {
                         file_set: file_set.clone(),
-                    };
-                    let document_file_set_viewer = DocumentViewer::builder()
-                        .transient_for(root)
-                        .launch(init_model)
-                        .detach();
-
-                    self.document_file_set_viewer = Some(document_file_set_viewer);
-                    self.document_file_set_viewer
-                        .as_ref()
-                        .expect("Document file set viewer should be set already")
-                        .widget()
-                        .present();
+                    });
                 }
             }
             ReleaseMsg::UpdateRelease(release_list_model) => {
