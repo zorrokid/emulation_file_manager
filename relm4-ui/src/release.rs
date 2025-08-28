@@ -23,9 +23,8 @@ use crate::{
     document_file_set_viewer::{DocumentViewer, DocumentViewerInit},
     emulator_runner::{EmulatorRunnerInit, EmulatorRunnerModel},
     image_fileset_viewer::{ImageFileSetViewerInit, ImageFilesetViewer},
-    image_viewer::{ImageViewer, ImageViewerInit, ImageViewerMsg},
     list_item::ListItem,
-    release_form::{ReleaseFormInit, ReleaseFormModel, ReleaseFormOutputMsg},
+    release_form::{ReleaseFormInit, ReleaseFormModel, ReleaseFormMsg, ReleaseFormOutputMsg},
     tabbed_image_viewer::{TabbedImageViewer, TabbedImageViewerInit, TabbedImageViewerMsg},
 };
 
@@ -48,7 +47,7 @@ pub struct ReleaseModel {
     emulator_runner: Option<Controller<EmulatorRunnerModel>>,
     image_file_set_viewer: Option<Controller<ImageFilesetViewer>>,
     document_file_set_viewer: Option<Controller<DocumentViewer>>,
-    form_window: Option<Controller<ReleaseFormModel>>,
+    release_form: Controller<ReleaseFormModel>,
     tabbed_image_viewer: Controller<TabbedImageViewer>,
 }
 
@@ -217,6 +216,33 @@ impl Component for ReleaseModel {
         let tabbed_image_viewer = TabbedImageViewer::builder()
             .launch(tabbed_image_viewer_init)
             .detach();
+
+        let release_form_init_model = ReleaseFormInit {
+            view_model_service: Arc::clone(&init_model.view_model_service),
+            repository_manager: Arc::clone(&init_model.repository_manager),
+            settings: Arc::clone(&init_model.settings),
+        };
+        let release_form = ReleaseFormModel::builder()
+            .transient_for(&root)
+            .launch(release_form_init_model)
+            .forward(sender.input_sender(), |msg| match msg {
+                ReleaseFormOutputMsg::ReleaseCreatedOrUpdated { id } => {
+                    ReleaseMsg::FetchRelease { id }
+                }
+                ReleaseFormOutputMsg::SoftwareTitleCreated(software_title_list_model) => {
+                    println!("Software title created: {:?}", software_title_list_model);
+                    ReleaseMsg::SoftwareTitleCreated {
+                        software_title_list_model,
+                    }
+                }
+                ReleaseFormOutputMsg::SoftwareTitleUpdated(software_title_list_model) => {
+                    println!("Software title updated: {:?}", software_title_list_model);
+                    ReleaseMsg::SoftwareTitleUpdated {
+                        software_title_list_model,
+                    }
+                }
+            });
+
         let model = ReleaseModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
@@ -235,7 +261,7 @@ impl Component for ReleaseModel {
             image_file_set_viewer: None,
             tabbed_image_viewer,
             document_file_set_viewer: None,
-            form_window: None,
+            release_form,
         };
 
         let file_set_list_view = &model.emulator_file_set_list_view_wrapper.view;
@@ -371,14 +397,17 @@ impl Component for ReleaseModel {
             }
             ReleaseMsg::StartEditRelease => {
                 if let Some(release) = &self.selected_release {
-                    println!("Starting edit release for: {:?}", release);
+                    self.release_form.emit(ReleaseFormMsg::Show {
+                        release: Some(release.clone()),
+                    });
+
+                    /* println!("Starting edit release for: {:?}", release);
                     let release_form_init_model = ReleaseFormInit {
                         view_model_service: Arc::clone(&self.view_model_service),
                         repository_manager: Arc::clone(&self.repository_manager),
                         settings: Arc::clone(&self.settings),
-                        release: Some(release.clone()),
                     };
-                    let form_window = ReleaseFormModel::builder()
+                    let release_form = ReleaseFormModel::builder()
                         .transient_for(root)
                         .launch(release_form_init_model)
                         .forward(sender.input_sender(), |msg| match msg {
@@ -403,13 +432,13 @@ impl Component for ReleaseModel {
                             }
                         });
 
-                    self.form_window = Some(form_window);
+                    self.release_form = Some(release_form);
 
-                    self.form_window
+                    self.release_form
                         .as_ref()
                         .expect("Form window should be set already")
                         .widget()
-                        .present();
+                        .present();*/
                 }
             }
             ReleaseMsg::Clear => {
@@ -421,7 +450,6 @@ impl Component for ReleaseModel {
                 self.document_file_set_list_view_wrapper.clear();
                 self.selected_file_set = None;
                 self.emulator_runner = None;
-                self.form_window = None;
                 self.tabbed_image_viewer.emit(TabbedImageViewerMsg::Clear);
             }
             ReleaseMsg::FileSetSelected { index } => {

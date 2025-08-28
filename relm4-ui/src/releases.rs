@@ -14,7 +14,7 @@ use service::{
 
 use crate::{
     list_item::ListItem,
-    release_form::{ReleaseFormInit, ReleaseFormModel, ReleaseFormOutputMsg},
+    release_form::{ReleaseFormInit, ReleaseFormModel, ReleaseFormMsg, ReleaseFormOutputMsg},
 };
 
 #[derive(Debug)]
@@ -39,7 +39,7 @@ pub struct ReleasesModel {
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
     settings: Arc<Settings>,
-    form_window: Option<Controller<ReleaseFormModel>>,
+    release_form: Controller<ReleaseFormModel>,
     releases_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     selected_software_title_id: Option<i64>,
 }
@@ -100,11 +100,36 @@ impl Component for ReleasesModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let release_form_init_model = ReleaseFormInit {
+            view_model_service: Arc::clone(&init_model.view_model_service),
+            repository_manager: Arc::clone(&init_model.repository_manager),
+            settings: Arc::clone(&init_model.settings),
+            //release: None,
+        };
+
+        let release_form = ReleaseFormModel::builder()
+            .transient_for(&root)
+            .launch(release_form_init_model)
+            .forward(sender.input_sender(), |msg| match msg {
+                ReleaseFormOutputMsg::ReleaseCreatedOrUpdated { id } => {
+                    println!("Release created or updated with ID: {}", id);
+                    ReleasesMsg::ReleaseCreatedOrUpdated { id }
+                }
+                ReleaseFormOutputMsg::SoftwareTitleCreated(software_title_list_model) => {
+                    println!("Software title created: {:?}", software_title_list_model);
+                    ReleasesMsg::SofwareTitleCreated(software_title_list_model)
+                }
+                ReleaseFormOutputMsg::SoftwareTitleUpdated(software_title_list_model) => {
+                    println!("Software title updated: {:?}", software_title_list_model);
+                    ReleasesMsg::SofwareTitleUpdated(software_title_list_model)
+                }
+            });
+
         let model = ReleasesModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
             settings: init_model.settings,
-            form_window: None,
+            release_form,
             releases_list_view_wrapper: TypedListView::new(),
             selected_software_title_id: None,
         };
@@ -169,38 +194,8 @@ impl Component for ReleasesModel {
             }
 
             ReleasesMsg::StartAddRelease => {
-                let release_form_init_model = ReleaseFormInit {
-                    view_model_service: Arc::clone(&self.view_model_service),
-                    repository_manager: Arc::clone(&self.repository_manager),
-                    settings: Arc::clone(&self.settings),
-                    release: None,
-                };
-
-                let form_window = ReleaseFormModel::builder()
-                    .transient_for(root)
-                    .launch(release_form_init_model)
-                    .forward(sender.input_sender(), |msg| match msg {
-                        ReleaseFormOutputMsg::ReleaseCreatedOrUpdated { id } => {
-                            println!("Release created or updated with ID: {}", id);
-                            ReleasesMsg::ReleaseCreatedOrUpdated { id }
-                        }
-                        ReleaseFormOutputMsg::SoftwareTitleCreated(software_title_list_model) => {
-                            println!("Software title created: {:?}", software_title_list_model);
-                            ReleasesMsg::SofwareTitleCreated(software_title_list_model)
-                        }
-                        ReleaseFormOutputMsg::SoftwareTitleUpdated(software_title_list_model) => {
-                            println!("Software title updated: {:?}", software_title_list_model);
-                            ReleasesMsg::SofwareTitleUpdated(software_title_list_model)
-                        }
-                    });
-
-                self.form_window = Some(form_window);
-
-                self.form_window
-                    .as_ref()
-                    .expect("Form window should be set already")
-                    .widget()
-                    .present();
+                self.release_form
+                    .emit(ReleaseFormMsg::Show { release: None });
             }
             ReleasesMsg::AddRelease(release_list_model) => {
                 println!("Release added: {:?}", release_list_model);
