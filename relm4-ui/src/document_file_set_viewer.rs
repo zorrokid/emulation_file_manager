@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use crate::{
     document_viewer_form::{
-        DocumentViewerFormInit, DocumentViewerFormModel, DocumentViewerFormOutputMsg,
+        DocumentViewerFormInit, DocumentViewerFormModel, DocumentViewerFormMsg,
+        DocumentViewerFormOutputMsg,
     },
     list_item::ListItem,
     utils::prepare_fileset_for_export,
@@ -68,7 +69,7 @@ pub struct DocumentViewer {
     viewer_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
 
     // controllers
-    viewer_form: Option<Controller<DocumentViewerFormModel>>,
+    viewer_form: Controller<DocumentViewerFormModel>,
 
     // data
     viewers: Vec<DocumentViewerDbModel>,
@@ -122,6 +123,19 @@ impl Component for DocumentViewer {
         let file_list_view_wrapper = TypedListView::<ListItem, gtk::SingleSelection>::new();
         let viewer_list_view_wrapper = TypedListView::<ListItem, gtk::SingleSelection>::new();
 
+        let init_model = DocumentViewerFormInit {
+            view_model_service: Arc::clone(&init.view_model_service),
+            repository_manager: Arc::clone(&init.repository_manager),
+        };
+        let viewer_form = DocumentViewerFormModel::builder()
+            .transient_for(&root)
+            .launch(init_model)
+            .forward(sender.input_sender(), |msg| match msg {
+                DocumentViewerFormOutputMsg::DocumentViewerAdded(viewer_list_model) => {
+                    DocumentViewerMsg::AddViewer(viewer_list_model)
+                }
+            });
+
         let model = DocumentViewer {
             view_model_service: init.view_model_service,
             repository_manager: init.repository_manager,
@@ -135,7 +149,7 @@ impl Component for DocumentViewer {
 
             selected_file: None,
             selected_viewer: None,
-            viewer_form: None,
+            viewer_form,
         };
 
         let file_list_view = &model.file_list_view_wrapper.view;
@@ -246,26 +260,7 @@ impl Component for DocumentViewer {
                 }
             }
             DocumentViewerMsg::OpenViewerForm => {
-                println!("Open Viewer Form");
-                let init_model = DocumentViewerFormInit {
-                    view_model_service: Arc::clone(&self.view_model_service),
-                    repository_manager: Arc::clone(&self.repository_manager),
-                };
-                let viewer_form = DocumentViewerFormModel::builder()
-                    .transient_for(root)
-                    .launch(init_model)
-                    .forward(sender.input_sender(), |msg| match msg {
-                        DocumentViewerFormOutputMsg::DocumentViewerAdded(viewer_list_model) => {
-                            DocumentViewerMsg::AddViewer(viewer_list_model)
-                        }
-                    });
-
-                self.viewer_form = Some(viewer_form);
-                self.viewer_form
-                    .as_ref()
-                    .expect("Viewer form should be initialized")
-                    .widget()
-                    .present();
+                self.viewer_form.emit(DocumentViewerFormMsg::Show);
             }
             DocumentViewerMsg::AddViewer(_viewer_list_model) => {
                 sender.input(DocumentViewerMsg::FetchViewers);
