@@ -6,7 +6,7 @@ use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
         self,
-        glib::clone,
+        glib::{self, clone},
         prelude::{ButtonExt, GtkWindowExt, OrientableExt, WidgetExt},
     },
     typed_view::list::TypedListView,
@@ -87,6 +87,12 @@ impl Component for FileSelectModel {
         gtk::Window {
             set_default_width: 800,
             set_default_height: 800,
+
+            connect_close_request[sender] => move |_| {
+                sender.input(FileSelectMsg::Hide);
+                glib::Propagation::Proceed
+            },
+
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
                 gtk::Label {
