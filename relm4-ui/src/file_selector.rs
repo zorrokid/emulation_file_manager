@@ -19,7 +19,7 @@ use service::{
 use ui_components::{DropDownOutputMsg, FileTypeDropDown, FileTypeSelectedMsg};
 
 use crate::{
-    file_set_form::{FileSetFormInit, FileSetFormModel, FileSetFormOutputMsg},
+    file_set_form::{FileSetFormInit, FileSetFormModel, FileSetFormMsg, FileSetFormOutputMsg},
     list_item::ListItem,
 };
 
@@ -67,7 +67,7 @@ pub struct FileSelectModel {
     settings: Arc<Settings>,
     file_sets: Vec<FileSetListModel>,
     list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
-    file_set_form: Option<Controller<FileSetFormModel>>,
+    file_set_form: Controller<FileSetFormModel>,
     selected_system_ids: Vec<i64>,
     selected_file_type: Option<FileType>,
     selected_file_set: Option<FileSetListModel>,
@@ -132,13 +132,29 @@ impl Component for FileSelectModel {
             },
         );
 
+        let file_set_form_init_model = FileSetFormInit {
+            repository_manager: Arc::clone(&init_model.repository_manager),
+            settings: Arc::clone(&init_model.settings),
+            // TODO set in Show message
+            //selected_system_ids: self.selected_system_ids.clone(),
+            //selected_file_type,
+        };
+        let file_set_form = FileSetFormModel::builder()
+            .transient_for(&root)
+            .launch(file_set_form_init_model)
+            .forward(sender.input_sender(), |msg| match msg {
+                FileSetFormOutputMsg::FileSetCreated(file_set_liset_model) => {
+                    FileSelectMsg::FileSetCreated(file_set_liset_model)
+                }
+            });
+
         let model = FileSelectModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
             settings: init_model.settings,
             file_sets: Vec::new(),
             list_view_wrapper,
-            file_set_form: None,
+            file_set_form,
             selected_system_ids: Vec::new(),
             selected_file_type: None,
             selected_file_set: None,
@@ -168,27 +184,10 @@ impl Component for FileSelectModel {
         match msg {
             FileSelectMsg::OpenFileSetForm => {
                 if let Some(selected_file_type) = self.selected_file_type {
-                    let init_model = FileSetFormInit {
-                        repository_manager: Arc::clone(&self.repository_manager),
-                        settings: Arc::clone(&self.settings),
+                    self.file_set_form.emit(FileSetFormMsg::Show {
                         selected_system_ids: self.selected_system_ids.clone(),
                         selected_file_type,
-                    };
-                    let file_set_form = FileSetFormModel::builder()
-                        .transient_for(root)
-                        .launch(init_model)
-                        .forward(sender.input_sender(), |msg| match msg {
-                            FileSetFormOutputMsg::FileSetCreated(file_set_liset_model) => {
-                                FileSelectMsg::FileSetCreated(file_set_liset_model)
-                            }
-                        });
-                    self.file_set_form = Some(file_set_form);
-
-                    self.file_set_form
-                        .as_ref()
-                        .expect("File set form should be set")
-                        .widget()
-                        .present();
+                    });
                 }
             }
             FileSelectMsg::FileSetCreated(file_set_list_model) => {

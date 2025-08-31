@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    emulator_form::{EmulatorFormInit, EmulatorFormModel, EmulatorFormOutputMsg},
+    emulator_form::{EmulatorFormInit, EmulatorFormModel, EmulatorFormMsg, EmulatorFormOutputMsg},
     list_item::ListItem,
     utils::prepare_fileset_for_export,
 };
@@ -45,7 +45,9 @@ pub enum EmulatorRunnerMsg {
 
     StartAddEmulator,
     StartEditEmulator,
-    OpenEmulatorForm(EmulatorFormInit),
+    OpenEmulatorForm {
+        editable_emulator: Option<EmulatorViewModel>,
+    },
     AddEmulator(EmulatorListModel),
     UpdateEmulator(EmulatorListModel),
 
@@ -82,7 +84,7 @@ pub struct EmulatorRunnerModel {
     system_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
 
     // controllers
-    emulator_form: Option<Controller<EmulatorFormModel>>,
+    emulator_form: Controller<EmulatorFormModel>,
 
     // data
     emulators: Vec<EmulatorViewModel>,
@@ -153,6 +155,23 @@ impl Component for EmulatorRunnerModel {
         let emulator_list_view_wrapper = TypedListView::<ListItem, gtk::SingleSelection>::new();
         let system_list_view_wrapper = TypedListView::<ListItem, gtk::SingleSelection>::new();
 
+        let init_model = EmulatorFormInit {
+            view_model_service: Arc::clone(&init.view_model_service),
+            repository_manager: Arc::clone(&init.repository_manager),
+        };
+
+        let emulator_form = EmulatorFormModel::builder()
+            .transient_for(&root)
+            .launch(init_model)
+            .forward(sender.input_sender(), |msg| match msg {
+                EmulatorFormOutputMsg::EmulatorAdded(emulator_list_model) => {
+                    EmulatorRunnerMsg::AddEmulator(emulator_list_model)
+                }
+                EmulatorFormOutputMsg::EmulatorUpdated(emulator_list_model) => {
+                    EmulatorRunnerMsg::UpdateEmulator(emulator_list_model)
+                }
+            });
+
         let model = EmulatorRunnerModel {
             view_model_service: init.view_model_service,
             repository_manager: init.repository_manager,
@@ -168,7 +187,7 @@ impl Component for EmulatorRunnerModel {
 
             selected_file: None,
             selected_emulator: None,
-            emulator_form: None,
+            emulator_form,
             selected_system: None,
         };
 
@@ -312,43 +331,23 @@ impl Component for EmulatorRunnerModel {
                 }
             }
             EmulatorRunnerMsg::StartAddEmulator => {
-                sender.input(EmulatorRunnerMsg::OpenEmulatorForm(EmulatorFormInit {
-                    view_model_service: Arc::clone(&self.view_model_service),
-                    repository_manager: Arc::clone(&self.repository_manager),
+                sender.input(EmulatorRunnerMsg::OpenEmulatorForm {
                     editable_emulator: None,
-                }));
+                });
             }
             EmulatorRunnerMsg::StartEditEmulator => {
                 if let Some(selected_emulator) = &self.selected_emulator {
                     println!("Editing Emulator: {}", selected_emulator.name);
-                    sender.input(EmulatorRunnerMsg::OpenEmulatorForm(EmulatorFormInit {
-                        view_model_service: Arc::clone(&self.view_model_service),
-                        repository_manager: Arc::clone(&self.repository_manager),
+                    sender.input(EmulatorRunnerMsg::OpenEmulatorForm {
                         editable_emulator: self.selected_emulator.clone(),
-                    }));
+                    });
                 } else {
                     eprintln!("No emulator selected for editing");
                 }
             }
-            EmulatorRunnerMsg::OpenEmulatorForm(init_model) => {
-                let emulator_form = EmulatorFormModel::builder()
-                    .transient_for(root)
-                    .launch(init_model)
-                    .forward(sender.input_sender(), |msg| match msg {
-                        EmulatorFormOutputMsg::EmulatorAdded(emulator_list_model) => {
-                            EmulatorRunnerMsg::AddEmulator(emulator_list_model)
-                        }
-                        EmulatorFormOutputMsg::EmulatorUpdated(emulator_list_model) => {
-                            EmulatorRunnerMsg::UpdateEmulator(emulator_list_model)
-                        }
-                    });
-
-                self.emulator_form = Some(emulator_form);
+            EmulatorRunnerMsg::OpenEmulatorForm { editable_emulator } => {
                 self.emulator_form
-                    .as_ref()
-                    .expect("Emulator form should be initialized")
-                    .widget()
-                    .present();
+                    .emit(EmulatorFormMsg::Show { editable_emulator });
             }
             EmulatorRunnerMsg::AddEmulator(_emulator_list_model) => {
                 if let Some(system) = &self.selected_system {
