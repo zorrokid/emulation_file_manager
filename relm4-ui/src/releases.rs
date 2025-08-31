@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use database::repository_manager::RepositoryManager;
+use database::{database_error::DatabaseError, repository_manager::RepositoryManager};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{self, glib::clone, prelude::*},
@@ -27,11 +27,13 @@ pub enum ReleasesMsg {
     ReleaseCreatedOrUpdated { id: i64 },
     SofwareTitleCreated(SoftwareTitleListModel),
     SofwareTitleUpdated(SoftwareTitleListModel),
+    RemoveRelease,
 }
 
 #[derive(Debug)]
 pub enum CommandMsg {
     FetchedReleases(Result<Vec<ReleaseListModel>, Error>),
+    ReleaseDeleted(Result<i64, DatabaseError>),
 }
 
 #[derive(Debug)]
@@ -85,6 +87,11 @@ impl Component for ReleasesModel {
                 set_vexpand: true,
                 #[local_ref]
                 releases_list_view -> gtk::ListView {}
+            },
+
+            gtk::Button {
+                set_label: "Remove Release",
+                connect_clicked => ReleasesMsg::RemoveRelease,
             },
 
             gtk::Button {
@@ -225,6 +232,20 @@ impl Component for ReleasesModel {
                     eprintln!("Error sending SoftwareTitleUpdated message: {:?}", err);
                 }
             }
+            ReleasesMsg::RemoveRelease => {
+                let selected_index = self.releases_list_view_wrapper.selection_model.selected();
+                if let Some(item) = self.releases_list_view_wrapper.get_visible(selected_index) {
+                    let release_id = item.borrow().id;
+                    let repository_manager = Arc::clone(&self.repository_manager);
+                    sender.oneshot_command(async move {
+                        let result = repository_manager
+                            .get_release_repository()
+                            .delete_release(release_id)
+                            .await;
+                        CommandMsg::ReleaseDeleted(result)
+                    });
+                }
+            }
         }
     }
     fn update_cmd(
@@ -270,6 +291,15 @@ impl Component for ReleasesModel {
                     }
                 }
             }
+            CommandMsg::ReleaseDeleted(result) => match result {
+                Ok(deleted_id) => {
+                    println!("Release deleted successfully with ID: {}", deleted_id);
+                    sender.input(ReleasesMsg::FetchReleases);
+                }
+                Err(err) => {
+                    eprintln!("Error deleting release: {:?}", err);
+                }
+            },
         }
     }
 }
