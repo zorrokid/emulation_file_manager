@@ -4,7 +4,7 @@ use database::{database_error::DatabaseError, repository_manager::RepositoryMana
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
-        self,
+        self, glib,
         prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt},
     },
     typed_view::list::TypedListView,
@@ -17,11 +17,14 @@ use service::{
 use crate::{
     list_item::ListItem,
     software_title_form::{
-        SoftwareTitleFormInit, SoftwareTitleFormModel, SoftwareTitleFormOutputMsg,
+        SoftwareTitleFormInit, SoftwareTitleFormModel, SoftwareTitleFormMsg,
+        SoftwareTitleFormOutputMsg,
     },
 };
 
-use ui_components::confirm_dialog::{ConfirmDialog, ConfirmDialogInit};
+use ui_components::confirm_dialog::{
+    ConfirmDialog, ConfirmDialogInit, ConfirmDialogMsg, ConfirmDialogOutputMsg,
+};
 
 #[derive(Debug)]
 pub enum SoftwareTitleSelectMsg {
@@ -32,6 +35,12 @@ pub enum SoftwareTitleSelectMsg {
     DeleteClicked,
     SoftwareTitleAdded(SoftwareTitleListModel),
     SoftwareTitleUpdated(SoftwareTitleListModel),
+    DeleteConfirmed,
+    DeleteCanceled,
+    Show {
+        selected_software_title_ids: Vec<i64>,
+    },
+    Hide,
 }
 
 #[derive(Debug)]
@@ -51,7 +60,7 @@ pub enum CommandMsg {
 pub struct SoftwareTitleSelectInit {
     pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
-    pub selected_software_title_ids: Vec<i64>,
+    //pub selected_software_title_ids: Vec<i64>,
 }
 
 #[derive(Debug)]
@@ -61,37 +70,8 @@ pub struct SoftwareTitleSelectModel {
     software_titles: Vec<SoftwareTitleListModel>,
     list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     selected_software_title_ids: Vec<i64>,
-    software_title_form_controller: Option<Controller<SoftwareTitleFormModel>>,
-}
-
-impl SoftwareTitleSelectModel {
-    fn open_software_title_form(
-        &mut self,
-        sender: &ComponentSender<Self>,
-        root: &gtk::Window,
-        edit_software_title: Option<SoftwareTitleListModel>,
-    ) {
-        let software_title_form = SoftwareTitleFormModel::builder()
-            .transient_for(root)
-            .launch(SoftwareTitleFormInit {
-                repository_manager: Arc::clone(&self.repository_manager),
-                edit_software_title,
-            })
-            .forward(sender.input_sender(), |msg| match msg {
-                SoftwareTitleFormOutputMsg::SoftwareTitleAdded(software_title_list_model) => {
-                    SoftwareTitleSelectMsg::SoftwareTitleAdded(software_title_list_model)
-                }
-                SoftwareTitleFormOutputMsg::SoftwareTitleUpdated(software_title_list_model) => {
-                    SoftwareTitleSelectMsg::SoftwareTitleUpdated(software_title_list_model)
-                }
-            });
-        self.software_title_form_controller = Some(software_title_form);
-        self.software_title_form_controller
-            .as_ref()
-            .expect("SoftwareTitle form controller should be initialized")
-            .widget()
-            .present();
-    }
+    software_title_form_controller: Controller<SoftwareTitleFormModel>,
+    confirm_dialog_controller: Controller<ConfirmDialog>,
 }
 
 #[relm4::component(pub)]
@@ -107,6 +87,11 @@ impl Component for SoftwareTitleSelectModel {
             set_default_width: 400,
             set_default_height: 600,
             set_title: Some("SoftwareTitle Selector"),
+
+            connect_close_request[sender] => move |_| {
+                sender.input(SoftwareTitleSelectMsg::Hide);
+                glib::Propagation::Proceed
+            },
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
                 set_margin_all: 10,
@@ -151,13 +136,40 @@ impl Component for SoftwareTitleSelectModel {
         let list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
             TypedListView::with_sorting();
 
+        let confirm_dialog_controller = ConfirmDialog::builder()
+            .transient_for(&root)
+            .launch(ConfirmDialogInit {
+                title: "Confirm Deletion".to_string(),
+                visible: false,
+            })
+            .forward(sender.input_sender(), |msg| match msg {
+                ConfirmDialogOutputMsg::Confirmed => SoftwareTitleSelectMsg::DeleteConfirmed,
+                ConfirmDialogOutputMsg::Canceled => SoftwareTitleSelectMsg::DeleteCanceled,
+            });
+
+        let software_title_form_controller = SoftwareTitleFormModel::builder()
+            .transient_for(&root)
+            .launch(SoftwareTitleFormInit {
+                repository_manager: Arc::clone(&init_model.repository_manager),
+                //edit_software_title,
+            })
+            .forward(sender.input_sender(), |msg| match msg {
+                SoftwareTitleFormOutputMsg::SoftwareTitleAdded(software_title_list_model) => {
+                    SoftwareTitleSelectMsg::SoftwareTitleAdded(software_title_list_model)
+                }
+                SoftwareTitleFormOutputMsg::SoftwareTitleUpdated(software_title_list_model) => {
+                    SoftwareTitleSelectMsg::SoftwareTitleUpdated(software_title_list_model)
+                }
+            });
+
         let model = SoftwareTitleSelectModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
             software_titles: Vec::new(),
             list_view_wrapper,
-            selected_software_title_ids: init_model.selected_software_title_ids,
-            software_title_form_controller: None,
+            selected_software_title_ids: Vec::new(),
+            software_title_form_controller,
+            confirm_dialog_controller,
         };
 
         let software_titles_list_view = &model.list_view_wrapper.view;
@@ -196,7 +208,7 @@ impl Component for SoftwareTitleSelectModel {
                     match res {
                         Ok(_) => {
                             println!("SoftwareTitle selection output sent successfully.");
-                            root.close();
+                            sender.input(SoftwareTitleSelectMsg::Hide);
                         }
                         Err(e) => {
                             eprintln!("Failed to send software_title selection output: {:?}", e)
@@ -207,7 +219,10 @@ impl Component for SoftwareTitleSelectModel {
                 }
             }
             SoftwareTitleSelectMsg::AddClicked => {
-                self.open_software_title_form(&sender, root, None);
+                self.software_title_form_controller
+                    .emit(SoftwareTitleFormMsg::Show {
+                        edit_software_title: None,
+                    });
             }
             SoftwareTitleSelectMsg::EditClicked => {
                 let edit_software_title = self
@@ -220,40 +235,32 @@ impl Component for SoftwareTitleSelectModel {
                             .cloned()
                     });
                 if let Some(edit_software_title) = &edit_software_title {
-                    self.open_software_title_form(&sender, root, Some(edit_software_title.clone()));
+                    self.software_title_form_controller
+                        .emit(SoftwareTitleFormMsg::Show {
+                            edit_software_title: Some(edit_software_title.clone()),
+                        });
                 }
             }
             SoftwareTitleSelectMsg::DeleteClicked => {
+                println!("Delete clicked");
+                self.confirm_dialog_controller.emit(ConfirmDialogMsg::Show);
+            }
+            SoftwareTitleSelectMsg::DeleteCanceled => {
+                println!("Canceled deletion");
+            }
+            SoftwareTitleSelectMsg::DeleteConfirmed => {
                 let repository_manager = Arc::clone(&self.repository_manager);
                 let selected = self.list_view_wrapper.selection_model.selected();
                 let software_title = self.list_view_wrapper.get_visible(selected);
                 let id = software_title.as_ref().map(|st| st.borrow().id);
                 if let Some(id) = id {
-                    let stream = ConfirmDialog::builder()
-                        .transient_for(root)
-                        .launch(ConfirmDialogInit {
-                            title: "Confirm Deletion".to_string(),
-                        })
-                        .into_stream();
                     sender.oneshot_command(async move {
-                        let result = stream.recv_one().await;
-
-                        if let Some(will_delete) = result {
-                            if will_delete {
-                                println!("Deleting software_title with ID {}", id);
-                                let result = repository_manager
-                                    .get_software_title_repository()
-                                    .delete_software_title(id)
-                                    .await;
-                                CommandMsg::Deleted(result)
-                            } else {
-                                println!("User canceled deletion");
-                                CommandMsg::Canceled
-                            }
-                        } else {
-                            println!("Dialog was closed without confirmation");
-                            CommandMsg::Canceled
-                        }
+                        println!("Deleting software_title with ID {}", id);
+                        let result = repository_manager
+                            .get_software_title_repository()
+                            .delete_software_title(id)
+                            .await;
+                        CommandMsg::Deleted(result)
                     });
                 }
             }
@@ -277,6 +284,16 @@ impl Component for SoftwareTitleSelectModel {
                     .expect("Failed to send software_title update output");
                 sender.input(SoftwareTitleSelectMsg::FetchSoftwareTitles);
             }
+            SoftwareTitleSelectMsg::Show {
+                selected_software_title_ids,
+            } => {
+                self.selected_software_title_ids = selected_software_title_ids;
+                sender.input(SoftwareTitleSelectMsg::FetchSoftwareTitles);
+                root.show();
+            }
+            SoftwareTitleSelectMsg::Hide => {
+                root.hide();
+            }
         }
     }
 
@@ -288,13 +305,6 @@ impl Component for SoftwareTitleSelectModel {
     ) {
         match message {
             CommandMsg::SoftwareTitlesFetched(Ok(software_titles)) => {
-                // Handle the fetched software_titles, e.g., populate a dropdown or list
-                for software_title in &software_titles {
-                    println!(
-                        "Fetched software_title: {} with ID: {}",
-                        software_title.name, software_title.id
-                    );
-                }
                 self.software_titles = software_titles;
                 let list_items = self
                     .software_titles

@@ -6,7 +6,7 @@ use database::{
 use relm4::{
     Component, ComponentParts, ComponentSender,
     gtk::{
-        self,
+        self, glib,
         prelude::{
             ButtonExt, EditableExt, EntryBufferExtManual, EntryExt, GtkWindowExt, OrientableExt,
             WidgetExt,
@@ -26,6 +26,10 @@ pub struct SoftwareTitleFormModel {
 pub enum SoftwareTitleFormMsg {
     NameChanged(String),
     Submit,
+    Show {
+        edit_software_title: Option<SoftwareTitleListModel>,
+    },
+    Hide,
 }
 
 #[derive(Debug)]
@@ -42,7 +46,7 @@ pub enum SoftwareTitleFormCommandMsg {
 #[derive(Debug)]
 pub struct SoftwareTitleFormInit {
     pub repository_manager: Arc<RepositoryManager>,
-    pub edit_software_title: Option<SoftwareTitleListModel>,
+    //pub edit_software_title: Option<SoftwareTitleListModel>,
 }
 
 #[relm4::component(pub)]
@@ -56,6 +60,11 @@ impl Component for SoftwareTitleFormModel {
         gtk::Window {
             set_title: Some("Software Title Form"),
             set_default_size: (300, 100),
+            connect_close_request[sender] => move |_| {
+                sender.input(SoftwareTitleFormMsg::Hide);
+                glib::Propagation::Proceed
+            },
+
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
                 set_margin_top: 10,
@@ -120,6 +129,21 @@ impl Component for SoftwareTitleFormModel {
                     }
                 });
             }
+            SoftwareTitleFormMsg::Show {
+                edit_software_title,
+            } => {
+                if let Some(edit_software_title) = edit_software_title {
+                    self.name = edit_software_title.name.clone();
+                    self.edit_software_title_id = Some(edit_software_title.id);
+                } else {
+                    self.name.clear();
+                    self.edit_software_title_id = None;
+                }
+                root.show();
+            }
+            SoftwareTitleFormMsg::Hide => {
+                root.hide();
+            }
             _ => (),
         }
     }
@@ -163,11 +187,11 @@ impl Component for SoftwareTitleFormModel {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let model = SoftwareTitleFormModel {
-            name: init
-                .edit_software_title
-                .as_ref()
-                .map_or("".into(), |st| st.name.clone()),
-            edit_software_title_id: init.edit_software_title.as_ref().map(|st| st.id),
+            name: "".to_string(),         /*init
+                                          .edit_software_title
+                                          .as_ref()
+                                          .map_or("".into(), |st| st.name.clone()),*/
+            edit_software_title_id: None, // init.edit_software_title.as_ref().map(|st| st.id),
             repository_manager: init.repository_manager,
         };
         println!("Initialized SoftwareTitleFormModel: {:?}", model);

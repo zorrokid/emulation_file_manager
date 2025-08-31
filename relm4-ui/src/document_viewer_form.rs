@@ -5,7 +5,7 @@ use database::{database_error::Error, repository_manager::RepositoryManager};
 use relm4::{
     Component, ComponentParts, ComponentSender,
     gtk::{
-        self,
+        self, glib,
         prelude::{
             ButtonExt, EditableExt, EntryBufferExtManual, EntryExt, GtkWindowExt, OrientableExt,
             WidgetExt,
@@ -25,6 +25,8 @@ pub enum DocumentViewerFormMsg {
     AddCommandLineArgument(String),
     DeleteCommandLineArgument(DynamicIndex),
     Submit,
+    Show,
+    Hide,
 }
 
 #[derive(Debug)]
@@ -64,6 +66,12 @@ impl Component for DocumentViewerFormModel {
     view! {
         gtk::Window {
             set_title: Some("Document viewer form"),
+
+            connect_close_request[sender] => move |_| {
+                sender.input(DocumentViewerFormMsg::Hide);
+                glib::Propagation::Proceed
+            },
+
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
                 set_margin_top: 10,
@@ -167,6 +175,12 @@ impl Component for DocumentViewerFormModel {
             }
             DocumentViewerFormMsg::NameChanged(name) => {
                 self.name = name;
+            }
+            DocumentViewerFormMsg::Show => {
+                root.show();
+            }
+            DocumentViewerFormMsg::Hide => {
+                root.hide();
             }
             _ => {}
         }

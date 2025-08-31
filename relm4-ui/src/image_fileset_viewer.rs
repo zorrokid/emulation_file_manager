@@ -6,7 +6,7 @@ use relm4::{
     gtk::{
         self,
         gio::File,
-        glib::clone,
+        glib::{self, clone},
         prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt},
     },
     typed_view::grid::{RelmGridItem, TypedGridView},
@@ -78,6 +78,8 @@ impl RelmGridItem for MyGridItem {
 pub enum ImageFilesetViewerMsg {
     FileSelected { index: u32 },
     ZoomIn,
+    Show { file_set: FileSetViewModel },
+    Hide,
 }
 
 #[derive(Debug)]
@@ -87,13 +89,12 @@ pub enum ImageFileSetViewerCommandMsg {
 }
 
 pub struct ImageFileSetViewerInit {
-    pub file_set: FileSetViewModel,
     pub settings: Arc<Settings>,
 }
 
 #[derive(Debug)]
 pub struct ImageFilesetViewer {
-    file_set: FileSetViewModel,
+    file_set: Option<FileSetViewModel>,
     settings: Arc<Settings>,
     thumbnails_mapping: ThumbnailPathMap,
     grid_view_wrapper: TypedGridView<MyGridItem, gtk::SingleSelection>,
@@ -112,10 +113,15 @@ impl Component for ImageFilesetViewer {
         gtk::Window {
             set_title: Some("Image Fileset Viewer"),
             set_default_size: (800, 600),
+            connect_close_request[sender] => move |_| {
+                sender.input(ImageFilesetViewerMsg::Hide);
+                glib::Propagation::Proceed
+            },
+
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
                 gtk::Label {
-                    set_label: &format!("Viewing fileset: {}", model.file_set.file_set_name),
+                    set_label: &format!("Viewing fileset: {}", model.file_set.as_ref().map_or("None", |fs| &fs.file_set_name)),
                 },
 
                 gtk::Paned {
@@ -157,14 +163,6 @@ impl Component for ImageFilesetViewer {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let export_model = prepare_fileset_for_export(
-            &init.file_set,
-            &init.settings.collection_root_dir,
-            // TODO: temp_dir should come from settings
-            std::env::temp_dir().as_path(),
-            true,
-        );
-
         let grid_view_wrapper: TypedGridView<MyGridItem, gtk::SingleSelection> =
             TypedGridView::new();
 
@@ -180,7 +178,7 @@ impl Component for ImageFilesetViewer {
         ));
 
         let model = ImageFilesetViewer {
-            file_set: init.file_set,
+            file_set: None,
             settings: init.settings,
             thumbnails_mapping: ThumbnailPathMap::new(),
             grid_view_wrapper,
@@ -188,17 +186,7 @@ impl Component for ImageFilesetViewer {
             image_dimensions: (0, 0),
         };
         let my_view = &model.grid_view_wrapper.view;
-
         let widgets = view_output!();
-
-        sender.spawn_command(move |sender| {
-            let res = export_files(&export_model);
-            sender.emit(ImageFileSetViewerCommandMsg::ExportedImageFileSet(
-                res,
-                export_model,
-            ));
-        });
-
         ComponentParts { model, widgets }
     }
 
@@ -220,6 +208,28 @@ impl Component for ImageFilesetViewer {
                 }
             }
             ImageFilesetViewerMsg::ZoomIn => {}
+            ImageFilesetViewerMsg::Show { file_set } => {
+                let export_model = prepare_fileset_for_export(
+                    &file_set,
+                    &self.settings.collection_root_dir,
+                    // TODO: temp_dir should come from settings
+                    std::env::temp_dir().as_path(),
+                    true,
+                );
+                sender.spawn_command(move |sender| {
+                    let res = export_files(&export_model);
+                    sender.emit(ImageFileSetViewerCommandMsg::ExportedImageFileSet(
+                        res,
+                        export_model,
+                    ));
+                });
+
+                self.file_set = Some(file_set);
+                root.show();
+            }
+            ImageFilesetViewerMsg::Hide => {
+                root.close();
+            }
         }
     }
 

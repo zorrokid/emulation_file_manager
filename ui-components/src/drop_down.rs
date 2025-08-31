@@ -34,6 +34,7 @@ where
     M: DropDownMessage<T>,
 {
     SelectionChanged(u32),
+    SetSelected(T),
     _Phantom(PhantomData<(T, M)>),
 }
 
@@ -48,7 +49,7 @@ where
 }
 
 #[relm4::component(pub)]
-impl<T, M> SimpleComponent for DropDown<T, M>
+impl<T, M> Component for DropDown<T, M>
 where
     T: DropDownItem,
     M: DropDownMessage<T> + 'static,
@@ -56,6 +57,7 @@ where
     type Init = Option<T>;
     type Input = DropDownMsg<T, M>;
     type Output = DropDownOutputMsg<T, M>;
+    type CommandOutput = ();
 
     view! {
         gtk::Box {
@@ -67,6 +69,8 @@ where
                 connect_selected_notify[sender] => move |dropdown| {
                     sender.input(DropDownMsg::SelectionChanged(dropdown.selected()));
                 },
+                #[watch]
+                set_selected: model.selected_index.unwrap_or(0),
             },
         }
     }
@@ -109,17 +113,20 @@ where
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match msg {
             DropDownMsg::SelectionChanged(index) => {
                 self.selected_index = Some(index);
 
                 if let Some(item) = self.items.get(index as usize) {
                     let message = M::from_selection(item.clone());
-                    let res = sender.output(DropDownOutputMsg::ItemSelected(message));
-                    if res.is_err() {
-                        eprintln!("Failed to send output message");
-                    }
+                    let _ = sender.output(DropDownOutputMsg::ItemSelected(message));
+                }
+            }
+            DropDownMsg::SetSelected(item) => {
+                if let Some(index) = self.items.iter().position(|i| i == &item) {
+                    self.selected_index = Some(index as u32);
+                    //root.widgets.dropdown.set_selected(index as u32);
                 }
             }
             DropDownMsg::_Phantom(_) => {}

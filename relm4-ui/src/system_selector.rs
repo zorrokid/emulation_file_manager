@@ -4,7 +4,7 @@ use database::{database_error::Error as DatabaseError, repository_manager::Repos
 use relm4::{
     Component, ComponentParts, ComponentSender, RelmWidgetExt,
     gtk::{
-        self,
+        self, glib,
         prelude::{
             BoxExt as _, ButtonExt, EntryBufferExtManual, EntryExt, GtkWindowExt, OrientableExt,
             WidgetExt,
@@ -24,6 +24,8 @@ pub enum SystemSelectMsg {
     FetchSystems,
     AddSystem { name: String },
     SelectClicked,
+    Show { selected_system_ids: Vec<i64> },
+    Hide,
 }
 
 #[derive(Debug)]
@@ -41,7 +43,6 @@ pub enum CommandMsg {
 pub struct SystemSelectInit {
     pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
-    pub selected_system_ids: Vec<i64>,
 }
 
 #[derive(Debug)]
@@ -66,6 +67,12 @@ impl Component for SystemSelectModel {
             set_default_width: 400,
             set_default_height: 600,
             set_title: Some("System Selector"),
+
+            connect_close_request[sender] => move |_| {
+                sender.input(SystemSelectMsg::Hide);
+                glib::Propagation::Proceed
+            },
+
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
                 set_margin_all: 10,
@@ -115,7 +122,7 @@ impl Component for SystemSelectModel {
             repository_manager: init_model.repository_manager,
             systems: Vec::new(),
             list_view_wrapper,
-            selected_system_ids: init_model.selected_system_ids,
+            selected_system_ids: Vec::new(),
         };
 
         let systems_list_view = &model.list_view_wrapper.view;
@@ -177,6 +184,16 @@ impl Component for SystemSelectModel {
                 } else {
                     eprintln!("No system found at selected index {}", selected);
                 }
+            }
+            SystemSelectMsg::Show {
+                selected_system_ids,
+            } => {
+                self.selected_system_ids = selected_system_ids;
+                sender.input(SystemSelectMsg::FetchSystems);
+                root.show();
+            }
+            SystemSelectMsg::Hide => {
+                root.hide();
             }
         }
     }

@@ -20,12 +20,11 @@ use service::{
 };
 
 use crate::{
-    document_file_set_viewer::{DocumentViewer, DocumentViewerInit},
-    emulator_runner::{EmulatorRunnerInit, EmulatorRunnerModel},
-    image_fileset_viewer::{ImageFileSetViewerInit, ImageFilesetViewer},
-    image_viewer::{ImageViewer, ImageViewerInit, ImageViewerMsg},
+    document_file_set_viewer::{DocumentViewer, DocumentViewerInit, DocumentViewerMsg},
+    emulator_runner::{EmulatorRunnerInit, EmulatorRunnerModel, EmulatorRunnerMsg},
+    image_fileset_viewer::{ImageFileSetViewerInit, ImageFilesetViewer, ImageFilesetViewerMsg},
     list_item::ListItem,
-    release_form::{ReleaseFormInit, ReleaseFormModel, ReleaseFormOutputMsg},
+    release_form::{ReleaseFormInit, ReleaseFormModel, ReleaseFormMsg, ReleaseFormOutputMsg},
     tabbed_image_viewer::{TabbedImageViewer, TabbedImageViewerInit, TabbedImageViewerMsg},
 };
 
@@ -45,10 +44,10 @@ pub struct ReleaseModel {
     selected_file_set: Option<FileSetViewModel>,
     selected_image_file_set: Option<FileSetViewModel>,
     selected_document_file_set: Option<FileSetViewModel>,
-    emulator_runner: Option<Controller<EmulatorRunnerModel>>,
-    image_file_set_viewer: Option<Controller<ImageFilesetViewer>>,
-    document_file_set_viewer: Option<Controller<DocumentViewer>>,
-    form_window: Option<Controller<ReleaseFormModel>>,
+    emulator_runner: Controller<EmulatorRunnerModel>,
+    image_file_set_viewer: Controller<ImageFilesetViewer>,
+    document_file_set_viewer: Controller<DocumentViewer>,
+    release_form: Controller<ReleaseFormModel>,
     tabbed_image_viewer: Controller<TabbedImageViewer>,
 }
 
@@ -217,6 +216,61 @@ impl Component for ReleaseModel {
         let tabbed_image_viewer = TabbedImageViewer::builder()
             .launch(tabbed_image_viewer_init)
             .detach();
+
+        let release_form_init_model = ReleaseFormInit {
+            view_model_service: Arc::clone(&init_model.view_model_service),
+            repository_manager: Arc::clone(&init_model.repository_manager),
+            settings: Arc::clone(&init_model.settings),
+        };
+        let release_form = ReleaseFormModel::builder()
+            .transient_for(&root)
+            .launch(release_form_init_model)
+            .forward(sender.input_sender(), |msg| match msg {
+                ReleaseFormOutputMsg::ReleaseCreatedOrUpdated { id } => {
+                    ReleaseMsg::FetchRelease { id }
+                }
+                ReleaseFormOutputMsg::SoftwareTitleCreated(software_title_list_model) => {
+                    println!("Software title created: {:?}", software_title_list_model);
+                    ReleaseMsg::SoftwareTitleCreated {
+                        software_title_list_model,
+                    }
+                }
+                ReleaseFormOutputMsg::SoftwareTitleUpdated(software_title_list_model) => {
+                    println!("Software title updated: {:?}", software_title_list_model);
+                    ReleaseMsg::SoftwareTitleUpdated {
+                        software_title_list_model,
+                    }
+                }
+            });
+
+        let emulator_runner_init_model = EmulatorRunnerInit {
+            view_model_service: Arc::clone(&init_model.view_model_service),
+            repository_manager: Arc::clone(&init_model.repository_manager),
+            settings: Arc::clone(&init_model.settings),
+        };
+        let emulator_runner = EmulatorRunnerModel::builder()
+            .transient_for(&root)
+            .launch(emulator_runner_init_model)
+            .detach();
+
+        let document_viewer_init_model = DocumentViewerInit {
+            view_model_service: Arc::clone(&init_model.view_model_service),
+            repository_manager: Arc::clone(&init_model.repository_manager),
+            settings: Arc::clone(&init_model.settings),
+        };
+        let document_file_set_viewer = DocumentViewer::builder()
+            .transient_for(&root)
+            .launch(document_viewer_init_model)
+            .detach();
+
+        let image_file_set_viewer_init_model = ImageFileSetViewerInit {
+            settings: Arc::clone(&init_model.settings),
+        };
+        let image_file_set_viewer = ImageFilesetViewer::builder()
+            .transient_for(&root)
+            .launch(image_file_set_viewer_init_model)
+            .detach();
+
         let model = ReleaseModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
@@ -231,11 +285,11 @@ impl Component for ReleaseModel {
             selected_file_set: None,
             selected_image_file_set: None,
             selected_document_file_set: None,
-            emulator_runner: None,
-            image_file_set_viewer: None,
+            emulator_runner,
+            image_file_set_viewer,
             tabbed_image_viewer,
-            document_file_set_viewer: None,
-            form_window: None,
+            document_file_set_viewer,
+            release_form,
         };
 
         let file_set_list_view = &model.emulator_file_set_list_view_wrapper.view;
@@ -296,48 +350,18 @@ impl Component for ReleaseModel {
                 if let (Some(file_set), Some(release)) =
                     (&self.selected_file_set, &self.selected_release)
                 {
-                    println!("Starting emulator runner with file set: {:?}", file_set);
-                    let init_model = EmulatorRunnerInit {
-                        view_model_service: Arc::clone(&self.view_model_service),
-                        repository_manager: Arc::clone(&self.repository_manager),
-                        settings: Arc::clone(&self.settings),
+                    self.emulator_runner.emit(EmulatorRunnerMsg::Show {
                         file_set: file_set.clone(),
                         systems: release.systems.clone(),
-                    };
-                    let emulator_runner = EmulatorRunnerModel::builder()
-                        .transient_for(root)
-                        .launch(init_model)
-                        .detach();
-
-                    self.emulator_runner = Some(emulator_runner);
-                    self.emulator_runner
-                        .as_ref()
-                        .expect("Emulator runner should be set already")
-                        .widget()
-                        .present();
+                    });
                 }
             }
             ReleaseMsg::StartImageFileSetViewer => {
                 if let Some(file_set) = &self.selected_image_file_set {
-                    println!(
-                        "Starting image file set viewer with file set: {:?}",
-                        file_set
-                    );
-                    let init_model = ImageFileSetViewerInit {
-                        file_set: file_set.clone(),
-                        settings: Arc::clone(&self.settings),
-                    };
-                    let image_file_set_viewer = ImageFilesetViewer::builder()
-                        .transient_for(root)
-                        .launch(init_model)
-                        .detach();
-
-                    self.image_file_set_viewer = Some(image_file_set_viewer);
                     self.image_file_set_viewer
-                        .as_ref()
-                        .expect("Image file set viewer should be set already")
-                        .widget()
-                        .present();
+                        .emit(ImageFilesetViewerMsg::Show {
+                            file_set: file_set.clone(),
+                        });
                 }
             }
             ReleaseMsg::StartDocumentFileSetViewer => {
@@ -346,23 +370,9 @@ impl Component for ReleaseModel {
                         "Starting document file set viewer with file set: {:?}",
                         file_set
                     );
-                    let init_model = DocumentViewerInit {
-                        view_model_service: Arc::clone(&self.view_model_service),
-                        repository_manager: Arc::clone(&self.repository_manager),
-                        settings: Arc::clone(&self.settings),
+                    self.document_file_set_viewer.emit(DocumentViewerMsg::Show {
                         file_set: file_set.clone(),
-                    };
-                    let document_file_set_viewer = DocumentViewer::builder()
-                        .transient_for(root)
-                        .launch(init_model)
-                        .detach();
-
-                    self.document_file_set_viewer = Some(document_file_set_viewer);
-                    self.document_file_set_viewer
-                        .as_ref()
-                        .expect("Document file set viewer should be set already")
-                        .widget()
-                        .present();
+                    });
                 }
             }
             ReleaseMsg::UpdateRelease(release_list_model) => {
@@ -371,45 +381,9 @@ impl Component for ReleaseModel {
             }
             ReleaseMsg::StartEditRelease => {
                 if let Some(release) = &self.selected_release {
-                    println!("Starting edit release for: {:?}", release);
-                    let release_form_init_model = ReleaseFormInit {
-                        view_model_service: Arc::clone(&self.view_model_service),
-                        repository_manager: Arc::clone(&self.repository_manager),
-                        settings: Arc::clone(&self.settings),
+                    self.release_form.emit(ReleaseFormMsg::Show {
                         release: Some(release.clone()),
-                    };
-                    let form_window = ReleaseFormModel::builder()
-                        .transient_for(root)
-                        .launch(release_form_init_model)
-                        .forward(sender.input_sender(), |msg| match msg {
-                            ReleaseFormOutputMsg::ReleaseCreatedOrUpdated { id } => {
-                                ReleaseMsg::FetchRelease { id }
-                            }
-                            ReleaseFormOutputMsg::SoftwareTitleCreated(
-                                software_title_list_model,
-                            ) => {
-                                println!("Software title created: {:?}", software_title_list_model);
-                                ReleaseMsg::SoftwareTitleCreated {
-                                    software_title_list_model,
-                                }
-                            }
-                            ReleaseFormOutputMsg::SoftwareTitleUpdated(
-                                software_title_list_model,
-                            ) => {
-                                println!("Software title updated: {:?}", software_title_list_model);
-                                ReleaseMsg::SoftwareTitleUpdated {
-                                    software_title_list_model,
-                                }
-                            }
-                        });
-
-                    self.form_window = Some(form_window);
-
-                    self.form_window
-                        .as_ref()
-                        .expect("Form window should be set already")
-                        .widget()
-                        .present();
+                    });
                 }
             }
             ReleaseMsg::Clear => {
@@ -420,8 +394,6 @@ impl Component for ReleaseModel {
                 self.image_file_set_list_view_wrapper.clear();
                 self.document_file_set_list_view_wrapper.clear();
                 self.selected_file_set = None;
-                self.emulator_runner = None;
-                self.form_window = None;
                 self.tabbed_image_viewer.emit(TabbedImageViewerMsg::Clear);
             }
             ReleaseMsg::FileSetSelected { index } => {
