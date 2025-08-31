@@ -17,7 +17,8 @@ use service::{
 use crate::{
     list_item::ListItem,
     software_title_form::{
-        SoftwareTitleFormInit, SoftwareTitleFormModel, SoftwareTitleFormOutputMsg,
+        SoftwareTitleFormInit, SoftwareTitleFormModel, SoftwareTitleFormMsg,
+        SoftwareTitleFormOutputMsg,
     },
 };
 
@@ -69,38 +70,8 @@ pub struct SoftwareTitleSelectModel {
     software_titles: Vec<SoftwareTitleListModel>,
     list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     selected_software_title_ids: Vec<i64>,
-    software_title_form_controller: Option<Controller<SoftwareTitleFormModel>>,
+    software_title_form_controller: Controller<SoftwareTitleFormModel>,
     confirm_dialog_controller: Controller<ConfirmDialog>,
-}
-
-impl SoftwareTitleSelectModel {
-    fn open_software_title_form(
-        &mut self,
-        sender: &ComponentSender<Self>,
-        root: &gtk::Window,
-        edit_software_title: Option<SoftwareTitleListModel>,
-    ) {
-        let software_title_form = SoftwareTitleFormModel::builder()
-            .transient_for(root)
-            .launch(SoftwareTitleFormInit {
-                repository_manager: Arc::clone(&self.repository_manager),
-                edit_software_title,
-            })
-            .forward(sender.input_sender(), |msg| match msg {
-                SoftwareTitleFormOutputMsg::SoftwareTitleAdded(software_title_list_model) => {
-                    SoftwareTitleSelectMsg::SoftwareTitleAdded(software_title_list_model)
-                }
-                SoftwareTitleFormOutputMsg::SoftwareTitleUpdated(software_title_list_model) => {
-                    SoftwareTitleSelectMsg::SoftwareTitleUpdated(software_title_list_model)
-                }
-            });
-        self.software_title_form_controller = Some(software_title_form);
-        self.software_title_form_controller
-            .as_ref()
-            .expect("SoftwareTitle form controller should be initialized")
-            .widget()
-            .present();
-    }
 }
 
 #[relm4::component(pub)]
@@ -176,13 +147,28 @@ impl Component for SoftwareTitleSelectModel {
                 ConfirmDialogOutputMsg::Canceled => SoftwareTitleSelectMsg::DeleteCanceled,
             });
 
+        let software_title_form_controller = SoftwareTitleFormModel::builder()
+            .transient_for(&root)
+            .launch(SoftwareTitleFormInit {
+                repository_manager: Arc::clone(&init_model.repository_manager),
+                //edit_software_title,
+            })
+            .forward(sender.input_sender(), |msg| match msg {
+                SoftwareTitleFormOutputMsg::SoftwareTitleAdded(software_title_list_model) => {
+                    SoftwareTitleSelectMsg::SoftwareTitleAdded(software_title_list_model)
+                }
+                SoftwareTitleFormOutputMsg::SoftwareTitleUpdated(software_title_list_model) => {
+                    SoftwareTitleSelectMsg::SoftwareTitleUpdated(software_title_list_model)
+                }
+            });
+
         let model = SoftwareTitleSelectModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
             software_titles: Vec::new(),
             list_view_wrapper,
             selected_software_title_ids: Vec::new(),
-            software_title_form_controller: None,
+            software_title_form_controller,
             confirm_dialog_controller,
         };
 
@@ -233,7 +219,10 @@ impl Component for SoftwareTitleSelectModel {
                 }
             }
             SoftwareTitleSelectMsg::AddClicked => {
-                self.open_software_title_form(&sender, root, None);
+                self.software_title_form_controller
+                    .emit(SoftwareTitleFormMsg::Show {
+                        edit_software_title: None,
+                    });
             }
             SoftwareTitleSelectMsg::EditClicked => {
                 let edit_software_title = self
@@ -246,7 +235,10 @@ impl Component for SoftwareTitleSelectModel {
                             .cloned()
                     });
                 if let Some(edit_software_title) = &edit_software_title {
-                    self.open_software_title_form(&sender, root, Some(edit_software_title.clone()));
+                    self.software_title_form_controller
+                        .emit(SoftwareTitleFormMsg::Show {
+                            edit_software_title: Some(edit_software_title.clone()),
+                        });
                 }
             }
             SoftwareTitleSelectMsg::DeleteClicked => {
