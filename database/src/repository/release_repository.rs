@@ -473,17 +473,23 @@ mod tests {
         let updated_release = release_repository.get_release(release_id).await.unwrap();
         assert_eq!(updated_release.name, "Updated Release");
 
-        // try deleting the release before removing the software title relation
-        let result = release_repository.delete_release(release_id).await;
-        assert!(result.is_err());
-
-        release_repository
-            .remove_software_title_from_release(release_id, software_title_id)
-            .await
-            .unwrap();
-
-        // Verify that the release is deleted
+        // Delete the release - with CASCADE DELETE, this should succeed and remove relationships
         release_repository.delete_release(release_id).await.unwrap();
+
+        // Verify that the software title relationship was cascaded away by checking junction table
+        let relationship_count = sqlx::query_scalar!(
+            "SELECT COUNT(*) FROM release_software_title WHERE release_id = ? AND software_title_id = ?",
+            release_id,
+            software_title_id
+        )
+        .fetch_one(pool.as_ref())
+        .await
+        .unwrap();
+        assert_eq!(relationship_count, 0);
+
+        // Verify that the software title itself still exists (only relationship was deleted)
+        let software_title_still_exists = software_title_repository.get_software_title(software_title_id).await.unwrap();
+        assert_eq!(software_title_still_exists.name, "Test Software Title");
 
         // Verify deletion
         let result = release_repository.get_release(release_id).await;
@@ -691,11 +697,11 @@ mod tests {
     #[async_std::test]
     async fn test_cascade_delete_release_system_when_release_deleted() {
         let pool = Arc::new(setup_test_db().await);
-        
+
         // Create release and system
         let release_id = insert_test_release(&pool).await;
         let system_id = insert_test_system(&pool).await;
-        
+
         // Link them in release_system
         sqlx::query!(
             "INSERT INTO release_system (release_id, system_id) VALUES (?, ?)",
@@ -705,7 +711,7 @@ mod tests {
         .execute(&*pool)
         .await
         .unwrap();
-        
+
         // Verify relationship exists
         let count_before = sqlx::query_scalar!(
             "SELECT COUNT(*) FROM release_system WHERE release_id = ? AND system_id = ?",
@@ -716,13 +722,13 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(count_before, 1);
-        
+
         // Delete the release
         sqlx::query!("DELETE FROM release WHERE id = ?", release_id)
             .execute(&*pool)
             .await
             .unwrap();
-        
+
         // Verify CASCADE DELETE removed the relationship
         let count_after = sqlx::query_scalar!(
             "SELECT COUNT(*) FROM release_system WHERE release_id = ? AND system_id = ?",
@@ -733,26 +739,24 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(count_after, 0);
-        
+
         // Verify system still exists
-        let system_exists = sqlx::query_scalar!(
-            "SELECT COUNT(*) FROM system WHERE id = ?",
-            system_id
-        )
-        .fetch_one(&*pool)
-        .await
-        .unwrap();
+        let system_exists =
+            sqlx::query_scalar!("SELECT COUNT(*) FROM system WHERE id = ?", system_id)
+                .fetch_one(&*pool)
+                .await
+                .unwrap();
         assert_eq!(system_exists, 1);
     }
 
     #[async_std::test]
     async fn test_cascade_delete_release_system_when_system_deleted() {
         let pool = Arc::new(setup_test_db().await);
-        
+
         // Create release and system
         let release_id = insert_test_release(&pool).await;
         let system_id = insert_test_system(&pool).await;
-        
+
         // Link them in release_system
         sqlx::query!(
             "INSERT INTO release_system (release_id, system_id) VALUES (?, ?)",
@@ -762,13 +766,13 @@ mod tests {
         .execute(&*pool)
         .await
         .unwrap();
-        
+
         // Delete the system
         sqlx::query!("DELETE FROM system WHERE id = ?", system_id)
             .execute(&*pool)
             .await
             .unwrap();
-        
+
         // Verify CASCADE DELETE removed the relationship
         let count_after = sqlx::query_scalar!(
             "SELECT COUNT(*) FROM release_system WHERE release_id = ? AND system_id = ?",
@@ -779,26 +783,24 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(count_after, 0);
-        
+
         // Verify release still exists
-        let release_exists = sqlx::query_scalar!(
-            "SELECT COUNT(*) FROM release WHERE id = ?",
-            release_id
-        )
-        .fetch_one(&*pool)
-        .await
-        .unwrap();
+        let release_exists =
+            sqlx::query_scalar!("SELECT COUNT(*) FROM release WHERE id = ?", release_id)
+                .fetch_one(&*pool)
+                .await
+                .unwrap();
         assert_eq!(release_exists, 1);
     }
 
     #[async_std::test]
     async fn test_cascade_delete_release_software_title_when_release_deleted() {
         let pool = Arc::new(setup_test_db().await);
-        
+
         // Create release and software title
         let release_id = insert_test_release(&pool).await;
         let software_title_id = insert_test_software_title(&pool).await;
-        
+
         // Link them in release_software_title
         sqlx::query!(
             "INSERT INTO release_software_title (release_id, software_title_id) VALUES (?, ?)",
@@ -808,13 +810,13 @@ mod tests {
         .execute(&*pool)
         .await
         .unwrap();
-        
+
         // Delete the release
         sqlx::query!("DELETE FROM release WHERE id = ?", release_id)
             .execute(&*pool)
             .await
             .unwrap();
-        
+
         // Verify CASCADE DELETE removed the relationship
         let count_after = sqlx::query_scalar!(
             "SELECT COUNT(*) FROM release_software_title WHERE release_id = ? AND software_title_id = ?",
@@ -825,7 +827,7 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(count_after, 0);
-        
+
         // Verify software title still exists
         let software_title_exists = sqlx::query_scalar!(
             "SELECT COUNT(*) FROM software_title WHERE id = ?",
@@ -840,11 +842,11 @@ mod tests {
     #[async_std::test]
     async fn test_cascade_delete_release_software_title_when_software_title_deleted() {
         let pool = Arc::new(setup_test_db().await);
-        
+
         // Create release and software title
         let release_id = insert_test_release(&pool).await;
         let software_title_id = insert_test_software_title(&pool).await;
-        
+
         // Link them in release_software_title
         sqlx::query!(
             "INSERT INTO release_software_title (release_id, software_title_id) VALUES (?, ?)",
@@ -854,13 +856,13 @@ mod tests {
         .execute(&*pool)
         .await
         .unwrap();
-        
+
         // Delete the software title
         sqlx::query!("DELETE FROM software_title WHERE id = ?", software_title_id)
             .execute(&*pool)
             .await
             .unwrap();
-        
+
         // Verify CASCADE DELETE removed the relationship
         let count_after = sqlx::query_scalar!(
             "SELECT COUNT(*) FROM release_software_title WHERE release_id = ? AND software_title_id = ?",
@@ -871,37 +873,29 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(count_after, 0);
-        
+
         // Verify release still exists
-        let release_exists = sqlx::query_scalar!(
-            "SELECT COUNT(*) FROM release WHERE id = ?",
-            release_id
-        )
-        .fetch_one(&*pool)
-        .await
-        .unwrap();
+        let release_exists =
+            sqlx::query_scalar!("SELECT COUNT(*) FROM release WHERE id = ?", release_id)
+                .fetch_one(&*pool)
+                .await
+                .unwrap();
         assert_eq!(release_exists, 1);
     }
 
     async fn insert_test_release(pool: &Pool<Sqlite>) -> i64 {
-        let result = sqlx::query!(
-            "INSERT INTO release (name) VALUES (?)",
-            "Test Release"
-        )
-        .execute(pool)
-        .await
-        .unwrap();
+        let result = sqlx::query!("INSERT INTO release (name) VALUES (?)", "Test Release")
+            .execute(pool)
+            .await
+            .unwrap();
         result.last_insert_rowid()
     }
 
     async fn insert_test_system(pool: &Pool<Sqlite>) -> i64 {
-        let result = sqlx::query!(
-            "INSERT INTO system (name) VALUES (?)",
-            "Test System"
-        )
-        .execute(pool)
-        .await
-        .unwrap();
+        let result = sqlx::query!("INSERT INTO system (name) VALUES (?)", "Test System")
+            .execute(pool)
+            .await
+            .unwrap();
         result.last_insert_rowid()
     }
 
