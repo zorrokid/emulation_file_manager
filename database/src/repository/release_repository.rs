@@ -367,7 +367,9 @@ impl ReleaseRepository {
     }
 
     pub async fn delete_release(&self, id: i64) -> Result<i64, DatabaseError> {
-        let count = sqlx::query_scalar!(
+        let mut transaction = self.pool.begin().await?;
+
+        /*let count = sqlx::query_scalar!(
             "SELECT COUNT(*) FROM release_file_set WHERE release_id = ?",
             id
         )
@@ -376,10 +378,11 @@ impl ReleaseRepository {
 
         if count > 0 {
             return Err(DatabaseError::InUse);
-        }
+        }*/
         sqlx::query!("DELETE FROM release WHERE id = ?", id)
-            .execute(&*self.pool)
+            .execute(&mut *transaction)
             .await?;
+        transaction.commit().await?;
         Ok(id)
     }
 
