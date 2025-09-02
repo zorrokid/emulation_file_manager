@@ -81,7 +81,6 @@ impl Component for SoftwareTitleFormModel {
                     set_text: &model.name,
                     set_placeholder_text: Some("Software title name"),
                     connect_changed[sender] => move |entry| {
-                        println!("Entry changed");
                         let buffer = entry.buffer();
                         sender.input(
                             SoftwareTitleFormMsg::NameChanged(buffer.text().into()),
@@ -102,10 +101,7 @@ impl Component for SoftwareTitleFormModel {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         match msg {
             SoftwareTitleFormMsg::NameChanged(name) => {
-                if name != self.name {
-                    println!("Name changed to: {}", name);
-                    self.name = name;
-                }
+                self.name = name;
             }
             SoftwareTitleFormMsg::Submit => {
                 let name = self.name.clone();
@@ -137,12 +133,10 @@ impl Component for SoftwareTitleFormModel {
             SoftwareTitleFormMsg::Show {
                 edit_software_title,
             } => {
-                println!("Showing SoftwareTitleForm");
                 if let Some(edit_software_title) = edit_software_title {
                     self.name = edit_software_title.name.clone();
                     self.edit_software_title_id = Some(edit_software_title.id);
                 } else {
-                    println!("Preparing to add new software title");
                     self.name.clear();
                     self.edit_software_title_id = None;
                 }

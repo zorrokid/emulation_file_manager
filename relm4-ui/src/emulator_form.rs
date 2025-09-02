@@ -113,7 +113,7 @@ impl FactoryComponent for CommandLineArgument {
 pub enum EmulatorFormMsg {
     ExecutableChanged(String),
     NameChanged(String),
-    ExtractFilesToggled(bool),
+    ExtractFilesToggled,
     SystemSelected(SystemListModel),
     OpenSystemSelector,
     OpenArgumentSelector,
@@ -219,10 +219,11 @@ impl Component for EmulatorFormModel {
                 gtk::CheckButton {
                     set_label: Some("Extract files"),
                     #[watch]
+                    #[block_signal(connect_toggled)]
                     set_active: model.extract_files,
-                    connect_toggled[sender] => move |btn| {
-                        sender.input(EmulatorFormMsg::ExtractFilesToggled(btn.is_active()));
-                    }
+                    connect_toggled[sender] => move |_| {
+                        sender.input(EmulatorFormMsg::ExtractFilesToggled);
+                    } @connect_toggled,
                 },
 
                 gtk::Label {
@@ -313,12 +314,8 @@ impl Component for EmulatorFormModel {
                 println!("Executable changed: {}", executable);
                 self.executable = executable;
             }
-            EmulatorFormMsg::ExtractFilesToggled(value) => {
-                if self.extract_files != value {
-                    // Guard against infinite loop
-                    self.extract_files = value;
-                    println!("Extract files toggled: {}", self.extract_files);
-                }
+            EmulatorFormMsg::ExtractFilesToggled => {
+                self.extract_files = !self.extract_files;
             }
             EmulatorFormMsg::SystemSelected(system) => {
                 println!("System selected: {}", system.name);
