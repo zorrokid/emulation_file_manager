@@ -46,7 +46,6 @@ pub enum SoftwareTitleFormCommandMsg {
 #[derive(Debug)]
 pub struct SoftwareTitleFormInit {
     pub repository_manager: Arc<RepositoryManager>,
-    //pub edit_software_title: Option<SoftwareTitleListModel>,
 }
 
 #[relm4::component(pub)]
@@ -77,15 +76,19 @@ impl Component for SoftwareTitleFormModel {
                 },
 
                 gtk::Entry {
+                    #[watch]
+                    #[block_signal(change_handler)]
                     set_text: &model.name,
                     set_placeholder_text: Some("Software title name"),
                     connect_changed[sender] => move |entry| {
+                        println!("Entry changed");
                         let buffer = entry.buffer();
                         sender.input(
                             SoftwareTitleFormMsg::NameChanged(buffer.text().into()),
                         );
-                    }
+                    } @change_handler,
                 },
+
                 gtk::Button {
                     set_label: "Submit",
                     #[watch]
@@ -99,8 +102,10 @@ impl Component for SoftwareTitleFormModel {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         match msg {
             SoftwareTitleFormMsg::NameChanged(name) => {
-                println!("Name changed to: {}", name);
-                self.name = name;
+                if name != self.name {
+                    println!("Name changed to: {}", name);
+                    self.name = name;
+                }
             }
             SoftwareTitleFormMsg::Submit => {
                 let name = self.name.clone();
@@ -132,10 +137,12 @@ impl Component for SoftwareTitleFormModel {
             SoftwareTitleFormMsg::Show {
                 edit_software_title,
             } => {
+                println!("Showing SoftwareTitleForm");
                 if let Some(edit_software_title) = edit_software_title {
                     self.name = edit_software_title.name.clone();
                     self.edit_software_title_id = Some(edit_software_title.id);
                 } else {
+                    println!("Preparing to add new software title");
                     self.name.clear();
                     self.edit_software_title_id = None;
                 }
@@ -187,16 +194,11 @@ impl Component for SoftwareTitleFormModel {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let model = SoftwareTitleFormModel {
-            name: "".to_string(),         /*init
-                                          .edit_software_title
-                                          .as_ref()
-                                          .map_or("".into(), |st| st.name.clone()),*/
-            edit_software_title_id: None, // init.edit_software_title.as_ref().map(|st| st.id),
+            name: "".to_string(),
+            edit_software_title_id: None,
             repository_manager: init.repository_manager,
         };
-        println!("Initialized SoftwareTitleFormModel: {:?}", model);
         let widgets = view_output!();
-
         ComponentParts { model, widgets }
     }
 }
