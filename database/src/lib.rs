@@ -43,5 +43,10 @@ pub async fn setup_test_db() -> SqlitePool {
         .await
         .expect("Failed to run migrations");
 
+    sqlx::query("PRAGMA foreign_keys = ON")
+        .execute(&pool)
+        .await
+        .expect("Failed to enable foreign keys");
+
     pool
 }

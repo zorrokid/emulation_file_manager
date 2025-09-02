@@ -645,6 +645,142 @@ mod tests {
         assert_eq!(result.unwrap_err(), DatabaseError::InUse);
     }
 
+    #[async_std::test]
+    async fn test_cascade_delete_when_release_deleted() {
+        let pool = setup_test_db().await;
+        
+        // Create a release
+        let release_id = insert_test_release(&pool).await;
+        
+        // Create a file set
+        let file_set_result = query!(
+            "INSERT INTO file_set (file_name, file_type, name) VALUES (?, ?, ?)",
+            "test.zip",
+            FileType::Rom as i64,
+            "Test File Set"
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let file_set_id = file_set_result.last_insert_rowid();
+        
+        // Link them in release_file_set
+        query!(
+            "INSERT INTO release_file_set (release_id, file_set_id) VALUES (?, ?)",
+            release_id,
+            file_set_id
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        
+        // Verify the relationship exists
+        let count_before = query_scalar!(
+            "SELECT COUNT(*) FROM release_file_set WHERE release_id = ? AND file_set_id = ?",
+            release_id,
+            file_set_id
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(count_before, 1);
+        
+        // Delete the release
+        query!("DELETE FROM release WHERE id = ?", release_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        
+        // Verify that the release_file_set entry was CASCADE deleted
+        let count_after = query_scalar!(
+            "SELECT COUNT(*) FROM release_file_set WHERE release_id = ? AND file_set_id = ?",
+            release_id,
+            file_set_id
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(count_after, 0);
+        
+        // Verify that the file_set still exists (should not be deleted)
+        let file_set_exists = query_scalar!(
+            "SELECT COUNT(*) FROM file_set WHERE id = ?",
+            file_set_id
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(file_set_exists, 1);
+    }
+
+    #[async_std::test]
+    async fn test_cascade_delete_when_file_set_deleted() {
+        let pool = setup_test_db().await;
+        
+        // Create a release
+        let release_id = insert_test_release(&pool).await;
+        
+        // Create a file set
+        let file_set_result = query!(
+            "INSERT INTO file_set (file_name, file_type, name) VALUES (?, ?, ?)",
+            "test.zip",
+            FileType::Rom as i64,
+            "Test File Set"
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let file_set_id = file_set_result.last_insert_rowid();
+        
+        // Link them in release_file_set
+        query!(
+            "INSERT INTO release_file_set (release_id, file_set_id) VALUES (?, ?)",
+            release_id,
+            file_set_id
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        
+        // Verify the relationship exists
+        let count_before = query_scalar!(
+            "SELECT COUNT(*) FROM release_file_set WHERE release_id = ? AND file_set_id = ?",
+            release_id,
+            file_set_id
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(count_before, 1);
+        
+        // Delete the file_set
+        query!("DELETE FROM file_set WHERE id = ?", file_set_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        
+        // Verify that the release_file_set entry was CASCADE deleted
+        let count_after = query_scalar!(
+            "SELECT COUNT(*) FROM release_file_set WHERE release_id = ? AND file_set_id = ?",
+            release_id,
+            file_set_id
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(count_after, 0);
+        
+        // Verify that the release still exists (should not be deleted)
+        let release_exists = query_scalar!(
+            "SELECT COUNT(*) FROM release WHERE id = ?",
+            release_id
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(release_exists, 1);
+    }
+
     async fn insert_test_release(pool: &Pool<Sqlite>) -> i64 {
         let result = query!(
             "INSERT INTO release (

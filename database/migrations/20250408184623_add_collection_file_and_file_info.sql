@@ -84,7 +84,8 @@ CREATE TABLE release_file_set (
     release_id INTEGER NOT NULL,
     file_set_id INTEGER NOT NULL,
     PRIMARY KEY (release_id, file_set_id),
-    FOREIGN KEY (release_id) REFERENCES release(id)
+    FOREIGN KEY (release_id) REFERENCES release(id) ON DELETE CASCADE,
+    FOREIGN KEY (file_set_id) REFERENCES file_set(id) ON DELETE CASCADE
 );
 
 CREATE TABLE setting (
