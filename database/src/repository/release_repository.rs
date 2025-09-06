@@ -540,6 +540,7 @@ mod tests {
                 &"Test file set".to_string(),
                 &"File Set 1".to_string(),
                 &FileType::Rom,
+                "",
                 &[ImportedFile {
                     original_file_name: "File1.bin".to_string(),
                     archive_file_name: "File1.zst".to_string(),
@@ -556,6 +557,7 @@ mod tests {
                 &"Test file set 2".to_string(),
                 &"File Set 2".to_string(),
                 &FileType::Rom,
+                "",
                 &[ImportedFile {
                     original_file_name: "File2.bin".to_string(),
                     archive_file_name: "File1.zst".to_string(),
@@ -572,6 +574,7 @@ mod tests {
                 &"Test file set 3".to_string(),
                 &"File Set 3".to_string(),
                 &FileType::Rom,
+                "",
                 &[ImportedFile {
                     original_file_name: "File3.bin".to_string(),
                     archive_file_name: "File1.zst".to_string(),

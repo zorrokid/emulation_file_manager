@@ -27,6 +27,7 @@ impl FromRow<'_, SqliteRow> for FileSet {
             file_name: row.try_get("file_name")?,
             file_type,
             name: row.try_get("name")?,
+            source: row.try_get("source")?,
         })
     }
 }
@@ -37,7 +38,7 @@ impl FileSetRepository {
         release_id: i64,
     ) -> Result<Vec<FileSet>, DatabaseError> {
         let file_sets = sqlx::query_as(
-            "SELECT c.id, c.file_name, c.file_type, c.name
+            "SELECT c.id, c.file_name, c.file_type, c.name, c.source
              FROM file_set c 
              INNER JOIN release_file_set rcf
              ON c.id = rcf.file_set_id
@@ -64,7 +65,7 @@ impl FileSetRepository {
     pub async fn get_file_sets(&self, ids: Vec<i64>) -> Result<Vec<FileSet>, DatabaseError> {
         let placeholders = ids.iter().map(|_| "?").collect::<Vec<&str>>().join(",");
         let query = format!(
-            "SELECT id, file_name, file_type, name 
+            "SELECT id, file_name, file_type, name, source 
              FROM file_set
              WHERE id IN ({})",
             placeholders
@@ -79,12 +80,24 @@ impl FileSetRepository {
         Ok(file_sets)
     }
 
+    pub async fn get_file_set(&self, id: i64) -> Result<FileSet, DatabaseError> {
+        let file_set = sqlx::query_as(
+            "SELECT id, file_name, file_type, name, source 
+             FROM file_set
+             WHERE id = ?",
+        )
+        .bind(id)
+        .fetch_one(&*self.pool)
+        .await?;
+        Ok(file_set)
+    }
+
     pub async fn get_file_sets_by_release(
         &self,
         release_id: i64,
     ) -> Result<Vec<FileSet>, DatabaseError> {
         let file_sets = sqlx::query_as(
-            "SELECT c.id, c.file_name, c.file_type, c.name
+            "SELECT c.id, c.file_name, c.file_type, c.name, c.source
              FROM file_set c 
              INNER JOIN release_file_set rcf
              ON c.id = rcf.file_set_id
@@ -98,7 +111,7 @@ impl FileSetRepository {
 
     pub async fn get_all_file_sets(&self) -> Result<Vec<FileSet>, DatabaseError> {
         let file_sets = sqlx::query_as(
-            "SELECT id, file_name, file_type, name 
+            "SELECT id, file_name, file_type, name, source 
              FROM file_set",
         )
         .fetch_all(&*self.pool)
@@ -122,7 +135,7 @@ impl FileSetRepository {
             .join(", ");
 
         let file_sets_query = format!(
-            "SELECT DISTINCT fs.id, fs.file_name, fs.file_type, fs.name 
+            "SELECT DISTINCT fs.id, fs.file_name, fs.file_type, fs.name, fs.source 
              FROM file_set fs
              INNER JOIN file_set_file_info fsfi ON fs.id = fsfi.file_set_id
              INNER JOIN file_info_system fis ON fsfi.file_info_id = fis.file_info_id
@@ -144,6 +157,7 @@ impl FileSetRepository {
         file_set_name: &str,
         file_set_file_name: &str,
         file_type: &FileType,
+        source: &str,
         files_in_fileset: &[ImportedFile],
         system_ids: &[i64],
     ) -> Result<i64, Error> {
@@ -159,11 +173,13 @@ impl FileSetRepository {
             "INSERT INTO file_set(
                 file_name, 
                 file_type,
-                name) 
-             VALUES (?, ?, ?)",
+                name,
+                source) 
+             VALUES (?, ?, ?, ?)",
             file_set_file_name,
             file_type,
             file_set_name,
+            source,
         )
         .execute(&mut *transaction)
         .await?;
@@ -359,6 +375,7 @@ mod tests {
             file_name: "test.zip".to_string(),
             file_type: FileType::Rom,
             name: "Test file set".to_string(),
+            source: "".to_string(),
         };
         let file_type = file_set.file_type as i64;
 
@@ -366,11 +383,13 @@ mod tests {
             "INSERT INTO file_set (
                 file_name,
                 file_type,
-                name
-            ) VALUES (?, ?, ?)",
+                name,
+                source
+            ) VALUES (?, ?, ?, ?)",
             file_set.file_name,
             file_type,
             file_set.name,
+            file_set.source,
         )
         .execute(&pool)
         .await
@@ -405,11 +424,13 @@ mod tests {
             "INSERT INTO file_set (
                 file_name,
                 file_type,
-                name
-            ) VALUES (?, ?, ?)",
+                name,
+                source
+            ) VALUES (?, ?, ?, ?)",
             "test",
             FileType::Rom as i64,
-            "Test File Set"
+            "Test File Set",
+            ""
         )
         .execute(&pool)
         .await
@@ -471,6 +492,7 @@ mod tests {
                 "Test File Set",
                 &file_name,
                 &file_type,
+                "",
                 &files,
                 &[system_id],
             )
@@ -537,6 +559,7 @@ mod tests {
                 &"Test File Set 1".to_string(),
                 &file_set_1_name,
                 &file_type,
+                "",
                 &file_set_1_files,
                 &[system_1_id],
             )
@@ -548,6 +571,7 @@ mod tests {
                 &"Test File Set 2".to_string(),
                 &file_set_2_name,
                 &file_type,
+                "",
                 &file_set_2_files,
                 &[system_1_id],
             )
@@ -582,11 +606,13 @@ mod tests {
             "INSERT INTO file_set (
                 file_name,
                 file_type,
-                name
-            ) VALUES (?, ?, ?)",
+                name,
+                source
+            ) VALUES (?, ?, ?, ?)",
             file_name,
             file_type,
-            file_set_name
+            file_set_name,
+            ""
         )
         .execute(&pool)
         .await
@@ -614,11 +640,13 @@ mod tests {
             "INSERT INTO file_set (
                 file_name,
                 file_type,
-                name
-            ) VALUES (?, ?, ?)",
+                name,
+                source
+            ) VALUES (?, ?, ?, ?)",
             file_name,
             file_type,
-            filet_set_name
+            filet_set_name,
+            ""
         )
         .execute(&pool)
         .await
@@ -648,22 +676,23 @@ mod tests {
     #[async_std::test]
     async fn test_cascade_delete_when_release_deleted() {
         let pool = setup_test_db().await;
-        
+
         // Create a release
         let release_id = insert_test_release(&pool).await;
-        
+
         // Create a file set
         let file_set_result = query!(
-            "INSERT INTO file_set (file_name, file_type, name) VALUES (?, ?, ?)",
+            "INSERT INTO file_set (file_name, file_type, name, source) VALUES (?, ?, ?, ?)",
             "test.zip",
             FileType::Rom as i64,
-            "Test File Set"
+            "Test File Set",
+            ""
         )
         .execute(&pool)
         .await
         .unwrap();
         let file_set_id = file_set_result.last_insert_rowid();
-        
+
         // Link them in release_file_set
         query!(
             "INSERT INTO release_file_set (release_id, file_set_id) VALUES (?, ?)",
@@ -673,7 +702,7 @@ mod tests {
         .execute(&pool)
         .await
         .unwrap();
-        
+
         // Verify the relationship exists
         let count_before = query_scalar!(
             "SELECT COUNT(*) FROM release_file_set WHERE release_id = ? AND file_set_id = ?",
@@ -684,13 +713,13 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(count_before, 1);
-        
+
         // Delete the release
         query!("DELETE FROM release WHERE id = ?", release_id)
             .execute(&pool)
             .await
             .unwrap();
-        
+
         // Verify that the release_file_set entry was CASCADE deleted
         let count_after = query_scalar!(
             "SELECT COUNT(*) FROM release_file_set WHERE release_id = ? AND file_set_id = ?",
@@ -701,37 +730,36 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(count_after, 0);
-        
+
         // Verify that the file_set still exists (should not be deleted)
-        let file_set_exists = query_scalar!(
-            "SELECT COUNT(*) FROM file_set WHERE id = ?",
-            file_set_id
-        )
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+        let file_set_exists =
+            query_scalar!("SELECT COUNT(*) FROM file_set WHERE id = ?", file_set_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
         assert_eq!(file_set_exists, 1);
     }
 
     #[async_std::test]
     async fn test_cascade_delete_when_file_set_deleted() {
         let pool = setup_test_db().await;
-        
+
         // Create a release
         let release_id = insert_test_release(&pool).await;
-        
+
         // Create a file set
         let file_set_result = query!(
-            "INSERT INTO file_set (file_name, file_type, name) VALUES (?, ?, ?)",
+            "INSERT INTO file_set (file_name, file_type, name, source) VALUES (?, ?, ?, ?)",
             "test.zip",
             FileType::Rom as i64,
-            "Test File Set"
+            "Test File Set",
+            ""
         )
         .execute(&pool)
         .await
         .unwrap();
         let file_set_id = file_set_result.last_insert_rowid();
-        
+
         // Link them in release_file_set
         query!(
             "INSERT INTO release_file_set (release_id, file_set_id) VALUES (?, ?)",
@@ -741,7 +769,7 @@ mod tests {
         .execute(&pool)
         .await
         .unwrap();
-        
+
         // Verify the relationship exists
         let count_before = query_scalar!(
             "SELECT COUNT(*) FROM release_file_set WHERE release_id = ? AND file_set_id = ?",
@@ -752,13 +780,13 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(count_before, 1);
-        
+
         // Delete the file_set
         query!("DELETE FROM file_set WHERE id = ?", file_set_id)
             .execute(&pool)
             .await
             .unwrap();
-        
+
         // Verify that the release_file_set entry was CASCADE deleted
         let count_after = query_scalar!(
             "SELECT COUNT(*) FROM release_file_set WHERE release_id = ? AND file_set_id = ?",
@@ -769,15 +797,12 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(count_after, 0);
-        
+
         // Verify that the release still exists (should not be deleted)
-        let release_exists = query_scalar!(
-            "SELECT COUNT(*) FROM release WHERE id = ?",
-            release_id
-        )
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+        let release_exists = query_scalar!("SELECT COUNT(*) FROM release WHERE id = ?", release_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
         assert_eq!(release_exists, 1);
     }
 

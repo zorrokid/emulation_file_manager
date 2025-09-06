@@ -145,6 +145,7 @@ pub struct FileSetViewModel {
     pub file_type: FileType,
     pub files: Vec<FileSetFileInfo>,
     pub file_name: String,
+    pub source: String,
 }
 
 impl Display for FileSetViewModel {

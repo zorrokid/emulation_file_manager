@@ -294,6 +294,7 @@ impl ViewModelService {
                 file_type: file_set.file_type,
                 files,
                 file_name: file_set.file_name.clone(),
+                source: file_set.source.clone(),
             });
         }
 
@@ -306,6 +307,33 @@ impl ViewModelService {
         };
 
         Ok(release_view_model)
+    }
+
+    pub async fn get_file_set_view_model(
+        &self,
+        file_set_id: i64,
+    ) -> Result<FileSetViewModel, Error> {
+        let file_set = self
+            .repository_manager
+            .get_file_set_repository()
+            .get_file_set(file_set_id)
+            .await?;
+
+        let files = self
+            .repository_manager
+            .get_file_set_repository()
+            .get_file_set_file_info(file_set.id)
+            .await
+            .map_err(|err| Error::DbError(err.to_string()))?;
+
+        Ok(FileSetViewModel {
+            id: file_set.id,
+            file_set_name: file_set.name.clone(),
+            file_type: file_set.file_type,
+            files,
+            file_name: file_set.file_name.clone(),
+            source: file_set.source.clone(),
+        })
     }
 }
 

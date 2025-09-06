@@ -174,6 +174,7 @@ pub struct FileSet {
     pub file_name: String,
     pub file_type: FileType,
     pub name: String,
+    pub source: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
