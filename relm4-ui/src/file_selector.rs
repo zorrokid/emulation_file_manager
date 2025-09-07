@@ -38,11 +38,13 @@ pub enum FileSelectMsg {
         selected_file_set_ids: Vec<i64>,
     },
     Hide,
+    Ignore,
 }
 
 #[derive(Debug)]
 pub enum FileSelectOutputMsg {
     FileSetSelected(FileSetListModel),
+    //FileSetUpdated(FileSetListModel),
 }
 
 #[derive(Debug)]
@@ -56,8 +58,6 @@ pub struct FileSelectInit {
     pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
     pub settings: Arc<Settings>,
-    //pub selected_system_ids: Vec<i64>,
-    //pub selected_file_set_ids: Vec<i64>,
 }
 
 #[derive(Debug)]
@@ -152,6 +152,7 @@ impl Component for FileSelectModel {
                 FileSetFormOutputMsg::FileSetCreated(file_set_liset_model) => {
                     FileSelectMsg::FileSetCreated(file_set_liset_model)
                 }
+                _ => FileSelectMsg::Ignore,
             });
 
         let model = FileSelectModel {
@@ -291,9 +292,7 @@ impl Component for FileSelectModel {
             FileSelectMsg::Hide => {
                 root.hide();
             }
-            _ => {
-                // Handle other messages here
-            }
+            _ => {}
         }
     }
 

@@ -7,6 +7,7 @@ use relm4::{
         self, glib,
         prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt},
     },
+    once_cell::sync::OnceCell,
     typed_view::list::TypedListView,
 };
 use service::{
@@ -18,6 +19,7 @@ use service::{
 
 use crate::{
     file_selector::{FileSelectInit, FileSelectModel, FileSelectMsg, FileSelectOutputMsg},
+    file_set_editor::FileSetEditor,
     list_item::ListItem,
     software_title_selector::{
         SoftwareTitleSelectInit, SoftwareTitleSelectModel, SoftwareTitleSelectMsg,
@@ -44,6 +46,8 @@ pub enum ReleaseFormMsg {
     RemoveFileSet,
     Show { release: Option<ReleaseViewModel> },
     Hide,
+    EditFileSet,
+    FileSetUpdated(FileSetListModel),
 }
 
 #[derive(Debug)]
@@ -70,6 +74,7 @@ pub struct ReleaseFormModel {
     selected_systems_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     selected_file_sets_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     release: Option<ReleaseViewModel>,
+    file_set_editor: OnceCell<Controller<FileSetEditor>>,
 }
 
 pub struct ReleaseFormInit {
@@ -77,6 +82,26 @@ pub struct ReleaseFormInit {
     pub repository_manager: Arc<RepositoryManager>,
     pub settings: Arc<Settings>,
     //pub release: Option<ReleaseViewModel>,
+}
+
+impl ReleaseFormModel {
+    fn ensure_file_set_editor(&mut self, root: &gtk::Window, sender: &ComponentSender<Self>) {
+        if self.file_set_editor.get().is_none() {
+            let file_set_editor_init = crate::file_set_editor::FileSetEditorInit {
+                view_model_service: Arc::clone(&self.view_model_service),
+                repository_manager: Arc::clone(&self.repository_manager),
+            };
+            let file_set_editor = FileSetEditor::builder()
+                .transient_for(root)
+                .launch(file_set_editor_init)
+                .forward(sender.input_sender(), |msg| match msg {
+                    crate::file_set_editor::FileSetEditorOutputMsg::FileSetUpdated(file_set) => {
+                        ReleaseFormMsg::FileSetUpdated(file_set)
+                    }
+                });
+            self.file_set_editor.set(file_set_editor);
+        }
+    }
 }
 
 #[relm4::component(pub)]
@@ -175,11 +200,14 @@ impl Component for ReleaseFormModel {
                             connect_clicked => ReleaseFormMsg::OpenFileSelector,
                         },
                         gtk::Button {
+                            set_label: "Edit File Set",
+                            connect_clicked => ReleaseFormMsg::EditFileSet,
+                        },
+                        gtk::Button {
                             set_label: "Remove File Set",
                             connect_clicked => ReleaseFormMsg::RemoveFileSet,
                         },
                     },
-
                 },
 
 
@@ -264,6 +292,7 @@ impl Component for ReleaseFormModel {
             selected_software_titles_list_view_wrapper,
             selected_systems_list_view_wrapper,
             selected_file_sets_list_view_wrapper,
+            file_set_editor: OnceCell::new(),
         };
 
         let selected_systems_list_view = &model.selected_systems_list_view_wrapper.view;
@@ -452,6 +481,33 @@ impl Component for ReleaseFormModel {
             }
             ReleaseFormMsg::Hide => {
                 root.hide();
+            }
+            ReleaseFormMsg::EditFileSet => {
+                let selected = self
+                    .selected_file_sets_list_view_wrapper
+                    .selection_model
+                    .selected();
+                if let Some(file_set) = self
+                    .selected_file_sets_list_view_wrapper
+                    .get_visible(selected)
+                {
+                    let file_set_id = file_set.borrow().id;
+                    self.ensure_file_set_editor(root, &sender);
+                    self.file_set_editor
+                        .get()
+                        .expect("File set editor should be initialized")
+                        .emit(crate::file_set_editor::FileSetEditorMsg::Show { file_set_id });
+                }
+            }
+            ReleaseFormMsg::FileSetUpdated(file_set) => {
+                for i in 0..self.selected_file_sets_list_view_wrapper.len() {
+                    if let Some(item) = self.selected_file_sets_list_view_wrapper.get(i) {
+                        if item.borrow().id == file_set.id {
+                            item.borrow_mut().name = file_set.file_set_name.clone();
+                            break;
+                        }
+                    }
+                }
             }
         }
     }

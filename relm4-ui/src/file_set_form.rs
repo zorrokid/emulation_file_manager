@@ -119,6 +119,7 @@ pub enum FileSetFormMsg {
     },
     FileSetNameChanged(String),
     FileSetFileNameChanged(String),
+    SourceChanged(String),
     FileTypeChanged(FileType),
     Show {
         selected_system_ids: Vec<i64>,
@@ -130,6 +131,7 @@ pub enum FileSetFormMsg {
 #[derive(Debug)]
 pub enum FileSetFormOutputMsg {
     FileSetCreated(FileSetListModel),
+    FileSetUpdated(FileSetListModel),
 }
 
 #[derive(Debug)]
@@ -153,8 +155,6 @@ pub enum CommandMsg {
 pub struct FileSetFormInit {
     pub repository_manager: Arc<RepositoryManager>,
     pub settings: Arc<Settings>,
-    //pub selected_system_ids: Vec<i64>,
-    //pub selected_file_type: FileType,
 }
 
 #[derive(Debug)]
@@ -167,6 +167,7 @@ pub struct FileSetFormModel {
     selected_system_ids: Vec<i64>,
     file_set_name: String,
     file_set_file_name: String,
+    source: String,
     dropdown: Controller<FileTypeDropDown>,
 }
 
@@ -258,6 +259,18 @@ impl Component for FileSetFormModel {
                     }
                 },
 
+                gtk::Entry {
+                    set_placeholder_text: Some("Source (e.g. website URL)"),
+                    #[watch]
+                    set_text: &model.source,
+                    connect_activate[sender] => move |entry| {
+                        let buffer = entry.buffer();
+                        sender.input(
+                            FileSetFormMsg::SourceChanged(buffer.text().into()),
+                        );
+                    }
+                },
+
                 gtk::Button {
                     set_label: "Create File Set",
                     connect_clicked => FileSetFormMsg::CreateFileSetFromSelectedFiles,
@@ -297,6 +310,7 @@ impl Component for FileSetFormModel {
             selected_system_ids: Vec::new(),
             file_set_name: String::new(),
             file_set_file_name: String::new(),
+            source: String::new(),
             dropdown,
         };
         let file_types_dropdown = model.dropdown.widget();
@@ -409,6 +423,9 @@ impl Component for FileSetFormModel {
             FileSetFormMsg::FileSetFileNameChanged(name) => {
                 self.file_set_file_name = name;
             }
+            FileSetFormMsg::SourceChanged(source) => {
+                self.source = source;
+            }
             FileSetFormMsg::FileTypeChanged(file_type) => {
                 println!("File type changed: {:?}", file_type);
                 self.selected_file_type = Some(file_type);
@@ -490,6 +507,7 @@ impl Component for FileSetFormModel {
                 let files_in_file_set = self.file_importer.get_files_selected_for_file_set();
                 let file_set_name = self.file_set_name.clone();
                 let file_set_file_name = self.file_set_file_name.clone();
+                let source = self.source.clone();
                 assert!(!files_in_file_set.is_empty());
                 assert!(!file_set_file_name.is_empty());
                 sender.oneshot_command(async move {
@@ -499,6 +517,7 @@ impl Component for FileSetFormModel {
                             &file_set_name,
                             &file_set_file_name,
                             &file_type.into(),
+                            &source,
                             &files_in_file_set,
                             &system_ids,
                         )
