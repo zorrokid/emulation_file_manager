@@ -292,6 +292,34 @@ impl FileSetRepository {
         Ok(file_set_id)
     }
 
+    pub async fn update_file_set(
+        &self,
+        id: i64,
+        file_set_file_name: &str,
+        file_set_name: &str,
+        source: &str,
+        file_type: &FileType,
+    ) -> Result<i64, DatabaseError> {
+        let file_type = *file_type as i64;
+        sqlx::query!(
+            "UPDATE file_set 
+             SET 
+                file_name = ?, 
+                name = ?, 
+                source = ?, 
+                file_type = ? 
+             WHERE id = ?",
+            file_set_file_name,
+            file_set_name,
+            source,
+            file_type,
+            id
+        )
+        .execute(&*self.pool)
+        .await?;
+        Ok(id)
+    }
+
     pub async fn delete_file_set(&self, id: i64) -> Result<i64, DatabaseError> {
         let is_in_use = sqlx::query_scalar!(
             "SELECT COUNT(*) 
