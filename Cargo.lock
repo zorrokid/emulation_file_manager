@@ -2530,6 +2530,7 @@ dependencies = [
  "strum",
  "strum_macros",
  "thumbnails",
+ "tracker",
  "ui-components",
  "utils",
 ]

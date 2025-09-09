@@ -114,6 +114,7 @@ pub enum EmulatorFormMsg {
     ExecutableChanged(String),
     NameChanged(String),
     ExtractFilesToggled,
+    UpdateExtractFiles(bool),
     SystemSelected(SystemListModel),
     OpenSystemSelector,
     OpenArgumentSelector,
@@ -174,8 +175,9 @@ impl Component for EmulatorFormModel {
     view! {
         gtk::Window {
              connect_close_request[sender] => move |_| {
+                 println!("Close request received");
                 sender.input(EmulatorFormMsg::Hide);
-                glib::Propagation::Proceed
+                glib::Propagation::Stop
             },
 
             gtk::Box {
@@ -189,26 +191,27 @@ impl Component for EmulatorFormModel {
                     set_label: "Name",
                 },
 
+                #[name = "name_entry"]
                 gtk::Entry {
-                    #[watch]
                     set_text: &model.name,
                     set_placeholder_text: Some("Emulator name"),
-                    connect_activate[sender] => move |entry| {
+                    connect_changed[sender] => move |entry| {
                         let buffer = entry.buffer();
                         sender.input(
                             EmulatorFormMsg::NameChanged(buffer.text().into()),
                         );
-                    }
+                    },
                 },
 
                 gtk::Label {
                     set_label: "Executable",
                 },
+
+                #[name = "executable_entry"]
                 gtk::Entry {
-                    #[watch]
                     set_text: &model.executable,
                     set_placeholder_text: Some("Emulator executable"),
-                    connect_activate[sender] => move |entry| {
+                    connect_changed[sender] => move |entry| {
                         let buffer = entry.buffer();
                         sender.input(
                             EmulatorFormMsg::ExecutableChanged(buffer.text().into()),
@@ -216,22 +219,21 @@ impl Component for EmulatorFormModel {
                     },
                 },
 
+                #[name = "extract_files_checkbutton"]
                 gtk::CheckButton {
                     set_label: Some("Extract files"),
-                    #[watch]
-                    #[block_signal(connect_toggled)]
                     set_active: model.extract_files,
                     connect_toggled[sender] => move |_| {
                         sender.input(EmulatorFormMsg::ExtractFilesToggled);
-                    } @connect_toggled,
+                    },
                 },
 
                 gtk::Label {
                     set_label: "Select system:",
                 },
 
+                #[name = "selected_system_label"]
                 gtk::Label {
-                    #[watch]
                     set_label: model.selected_system.as_ref()
                         .map_or("No system selected", |s| s.name.as_str()),
                 },
@@ -246,17 +248,14 @@ impl Component for EmulatorFormModel {
                     set_label: "Add flag command line argument",
                 },
 
-                gtk::Box {
-                    set_orientation: gtk::Orientation::Horizontal,
-                    gtk::Entry {
-                        #[watch]
-                        set_sensitive: model.selected_system.is_some(),
-                        connect_activate[sender] => move |entry| {
-                            let buffer = entry.buffer();
-                            sender.input(EmulatorFormMsg::AddCommandLineArgument(buffer.text().into()));
-                            buffer.delete_text(0, None);
-                        }
-                    },
+                #[name = "argument_entry"]
+                gtk::Entry {
+                    set_sensitive: model.selected_system.is_some(),
+                    connect_activate[sender] => move |entry| {
+                        let buffer = entry.buffer();
+                        sender.input(EmulatorFormMsg::AddCommandLineArgument(buffer.text().into()));
+                        buffer.delete_text(0, None);
+                    }
                 },
 
                 gtk::Box {
@@ -298,6 +297,7 @@ impl Component for EmulatorFormModel {
                     }
                 },
 
+                #[name="submit_button"]
                 gtk::Button {
                     set_label: "Submit",
                     #[watch]
@@ -308,7 +308,13 @@ impl Component for EmulatorFormModel {
         }
     }
 
-    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
+    fn update_with_view(
+        &mut self,
+        widgets: &mut Self::Widgets,
+        msg: Self::Input,
+        sender: ComponentSender<Self>,
+        root: &Self::Root,
+    ) {
         match msg {
             EmulatorFormMsg::ExecutableChanged(executable) => {
                 println!("Executable changed: {}", executable);
@@ -438,14 +444,47 @@ impl Component for EmulatorFormModel {
                     self.list_view_wrapper.remove(index);
                 }
             }
+            EmulatorFormMsg::UpdateExtractFiles(value) => {
+                self.extract_files = value;
+            }
             EmulatorFormMsg::Show { editable_emulator } => {
                 if let Some(editable_emulator) = editable_emulator {
                     println!("Editing emulator: {:?}", editable_emulator);
                     self.editable_emulator_id = Some(editable_emulator.id);
+
+                    sender.input(EmulatorFormMsg::NameChanged(editable_emulator.name.clone()));
+                    sender.input(EmulatorFormMsg::ExecutableChanged(
+                        editable_emulator.executable.clone(),
+                    ));
+
+                    sender.input(EmulatorFormMsg::UpdateExtractFiles(
+                        editable_emulator.extract_files,
+                    ));
+
+                    sender.input(EmulatorFormMsg::SystemSelected(
+                        editable_emulator.system.clone(),
+                    ));
+
                     self.name = editable_emulator.name.clone();
                     self.executable = editable_emulator.executable.clone();
                     self.extract_files = editable_emulator.extract_files;
                     self.selected_system = Some(editable_emulator.system.clone());
+
+                    println!("Selected system: {:?}", self.selected_system);
+                    println!("Executable: {}", self.executable);
+
+                    widgets.name_entry.set_text(&self.name);
+                    widgets.executable_entry.set_text(&self.executable);
+                    widgets
+                        .extract_files_checkbutton
+                        .set_active(self.extract_files);
+                    widgets.selected_system_label.set_label(
+                        self.selected_system
+                            .as_ref()
+                            .map_or("No system selected", |s| s.name.as_str()),
+                    );
+                    widgets.submit_button.set_sensitive(true);
+                    widgets.argument_entry.set_sensitive(true);
 
                     self.list_view_wrapper.clear();
                     let argument_list_items =
@@ -465,6 +504,10 @@ impl Component for EmulatorFormModel {
                     self.list_view_wrapper.clear();
                 }
                 root.show();
+            }
+            EmulatorFormMsg::Hide => {
+                println!("Hiding emulator form");
+                root.hide();
             }
             _ => {}
         }
