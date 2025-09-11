@@ -414,9 +414,6 @@ impl Component for EmulatorFormModel {
                     self.extract_files = editable_emulator.extract_files;
                     self.selected_system = Some(editable_emulator.system.clone());
 
-                    println!("Selected system: {:?}", self.selected_system);
-                    println!("Executable: {}", self.executable);
-
                     widgets.name_entry.set_text(&self.name);
                     widgets.executable_entry.set_text(&self.executable);
 
