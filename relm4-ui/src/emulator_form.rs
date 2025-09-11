@@ -3,7 +3,7 @@ use std::sync::Arc;
 use core_types::ArgumentType;
 use database::{database_error::DatabaseError, repository_manager::RepositoryManager};
 use relm4::{
-    Component, ComponentController, ComponentParts, ComponentSender, Controller, FactorySender,
+    Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
         self, glib,
         prelude::{
@@ -11,7 +11,6 @@ use relm4::{
             OrientableExt, WidgetExt,
         },
     },
-    prelude::{DynamicIndex, FactoryComponent},
     typed_view::list::{RelmListItem, TypedListView},
 };
 use service::{
@@ -53,59 +52,6 @@ impl RelmListItem for ArgumentListItem {
     fn bind(&mut self, widgets: &mut Self::Widgets, _root: &mut Self::Root) {
         let ListItemWidgets { label } = widgets;
         label.set_label(self.argument.to_string().as_str());
-    }
-}
-#[derive(Debug)]
-pub struct CommandLineArgument {
-    value: String,
-}
-
-#[derive(Debug)]
-pub enum CommandLineArgumentInput {}
-
-#[derive(Debug)]
-pub enum CommandLineArgumentOutput {
-    Delete(DynamicIndex),
-}
-
-#[relm4::factory(pub)]
-impl FactoryComponent for CommandLineArgument {
-    type Init = String;
-    type Input = CommandLineArgumentInput;
-    type Output = CommandLineArgumentOutput;
-    type CommandOutput = ();
-    type ParentWidget = gtk::ListBox;
-
-    view! {
-        gtk::Box {
-            set_orientation: gtk::Orientation::Horizontal,
-            #[name(label)]
-            gtk::Label {
-                set_label: &self.value,
-            },
-            gtk::Button {
-               set_icon_name: "edit-delete",
-                connect_clicked[sender, index] => move |_| {
-                    let res = sender.output(CommandLineArgumentOutput::Delete(index.clone()));
-                    match res {
-                        Ok(()) => {
-                            println!("Command line argument deleted: {:?}", index);
-                        }
-                        Err(error) => {
-                            eprintln!("Error sending delete message: {:?}", error);
-                        }
-                    }
-                },
-            }
-        }
-    }
-
-    fn init_model(value: Self::Init, _index: &DynamicIndex, _sender: FactorySender<Self>) -> Self {
-        Self { value }
-    }
-
-    fn update(&mut self, message: Self::Input, _sender: FactorySender<Self>) {
-        match message {}
     }
 }
 
@@ -160,7 +106,6 @@ pub struct EmulatorFormModel {
     pub extract_files: bool,
     pub selected_system: Option<SystemListModel>,
     system_selector: Controller<SystemSelectModel>,
-    //pub command_line_arguments: FactoryVecDeque<CommandLineArgument>,
     editable_emulator_id: Option<i64>,
     list_view_wrapper: TypedListView<ArgumentListItem, gtk::SingleSelection>,
 }
@@ -219,21 +164,22 @@ impl Component for EmulatorFormModel {
                     },
                 },
 
-                #[name = "extract_files_checkbutton"]
                 gtk::CheckButton {
                     set_label: Some("Extract files"),
+                    #[watch]
+                    #[block_signal(extract_files_toggled)]
                     set_active: model.extract_files,
                     connect_toggled[sender] => move |_| {
                         sender.input(EmulatorFormMsg::ExtractFilesToggled);
-                    },
-                },
+                    } @extract_files_toggled,
+               },
 
                 gtk::Label {
                     set_label: "Select system:",
                 },
 
-                #[name = "selected_system_label"]
                 gtk::Label {
+                    #[watch]
                     set_label: model.selected_system.as_ref()
                         .map_or("No system selected", |s| s.name.as_str()),
                 },
@@ -248,8 +194,8 @@ impl Component for EmulatorFormModel {
                     set_label: "Add flag command line argument",
                 },
 
-                #[name = "argument_entry"]
                 gtk::Entry {
+                    #[watch]
                     set_sensitive: model.selected_system.is_some(),
                     connect_activate[sender] => move |entry| {
                         let buffer = entry.buffer();
@@ -266,8 +212,6 @@ impl Component for EmulatorFormModel {
                         set_vexpand: true,
                         set_hexpand: true,
 
-                        //#[local_ref]
-                        //command_line_argument_list_box -> gtk::ListBox {}
                         #[local_ref]
                         arguments_list_view -> gtk::ListView{}
 
@@ -285,13 +229,13 @@ impl Component for EmulatorFormModel {
                             set_label: "Delete",
                             #[watch]
                             set_sensitive: !model.list_view_wrapper.is_empty(),
-                             connect_clicked => EmulatorFormMsg::Delete,
+                            connect_clicked => EmulatorFormMsg::Delete,
                         },
                        gtk::Button {
                             set_label: "Down",
                             #[watch]
                             set_sensitive: model.list_view_wrapper.len() > 1,
-                             connect_clicked => EmulatorFormMsg::MoveArgumentDown,
+                            connect_clicked => EmulatorFormMsg::MoveArgumentDown,
                         }
 
                     }
@@ -475,16 +419,6 @@ impl Component for EmulatorFormModel {
 
                     widgets.name_entry.set_text(&self.name);
                     widgets.executable_entry.set_text(&self.executable);
-                    widgets
-                        .extract_files_checkbutton
-                        .set_active(self.extract_files);
-                    widgets.selected_system_label.set_label(
-                        self.selected_system
-                            .as_ref()
-                            .map_or("No system selected", |s| s.name.as_str()),
-                    );
-                    widgets.submit_button.set_sensitive(true);
-                    widgets.argument_entry.set_sensitive(true);
 
                     self.list_view_wrapper.clear();
                     let argument_list_items =
@@ -511,6 +445,7 @@ impl Component for EmulatorFormModel {
             }
             _ => {}
         }
+        self.update_view(widgets, sender);
     }
 
     fn update_cmd(
