@@ -3,11 +3,9 @@ use relm4::{
     Component, ComponentParts, ComponentSender,
     gtk::{
         self,
-        prelude::{
-            ButtonExt, EditableExt, EntryBufferExtManual, EntryExt, OrientableExt, WidgetExt,
-        },
+        prelude::{ButtonExt, EntryBufferExtManual, EntryExt, OrientableExt, WidgetExt},
     },
-    typed_view::list::{RelmListItem, TypedListView},
+    typed_view::list::TypedListView,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -192,7 +190,7 @@ impl Component for ArgumentList {
     }
 
     fn init(
-        init: Self::Init,
+        _init: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
