@@ -46,6 +46,7 @@ impl relm4::typed_view::list::RelmListItem for ArgumentListItem {
 #[derive(Debug)]
 pub enum ArgumentListMsg {
     SetArguments(Vec<ArgumentType>),
+    Clear,
     MoveArgumentUp,
     MoveArgumentDown,
     Delete,
@@ -133,13 +134,8 @@ impl Component for ArgumentList {
                 let argument = ArgumentType::try_from(argument_string.as_str());
                 match argument {
                     Ok(argument) => {
-                        println!("Adding command line argument: {}", argument);
                         self.list_view_wrapper.append(ArgumentListItem { argument });
-                        sender
-                            .output(ArgumentListOutputMsg::ArgumentsChanged(
-                                self.collect_arguments(),
-                            ))
-                            .unwrap();
+                        self.emit_arguments_changed(&sender);
                     }
                     Err(e) => {
                         eprintln!("Error parsing command line argument: {}", e);
@@ -157,11 +153,7 @@ impl Component for ArgumentList {
                         self.list_view_wrapper
                             .selection_model
                             .set_selected(index - 1);
-                        sender
-                            .output(ArgumentListOutputMsg::ArgumentsChanged(
-                                self.collect_arguments(),
-                            ))
-                            .unwrap();
+                        self.emit_arguments_changed(&sender);
                     }
                 }
             }
@@ -176,11 +168,7 @@ impl Component for ArgumentList {
                         self.list_view_wrapper
                             .selection_model
                             .set_selected(index + 1);
-                        sender
-                            .output(ArgumentListOutputMsg::ArgumentsChanged(
-                                self.collect_arguments(),
-                            ))
-                            .unwrap();
+                        self.emit_arguments_changed(&sender);
                     }
                 }
             }
@@ -188,24 +176,17 @@ impl Component for ArgumentList {
                 let index = self.list_view_wrapper.selection_model.selected();
                 if index < self.list_view_wrapper.len() {
                     self.list_view_wrapper.remove(index);
-                    sender
-                        .output(ArgumentListOutputMsg::ArgumentsChanged(
-                            self.collect_arguments(),
-                        ))
-                        .unwrap();
+                    self.emit_arguments_changed(&sender);
                 }
             }
             ArgumentListMsg::SetArguments(arguments) => {
-                self.list_view_wrapper.clear();
-                let argument_list_items = arguments
-                    .into_iter()
-                    .map(|arg| ArgumentListItem { argument: arg });
-                self.list_view_wrapper.extend_from_iter(argument_list_items);
-                sender
-                    .output(ArgumentListOutputMsg::ArgumentsChanged(
-                        self.collect_arguments(),
-                    ))
-                    .unwrap();
+                self.clear();
+                self.extend_from_arguments(arguments.into_iter());
+                self.emit_arguments_changed(&sender);
+            }
+            ArgumentListMsg::Clear => {
+                self.clear();
+                self.emit_arguments_changed(&sender);
             }
         }
     }
@@ -239,30 +220,19 @@ impl ArgumentList {
         }
         arguments
     }
-}
 
-/*impl ArgumentListModel {
+    fn emit_arguments_changed(&self, sender: &ComponentSender<Self>) {
+        let arguments = self.collect_arguments();
+        let res = sender.output(ArgumentListOutputMsg::ArgumentsChanged(arguments));
+        if let Err(e) = res {
+            eprintln!("Failed to send output message: {:?}", e);
+        }
+    }
     pub fn clear(&mut self) {
         self.list_view_wrapper.clear();
     }
-
     pub fn extend_from_arguments(&mut self, arguments: impl Iterator<Item = ArgumentType>) {
         let argument_list_items = arguments.map(|arg| ArgumentListItem { argument: arg });
         self.list_view_wrapper.extend_from_iter(argument_list_items);
     }
-
-    pub fn get_arguments(&self) -> Vec<ArgumentType> {
-        let mut arguments = Vec::new();
-        for i in 0..self.list_view_wrapper.len() {
-            if let Some(item) = self.list_view_wrapper.get(i) {
-                arguments.push(item.borrow().argument.clone());
-            }
-        }
-        arguments
-    }
-
-    fn emit_arguments_changed(&self, sender: &ComponentSender<Self>) {
-        let arguments = self.get_arguments();
-        let _ = sender.output(ArgumentListOutputMsg::ArgumentsChanged(arguments));
-    }
-}*/
+}
