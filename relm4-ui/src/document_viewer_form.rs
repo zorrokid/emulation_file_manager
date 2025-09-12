@@ -1,32 +1,29 @@
 use std::sync::Arc;
 
-use core_types::DocumentType;
-use database::{database_error::Error, repository_manager::RepositoryManager};
+use core_types::{ArgumentType, DocumentType};
+use database::{database_error::DatabaseError, repository_manager::RepositoryManager};
 use relm4::{
-    Component, ComponentParts, ComponentSender,
+    Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
         self, glib,
         prelude::{
-            ButtonExt, EditableExt, EntryBufferExtManual, EntryExt, GtkWindowExt, OrientableExt,
-            WidgetExt,
+            BoxExt, ButtonExt, EditableExt, EntryBufferExtManual, EntryExt, GtkWindowExt,
+            OrientableExt, WidgetExt,
         },
     },
-    prelude::{DynamicIndex, FactoryVecDeque},
 };
 use service::{view_model_service::ViewModelService, view_models::DocumentViewerListModel};
 
-use crate::emulator_form::{CommandLineArgument, CommandLineArgumentOutput};
+use crate::argument_list::{ArgumentList, ArgumentListOutputMsg};
 
 #[derive(Debug)]
 pub enum DocumentViewerFormMsg {
     ExecutableChanged(String),
     NameChanged(String),
-    ExtractFilesToggled,
-    AddCommandLineArgument(String),
-    DeleteCommandLineArgument(DynamicIndex),
     Submit,
     Show,
     Hide,
+    ArgumentsChanged(Vec<ArgumentType>),
 }
 
 #[derive(Debug)]
@@ -36,7 +33,7 @@ pub enum DocumentViewerFormOutputMsg {
 
 #[derive(Debug)]
 pub enum DocumentViewerFormCommandMsg {
-    DocumentViewerSubmitted(Result<i64, Error>),
+    DocumentViewerSubmitted(Result<i64, DatabaseError>),
 }
 
 pub struct DocumentViewerFormInit {
@@ -50,10 +47,9 @@ pub struct DocumentViewerFormModel {
     pub repository_manager: Arc<RepositoryManager>,
     pub name: String,
     pub executable: String,
-    pub extract_files: bool,
-    pub command_line_arguments: FactoryVecDeque<CommandLineArgument>,
-    pub arguments: Vec<String>,
     pub selected_document_type: Option<DocumentType>,
+    argument_list: Controller<ArgumentList>,
+    arguments: Vec<ArgumentType>,
 }
 
 #[relm4::component(pub)]
@@ -108,26 +104,10 @@ impl Component for DocumentViewerFormModel {
                     },
                 },
 
-                gtk::Label {
-                    set_label: "Add command line argument",
+                gtk::Box {
+                    append = model.argument_list.widget(),
                 },
 
-                gtk::Entry {
-                    connect_activate[sender] => move |entry| {
-                        let buffer = entry.buffer();
-                        sender.input(DocumentViewerFormMsg::AddCommandLineArgument(buffer.text().into()));
-                        buffer.delete_text(0, None);
-                    }
-                },
-
-                gtk::ScrolledWindow {
-                    set_hscrollbar_policy: gtk::PolicyType::Never,
-                    set_min_content_height: 360,
-                    set_vexpand: true,
-
-                    #[local_ref]
-                    command_line_argument_list_box -> gtk::ListBox {}
-                },
 
                 gtk::Button {
                     set_label: "Submit",
@@ -145,24 +125,12 @@ impl Component for DocumentViewerFormModel {
                 println!("Executable changed: {}", executable);
                 self.executable = executable;
             }
-            DocumentViewerFormMsg::AddCommandLineArgument(argument) => {
-                self.command_line_arguments
-                    .guard()
-                    .push_back(argument.clone());
-                self.arguments.push(argument);
-            }
-            DocumentViewerFormMsg::DeleteCommandLineArgument(index) => {
-                self.command_line_arguments
-                    .guard()
-                    .remove(index.current_index());
-            }
-
             DocumentViewerFormMsg::Submit => {
                 if let Some(document_type) = self.selected_document_type {
                     let repository_manager = Arc::clone(&self.repository_manager);
                     let executable = self.executable.clone();
                     let name = self.name.clone();
-                    let arguments = self.arguments.join("|");
+                    let arguments = self.arguments.clone();
 
                     sender.oneshot_command(async move {
                         let res = repository_manager
@@ -182,6 +150,10 @@ impl Component for DocumentViewerFormModel {
             DocumentViewerFormMsg::Hide => {
                 root.hide();
             }
+            DocumentViewerFormMsg::ArgumentsChanged(arguments) => {
+                self.arguments = arguments;
+            }
+
             _ => {}
         }
     }
@@ -224,28 +196,27 @@ impl Component for DocumentViewerFormModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let command_line_arguments =
-            FactoryVecDeque::builder()
-                .launch_default()
+        let argument_list =
+            ArgumentList::builder()
+                .launch(())
                 .forward(sender.input_sender(), |msg| match msg {
-                    CommandLineArgumentOutput::Delete(index) => {
-                        DocumentViewerFormMsg::DeleteCommandLineArgument(index)
+                    ArgumentListOutputMsg::ArgumentsChanged(arguments) => {
+                        DocumentViewerFormMsg::ArgumentsChanged(arguments)
                     }
+                    _ => unreachable!(),
                 });
 
         let model = Self {
             view_model_service: init.view_model_service,
             repository_manager: init.repository_manager,
             executable: String::new(),
-            extract_files: false,
-            command_line_arguments,
             arguments: Vec::new(),
             name: String::new(),
             // TODO: add document type selection
             selected_document_type: Some(DocumentType::Pdf),
+            argument_list,
         };
 
-        let command_line_argument_list_box = model.command_line_arguments.widget();
         let widgets = view_output!();
 
         ComponentParts { model, widgets }

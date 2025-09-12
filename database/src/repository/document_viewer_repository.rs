@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use core_types::DocumentType;
+use core_types::{ArgumentType, DocumentType};
 use sqlx::{Pool, Row, Sqlite};
 
 use crate::{
@@ -54,10 +54,14 @@ impl DocumentViewerRepository {
         &self,
         name: &String,
         executable: &String,
-        arguments: &String,
+        arguments: &[ArgumentType],
         document_type: &DocumentType,
-    ) -> Result<i64, Error> {
+    ) -> Result<i64, DatabaseError> {
         let document_type: i64 = (*document_type).into();
+        // TODO: deserialize when fetching
+        let serialized_arguments = serde_json::to_string(&arguments)
+            .map_err(|e| DatabaseError::SerializationError(e.to_string()))?;
+
         let result = sqlx::query!(
             "INSERT INTO document_viewer (
                 name, 
@@ -67,7 +71,7 @@ impl DocumentViewerRepository {
             ) VALUES (?, ?, ?, ?)",
             name,
             executable,
-            arguments,
+            serialized_arguments,
             document_type,
         )
         .execute(&*self.pool)
