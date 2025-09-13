@@ -6,6 +6,7 @@ use crate::{
     utils::prepare_fileset_for_export,
 };
 use database::{
+    database_error::Error,
     models::{FileSetFileInfo, System},
     repository_manager::RepositoryManager,
 };
@@ -24,6 +25,9 @@ use service::{
     error::Error as ServiceError,
     view_model_service::ViewModelService,
     view_models::{EmulatorListModel, EmulatorViewModel, FileSetViewModel, Settings},
+};
+use ui_components::confirm_dialog::{
+    ConfirmDialog, ConfirmDialogInit, ConfirmDialogMsg, ConfirmDialogOutputMsg,
 };
 
 #[derive(Debug)]
@@ -45,6 +49,8 @@ pub enum EmulatorRunnerMsg {
 
     StartAddEmulator,
     StartEditEmulator,
+    DeleteEmulator,
+    DeleteConfirmed,
     OpenEmulatorForm {
         editable_emulator: Option<EmulatorViewModel>,
     },
@@ -58,12 +64,14 @@ pub enum EmulatorRunnerMsg {
         systems: Vec<System>,
     },
     Hide,
+    Ignore,
 }
 
 #[derive(Debug)]
 pub enum EmulatorRunnerCommandMsg {
     EmulatorsFetched(Result<Vec<EmulatorViewModel>, ServiceError>),
     FinishedRunningEmulator(Result<(), EmulatorRunnerError>),
+    EmulatorDeleted(Result<i64, Error>),
 }
 
 pub struct EmulatorRunnerInit {
@@ -85,6 +93,7 @@ pub struct EmulatorRunnerModel {
 
     // controllers
     emulator_form: Controller<EmulatorFormModel>,
+    confirm_dialog_controller: Controller<ConfirmDialog>,
 
     // data
     emulators: Vec<EmulatorViewModel>,
@@ -137,6 +146,13 @@ impl Component for EmulatorRunnerModel {
                 },
 
                 gtk::Button {
+                    set_label: "Delete emulator",
+                    connect_clicked => EmulatorRunnerMsg::DeleteEmulator,
+                    #[watch]
+                    set_sensitive: model.selected_emulator.is_some()
+                },
+
+                gtk::Button {
                     set_label: "Run Emulator",
                     connect_clicked => EmulatorRunnerMsg::RunEmulator,
                     #[watch]
@@ -172,6 +188,17 @@ impl Component for EmulatorRunnerModel {
                 }
             });
 
+        let confirm_dialog_controller = ConfirmDialog::builder()
+            .transient_for(&root)
+            .launch(ConfirmDialogInit {
+                title: "Confirm Deletion".to_string(),
+                visible: false,
+            })
+            .forward(sender.input_sender(), |msg| match msg {
+                ConfirmDialogOutputMsg::Confirmed => EmulatorRunnerMsg::DeleteConfirmed,
+                ConfirmDialogOutputMsg::Canceled => EmulatorRunnerMsg::Ignore,
+            });
+
         let model = EmulatorRunnerModel {
             view_model_service: init.view_model_service,
             repository_manager: init.repository_manager,
@@ -188,6 +215,7 @@ impl Component for EmulatorRunnerModel {
             selected_file: None,
             selected_emulator: None,
             emulator_form,
+            confirm_dialog_controller,
             selected_system: None,
         };
 
@@ -298,6 +326,22 @@ impl Component for EmulatorRunnerModel {
             EmulatorRunnerMsg::Hide => {
                 root.hide();
             }
+            EmulatorRunnerMsg::DeleteEmulator => {
+                self.confirm_dialog_controller.emit(ConfirmDialogMsg::Show);
+            }
+            EmulatorRunnerMsg::DeleteConfirmed => {
+                if let Some(selected_emulator) = &self.selected_emulator {
+                    let emulator_id = selected_emulator.id;
+                    let repository_manager = Arc::clone(&self.repository_manager);
+                    sender.oneshot_command(async move {
+                        let res = repository_manager
+                            .get_emulator_repository()
+                            .delete_emulator(emulator_id)
+                            .await;
+                        EmulatorRunnerCommandMsg::EmulatorDeleted(res)
+                    });
+                }
+            }
             _ => {}
         }
     }
@@ -333,6 +377,18 @@ impl Component for EmulatorRunnerModel {
             }
             EmulatorRunnerCommandMsg::FinishedRunningEmulator(Err(error)) => {
                 eprintln!("Error running emulator: {:?}", error);
+            }
+            EmulatorRunnerCommandMsg::EmulatorDeleted(Ok(deleted_id)) => {
+                println!("Emulator with ID {} deleted successfully", deleted_id);
+                // TODO: instead of fetching maybe just remove from the list
+                if let Some(system) = &self.selected_system {
+                    sender.input(EmulatorRunnerMsg::FetchEmulators {
+                        system_id: system.id,
+                    });
+                }
+            }
+            EmulatorRunnerCommandMsg::EmulatorDeleted(Err(error)) => {
+                eprintln!("Error deleting emulator: {:?}", error);
             }
         }
     }
