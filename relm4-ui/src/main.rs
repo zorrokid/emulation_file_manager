@@ -17,7 +17,7 @@ mod software_title_form;
 mod software_title_selector;
 mod system_selector;
 mod tabbed_image_viewer;
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use database::{get_db_pool, repository_manager::RepositoryManager};
 use list_item::ListItem;
@@ -25,7 +25,7 @@ use release::{ReleaseInitModel, ReleaseModel, ReleaseMsg, ReleaseOutputMsg};
 use releases::{ReleasesInit, ReleasesModel, ReleasesMsg, ReleasesOutputMsg};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmApp,
-    gtk::{self, gio, glib::clone, prelude::*},
+    gtk::{self, FileChooserDialog, gio::{self, prelude::*}, glib::clone, prelude::*},
     once_cell::sync::OnceCell,
     typed_view::list::TypedListView,
 };
@@ -50,6 +50,7 @@ enum AppMsg {
     SoftwareTitleUpdated(SoftwareTitleListModel),
     ReleaseSelected { id: i64 },
     ExportAllFiles,
+    ExportFolderSelected(PathBuf),
 }
 
 #[derive(Debug)]
@@ -90,38 +91,23 @@ impl Component for AppModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        // Create menu model
-        let menu_model = gio::Menu::new();
-        let file_menu = gio::Menu::new();
-
-        file_menu.append(Some("Export All Files"), Some("app.export_all_files"));
-        menu_model.append_submenu(Some("File"), &file_menu);
-
-        // Create header bar with menu
+        // Create header bar with simple button
         let header_bar = gtk::HeaderBar::new();
-        let menu_button = gtk::MenuButton::builder()
-            .icon_name("open-menu-symbolic")
-            .popover(&gtk::PopoverMenu::from_model(Some(&menu_model)))
+        let export_button = gtk::Button::builder()
+            .icon_name("document-save-symbolic")
+            .tooltip_text("Export All Files")
             .build();
 
-        header_bar.pack_end(&menu_button);
+        export_button.connect_clicked(clone!(
+            #[strong]
+            sender,
+            move |_| {
+                sender.input(AppMsg::ExportAllFiles);
+            }
+        ));
+
+        header_bar.pack_end(&export_button);
         root.set_titlebar(Some(&header_bar));
-
-        // Create action for menu item
-        let export_action = gio::ActionEntry::builder("export_all_files")
-            .activate(clone!(
-                #[strong]
-                sender,
-                move |_, _, _| {
-                    sender.input(AppMsg::ExportAllFiles);
-                }
-            ))
-            .build();
-
-        // Add action to the application (get it from the root window)
-        if let Some(app) = root.application() {
-            app.add_action_entries([export_action]);
-        }
 
         let list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
             TypedListView::with_sorting();
@@ -187,7 +173,7 @@ impl Component for AppModel {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _: &Self::Root) {
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         match msg {
             AppMsg::Initialize => {
                 sender.oneshot_command(async {
@@ -246,8 +232,37 @@ impl Component for AppModel {
             }
             AppMsg::ExportAllFiles => {
                 println!("Export All Files requested!");
-                // TODO: add a file chooser dialog to select export location
-                // TODO: use ExportService to export all files
+                let dialog = FileChooserDialog::builder()
+                    .title("Select folder to export all files")
+                    .action(gtk::FileChooserAction::Open)
+                    .modal(true)
+                    .transient_for(root)
+                    .build();
+
+                dialog.add_button("Cancel", gtk::ResponseType::Cancel);
+                dialog.add_button("Open", gtk::ResponseType::Accept);
+
+                dialog.connect_response(clone!(
+                    #[strong]
+                    sender,
+                    move |dialog, response| {
+                        if response == gtk::ResponseType::Accept {
+                            if let Some(path) = dialog.file().and_then(|f| f.path()) {
+                                sender.input(AppMsg::ExportFolderSelected(path));
+                            }
+                        }
+                        dialog.close();
+                    }
+                ));
+
+                dialog.present();
+            }
+            AppMsg::ExportFolderSelected(path) => {
+                if path.is_dir() {
+                    // TODO export all files to the selected directory
+                } else {
+                    eprintln!("Selected path is not a directory: {:?}", path);
+                }
             }
         }
     }
