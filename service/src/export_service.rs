@@ -53,13 +53,6 @@ impl ExportService {
     pub async fn export_all_files(&self, destination: &Path) -> Result<(), Error> {
         println!("Exporting all files to {}", destination.display());
 
-        // query all file sets
-        // for each systems-combination create directory
-        // for each fiel type in systems-combination create a sub-directory
-        // export file set as zipped into the sub-directory
-        // - use file_export to export the file set
-        // - prepare file export model with source files and destination path
-
         let file_sets = self
             .repository_manager
             .get_file_set_repository()
@@ -90,6 +83,9 @@ impl ExportService {
                 &systems,
                 &file_set_view_model.file_type.into(),
             );
+
+            std::fs::create_dir_all(&destination_path)
+                .map_err(|e| Error::IoError(e.to_string()))?;
 
             println!("Destionation path: {:?}", destination_path.display());
 

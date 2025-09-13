@@ -25,7 +25,12 @@ use release::{ReleaseInitModel, ReleaseModel, ReleaseMsg, ReleaseOutputMsg};
 use releases::{ReleasesInit, ReleasesModel, ReleasesMsg, ReleasesOutputMsg};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmApp,
-    gtk::{self, FileChooserDialog, gio::{self, prelude::*}, glib::clone, prelude::*},
+    gtk::{
+        self, FileChooserDialog,
+        gio::{self, prelude::*},
+        glib::clone,
+        prelude::*,
+    },
     once_cell::sync::OnceCell,
     typed_view::list::TypedListView,
 };
@@ -56,11 +61,13 @@ enum AppMsg {
 #[derive(Debug)]
 enum CommandMsg {
     InitializationDone(InitResult),
+    ExportFinished(Result<(), service::error::Error>),
 }
 
 struct AppModel {
     repository_manager: OnceCell<Arc<RepositoryManager>>,
     view_model_service: OnceCell<Arc<ViewModelService>>,
+    settings: OnceCell<Arc<Settings>>,
     list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     releases_view: gtk::Box,
     releases: OnceCell<Controller<ReleasesModel>>,
@@ -161,6 +168,7 @@ impl Component for AppModel {
         let model = AppModel {
             repository_manager: OnceCell::new(),
             view_model_service: OnceCell::new(),
+            settings: OnceCell::new(),
             list_view_wrapper,
             releases_view: left_vbox,
             release_view: right_vbox,
@@ -234,7 +242,7 @@ impl Component for AppModel {
                 println!("Export All Files requested!");
                 let dialog = FileChooserDialog::builder()
                     .title("Select folder to export all files")
-                    .action(gtk::FileChooserAction::Open)
+                    .action(gtk::FileChooserAction::SelectFolder)
                     .modal(true)
                     .transient_for(root)
                     .build();
@@ -259,7 +267,27 @@ impl Component for AppModel {
             }
             AppMsg::ExportFolderSelected(path) => {
                 if path.is_dir() {
-                    // TODO export all files to the selected directory
+                    let repository_manager = Arc::clone(
+                        self.repository_manager
+                            .get()
+                            .expect("Repository manager not initialized"),
+                    );
+                    let view_model_service = Arc::clone(
+                        self.view_model_service
+                            .get()
+                            .expect("View model service not initialized"),
+                    );
+                    let settings =
+                        Arc::clone(self.settings.get().expect("Settings not initialized"));
+                    sender.oneshot_command(async move {
+                        let export_service = service::export_service::ExportService::new(
+                            repository_manager,
+                            view_model_service,
+                            settings,
+                        );
+                        let res = export_service.export_all_files(&path).await;
+                        CommandMsg::ExportFinished(res)
+                    });
                 } else {
                     eprintln!("Selected path is not a directory: {:?}", path);
                 }
@@ -324,6 +352,9 @@ impl Component for AppModel {
                 self.repository_manager
                     .set(init_result.repository_manager)
                     .expect("repository manger already initialized");
+                self.settings
+                    .set(init_result.settings)
+                    .expect("Settings already initialized");
 
                 self.releases
                     .set(releases)
@@ -333,6 +364,16 @@ impl Component for AppModel {
                     .set(release_model)
                     .expect("ReleaseModel already initialized");
             }
+            CommandMsg::ExportFinished(result) => match result {
+                Ok(_) => {
+                    // TODO: show success dialog
+                    println!("Export completed successfully.");
+                }
+                Err(e) => {
+                    // TODO: show error dialog
+                    eprintln!("Export failed: {}", e);
+                }
+            },
         }
     }
 }
