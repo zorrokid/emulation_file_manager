@@ -25,7 +25,7 @@ use release::{ReleaseInitModel, ReleaseModel, ReleaseMsg, ReleaseOutputMsg};
 use releases::{ReleasesInit, ReleasesModel, ReleasesMsg, ReleasesOutputMsg};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmApp,
-    gtk::{self, glib::clone, prelude::*},
+    gtk::{self, gio, glib::clone, prelude::*},
     once_cell::sync::OnceCell,
     typed_view::list::TypedListView,
 };
@@ -49,6 +49,7 @@ enum AppMsg {
     SoftwareTitleCreated(SoftwareTitleListModel),
     SoftwareTitleUpdated(SoftwareTitleListModel),
     ReleaseSelected { id: i64 },
+    ExportAllFiles,
 }
 
 #[derive(Debug)]
@@ -89,6 +90,39 @@ impl Component for AppModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        // Create menu model
+        let menu_model = gio::Menu::new();
+        let file_menu = gio::Menu::new();
+
+        file_menu.append(Some("Export All Files"), Some("app.export_all_files"));
+        menu_model.append_submenu(Some("File"), &file_menu);
+
+        // Create header bar with menu
+        let header_bar = gtk::HeaderBar::new();
+        let menu_button = gtk::MenuButton::builder()
+            .icon_name("open-menu-symbolic")
+            .popover(&gtk::PopoverMenu::from_model(Some(&menu_model)))
+            .build();
+
+        header_bar.pack_end(&menu_button);
+        root.set_titlebar(Some(&header_bar));
+
+        // Create action for menu item
+        let export_action = gio::ActionEntry::builder("export_all_files")
+            .activate(clone!(
+                #[strong]
+                sender,
+                move |_, _, _| {
+                    sender.input(AppMsg::ExportAllFiles);
+                }
+            ))
+            .build();
+
+        // Add action to the application (get it from the root window)
+        if let Some(app) = root.application() {
+            app.add_action_entries([export_action]);
+        }
+
         let list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
             TypedListView::with_sorting();
 
@@ -209,6 +243,11 @@ impl Component for AppModel {
                     .get()
                     .expect("ReleasesModel not initialized")
                     .emit(ReleaseMsg::ReleaseSelected { id });
+            }
+            AppMsg::ExportAllFiles => {
+                println!("Export All Files requested!");
+                // TODO: add a file chooser dialog to select export location
+                // TODO: use ExportService to export all files
             }
         }
     }
