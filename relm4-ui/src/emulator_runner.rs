@@ -239,96 +239,15 @@ impl Component for EmulatorRunnerModel {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         match msg {
-            EmulatorRunnerMsg::RunEmulator => {
-                if let (Some(emulator), Some(selected_file), Some(file_set)) = (
-                    self.selected_emulator.clone(),
-                    self.selected_file.clone(),
-                    self.file_set.clone(),
-                ) {
-                    let temp_dir = std::env::temp_dir();
-                    let export_model = prepare_fileset_for_export(
-                        &file_set,
-                        &self.settings.collection_root_dir,
-                        temp_dir.as_path(),
-                        emulator.extract_files,
-                    );
-
-                    println!("Export model prepared: {:?}", export_model);
-
-                    let files_in_fileset = file_set
-                        .files
-                        .iter()
-                        .map(|f| f.file_name.clone())
-                        .collect::<Vec<_>>();
-
-                    let extract_files = emulator.extract_files;
-                    println!(
-                        "Extract files: {}, Files in fileset: {:?}",
-                        extract_files, files_in_fileset
-                    );
-                    let starting_file = if extract_files {
-                        selected_file.file_name.clone()
-                    } else {
-                        export_model.exported_zip_file_name.clone()
-                    };
-
-                    let executable = emulator.executable.clone();
-                    let arguments = emulator.arguments.clone();
-
-                    sender.oneshot_command(async move {
-                        let res = match export_files_zipped_or_non_zipped(&export_model) {
-                            Ok(()) => {
-                                run_with_emulator(
-                                    executable,
-                                    &arguments,
-                                    &files_in_fileset,
-                                    starting_file,
-                                    temp_dir,
-                                )
-                                .await
-                            }
-                            Err(e) => Err(EmulatorRunnerError::IoError(format!(
-                                "Failed to export files: {}",
-                                e
-                            ))),
-                        };
-                        EmulatorRunnerCommandMsg::FinishedRunningEmulator(res)
-                    });
-                } else {
-                    // Handle the case where no emulator or file is selected
-                    eprintln!("No emulator or file selected");
-                }
-            }
+            EmulatorRunnerMsg::RunEmulator => self.run_emulator(&sender),
             EmulatorRunnerMsg::FileSelected { index } => {
-                println!("File selected at index: {}", index);
-                let file_list_item = self.file_list_view_wrapper.get(index);
-                if let (Some(item), Some(file_set)) = (file_list_item, &self.file_set) {
-                    let id = item.borrow().id;
-                    let file_info = file_set.files.iter().find(|f| f.file_info_id == id);
-                    println!("Selected file info: {:?}", file_info);
-                    self.selected_file = file_info.cloned();
-                }
+                self.handle_file_selection(index);
             }
             EmulatorRunnerMsg::EmulatorSelected { index } => {
-                println!("Emulator selected at index: {}", index);
-                let emulator_list_item = self.emulator_list_view_wrapper.get(index);
-                if let Some(item) = emulator_list_item {
-                    let id = item.borrow().id;
-                    let emulator = self.emulators.iter().find(|e| e.id == id);
-                    println!("Selected emulator: {:?}", emulator);
-                    self.selected_emulator = emulator.cloned();
-                }
+                self.handle_emulator_selection(index);
             }
             EmulatorRunnerMsg::SystemSelected { index } => {
-                println!("System selected at index: {}", index);
-                let system_list_item = self.system_list_view_wrapper.get(index);
-                if let Some(item) = system_list_item {
-                    let id = item.borrow().id;
-                    let system = self.systems.iter().find(|s| s.id == id);
-                    println!("Selected system: {:?}", system);
-                    self.selected_system = system.cloned();
-                    sender.input(EmulatorRunnerMsg::FetchEmulators { system_id: id });
-                }
+                self.handle_system_selection(index, &sender);
             }
             EmulatorRunnerMsg::StartAddEmulator => {
                 sender.input(EmulatorRunnerMsg::OpenEmulatorForm {
@@ -364,7 +283,6 @@ impl Component for EmulatorRunnerModel {
                 }
             }
             EmulatorRunnerMsg::FetchEmulators { system_id } => {
-                println!("Fetching emulators for systems: {:?}", system_id);
                 let view_model_service = Arc::clone(&self.view_model_service);
                 sender.oneshot_command(async move {
                     let emulators_result = view_model_service
@@ -374,41 +292,7 @@ impl Component for EmulatorRunnerModel {
                 });
             }
             EmulatorRunnerMsg::Show { file_set, systems } => {
-                let file_list_items = file_set
-                    .files
-                    .iter()
-                    .map(|file| ListItem {
-                        id: file.file_info_id,
-                        name: file.file_name.clone(),
-                    })
-                    .collect::<Vec<_>>();
-
-                self.file_list_view_wrapper.clear();
-                self.file_list_view_wrapper
-                    .extend_from_iter(file_list_items);
-
-                sender.input(EmulatorRunnerMsg::FileSelected {
-                    index: self.file_list_view_wrapper.selection_model.selected(),
-                });
-
-                let system_list_items = systems
-                    .iter()
-                    .map(|system| ListItem {
-                        id: system.id,
-                        name: system.name.clone(),
-                    })
-                    .collect::<Vec<_>>();
-
-                self.system_list_view_wrapper.clear();
-                self.system_list_view_wrapper
-                    .extend_from_iter(system_list_items);
-
-                sender.input(EmulatorRunnerMsg::FetchEmulators {
-                    system_id: systems.first().map_or(0, |s| s.id),
-                });
-
-                self.systems = systems;
-                self.file_set = Some(file_set);
+                self.init_with_new_data(file_set, systems, &sender);
                 root.show();
             }
             EmulatorRunnerMsg::Hide => {
@@ -422,7 +306,7 @@ impl Component for EmulatorRunnerModel {
         &mut self,
         message: Self::CommandOutput,
         sender: ComponentSender<Self>,
-        root: &Self::Root,
+        _root: &Self::Root,
     ) {
         match message {
             EmulatorRunnerCommandMsg::EmulatorsFetched(Ok(emulator_view_models)) => {
@@ -451,5 +335,139 @@ impl Component for EmulatorRunnerModel {
                 eprintln!("Error running emulator: {:?}", error);
             }
         }
+    }
+}
+
+impl EmulatorRunnerModel {
+    pub fn handle_file_selection(&mut self, index: u32) {
+        let file_list_item = self.file_list_view_wrapper.get(index);
+        if let (Some(item), Some(file_set)) = (file_list_item, &self.file_set) {
+            let id = item.borrow().id;
+            let file_info = file_set.files.iter().find(|f| f.file_info_id == id);
+            self.selected_file = file_info.cloned();
+        }
+    }
+    pub fn handle_emulator_selection(&mut self, index: u32) {
+        let emulator_list_item = self.emulator_list_view_wrapper.get(index);
+        if let Some(item) = emulator_list_item {
+            let id = item.borrow().id;
+            let emulator = self.emulators.iter().find(|e| e.id == id);
+            self.selected_emulator = emulator.cloned();
+        }
+    }
+    pub fn handle_system_selection(&mut self, index: u32, sender: &ComponentSender<Self>) {
+        let system_list_item = self.system_list_view_wrapper.get(index);
+        if let Some(item) = system_list_item {
+            let id = item.borrow().id;
+            let system = self.systems.iter().find(|s| s.id == id);
+            self.selected_system = system.cloned();
+            if let Some(system) = system {
+                sender.input(EmulatorRunnerMsg::FetchEmulators {
+                    system_id: system.id,
+                });
+            }
+        }
+    }
+    pub fn run_emulator(&self, sender: &ComponentSender<Self>) {
+        if let (Some(emulator), Some(selected_file), Some(file_set)) = (
+            self.selected_emulator.clone(),
+            self.selected_file.clone(),
+            self.file_set.clone(),
+        ) {
+            let temp_dir = std::env::temp_dir();
+            let export_model = prepare_fileset_for_export(
+                &file_set,
+                &self.settings.collection_root_dir,
+                temp_dir.as_path(),
+                emulator.extract_files,
+            );
+
+            println!("Export model prepared: {:?}", export_model);
+
+            let files_in_fileset = file_set
+                .files
+                .iter()
+                .map(|f| f.file_name.clone())
+                .collect::<Vec<_>>();
+
+            let extract_files = emulator.extract_files;
+            println!(
+                "Extract files: {}, Files in fileset: {:?}",
+                extract_files, files_in_fileset
+            );
+            let starting_file = if extract_files {
+                selected_file.file_name.clone()
+            } else {
+                export_model.exported_zip_file_name.clone()
+            };
+
+            let executable = emulator.executable.clone();
+            let arguments = emulator.arguments.clone();
+
+            sender.oneshot_command(async move {
+                let res = match export_files_zipped_or_non_zipped(&export_model) {
+                    Ok(()) => {
+                        run_with_emulator(
+                            executable,
+                            &arguments,
+                            &files_in_fileset,
+                            starting_file,
+                            temp_dir,
+                        )
+                        .await
+                    }
+                    Err(e) => Err(EmulatorRunnerError::IoError(format!(
+                        "Failed to export files: {}",
+                        e
+                    ))),
+                };
+                EmulatorRunnerCommandMsg::FinishedRunningEmulator(res)
+            });
+        } else {
+            // Handle the case where no emulator or file is selected
+            eprintln!("No emulator or file selected");
+        }
+    }
+    pub fn init_with_new_data(
+        &mut self,
+        file_set: FileSetViewModel,
+        systems: Vec<System>,
+        sender: &ComponentSender<Self>,
+    ) {
+        let file_list_items = file_set
+            .files
+            .iter()
+            .map(|file| ListItem {
+                id: file.file_info_id,
+                name: file.file_name.clone(),
+            })
+            .collect::<Vec<_>>();
+
+        self.file_list_view_wrapper.clear();
+        self.file_list_view_wrapper
+            .extend_from_iter(file_list_items);
+
+        sender.input(EmulatorRunnerMsg::FileSelected {
+            index: self.file_list_view_wrapper.selection_model.selected(),
+        });
+
+        let system_list_items = systems
+            .iter()
+            .map(|system| ListItem {
+                id: system.id,
+                name: system.name.clone(),
+            })
+            .collect::<Vec<_>>();
+
+        self.system_list_view_wrapper.clear();
+        self.system_list_view_wrapper
+            .extend_from_iter(system_list_items);
+
+        sender.input(EmulatorRunnerMsg::FetchEmulators {
+            system_id: systems.first().map_or(0, |s| s.id),
+        });
+
+        self.systems = systems;
+        self.file_set = Some(file_set);
     }
 }
