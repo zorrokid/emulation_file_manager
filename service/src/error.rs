@@ -4,6 +4,8 @@ use std::fmt::{Display, Formatter, Result};
 pub enum Error {
     DbError(String),
     DeserializationError(String),
+    ExportError(String),
+    IoError(String),
 }
 
 impl Display for Error {
@@ -11,6 +13,8 @@ impl Display for Error {
         match self {
             Error::DbError(message) => write!(f, "Database error: {}", message),
             Error::DeserializationError(message) => write!(f, "Deserialization error: {}", message),
+            Error::ExportError(message) => write!(f, "Export error: {}", message),
+            Error::IoError(message) => write!(f, "IO error: {}", message),
         }
     }
 }

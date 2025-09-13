@@ -48,6 +48,22 @@ impl SystemRepository {
         Ok(systems)
     }
 
+    pub async fn get_systems_by_file_set(&self, file_set_id: i64) -> Result<Vec<System>, Error> {
+        let systems = sqlx::query_as!(
+            System,
+            "SELECT DISTINCT s.id, s.name
+             FROM file_set fs
+                INNER JOIN file_set_file_info fsfi ON fs.id = fsfi.file_set_id
+                INNER JOIN file_info_system fis ON fsfi.file_info_id = fis.file_info_id
+                INNER JOIN system s ON fis.system_id = s.id
+             WHERE fs.id = ?",
+            file_set_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+        Ok(systems)
+    }
+
     pub async fn is_system_in_use(&self, system_id: i64) -> Result<bool, Error> {
         let releases_count = sqlx::query_scalar!(
             "SELECT COUNT(*) 
@@ -57,7 +73,6 @@ impl SystemRepository {
         )
         .fetch_one(&*self.pool)
         .await?;
-
         Ok(releases_count > 0)
     }
 

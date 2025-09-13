@@ -17,8 +17,7 @@ mod software_title_form;
 mod software_title_selector;
 mod system_selector;
 mod tabbed_image_viewer;
-mod utils;
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use database::{get_db_pool, repository_manager::RepositoryManager};
 use list_item::ListItem;
@@ -26,7 +25,12 @@ use release::{ReleaseInitModel, ReleaseModel, ReleaseMsg, ReleaseOutputMsg};
 use releases::{ReleasesInit, ReleasesModel, ReleasesMsg, ReleasesOutputMsg};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmApp,
-    gtk::{self, glib::clone, prelude::*},
+    gtk::{
+        self, FileChooserDialog,
+        gio::{self, prelude::*},
+        glib::clone,
+        prelude::*,
+    },
     once_cell::sync::OnceCell,
     typed_view::list::TypedListView,
 };
@@ -50,16 +54,20 @@ enum AppMsg {
     SoftwareTitleCreated(SoftwareTitleListModel),
     SoftwareTitleUpdated(SoftwareTitleListModel),
     ReleaseSelected { id: i64 },
+    ExportAllFiles,
+    ExportFolderSelected(PathBuf),
 }
 
 #[derive(Debug)]
 enum CommandMsg {
     InitializationDone(InitResult),
+    ExportFinished(Result<(), service::error::Error>),
 }
 
 struct AppModel {
     repository_manager: OnceCell<Arc<RepositoryManager>>,
     view_model_service: OnceCell<Arc<ViewModelService>>,
+    settings: OnceCell<Arc<Settings>>,
     list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     releases_view: gtk::Box,
     releases: OnceCell<Controller<ReleasesModel>>,
@@ -90,6 +98,24 @@ impl Component for AppModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        // Create header bar with simple button
+        let header_bar = gtk::HeaderBar::new();
+        let export_button = gtk::Button::builder()
+            .icon_name("document-save-symbolic")
+            .tooltip_text("Export All Files")
+            .build();
+
+        export_button.connect_clicked(clone!(
+            #[strong]
+            sender,
+            move |_| {
+                sender.input(AppMsg::ExportAllFiles);
+            }
+        ));
+
+        header_bar.pack_end(&export_button);
+        root.set_titlebar(Some(&header_bar));
+
         let list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
             TypedListView::with_sorting();
 
@@ -142,6 +168,7 @@ impl Component for AppModel {
         let model = AppModel {
             repository_manager: OnceCell::new(),
             view_model_service: OnceCell::new(),
+            settings: OnceCell::new(),
             list_view_wrapper,
             releases_view: left_vbox,
             release_view: right_vbox,
@@ -154,7 +181,7 @@ impl Component for AppModel {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _: &Self::Root) {
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         match msg {
             AppMsg::Initialize => {
                 sender.oneshot_command(async {
@@ -210,6 +237,60 @@ impl Component for AppModel {
                     .get()
                     .expect("ReleasesModel not initialized")
                     .emit(ReleaseMsg::ReleaseSelected { id });
+            }
+            AppMsg::ExportAllFiles => {
+                println!("Export All Files requested!");
+                let dialog = FileChooserDialog::builder()
+                    .title("Select folder to export all files")
+                    .action(gtk::FileChooserAction::SelectFolder)
+                    .modal(true)
+                    .transient_for(root)
+                    .build();
+
+                dialog.add_button("Cancel", gtk::ResponseType::Cancel);
+                dialog.add_button("Open", gtk::ResponseType::Accept);
+
+                dialog.connect_response(clone!(
+                    #[strong]
+                    sender,
+                    move |dialog, response| {
+                        if response == gtk::ResponseType::Accept {
+                            if let Some(path) = dialog.file().and_then(|f| f.path()) {
+                                sender.input(AppMsg::ExportFolderSelected(path));
+                            }
+                        }
+                        dialog.close();
+                    }
+                ));
+
+                dialog.present();
+            }
+            AppMsg::ExportFolderSelected(path) => {
+                if path.is_dir() {
+                    let repository_manager = Arc::clone(
+                        self.repository_manager
+                            .get()
+                            .expect("Repository manager not initialized"),
+                    );
+                    let view_model_service = Arc::clone(
+                        self.view_model_service
+                            .get()
+                            .expect("View model service not initialized"),
+                    );
+                    let settings =
+                        Arc::clone(self.settings.get().expect("Settings not initialized"));
+                    sender.oneshot_command(async move {
+                        let export_service = service::export_service::ExportService::new(
+                            repository_manager,
+                            view_model_service,
+                            settings,
+                        );
+                        let res = export_service.export_all_files(&path).await;
+                        CommandMsg::ExportFinished(res)
+                    });
+                } else {
+                    eprintln!("Selected path is not a directory: {:?}", path);
+                }
             }
         }
     }
@@ -271,6 +352,9 @@ impl Component for AppModel {
                 self.repository_manager
                     .set(init_result.repository_manager)
                     .expect("repository manger already initialized");
+                self.settings
+                    .set(init_result.settings)
+                    .expect("Settings already initialized");
 
                 self.releases
                     .set(releases)
@@ -280,6 +364,16 @@ impl Component for AppModel {
                     .set(release_model)
                     .expect("ReleaseModel already initialized");
             }
+            CommandMsg::ExportFinished(result) => match result {
+                Ok(_) => {
+                    // TODO: show success dialog
+                    println!("Export completed successfully.");
+                }
+                Err(e) => {
+                    // TODO: show error dialog
+                    eprintln!("Export failed: {}", e);
+                }
+            },
         }
     }
 }

@@ -11,10 +11,11 @@ use relm4::{
     },
     typed_view::grid::{RelmGridItem, TypedGridView},
 };
-use service::view_models::{FileSetViewModel, Settings};
+use service::{
+    export_service::prepare_fileset_for_export,
+    view_models::{FileSetViewModel, Settings},
+};
 use thumbnails::{ThumbnailPathMap, get_image_size, prepare_thumbnails};
-
-use crate::utils::prepare_fileset_for_export;
 
 // grid
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -212,8 +213,7 @@ impl Component for ImageFilesetViewer {
                 let export_model = prepare_fileset_for_export(
                     &file_set,
                     &self.settings.collection_root_dir,
-                    // TODO: temp_dir should come from settings
-                    std::env::temp_dir().as_path(),
+                    &self.settings.temp_output_dir,
                     true,
                 );
                 sender.spawn_command(move |sender| {

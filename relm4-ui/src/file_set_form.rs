@@ -23,10 +23,13 @@ use relm4::{
     },
     prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque},
 };
-use service::view_models::{FileSetListModel, Settings};
+use service::{
+    export_service::resolve_file_type_path,
+    view_models::{FileSetListModel, Settings},
+};
 use ui_components::{DropDownMsg, DropDownOutputMsg, FileTypeDropDown, FileTypeSelectedMsg};
 
-use crate::{file_importer::FileImporter, utils::resolve_file_type_path};
+use crate::file_importer::FileImporter;
 
 #[derive(Debug, Clone)]
 struct File {
