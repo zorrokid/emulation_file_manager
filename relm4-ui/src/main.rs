@@ -17,7 +17,6 @@ mod software_title_form;
 mod software_title_selector;
 mod system_selector;
 mod tabbed_image_viewer;
-mod utils;
 use std::sync::Arc;
 
 use database::{get_db_pool, repository_manager::RepositoryManager};
