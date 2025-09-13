@@ -3,7 +3,6 @@ use std::sync::Arc;
 use crate::{
     emulator_form::{EmulatorFormInit, EmulatorFormModel, EmulatorFormMsg, EmulatorFormOutputMsg},
     list_item::ListItem,
-    utils::prepare_fileset_for_export,
 };
 use database::{
     database_error::Error,
@@ -23,6 +22,7 @@ use relm4::{
 };
 use service::{
     error::Error as ServiceError,
+    export_service::prepare_fileset_for_export,
     view_model_service::ViewModelService,
     view_models::{EmulatorListModel, EmulatorViewModel, FileSetViewModel, Settings},
 };

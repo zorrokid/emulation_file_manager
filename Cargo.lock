@@ -2700,6 +2700,7 @@ dependencies = [
  "async-std",
  "core_types",
  "database",
+ "file_export",
  "file_system",
  "serde_json",
 ]

@@ -5,14 +5,16 @@ use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
         self,
-        prelude::{ButtonExt, GtkWindowExt, OrientableExt, WidgetExt},
+        prelude::{ButtonExt, OrientableExt, WidgetExt},
     },
 };
-use service::view_models::{FileSetViewModel, Settings};
+use service::{
+    export_service::prepare_fileset_for_export,
+    view_models::{FileSetViewModel, Settings},
+};
 
-use crate::{
-    image_fileset_viewer::{ImageFileSetViewerInit, ImageFilesetViewer, ImageFilesetViewerMsg},
-    utils::prepare_fileset_for_export,
+use crate::image_fileset_viewer::{
+    ImageFileSetViewerInit, ImageFilesetViewer, ImageFilesetViewerMsg,
 };
 
 #[derive(Debug)]

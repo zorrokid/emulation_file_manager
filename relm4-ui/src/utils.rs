@@ -10,7 +10,7 @@ use service::view_models::FileSetViewModel;
 
 use crate::file_importer::FileImporter;
 
-pub fn resolve_file_type_path(root_path: &Path, file_type: &FileType) -> PathBuf {
+/*pub fn resolve_file_type_path(root_path: &Path, file_type: &FileType) -> PathBuf {
     let mut path = PathBuf::from(root_path);
     path.push(file_type.dir_name());
     path
@@ -52,4 +52,4 @@ pub fn prepare_fileset_for_export(
         extract_files,
         exported_zip_file_name,
     }
-}
+}*/

@@ -6,7 +6,6 @@ use crate::{
         DocumentViewerFormOutputMsg,
     },
     list_item::ListItem,
-    utils::prepare_fileset_for_export,
 };
 use database::{
     database_error::DatabaseError,
@@ -25,6 +24,7 @@ use relm4::{
     typed_view::list::TypedListView,
 };
 use service::{
+    export_service::prepare_fileset_for_export,
     view_model_service::ViewModelService,
     view_models::{DocumentViewerListModel, FileSetViewModel, Settings},
 };
