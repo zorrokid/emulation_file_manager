@@ -149,7 +149,6 @@ impl Component for SystemSelectModel {
         let list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
             TypedListView::with_sorting();
 
-        // TODO: instantiate in update when needed?
         let confirm_dialog_controller = ConfirmDialog::builder()
             .transient_for(&root)
             .launch(ConfirmDialogInit {
@@ -264,8 +263,6 @@ impl Component for SystemSelectModel {
                     .list_view_wrapper
                     .get_visible(self.list_view_wrapper.selection_model.selected())
                     .and_then(|st| {
-                        // TODO: probably local systems collection not needed, list view item
-                        // should have all needed data
                         self.systems
                             .iter()
                             .find(|s| s.id == st.borrow().id)
