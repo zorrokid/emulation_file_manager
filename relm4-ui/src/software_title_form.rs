@@ -144,6 +144,7 @@ impl Component for SoftwareTitleFormModel {
                     self.edit_software_title_id = Some(edit_software_title.id);
                 } else {
                     self.name.clear();
+                    widgets.name_entry.set_text("");
                     self.edit_software_title_id = None;
                 }
                 root.show();

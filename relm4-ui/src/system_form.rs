@@ -135,6 +135,7 @@ impl Component for SystemFormModel {
                     self.edit_system_id = Some(edit_system.id);
                 } else {
                     self.name.clear();
+                    widgets.name_entry.set_text("");
                     self.edit_system_id = None;
                 }
                 root.show();
