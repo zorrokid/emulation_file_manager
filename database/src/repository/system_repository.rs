@@ -73,7 +73,25 @@ impl SystemRepository {
         )
         .fetch_one(&*self.pool)
         .await?;
-        Ok(releases_count > 0)
+
+        let files_count = sqlx::query_scalar!(
+            "SELECT COUNT(*) 
+             FROM file_info_system 
+             WHERE system_id = ?",
+            system_id
+        )
+        .fetch_one(&*self.pool)
+        .await?;
+
+        let emulators_count = sqlx::query_scalar!(
+            "SELECT COUNT(*) 
+             FROM emulator 
+             WHERE system_id = ?",
+            system_id
+        )
+        .fetch_one(&*self.pool)
+        .await?;
+        Ok(releases_count > 0 || files_count > 0 || emulators_count > 0)
     }
 
     pub async fn add_system(&self, name: &String) -> Result<i64, Error> {
@@ -88,6 +106,16 @@ impl SystemRepository {
             .execute(&*self.pool)
             .await?;
         Ok(id)
+    }
+
+    pub async fn delete_system(&self, id: i64) -> Result<(), Error> {
+        if self.is_system_in_use(id).await? {
+            return Err(Error::InUse);
+        }
+        sqlx::query!("DELETE FROM system WHERE id = ?", id)
+            .execute(&*self.pool)
+            .await?;
+        Ok(())
     }
 }
 

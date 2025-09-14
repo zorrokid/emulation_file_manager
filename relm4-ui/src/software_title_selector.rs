@@ -151,7 +151,6 @@ impl Component for SoftwareTitleSelectModel {
             .transient_for(&root)
             .launch(SoftwareTitleFormInit {
                 repository_manager: Arc::clone(&init_model.repository_manager),
-                //edit_software_title,
             })
             .forward(sender.input_sender(), |msg| match msg {
                 SoftwareTitleFormOutputMsg::SoftwareTitleAdded(software_title_list_model) => {

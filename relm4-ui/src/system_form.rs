@@ -1,8 +1,6 @@
 use std::sync::Arc;
 
-use database::{
-    database_error::Error, models::SoftwareTitle, repository_manager::RepositoryManager,
-};
+use database::{database_error::Error, repository_manager::RepositoryManager};
 use relm4::{
     Component, ComponentParts, ComponentSender,
     gtk::{
@@ -13,54 +11,54 @@ use relm4::{
         },
     },
 };
-use service::view_models::SoftwareTitleListModel;
+use service::view_models::SystemListModel;
 
 #[derive(Debug)]
-pub struct SoftwareTitleFormModel {
+pub struct SystemFormModel {
     pub name: String,
-    pub edit_software_title_id: Option<i64>,
+    pub edit_system_id: Option<i64>,
     pub repository_manager: Arc<RepositoryManager>,
 }
 
 #[derive(Debug)]
-pub enum SoftwareTitleFormMsg {
+pub enum SystemFormMsg {
     NameChanged(String),
     Submit,
     Show {
-        edit_software_title: Option<SoftwareTitleListModel>,
+        edit_system: Option<SystemListModel>,
     },
     Hide,
 }
 
 #[derive(Debug)]
-pub enum SoftwareTitleFormOutputMsg {
-    SoftwareTitleAdded(SoftwareTitleListModel),
-    SoftwareTitleUpdated(SoftwareTitleListModel),
+pub enum SystemFormOutputMsg {
+    SystemAdded(SystemListModel),
+    SystemUpdated(SystemListModel),
 }
 
 #[derive(Debug)]
-pub enum SoftwareTitleFormCommandMsg {
-    SoftwareTitleSubmitted(Result<i64, Error>),
+pub enum SystemFormCommandMsg {
+    SystemSubmitted(Result<i64, Error>),
 }
 
 #[derive(Debug)]
-pub struct SoftwareTitleFormInit {
+pub struct SystemFormInit {
     pub repository_manager: Arc<RepositoryManager>,
 }
 
 #[relm4::component(pub)]
-impl Component for SoftwareTitleFormModel {
-    type Input = SoftwareTitleFormMsg;
-    type Output = SoftwareTitleFormOutputMsg;
-    type CommandOutput = SoftwareTitleFormCommandMsg;
-    type Init = SoftwareTitleFormInit;
+impl Component for SystemFormModel {
+    type Input = SystemFormMsg;
+    type Output = SystemFormOutputMsg;
+    type CommandOutput = SystemFormCommandMsg;
+    type Init = SystemFormInit;
 
     view! {
         gtk::Window {
-            set_title: Some("Software Title Form"),
+            set_title: Some("System Form"),
             set_default_size: (300, 100),
             connect_close_request[sender] => move |_| {
-                sender.input(SoftwareTitleFormMsg::Hide);
+                sender.input(SystemFormMsg::Hide);
                 glib::Propagation::Proceed
             },
 
@@ -78,11 +76,11 @@ impl Component for SoftwareTitleFormModel {
                 #[name = "name_entry"]
                 gtk::Entry {
                     set_text: &model.name,
-                    set_placeholder_text: Some("Software title name"),
+                    set_placeholder_text: Some("System name"),
                     connect_changed[sender] => move |entry| {
                         let buffer = entry.buffer();
                         sender.input(
-                            SoftwareTitleFormMsg::NameChanged(buffer.text().into()),
+                            SystemFormMsg::NameChanged(buffer.text().into()),
                         );
                     },
                 },
@@ -91,7 +89,7 @@ impl Component for SoftwareTitleFormModel {
                     set_label: "Submit",
                     #[watch]
                     set_sensitive: !model.name.is_empty(),
-                    connect_clicked => SoftwareTitleFormMsg::Submit,
+                    connect_clicked => SystemFormMsg::Submit,
                 },
             },
         }
@@ -105,50 +103,43 @@ impl Component for SoftwareTitleFormModel {
         root: &Self::Root,
     ) {
         match msg {
-            SoftwareTitleFormMsg::NameChanged(name) => {
+            SystemFormMsg::NameChanged(name) => {
                 self.name = name;
             }
-            SoftwareTitleFormMsg::Submit => {
+            SystemFormMsg::Submit => {
                 let name = self.name.clone();
                 let repository_manager = Arc::clone(&self.repository_manager);
-                let edit_id = self.edit_software_title_id;
+                let edit_id = self.edit_system_id;
                 sender.oneshot_command(async move {
                     if let Some(edit_id) = edit_id {
-                        println!("Updating software title with ID {}: {}", edit_id, name);
-                        let update_software_title = SoftwareTitle {
-                            id: edit_id,
-                            name: name.clone(),
-                            franchise_id: None,
-                        };
+                        println!("Updating system with ID {}: {}", edit_id, name);
                         let result = repository_manager
-                            .get_software_title_repository()
-                            .update_software_title(&update_software_title)
+                            .get_system_repository()
+                            .update_system(edit_id, &name)
                             .await;
-                        SoftwareTitleFormCommandMsg::SoftwareTitleSubmitted(result)
+                        SystemFormCommandMsg::SystemSubmitted(result)
                     } else {
                         println!("Adding new software title: {}", name);
                         let result = repository_manager
-                            .get_software_title_repository()
-                            .add_software_title(&name, None)
+                            .get_system_repository()
+                            .add_system(&name)
                             .await;
-                        SoftwareTitleFormCommandMsg::SoftwareTitleSubmitted(result)
+                        SystemFormCommandMsg::SystemSubmitted(result)
                     }
                 });
             }
-            SoftwareTitleFormMsg::Show {
-                edit_software_title,
-            } => {
-                if let Some(edit_software_title) = edit_software_title {
-                    self.name = edit_software_title.name.clone();
+            SystemFormMsg::Show { edit_system } => {
+                if let Some(edit_system) = edit_system {
+                    self.name = edit_system.name.clone();
                     widgets.name_entry.set_text(&self.name);
-                    self.edit_software_title_id = Some(edit_software_title.id);
+                    self.edit_system_id = Some(edit_system.id);
                 } else {
                     self.name.clear();
-                    self.edit_software_title_id = None;
+                    self.edit_system_id = None;
                 }
                 root.show();
             }
-            SoftwareTitleFormMsg::Hide => {
+            SystemFormMsg::Hide => {
                 root.hide();
             }
             _ => (),
@@ -164,15 +155,15 @@ impl Component for SoftwareTitleFormModel {
         root: &Self::Root,
     ) {
         match message {
-            SoftwareTitleFormCommandMsg::SoftwareTitleSubmitted(Ok(id)) => {
-                let res = sender.output(if let Some(edit_id) = self.edit_software_title_id {
-                    SoftwareTitleFormOutputMsg::SoftwareTitleUpdated(SoftwareTitleListModel {
+            SystemFormCommandMsg::SystemSubmitted(Ok(id)) => {
+                let res = sender.output(if let Some(edit_id) = self.edit_system_id {
+                    SystemFormOutputMsg::SystemUpdated(SystemListModel {
                         id: edit_id,
                         name: self.name.clone(),
                         can_delete: false,
                     })
                 } else {
-                    SoftwareTitleFormOutputMsg::SoftwareTitleAdded(SoftwareTitleListModel {
+                    SystemFormOutputMsg::SystemAdded(SystemListModel {
                         id,
                         name: self.name.clone(),
                         can_delete: false,
@@ -183,7 +174,7 @@ impl Component for SoftwareTitleFormModel {
                 }
                 root.close();
             }
-            SoftwareTitleFormCommandMsg::SoftwareTitleSubmitted(Err(e)) => {
+            SystemFormCommandMsg::SystemSubmitted(Err(e)) => {
                 eprintln!("Error submitting software title: {}", e);
             }
             _ => (),
@@ -195,9 +186,9 @@ impl Component for SoftwareTitleFormModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let model = SoftwareTitleFormModel {
+        let model = SystemFormModel {
             name: "".to_string(),
-            edit_software_title_id: None,
+            edit_system_id: None,
             repository_manager: init.repository_manager,
         };
         let widgets = view_output!();
