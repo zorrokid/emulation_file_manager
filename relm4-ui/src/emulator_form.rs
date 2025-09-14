@@ -304,6 +304,7 @@ impl Component for EmulatorFormModel {
             }
             _ => {}
         }
+        // This is essential:
         self.update_view(widgets, sender);
     }
 

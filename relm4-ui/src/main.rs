@@ -15,6 +15,7 @@ mod release_form;
 mod releases;
 mod software_title_form;
 mod software_title_selector;
+mod system_form;
 mod system_selector;
 mod tabbed_image_viewer;
 use std::{path::PathBuf, sync::Arc};
