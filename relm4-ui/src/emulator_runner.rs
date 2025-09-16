@@ -288,8 +288,6 @@ impl Component for EmulatorRunnerModel {
                     sender.input(EmulatorRunnerMsg::OpenEmulatorForm {
                         editable_emulator: self.selected_emulator.clone(),
                     });
-                } else {
-                    eprintln!("No emulator selected for editing");
                 }
             }
             EmulatorRunnerMsg::OpenEmulatorForm { editable_emulator } => {

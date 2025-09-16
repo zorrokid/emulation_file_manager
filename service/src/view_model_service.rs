@@ -5,8 +5,9 @@ use database::{models::FileType, repository_manager::RepositoryManager};
 use crate::{
     error::Error,
     view_models::{
-        DocumentViewerListModel, EmulatorViewModel, FileSetListModel, FileSetViewModel,
-        ReleaseListModel, ReleaseViewModel, Settings, SoftwareTitleListModel, SystemListModel,
+        DocumentViewerListModel, DocumentViewerViewModel, EmulatorViewModel, FileSetListModel,
+        FileSetViewModel, ReleaseListModel, ReleaseViewModel, Settings, SoftwareTitleListModel,
+        SystemListModel,
     },
 };
 
@@ -100,13 +101,6 @@ impl ViewModelService {
         let mut emulator_view_models: Vec<EmulatorViewModel> = vec![];
 
         for emulator in emulators {
-            let emulator = self
-                .repository_manager
-                .get_emulator_repository()
-                .get_emulator(emulator.id)
-                .await
-                .map_err(|err| Error::DbError(err.to_string()))?;
-
             let system = self
                 .repository_manager
                 .get_system_repository()
@@ -127,6 +121,7 @@ impl ViewModelService {
                         emulator.name, emulator.arguments
                     ))
                 })?;
+
             let view_model = EmulatorViewModel {
                 id: emulator.id,
                 name: emulator.name,
@@ -140,6 +135,41 @@ impl ViewModelService {
         }
 
         Ok(emulator_view_models)
+    }
+
+    pub async fn get_document_viewer_view_models(
+        &self,
+    ) -> Result<Vec<DocumentViewerViewModel>, Error> {
+        let document_viewers = self
+            .repository_manager
+            .get_document_viewer_repository()
+            .get_document_viewers()
+            .await
+            .map_err(|err| Error::DbError(err.to_string()))?;
+
+        let mut view_models: Vec<DocumentViewerViewModel> = vec![];
+
+        for document_viewer in document_viewers {
+            let arguments: Vec<ArgumentType> = serde_json::from_str(&document_viewer.arguments)
+                .map_err(|_| {
+                    Error::DeserializationError(format!(
+                        "Invalid argument format for document viewer {}: {}",
+                        document_viewer.name, document_viewer.arguments
+                    ))
+                })?;
+
+            let view_model = DocumentViewerViewModel {
+                id: document_viewer.id,
+                name: document_viewer.name,
+                executable: document_viewer.executable,
+                arguments,
+                document_type: document_viewer.document_type,
+            };
+
+            view_models.push(view_model);
+        }
+
+        Ok(view_models)
     }
 
     pub async fn get_settings(&self) -> Result<Settings, Error> {
