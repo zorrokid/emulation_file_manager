@@ -4,7 +4,7 @@ use std::{
     path::PathBuf,
 };
 
-use core_types::ArgumentType;
+use core_types::{ArgumentType, DocumentType};
 use database::models::{
     DocumentViewer, Emulator, FileSet, FileSetFileInfo, FileType, ReleaseExtended, SettingName,
     SoftwareTitle, System,
@@ -207,5 +207,20 @@ impl From<&DocumentViewer> for DocumentViewerListModel {
             id: document_viewer.id,
             name: document_viewer.name.clone(),
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DocumentViewerViewModel {
+    pub id: i64,
+    pub name: String,
+    pub executable: String,
+    pub arguments: Vec<ArgumentType>,
+    pub document_type: DocumentType,
+}
+
+impl Display for DocumentViewerViewModel {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name)
     }
 }

@@ -81,8 +81,9 @@ impl Component for EmulatorFormModel {
 
     view! {
         gtk::Window {
+            set_title: Some("Emulator Form"),
+
              connect_close_request[sender] => move |_| {
-                 println!("Close request received");
                 sender.input(EmulatorFormMsg::Hide);
                 glib::Propagation::Stop
             },
@@ -255,7 +256,7 @@ impl Component for EmulatorFormModel {
                     println!("Editing emulator: {:?}", editable_emulator);
                     self.editable_emulator_id = Some(editable_emulator.id);
 
-                    sender.input(EmulatorFormMsg::NameChanged(editable_emulator.name.clone()));
+                    /*sender.input(EmulatorFormMsg::NameChanged(editable_emulator.name.clone()));
                     sender.input(EmulatorFormMsg::ExecutableChanged(
                         editable_emulator.executable.clone(),
                     ));
@@ -266,7 +267,7 @@ impl Component for EmulatorFormModel {
 
                     sender.input(EmulatorFormMsg::SystemSelected(
                         editable_emulator.system.clone(),
-                    ));
+                    ));*/
 
                     self.name = editable_emulator.name.clone();
                     self.executable = editable_emulator.executable.clone();

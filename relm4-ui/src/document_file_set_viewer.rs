@@ -8,9 +8,7 @@ use crate::{
     list_item::ListItem,
 };
 use database::{
-    database_error::DatabaseError,
-    models::{DocumentViewer as DocumentViewerDbModel, FileSetFileInfo},
-    repository_manager::RepositoryManager,
+    database_error::DatabaseError, models::FileSetFileInfo, repository_manager::RepositoryManager,
 };
 use emulator_runner::{error::EmulatorRunnerError, run_with_emulator};
 use file_export::export_files;
@@ -24,9 +22,13 @@ use relm4::{
     typed_view::list::TypedListView,
 };
 use service::{
+    error::Error as ServiceError,
     export_service::prepare_fileset_for_export,
     view_model_service::ViewModelService,
-    view_models::{DocumentViewerListModel, FileSetViewModel, Settings},
+    view_models::{DocumentViewerListModel, DocumentViewerViewModel, FileSetViewModel, Settings},
+};
+use ui_components::confirm_dialog::{
+    ConfirmDialog, ConfirmDialogInit, ConfirmDialogMsg, ConfirmDialogOutputMsg,
 };
 
 #[derive(Debug)]
@@ -39,17 +41,24 @@ pub enum DocumentViewerMsg {
 
     OpenViewerForm,
     AddViewer(DocumentViewerListModel),
+    UpdateViewer(DocumentViewerListModel),
 
     StartViewer,
+    StartEdit,
+    ConfirmDelete,
+    DeleteConfirmed,
 
     Show { file_set: FileSetViewModel },
     Hide,
+
+    Ignore,
 }
 
 #[derive(Debug)]
 pub enum DocumentViewerCommandMsg {
-    ViewersFetched(Result<Vec<DocumentViewerDbModel>, DatabaseError>),
+    ViewersFetched(Result<Vec<DocumentViewerViewModel>, ServiceError>),
     FinishedRunningViewer(Result<(), EmulatorRunnerError>),
+    Deleted(Result<i64, DatabaseError>),
 }
 
 pub struct DocumentViewerInit {
@@ -70,15 +79,16 @@ pub struct DocumentViewer {
 
     // controllers
     viewer_form: Controller<DocumentViewerFormModel>,
+    confirm_dialog_controller: Controller<ConfirmDialog>,
 
     // data
-    viewers: Vec<DocumentViewerDbModel>,
+    viewers: Vec<DocumentViewerViewModel>,
 
     // needed for running the viewer:
     settings: Arc<Settings>,
     file_set: Option<FileSetViewModel>,
     selected_file: Option<FileSetFileInfo>,
-    selected_viewer: Option<DocumentViewerDbModel>,
+    selected_viewer: Option<DocumentViewerViewModel>,
 }
 
 #[relm4::component(pub)]
@@ -90,6 +100,8 @@ impl Component for DocumentViewer {
 
     view! {
         gtk::Window {
+            set_title: Some("Document Viewer"),
+
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
 
@@ -100,13 +112,27 @@ impl Component for DocumentViewer {
                 viewer_list_view -> gtk::ListView,
 
                 gtk::Button {
-                    set_label: "Add viewer",
+                    set_label: "Add",
                     connect_clicked => DocumentViewerMsg::OpenViewerForm,
-
                 },
 
                 gtk::Button {
-                    set_label: "Start viewer",
+                    set_label: "Edit",
+                    connect_clicked => DocumentViewerMsg::StartEdit,
+                    #[watch]
+                    set_sensitive: model.selected_viewer.is_some()
+                },
+
+                gtk::Button {
+                    set_label: "Delete",
+                    connect_clicked => DocumentViewerMsg::ConfirmDelete,
+                    #[watch]
+                    set_sensitive: model.selected_viewer.is_some()
+                },
+
+
+                gtk::Button {
+                    set_label: "Start",
                     connect_clicked => DocumentViewerMsg::StartViewer,
                     #[watch]
                     set_sensitive: model.selected_viewer.is_some() && model.selected_file.is_some(),
@@ -134,6 +160,21 @@ impl Component for DocumentViewer {
                 DocumentViewerFormOutputMsg::DocumentViewerAdded(viewer_list_model) => {
                     DocumentViewerMsg::AddViewer(viewer_list_model)
                 }
+                DocumentViewerFormOutputMsg::DocumentViewerUpdated(viewer_list_model) => {
+                    println!("Viewer updated: {:?}", viewer_list_model);
+                    DocumentViewerMsg::UpdateViewer(viewer_list_model)
+                }
+            });
+
+        let confirm_dialog_controller = ConfirmDialog::builder()
+            .transient_for(&root)
+            .launch(ConfirmDialogInit {
+                title: "Confirm Deletion".to_string(),
+                visible: false,
+            })
+            .forward(sender.input_sender(), |msg| match msg {
+                ConfirmDialogOutputMsg::Confirmed => DocumentViewerMsg::DeleteConfirmed,
+                ConfirmDialogOutputMsg::Canceled => DocumentViewerMsg::Ignore,
             });
 
         let model = DocumentViewer {
@@ -150,6 +191,7 @@ impl Component for DocumentViewer {
             selected_file: None,
             selected_viewer: None,
             viewer_form,
+            confirm_dialog_controller,
         };
 
         let file_list_view = &model.file_list_view_wrapper.view;
@@ -260,19 +302,22 @@ impl Component for DocumentViewer {
                 }
             }
             DocumentViewerMsg::OpenViewerForm => {
-                self.viewer_form.emit(DocumentViewerFormMsg::Show);
+                self.viewer_form.emit(DocumentViewerFormMsg::Show {
+                    edit_document_viewer: None,
+                });
             }
             DocumentViewerMsg::AddViewer(_viewer_list_model) => {
                 sender.input(DocumentViewerMsg::FetchViewers);
             }
+            DocumentViewerMsg::UpdateViewer(_viewer_list_model) => {
+                sender.input(DocumentViewerMsg::FetchViewers);
+            }
             DocumentViewerMsg::FetchViewers => {
                 println!("Fetching viewers");
-                let repository = Arc::clone(&self.repository_manager);
+
+                let view_model_service = Arc::clone(&self.view_model_service);
                 sender.oneshot_command(async move {
-                    let viewers_result = repository
-                        .get_document_viewer_repository()
-                        .get_document_viewers()
-                        .await;
+                    let viewers_result = view_model_service.get_document_viewer_view_models().await;
                     DocumentViewerCommandMsg::ViewersFetched(viewers_result)
                 });
             }
@@ -296,6 +341,30 @@ impl Component for DocumentViewer {
             DocumentViewerMsg::Hide => {
                 root.hide();
             }
+            DocumentViewerMsg::StartEdit => {
+                if let Some(selected_viewer) = self.selected_viewer.clone() {
+                    self.viewer_form.emit(DocumentViewerFormMsg::Show {
+                        edit_document_viewer: Some(selected_viewer),
+                    });
+                }
+            }
+            DocumentViewerMsg::ConfirmDelete => {
+                self.confirm_dialog_controller.emit(ConfirmDialogMsg::Show);
+            }
+            DocumentViewerMsg::DeleteConfirmed => {
+                if let Some(selected_viewer) = &self.selected_viewer {
+                    let viewer_id = selected_viewer.id;
+                    let repository_manager = Arc::clone(&self.repository_manager);
+                    sender.oneshot_command(async move {
+                        let res = repository_manager
+                            .get_document_viewer_repository()
+                            .delete(viewer_id)
+                            .await;
+                        DocumentViewerCommandMsg::Deleted(res)
+                    });
+                }
+            }
+
             _ => {}
         }
     }
@@ -303,20 +372,21 @@ impl Component for DocumentViewer {
     fn update_cmd(
         &mut self,
         message: Self::CommandOutput,
-        _sender: ComponentSender<Self>,
+        sender: ComponentSender<Self>,
         root: &Self::Root,
     ) {
         match message {
-            DocumentViewerCommandMsg::ViewersFetched(Ok(viewer_db_models)) => {
-                println!("Viewers fetched successfully: {:?}", viewer_db_models);
-                let viewer_list_items = viewer_db_models
+            DocumentViewerCommandMsg::ViewersFetched(Ok(viewer_view_models)) => {
+                println!("Viewers fetched successfully: {:?}", viewer_view_models);
+                let viewer_list_items = viewer_view_models
                     .iter()
                     .map(|viewer| ListItem {
                         id: viewer.id,
                         name: viewer.name.clone(),
                     })
                     .collect::<Vec<_>>();
-                self.viewers = viewer_db_models;
+                self.viewers = viewer_view_models;
+                self.viewer_list_view_wrapper.clear();
                 self.viewer_list_view_wrapper
                     .extend_from_iter(viewer_list_items);
             }
@@ -330,6 +400,14 @@ impl Component for DocumentViewer {
             }
             DocumentViewerCommandMsg::FinishedRunningViewer(Err(error)) => {
                 eprintln!("Error running viewer: {:?}", error);
+            }
+            DocumentViewerCommandMsg::Deleted(Ok((_))) => {
+                println!("Viewer deleted successfully");
+                // TODO: delete directly from the list?
+                sender.input(DocumentViewerMsg::FetchViewers);
+            }
+            DocumentViewerCommandMsg::Deleted(Err(error)) => {
+                eprintln!("Error deleting viewer: {:?}", error);
             }
         }
     }

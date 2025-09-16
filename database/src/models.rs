@@ -1,5 +1,5 @@
 use core::fmt;
-use core_types::{DocumentType, FileType as CoreFileType};
+use core_types::{ArgumentType, DocumentType, FileType as CoreFileType};
 use std::fmt::{Display, Formatter};
 
 use sqlx::FromRow;
@@ -236,7 +236,7 @@ pub struct DocumentViewer {
     pub name: String,
     pub executable: String,
     pub document_type: DocumentType,
-    pub arguments: String,
+    pub arguments: String, // as JSON string
 }
 
 #[derive(Clone, Debug, PartialEq)]

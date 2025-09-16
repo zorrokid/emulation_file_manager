@@ -12,16 +12,21 @@ use relm4::{
         },
     },
 };
-use service::{view_model_service::ViewModelService, view_models::DocumentViewerListModel};
+use service::{
+    view_model_service::ViewModelService,
+    view_models::{DocumentViewerListModel, DocumentViewerViewModel},
+};
 
-use crate::argument_list::{ArgumentList, ArgumentListOutputMsg};
+use crate::argument_list::{ArgumentList, ArgumentListMsg, ArgumentListOutputMsg};
 
 #[derive(Debug)]
 pub enum DocumentViewerFormMsg {
     ExecutableChanged(String),
     NameChanged(String),
     Submit,
-    Show,
+    Show {
+        edit_document_viewer: Option<DocumentViewerViewModel>,
+    },
     Hide,
     ArgumentsChanged(Vec<ArgumentType>),
 }
@@ -29,11 +34,13 @@ pub enum DocumentViewerFormMsg {
 #[derive(Debug)]
 pub enum DocumentViewerFormOutputMsg {
     DocumentViewerAdded(DocumentViewerListModel),
+    DocumentViewerUpdated(DocumentViewerListModel),
 }
 
 #[derive(Debug)]
 pub enum DocumentViewerFormCommandMsg {
     DocumentViewerSubmitted(Result<i64, DatabaseError>),
+    DocumentViewerUpdated(Result<i64, DatabaseError>),
 }
 
 pub struct DocumentViewerFormInit {
@@ -50,6 +57,7 @@ pub struct DocumentViewerFormModel {
     pub selected_document_type: Option<DocumentType>,
     argument_list: Controller<ArgumentList>,
     arguments: Vec<ArgumentType>,
+    editable_viewer_id: Option<i64>,
 }
 
 #[relm4::component(pub)]
@@ -65,7 +73,7 @@ impl Component for DocumentViewerFormModel {
 
             connect_close_request[sender] => move |_| {
                 sender.input(DocumentViewerFormMsg::Hide);
-                glib::Propagation::Proceed
+                glib::Propagation::Stop
             },
 
             gtk::Box {
@@ -79,6 +87,7 @@ impl Component for DocumentViewerFormModel {
                     set_label: "Name",
                 },
 
+                #[name = "name_entry"]
                 gtk::Entry {
                     set_text: &model.name,
                     set_placeholder_text: Some("DocumentViewer name"),
@@ -93,6 +102,8 @@ impl Component for DocumentViewerFormModel {
                 gtk::Label {
                     set_label: "Executable",
                 },
+
+                #[name = "executable_entry"]
                 gtk::Entry {
                     set_text: &model.executable,
                     set_placeholder_text: Some("DocumentViewer executable"),
@@ -103,6 +114,8 @@ impl Component for DocumentViewerFormModel {
                         );
                     },
                 },
+
+                // TODO: add file type selection
 
                 gtk::Box {
                     append = model.argument_list.widget(),
@@ -119,7 +132,13 @@ impl Component for DocumentViewerFormModel {
         }
     }
 
-    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
+    fn update_with_view(
+        &mut self,
+        widgets: &mut Self::Widgets,
+        msg: Self::Input,
+        sender: ComponentSender<Self>,
+        root: &Self::Root,
+    ) {
         match msg {
             DocumentViewerFormMsg::ExecutableChanged(executable) => {
                 println!("Executable changed: {}", executable);
@@ -132,19 +151,59 @@ impl Component for DocumentViewerFormModel {
                     let name = self.name.clone();
                     let arguments = self.arguments.clone();
 
-                    sender.oneshot_command(async move {
-                        let res = repository_manager
-                            .get_document_viewer_repository()
-                            .add_document_viewer(&name, &executable, &arguments, &document_type)
-                            .await;
-                        DocumentViewerFormCommandMsg::DocumentViewerSubmitted(res)
-                    });
+                    if let Some(editable_id) = self.editable_viewer_id {
+                        sender.oneshot_command(async move {
+                            let res = repository_manager
+                                .get_document_viewer_repository()
+                                .update_document_viewer(
+                                    editable_id,
+                                    &name,
+                                    &executable,
+                                    &arguments,
+                                    &document_type,
+                                )
+                                .await;
+                            DocumentViewerFormCommandMsg::DocumentViewerUpdated(res)
+                        });
+                    } else {
+                        sender.oneshot_command(async move {
+                            let res = repository_manager
+                                .get_document_viewer_repository()
+                                .add_document_viewer(&name, &executable, &arguments, &document_type)
+                                .await;
+                            DocumentViewerFormCommandMsg::DocumentViewerSubmitted(res)
+                        });
+                    }
                 }
             }
             DocumentViewerFormMsg::NameChanged(name) => {
                 self.name = name;
             }
-            DocumentViewerFormMsg::Show => {
+            DocumentViewerFormMsg::Show {
+                edit_document_viewer,
+            } => {
+                if let Some(editable_viewer) = edit_document_viewer {
+                    println!("Editing document viewer: {:?}", editable_viewer);
+                    self.editable_viewer_id = Some(editable_viewer.id);
+                    self.name = editable_viewer.name;
+                    self.executable = editable_viewer.executable;
+                    self.arguments = editable_viewer.arguments;
+                    self.selected_document_type = Some(editable_viewer.document_type);
+                    widgets.name_entry.set_text(&self.name);
+                    widgets.executable_entry.set_text(&self.executable);
+                    self.argument_list
+                        .emit(ArgumentListMsg::SetArguments(self.arguments.clone()));
+                } else {
+                    self.editable_viewer_id = None;
+                    self.name.clear();
+                    self.executable.clear();
+                    self.arguments.clear();
+                    self.selected_document_type = None;
+                    widgets.name_entry.set_text("");
+                    widgets.executable_entry.set_text("");
+                    self.argument_list
+                        .emit(ArgumentListMsg::SetArguments(Vec::new()));
+                }
                 root.show();
             }
             DocumentViewerFormMsg::Hide => {
@@ -156,6 +215,8 @@ impl Component for DocumentViewerFormModel {
 
             _ => {}
         }
+        // This is essential:
+        self.update_view(widgets, sender);
     }
 
     fn update_cmd(
@@ -184,6 +245,25 @@ impl Component for DocumentViewerFormModel {
             DocumentViewerFormCommandMsg::DocumentViewerSubmitted(Err(error)) => {
                 eprintln!("Error in submitting document_viewer: {}", error);
                 // TODO: show error to user
+            }
+            DocumentViewerFormCommandMsg::DocumentViewerUpdated(Ok(id)) => {
+                println!("Document viewer updated with id {}", id);
+                let name = self.name.clone();
+                let res = sender.output(DocumentViewerFormOutputMsg::DocumentViewerUpdated(
+                    DocumentViewerListModel { id, name },
+                ));
+
+                match res {
+                    Ok(()) => {
+                        root.close();
+                    }
+                    Err(error) => {
+                        eprintln!("Sending message failed: {:?}", error);
+                    }
+                }
+            }
+            DocumentViewerFormCommandMsg::DocumentViewerUpdated(Err(error)) => {
+                eprintln!("Error in updating document_viewer: {}", error);
             }
             _ => {
                 // Handle command outputs if necessary
@@ -215,6 +295,7 @@ impl Component for DocumentViewerFormModel {
             // TODO: add document type selection
             selected_document_type: Some(DocumentType::Pdf),
             argument_list,
+            editable_viewer_id: None,
         };
 
         let widgets = view_output!();

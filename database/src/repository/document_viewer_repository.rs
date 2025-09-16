@@ -82,9 +82,16 @@ impl DocumentViewerRepository {
 
     pub async fn update_document_viewer(
         &self,
-        document_viewer: &DocumentViewer,
+        id: i64,
+        name: &String,
+        executable: &String,
+        arguments: &Vec<ArgumentType>,
+        document_type: &DocumentType,
     ) -> Result<i64, DatabaseError> {
-        let document_type: i64 = document_viewer.document_type.into();
+        let document_type: i64 = (*document_type).into();
+        let arguments = serde_json::to_string(&arguments)
+            .map_err(|e| DatabaseError::SerializationError(e.to_string()))?;
+
         let result = sqlx::query!(
             "UPDATE document_viewer SET 
              name = ?, 
@@ -92,14 +99,21 @@ impl DocumentViewerRepository {
              arguments = ?,
              document_type = ?
              WHERE id = ?",
-            document_viewer.name,
-            document_viewer.executable,
-            document_viewer.arguments,
+            name,
+            executable,
+            arguments,
             document_type,
-            document_viewer.id
+            id
         )
         .execute(&*self.pool)
         .await?;
-        Ok(result.last_insert_rowid())
+        Ok(id)
+    }
+
+    pub async fn delete(&self, id: i64) -> Result<i64, DatabaseError> {
+        sqlx::query!("DELETE FROM document_viewer WHERE id = ?", id)
+            .execute(&*self.pool)
+            .await?;
+        Ok(id)
     }
 }
