@@ -256,19 +256,6 @@ impl Component for EmulatorFormModel {
                     println!("Editing emulator: {:?}", editable_emulator);
                     self.editable_emulator_id = Some(editable_emulator.id);
 
-                    /*sender.input(EmulatorFormMsg::NameChanged(editable_emulator.name.clone()));
-                    sender.input(EmulatorFormMsg::ExecutableChanged(
-                        editable_emulator.executable.clone(),
-                    ));
-
-                    sender.input(EmulatorFormMsg::UpdateExtractFiles(
-                        editable_emulator.extract_files,
-                    ));
-
-                    sender.input(EmulatorFormMsg::SystemSelected(
-                        editable_emulator.system.clone(),
-                    ));*/
-
                     self.name = editable_emulator.name.clone();
                     self.executable = editable_emulator.executable.clone();
                     self.extract_files = editable_emulator.extract_files;

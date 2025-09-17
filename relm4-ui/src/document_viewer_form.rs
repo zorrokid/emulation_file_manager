@@ -12,10 +12,7 @@ use relm4::{
         },
     },
 };
-use service::{
-    view_model_service::ViewModelService,
-    view_models::{DocumentViewerListModel, DocumentViewerViewModel},
-};
+use service::view_models::{DocumentViewerListModel, DocumentViewerViewModel};
 
 use crate::argument_list::{ArgumentList, ArgumentListMsg, ArgumentListOutputMsg};
 
@@ -44,13 +41,11 @@ pub enum DocumentViewerFormCommandMsg {
 }
 
 pub struct DocumentViewerFormInit {
-    pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
 }
 
 #[derive(Debug)]
 pub struct DocumentViewerFormModel {
-    pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
     pub name: String,
     pub executable: String,
@@ -287,7 +282,6 @@ impl Component for DocumentViewerFormModel {
                 });
 
         let model = Self {
-            view_model_service: init.view_model_service,
             repository_manager: init.repository_manager,
             executable: String::new(),
             arguments: Vec::new(),

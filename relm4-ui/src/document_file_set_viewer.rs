@@ -150,7 +150,6 @@ impl Component for DocumentViewer {
         let viewer_list_view_wrapper = TypedListView::<ListItem, gtk::SingleSelection>::new();
 
         let init_model = DocumentViewerFormInit {
-            view_model_service: Arc::clone(&init.view_model_service),
             repository_manager: Arc::clone(&init.repository_manager),
         };
         let viewer_form = DocumentViewerFormModel::builder()
