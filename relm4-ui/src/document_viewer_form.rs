@@ -86,7 +86,7 @@ impl Component for DocumentViewerFormModel {
                 gtk::Entry {
                     set_text: &model.name,
                     set_placeholder_text: Some("DocumentViewer name"),
-                    connect_activate[sender] => move |entry| {
+                    connect_changed[sender] => move |entry| {
                         let buffer = entry.buffer();
                         sender.input(
                             DocumentViewerFormMsg::NameChanged(buffer.text().into()),
@@ -102,7 +102,7 @@ impl Component for DocumentViewerFormModel {
                 gtk::Entry {
                     set_text: &model.executable,
                     set_placeholder_text: Some("DocumentViewer executable"),
-                    connect_activate[sender] => move |entry| {
+                    connect_changed[sender] => move |entry| {
                         let buffer = entry.buffer();
                         sender.input(
                             DocumentViewerFormMsg::ExecutableChanged(buffer.text().into()),
@@ -147,6 +147,7 @@ impl Component for DocumentViewerFormModel {
                     let arguments = self.arguments.clone();
 
                     if let Some(editable_id) = self.editable_viewer_id {
+                        println!("Updating document viewer with ID {}: {}", editable_id, name);
                         sender.oneshot_command(async move {
                             let res = repository_manager
                                 .get_document_viewer_repository()
@@ -161,6 +162,7 @@ impl Component for DocumentViewerFormModel {
                             DocumentViewerFormCommandMsg::DocumentViewerUpdated(res)
                         });
                     } else {
+                        println!("Adding new document viewer: {}", name);
                         sender.oneshot_command(async move {
                             let res = repository_manager
                                 .get_document_viewer_repository()
