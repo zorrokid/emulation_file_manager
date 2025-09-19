@@ -175,3 +175,26 @@ impl DropDownMessage<FileType> for FileTypeSelectedMsg {
 }
 
 pub type FileTypeDropDown = DropDown<FileType, FileTypeSelectedMsg>;
+
+// DocumentType-specific implementation
+
+use core_types::DocumentType;
+
+impl DropDownItem for DocumentType {
+    fn all_items() -> Vec<Self> {
+        DocumentType::iter().collect()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum DocumentTypeSelectedMsg {
+    DocumentTypeSelected(DocumentType),
+}
+
+impl DropDownMessage<DocumentType> for DocumentTypeSelectedMsg {
+    fn from_selection(item: DocumentType) -> Self {
+        DocumentTypeSelectedMsg::DocumentTypeSelected(item)
+    }
+}
+
+pub type DocumentTypeDropDown = DropDown<DocumentType, DocumentTypeSelectedMsg>;

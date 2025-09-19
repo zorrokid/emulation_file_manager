@@ -3,7 +3,7 @@ use relm4::{
     Component, ComponentParts, ComponentSender,
     gtk::{
         self,
-        prelude::{ButtonExt, EntryBufferExtManual, EntryExt, OrientableExt, WidgetExt},
+        prelude::{BoxExt, ButtonExt, EntryBufferExtManual, EntryExt, OrientableExt, WidgetExt},
     },
     typed_view::list::TypedListView,
 };
@@ -71,9 +71,10 @@ impl Component for ArgumentList {
     view! {
         gtk::Box {
             set_orientation: gtk::Orientation::Vertical,
+            set_spacing: 6,
 
             gtk::Label {
-                set_label: "Add flag command line argument",
+                set_label: "Add command line argument",
             },
 
             gtk::Entry {
@@ -88,6 +89,7 @@ impl Component for ArgumentList {
 
             gtk::Box {
                 set_orientation: gtk::Orientation::Horizontal,
+                set_spacing: 6,
                 gtk::ScrolledWindow {
                     set_hscrollbar_policy: gtk::PolicyType::Never,
                     set_min_content_height: 360,
@@ -100,6 +102,7 @@ impl Component for ArgumentList {
                 },
                 gtk::Box {
                     set_orientation: gtk::Orientation::Vertical,
+                    set_spacing: 6,
 
                     gtk::Button {
                         set_label: "Up",

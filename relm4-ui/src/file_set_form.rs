@@ -202,6 +202,8 @@ impl Component for FileSetFormModel {
         gtk::Window {
             set_default_width: 800,
             set_default_height: 600,
+            set_margin_all: 10,
+            set_title: Some("Create File Set"),
 
             connect_close_request[sender] => move |_| {
                 sender.input(FileSetFormMsg::Hide);
@@ -220,7 +222,6 @@ impl Component for FileSetFormModel {
                     set_label: "Open file selector",
                     connect_clicked => FileSetFormMsg::OpenFileSelector,
                 },
-
 
                 #[name = "selected_file_label"]
                 gtk::Label {

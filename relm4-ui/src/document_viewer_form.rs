@@ -3,7 +3,7 @@ use std::sync::Arc;
 use core_types::{ArgumentType, DocumentType};
 use database::{database_error::DatabaseError, repository_manager::RepositoryManager};
 use relm4::{
-    Component, ComponentController, ComponentParts, ComponentSender, Controller,
+    Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
         self, glib,
         prelude::{
@@ -13,6 +13,10 @@ use relm4::{
     },
 };
 use service::view_models::{DocumentViewerListModel, DocumentViewerViewModel};
+use ui_components::{
+    DropDownOutputMsg,
+    drop_down::{DocumentTypeDropDown, DocumentTypeSelectedMsg},
+};
 
 use crate::argument_list::{ArgumentList, ArgumentListMsg, ArgumentListOutputMsg};
 
@@ -26,6 +30,7 @@ pub enum DocumentViewerFormMsg {
     },
     Hide,
     ArgumentsChanged(Vec<ArgumentType>),
+    DocumentTypeChanged(DocumentType),
 }
 
 #[derive(Debug)]
@@ -53,6 +58,7 @@ pub struct DocumentViewerFormModel {
     argument_list: Controller<ArgumentList>,
     arguments: Vec<ArgumentType>,
     editable_viewer_id: Option<i64>,
+    dropdown: Controller<DocumentTypeDropDown>,
 }
 
 #[relm4::component(pub)]
@@ -73,49 +79,66 @@ impl Component for DocumentViewerFormModel {
 
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
-                set_margin_top: 10,
-                set_margin_bottom: 10,
-                set_margin_start: 10,
-                set_margin_end: 10,
+                set_margin_all: 10,
+                set_spacing: 6,
 
-                gtk::Label {
-                    set_label: "Name",
+                gtk::Box {
+                   set_orientation: gtk::Orientation::Horizontal,
+                   set_spacing: 6,
+                   gtk::Label {
+                       set_label: "Name",
+                   },
+
+                   #[name = "name_entry"]
+                   gtk::Entry {
+                       set_text: &model.name,
+                       set_placeholder_text: Some("DocumentViewer name"),
+                       set_hexpand: true,
+                       connect_changed[sender] => move |entry| {
+                           let buffer = entry.buffer();
+                           sender.input(
+                               DocumentViewerFormMsg::NameChanged(buffer.text().into()),
+                           );
+                       }
+                   },
                 },
 
-                #[name = "name_entry"]
-                gtk::Entry {
-                    set_text: &model.name,
-                    set_placeholder_text: Some("DocumentViewer name"),
-                    connect_changed[sender] => move |entry| {
-                        let buffer = entry.buffer();
-                        sender.input(
-                            DocumentViewerFormMsg::NameChanged(buffer.text().into()),
-                        );
-                    }
-                },
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    set_spacing: 6,
+                    gtk::Label {
+                        set_label: "Executable",
+                    },
 
-                gtk::Label {
-                    set_label: "Executable",
-                },
-
-                #[name = "executable_entry"]
-                gtk::Entry {
-                    set_text: &model.executable,
-                    set_placeholder_text: Some("DocumentViewer executable"),
-                    connect_changed[sender] => move |entry| {
-                        let buffer = entry.buffer();
-                        sender.input(
-                            DocumentViewerFormMsg::ExecutableChanged(buffer.text().into()),
-                        );
+                    #[name = "executable_entry"]
+                    gtk::Entry {
+                        set_text: &model.executable,
+                        set_placeholder_text: Some("DocumentViewer executable"),
+                        set_hexpand: true,
+                        connect_changed[sender] => move |entry| {
+                            let buffer = entry.buffer();
+                            sender.input(
+                                DocumentViewerFormMsg::ExecutableChanged(buffer.text().into()),
+                            );
+                        },
                     },
                 },
 
-                // TODO: add file type selection
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    set_spacing: 6,
+                    gtk::Label {
+                        set_label: "Document Type",
+                    },
+                    #[local_ref]
+                    document_types_dropdown -> gtk::Box{
+                        set_hexpand: true,
+                    },
+                },
 
                 gtk::Box {
                     append = model.argument_list.widget(),
                 },
-
 
                 gtk::Button {
                     set_label: "Submit",
@@ -136,7 +159,6 @@ impl Component for DocumentViewerFormModel {
     ) {
         match msg {
             DocumentViewerFormMsg::ExecutableChanged(executable) => {
-                println!("Executable changed: {}", executable);
                 self.executable = executable;
             }
             DocumentViewerFormMsg::Submit => {
@@ -147,7 +169,6 @@ impl Component for DocumentViewerFormModel {
                     let arguments = self.arguments.clone();
 
                     if let Some(editable_id) = self.editable_viewer_id {
-                        println!("Updating document viewer with ID {}: {}", editable_id, name);
                         sender.oneshot_command(async move {
                             let res = repository_manager
                                 .get_document_viewer_repository()
@@ -162,7 +183,6 @@ impl Component for DocumentViewerFormModel {
                             DocumentViewerFormCommandMsg::DocumentViewerUpdated(res)
                         });
                     } else {
-                        println!("Adding new document viewer: {}", name);
                         sender.oneshot_command(async move {
                             let res = repository_manager
                                 .get_document_viewer_repository()
@@ -180,7 +200,6 @@ impl Component for DocumentViewerFormModel {
                 edit_document_viewer,
             } => {
                 if let Some(editable_viewer) = edit_document_viewer {
-                    println!("Editing document viewer: {:?}", editable_viewer);
                     self.editable_viewer_id = Some(editable_viewer.id);
                     self.name = editable_viewer.name;
                     self.executable = editable_viewer.executable;
@@ -209,7 +228,9 @@ impl Component for DocumentViewerFormModel {
             DocumentViewerFormMsg::ArgumentsChanged(arguments) => {
                 self.arguments = arguments;
             }
-
+            DocumentViewerFormMsg::DocumentTypeChanged(document_type) => {
+                self.selected_document_type = Some(document_type);
+            }
             _ => {}
         }
         // This is essential:
@@ -224,7 +245,6 @@ impl Component for DocumentViewerFormModel {
     ) {
         match message {
             DocumentViewerFormCommandMsg::DocumentViewerSubmitted(Ok(id)) => {
-                println!("DocumentViewer submitted with id {}", id);
                 let name = self.name.clone();
                 let res = sender.output(DocumentViewerFormOutputMsg::DocumentViewerAdded(
                     DocumentViewerListModel { id, name },
@@ -244,7 +264,6 @@ impl Component for DocumentViewerFormModel {
                 // TODO: show error to user
             }
             DocumentViewerFormCommandMsg::DocumentViewerUpdated(Ok(id)) => {
-                println!("Document viewer updated with id {}", id);
                 let name = self.name.clone();
                 let res = sender.output(DocumentViewerFormOutputMsg::DocumentViewerUpdated(
                     DocumentViewerListModel { id, name },
@@ -280,22 +299,41 @@ impl Component for DocumentViewerFormModel {
                     ArgumentListOutputMsg::ArgumentsChanged(arguments) => {
                         DocumentViewerFormMsg::ArgumentsChanged(arguments)
                     }
-                    _ => unreachable!(),
                 });
+
+        let dropdown = Self::create_dropdown(None, &sender);
 
         let model = Self {
             repository_manager: init.repository_manager,
             executable: String::new(),
             arguments: Vec::new(),
             name: String::new(),
-            // TODO: add document type selection
-            selected_document_type: Some(DocumentType::Pdf),
+            selected_document_type: None,
             argument_list,
             editable_viewer_id: None,
+            dropdown,
         };
+
+        let document_types_dropdown = model.dropdown.widget();
 
         let widgets = view_output!();
 
         ComponentParts { model, widgets }
+    }
+}
+
+impl DocumentViewerFormModel {
+    fn create_dropdown(
+        initial_selection: Option<DocumentType>,
+        sender: &ComponentSender<Self>,
+    ) -> Controller<DocumentTypeDropDown> {
+        DocumentTypeDropDown::builder()
+            .launch(initial_selection)
+            .forward(sender.input_sender(), |msg| match msg {
+                DropDownOutputMsg::ItemSelected(DocumentTypeSelectedMsg::DocumentTypeSelected(
+                    document_type,
+                )) => DocumentViewerFormMsg::DocumentTypeChanged(document_type),
+                _ => unreachable!(),
+            })
     }
 }
