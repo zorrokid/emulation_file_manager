@@ -96,7 +96,7 @@ impl Component for FileSelectModel {
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
                 gtk::Label {
-                    set_label: "File Selector Component",
+                    set_label: "File Selector",
                 },
                 #[local_ref]
                 file_types_dropdown -> gtk::Box {},

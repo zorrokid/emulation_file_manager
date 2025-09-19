@@ -440,6 +440,11 @@ impl Component for FileSetFormModel {
             } => {
                 self.selected_system_ids = selected_system_ids;
                 self.selected_file_type = Some(selected_file_type);
+                self.file_set_name.clear();
+                self.file_set_file_name.clear();
+                self.file_importer.clear();
+                self.source.clear();
+                self.files.guard().clear();
                 self.dropdown
                     .emit(DropDownMsg::SetSelected(selected_file_type));
                 root.show();
