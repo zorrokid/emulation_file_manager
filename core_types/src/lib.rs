@@ -21,7 +21,7 @@ impl std::fmt::Display for CoreTypeError {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Copy)]
+#[derive(Debug, Clone, PartialEq, Copy, EnumIter)]
 pub enum DocumentType {
     Pdf = 1,
 }
@@ -42,6 +42,14 @@ impl TryFrom<i64> for DocumentType {
             _ => Err(CoreTypeError::ConversionError(
                 "Failed convert to DocumentType".to_string(),
             )),
+        }
+    }
+}
+
+impl std::fmt::Display for DocumentType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DocumentType::Pdf => write!(f, "PDF"),
         }
     }
 }

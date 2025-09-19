@@ -309,6 +309,7 @@ impl Component for DocumentViewer {
                 sender.input(DocumentViewerMsg::FetchViewers);
             }
             DocumentViewerMsg::UpdateViewer(_viewer_list_model) => {
+                println!("Viewer updated: {:?}", _viewer_list_model);
                 sender.input(DocumentViewerMsg::FetchViewers);
             }
             DocumentViewerMsg::FetchViewers => {
