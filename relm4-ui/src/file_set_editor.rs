@@ -233,7 +233,7 @@ impl Component for FileSetEditor {
                         id: file_set_id,
                         file_set_name: file_set_name.clone(),
                         file_name: file_set_file_name.clone(),
-                        file_type: file_type.into(),
+                        file_type: file_type,
                     };
                     sender.oneshot_command(async move {
                         let res = repository_manager
@@ -243,7 +243,7 @@ impl Component for FileSetEditor {
                                 &file_set_file_name,
                                 &file_set_name,
                                 &source,
-                                &file_type.into(),
+                                &file_type,
                             )
                             .await;
                         CommandMsg::FileSetUpdated(res, file_set_list_model)
@@ -267,9 +267,9 @@ impl Component for FileSetEditor {
                 self.file_set_name = file_set.file_set_name.clone();
                 self.file_set_file_name = file_set.file_name.clone();
                 self.source = file_set.source.clone();
-                self.selected_file_type = Some(file_set.file_type.into());
+                self.selected_file_type = Some(file_set.file_type);
                 self.dropdown
-                    .emit(DropDownMsg::SetSelected(file_set.file_type.into()));
+                    .emit(DropDownMsg::SetSelected(file_set.file_type));
             }
             CommandMsg::FileSetFetched(Err(e)) => {
                 eprintln!("Error fetching file set: {:?}", e);

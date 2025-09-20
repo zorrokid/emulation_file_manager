@@ -490,7 +490,7 @@ impl Component for ReleaseModel {
                 let image_file_sets = release
                     .file_sets
                     .iter()
-                    .filter(|fs| IMAGE_FILE_TYPES.contains(&fs.file_type.into()))
+                    .filter(|fs| IMAGE_FILE_TYPES.contains(&fs.file_type))
                     .cloned()
                     .collect::<Vec<_>>();
 
@@ -504,7 +504,7 @@ impl Component for ReleaseModel {
                 let emulator_file_sets = release
                     .file_sets
                     .iter()
-                    .filter(|fs| EMULATOR_FILE_TYPES.contains(&fs.file_type.into()))
+                    .filter(|fs| EMULATOR_FILE_TYPES.contains(&fs.file_type))
                     .cloned()
                     .collect::<Vec<_>>();
 
@@ -538,7 +538,7 @@ impl Component for ReleaseModel {
                 let image_file_sets = release
                     .file_sets
                     .iter()
-                    .filter(|fs| IMAGE_FILE_TYPES.contains(&fs.file_type.into()))
+                    .filter(|fs| IMAGE_FILE_TYPES.contains(&fs.file_type))
                     .cloned()
                     .collect::<Vec<_>>();
 
@@ -572,7 +572,7 @@ impl Component for ReleaseModel {
                 let document_file_sets = release
                     .file_sets
                     .iter()
-                    .filter(|fs| DOCUMENT_FILE_TYPES.contains(&fs.file_type.into()))
+                    .filter(|fs| DOCUMENT_FILE_TYPES.contains(&fs.file_type))
                     .cloned()
                     .collect::<Vec<_>>();
 

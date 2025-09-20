@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
+use core_types::FileType;
 use sqlx::{query_as, Pool, Sqlite};
 
 use crate::{
     database_error::{DatabaseError, Error},
-    models::{FileType, Release, ReleaseExtended},
+    models::{Release, ReleaseExtended},
 };
 
 #[derive(Debug)]
@@ -96,22 +97,15 @@ impl ReleaseRepository {
                 .split(',')
                 .map(String::from)
                 .collect();
-            let file_types = raw
+            let file_types: Vec<FileType> = raw
                 .file_types
                 .unwrap_or_default()
                 .split(',')
                 .map(|ft| {
-                    ft.parse::<i64>()
-                        .map_err(|e| {
-                            Error::ParseError(format!("Failed to parse '{}' as i64: {}", ft, e))
-                        })
-                        .and_then(|ft| {
-                            FileType::try_from(ft).map_err(|e| {
-                                Error::ParseError(format!("Invalid file type {}, {}", ft, e))
-                            })
-                        })
+                    let int_ft: u8 = ft.parse().expect("Failed to parse file type as u8");
+                    FileType::from_db_int(int_ft).expect("Invalid file type")
                 })
-                .collect::<Result<Vec<FileType>, Error>>()?;
+                .collect();
             releases.push(ReleaseExtended {
                 id: raw.id,
                 name: raw.name,
@@ -488,7 +482,10 @@ mod tests {
         assert_eq!(relationship_count, 0);
 
         // Verify that the software title itself still exists (only relationship was deleted)
-        let software_title_still_exists = software_title_repository.get_software_title(software_title_id).await.unwrap();
+        let software_title_still_exists = software_title_repository
+            .get_software_title(software_title_id)
+            .await
+            .unwrap();
         assert_eq!(software_title_still_exists.name, "Test Software Title");
 
         // Verify deletion

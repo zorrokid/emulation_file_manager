@@ -96,7 +96,7 @@ impl Component for FileSelectModel {
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
                 gtk::Label {
-                    set_label: "File Selector Component",
+                    set_label: "File Selector",
                 },
                 #[local_ref]
                 file_types_dropdown -> gtk::Box {},
@@ -219,7 +219,7 @@ impl Component for FileSelectModel {
                     let file_set_list_model = FileSetListModel {
                         id: selected_item.id,
                         file_set_name: selected_item.name.clone(), // TODO
-                        file_type: file_type.into(),
+                        file_type: file_type,
                         file_name: selected_item.name.clone(),
                     };
                     let res =
@@ -248,7 +248,7 @@ impl Component for FileSelectModel {
                     let file_set_list_model = FileSetListModel {
                         id: file_set.id,
                         file_set_name: file_set.name.clone(),
-                        file_type: file_type.into(),
+                        file_type: file_type,
                         file_name: file_set.name.clone(), // TODO?
                     };
                     self.selected_file_set = Some(file_set_list_model);
@@ -273,7 +273,7 @@ impl Component for FileSelectModel {
                         view_model_service,
                         async move {
                             let file_sets = view_model_service
-                                .get_file_set_list_models(file_type.into(), &system_ids)
+                                .get_file_set_list_models(file_type, &system_ids)
                                 .await;
                             CommandMsg::FilesFetched(file_sets)
                         }

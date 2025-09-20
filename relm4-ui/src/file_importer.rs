@@ -51,12 +51,14 @@ impl FileImporter {
             current_picked_files: vec![],
         }
     }
+
+    pub fn clear(&mut self) {
+        self.current_picked_files.clear();
+    }
+
     pub fn get_current_picked_files(&self) -> &Vec<PickedFile> {
         self.current_picked_files.as_ref()
     }
-    /*pub fn get_current_picked_file_content(&self) -> &HashMap<Sha1Checksum, ReadFile> {
-        &self.current_picked_files_content
-    }*/
 
     pub fn get_selected_files_from_current_picked_files_that_are_new(&self) -> Vec<ReadFile> {
         self.current_picked_files
@@ -84,57 +86,16 @@ impl FileImporter {
                 .any(|c| c.is_selected)
     }
 
-    pub fn set_current_picked_file(&mut self, file: PickedFile) {
-        self.current_picked_files.push(file);
-    }
-
-    /*pub fn get_current_picked_file_name(&self) -> Vec<String> {
-        self.current_picked_files
-            .iter()
-            .map(|f| f.file_name())
-            .and_then(|f| f.to_string_lossy().to_string())
-    }*/
-
-    pub fn get_file_set_name(&self, path: &PathBuf) -> Option<String> {
+    pub fn get_file_set_name(&self, path: &Path) -> Option<String> {
         path.file_stem()
             .map(|stem| stem.to_string_lossy().to_string())
     }
 
-    pub fn get_file_set_file_name(&self, path: &PathBuf) -> Option<String> {
+    pub fn get_file_set_file_name(&self, path: &Path) -> Option<String> {
         path.file_name()
             .map(|name| name.to_string_lossy().to_string())
     }
 
-    /*pub fn add_current_picked_file_content(&mut self, content: HashMap<Sha1Checksum, ReadFile>) {
-        println!("Setting selected: {:?}", content.keys());
-        self.selected_files_from_current_picked_files
-            .extend(content.keys());
-        self.current_picked_files_content.extend(content);
-    }*/
-
-    /*pub fn add_existing_files(&mut self, files: Vec<FileInfo>) {
-        for file in files {
-            let checksum = file
-                .sha1_checksum
-                .clone()
-                .try_into()
-                .expect("Invalid checksum length");
-            let original_file_name = self
-                .current_picked_files_content
-                .get(&checksum)
-                .and_then(|read_file| read_file.file_name.clone().into())
-                .expect("File name not found in current picked file content");
-            self.existing_files.insert(
-                checksum,
-                ImportedFile {
-                    original_file_name,
-                    archive_file_name: file.archive_file_name.clone(),
-                    sha1_checksum: checksum,
-                    file_size: file.file_size,
-                },
-            );
-        }
-    }*/
     pub fn set_imported_files(&mut self, files: HashMap<Sha1Checksum, ImportedFile>) {
         for (sha1_checksum, imported_file) in files.iter() {
             let file = self
@@ -149,10 +110,6 @@ impl FileImporter {
             }
         }
     }
-
-    /*pub fn clear(&mut self) {
-        self.current_picked_files = vec![];
-    }*/
 
     pub fn get_files_selected_for_file_set(&self) -> Vec<ImportedFile> {
         self.current_picked_files
@@ -170,11 +127,6 @@ impl FileImporter {
             })
             .collect::<Vec<_>>()
     }
-
-    /*pub fn is_file_selected(&self, sha1_checksum: &Sha1Checksum) -> bool {
-        self.selected_files_from_current_picked_files
-            .contains(sha1_checksum)
-    }*/
 
     pub fn deselect_file(&mut self, sha1_checksum: &Sha1Checksum) {
         let file = self
@@ -204,13 +156,6 @@ impl FileImporter {
         }
     }
 
-    /*pub fn toggle_file_selection(&mut self, sha1_checksum: Sha1Checksum) {
-        if self.is_file_selected(&sha1_checksum) {
-            self.deselect_file(&sha1_checksum);
-        } else {
-            self.select_file(&sha1_checksum);
-        }
-    }*/
     pub fn is_zip_file(&self, path: &Path) -> bool {
         file_util::is_zip_file(path).unwrap_or(false)
     }

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use core_types::ArgumentType;
 use database::{database_error::DatabaseError, repository_manager::RepositoryManager};
 use relm4::{
-    Component, ComponentController, ComponentParts, ComponentSender, Controller,
+    Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
         self, glib,
         prelude::{
@@ -90,40 +90,48 @@ impl Component for EmulatorFormModel {
 
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
-                set_margin_top: 10,
-                set_margin_bottom: 10,
-                set_margin_start: 10,
-                set_margin_end: 10,
+                set_margin_all: 10,
+                set_spacing: 6,
 
-                gtk::Label {
-                    set_label: "Name",
-                },
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    set_spacing: 6,
 
-                #[name = "name_entry"]
-                gtk::Entry {
-                    set_text: &model.name,
-                    set_placeholder_text: Some("Emulator name"),
-                    connect_changed[sender] => move |entry| {
-                        let buffer = entry.buffer();
-                        sender.input(
-                            EmulatorFormMsg::NameChanged(buffer.text().into()),
-                        );
+                    gtk::Label {
+                        set_label: "Name",
+                    },
+
+                    #[name = "name_entry"]
+                    gtk::Entry {
+                        set_text: &model.name,
+                        set_placeholder_text: Some("Emulator name"),
+                        connect_changed[sender] => move |entry| {
+                            let buffer = entry.buffer();
+                            sender.input(
+                                EmulatorFormMsg::NameChanged(buffer.text().into()),
+                            );
+                        },
                     },
                 },
 
-                gtk::Label {
-                    set_label: "Executable",
-                },
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    set_spacing: 6,
 
-                #[name = "executable_entry"]
-                gtk::Entry {
-                    set_text: &model.executable,
-                    set_placeholder_text: Some("Emulator executable"),
-                    connect_changed[sender] => move |entry| {
-                        let buffer = entry.buffer();
-                        sender.input(
-                            EmulatorFormMsg::ExecutableChanged(buffer.text().into()),
-                        );
+                    gtk::Label {
+                        set_label: "Executable",
+                    },
+
+                    #[name = "executable_entry"]
+                    gtk::Entry {
+                        set_text: &model.executable,
+                        set_placeholder_text: Some("Emulator executable"),
+                        connect_changed[sender] => move |entry| {
+                            let buffer = entry.buffer();
+                            sender.input(
+                                EmulatorFormMsg::ExecutableChanged(buffer.text().into()),
+                            );
+                        },
                     },
                 },
 

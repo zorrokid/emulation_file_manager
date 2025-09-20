@@ -440,6 +440,11 @@ impl Component for FileSetFormModel {
             } => {
                 self.selected_system_ids = selected_system_ids;
                 self.selected_file_type = Some(selected_file_type);
+                self.file_set_name.clear();
+                self.file_set_file_name.clear();
+                self.file_importer.clear();
+                self.source.clear();
+                self.files.guard().clear();
                 self.dropdown
                     .emit(DropDownMsg::SetSelected(selected_file_type));
                 root.show();
@@ -520,7 +525,7 @@ impl Component for FileSetFormModel {
                         .add_file_set(
                             &file_set_name,
                             &file_set_file_name,
-                            &file_type.into(),
+                            &file_type,
                             &source,
                             &files_in_file_set,
                             &system_ids,
@@ -538,7 +543,7 @@ impl Component for FileSetFormModel {
                 let file_set_list_model = FileSetListModel {
                     id,
                     file_set_name: self.file_set_name.clone(),
-                    file_type: file_type.into(),
+                    file_type: file_type,
                     file_name: self.file_set_file_name.clone(),
                 };
                 let res = sender.output(FileSetFormOutputMsg::FileSetCreated(file_set_list_model));

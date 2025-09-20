@@ -70,7 +70,7 @@ impl Component for DocumentViewerFormModel {
 
     view! {
         gtk::Window {
-            set_title: Some("Document viewer form"),
+            set_title: Some("Document Viewer Form"),
 
             connect_close_request[sender] => move |_| {
                 sender.input(DocumentViewerFormMsg::Hide);
@@ -85,6 +85,7 @@ impl Component for DocumentViewerFormModel {
                 gtk::Box {
                    set_orientation: gtk::Orientation::Horizontal,
                    set_spacing: 6,
+
                    gtk::Label {
                        set_label: "Name",
                    },

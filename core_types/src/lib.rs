@@ -70,6 +70,7 @@ pub struct ReadFile {
 }
 
 #[derive(Debug, Clone, PartialEq, Copy, EnumIter, Display)]
+#[repr(u8)]
 pub enum FileType {
     Rom = 1,
     #[strum(serialize = "Disk Image")]
@@ -112,6 +113,31 @@ impl FileType {
             FileType::MediaScan => "media_scan",
             FileType::PackageScan => "package_scan",
             FileType::InlayScan => "inlay_scan",
+        }
+    }
+
+    pub fn to_db_int(&self) -> u8 {
+        *self as u8
+    }
+
+    pub fn from_db_int(value: u8) -> Result<Self, CoreTypeError> {
+        match value {
+            1 => Ok(FileType::Rom),
+            2 => Ok(FileType::DiskImage),
+            3 => Ok(FileType::TapeImage),
+            4 => Ok(FileType::Screenshot),
+            5 => Ok(FileType::Manual),
+            6 => Ok(FileType::CoverScan),
+            7 => Ok(FileType::MemorySnapshot),
+            8 => Ok(FileType::LoadingScreen),
+            9 => Ok(FileType::TitleScreen),
+            10 => Ok(FileType::ManualScan),
+            11 => Ok(FileType::MediaScan),
+            12 => Ok(FileType::PackageScan),
+            13 => Ok(FileType::InlayScan),
+            _ => Err(CoreTypeError::ConversionError(
+                "Failed convert to FileType".to_string(),
+            )),
         }
     }
 }

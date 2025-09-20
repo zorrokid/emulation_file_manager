@@ -1,11 +1,11 @@
 use std::{collections::HashSet, sync::Arc};
 
-use core_types::ImportedFile;
+use core_types::{FileType, ImportedFile};
 use sqlx::{sqlite::SqliteRow, FromRow, Pool, Row, Sqlite};
 
 use crate::{
     database_error::{DatabaseError, Error},
-    models::{FileSet, FileSetFileInfo, FileType},
+    models::{FileSet, FileSetFileInfo},
 };
 
 #[derive(Debug)]
@@ -21,7 +21,8 @@ impl FileSetRepository {
 
 impl FromRow<'_, SqliteRow> for FileSet {
     fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
-        let file_type: FileType = row.try_get::<i64, _>("file_type")?.try_into()?;
+        let file_type: FileType = FileType::from_db_int(row.try_get::<u8, _>("file_type")?)
+            .expect("Invalid file type in DB");
         Ok(Self {
             id: row.try_get("id")?,
             file_name: row.try_get("file_name")?,
