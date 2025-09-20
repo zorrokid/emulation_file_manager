@@ -22,6 +22,10 @@ LOAD""
 
 ## Fuse GTK
 
+### System roms
+
+- Place the rom files in the folder `.spectrum-roms` in your home directory.
+
 ### Joysticks
 - configuring Kempston joystick:
   - Tick Options -> Peripherals -> General -> Kempston Joystick 
