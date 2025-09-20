@@ -81,7 +81,7 @@ impl ExportService {
             let destination_path = self.construct_destination_path(
                 destination,
                 &systems,
-                &file_set_view_model.file_type.into(),
+                &file_set_view_model.file_type,
             );
 
             std::fs::create_dir_all(&destination_path)

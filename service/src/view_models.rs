@@ -4,9 +4,9 @@ use std::{
     path::PathBuf,
 };
 
-use core_types::{ArgumentType, DocumentType};
+use core_types::{ArgumentType, DocumentType, FileType};
 use database::models::{
-    DocumentViewer, Emulator, FileSet, FileSetFileInfo, FileType, ReleaseExtended, SettingName,
+    DocumentViewer, Emulator, FileSet, FileSetFileInfo, ReleaseExtended, SettingName,
     SoftwareTitle, System,
 };
 use file_system::get_files_root_dir;

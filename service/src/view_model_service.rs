@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use database::{models::FileType, repository_manager::RepositoryManager};
+use database::repository_manager::RepositoryManager;
 
 use crate::{
     error::Error,
@@ -11,7 +11,7 @@ use crate::{
     },
 };
 
-use core_types::ArgumentType;
+use core_types::{ArgumentType, FileType};
 
 #[derive(Debug, Clone)]
 pub struct ReleaseFilter {

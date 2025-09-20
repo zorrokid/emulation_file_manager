@@ -316,14 +316,14 @@ impl FileAddWidget {
                                     file_path,
                                     target_path,
                                     file_filter,
-                                    file_type.into(),
+                                    file_type,
                                 )
                             } else {
                                 file_import::import_file(
                                     file_path,
                                     target_path,
                                     file_name,
-                                    file_type.into(),
+                                    file_type,
                                 )
                             }
                         },
