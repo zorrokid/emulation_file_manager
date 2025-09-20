@@ -16,7 +16,7 @@ use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
         self,
-        glib::clone,
+        glib::{self, clone},
         prelude::{ButtonExt, GtkWindowExt, OrientableExt, WidgetExt},
     },
     typed_view::list::TypedListView,
@@ -101,6 +101,11 @@ impl Component for DocumentViewer {
     view! {
         gtk::Window {
             set_title: Some("Document Viewer"),
+
+            connect_close_request[sender] => move |_| {
+                sender.input(DocumentViewerMsg::Hide);
+                glib::Propagation::Stop
+            },
 
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
