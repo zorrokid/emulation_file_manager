@@ -166,7 +166,7 @@ impl FileSetRepository {
             "Adding file set: {}, {} file type: {:?}, files: {:?}, systems: {:?}",
             file_set_name, file_set_file_name, file_type, files_in_fileset, system_ids
         );
-        let file_type = *file_type as i64;
+        let file_type = file_type.to_db_int();
 
         let mut transaction = self.pool.begin().await?;
 
@@ -193,8 +193,9 @@ impl FileSetRepository {
             let existing_file_info = sqlx::query_scalar!(
                 "SELECT id 
                  FROM file_info 
-                 WHERE sha1_checksum = ?",
-                checksum
+                 WHERE sha1_checksum = ? and file_type = ?",
+                checksum,
+                file_type
             )
             .fetch_optional(&mut *transaction)
             .await?;
@@ -214,11 +215,13 @@ impl FileSetRepository {
                         "INSERT INTO file_info (
                             sha1_checksum, 
                             file_size, 
-                            archive_file_name
-                        ) VALUES (?, ?, ?)",
+                            archive_file_name,
+                            file_type
+                        ) VALUES (?, ?, ?, ?)",
                         checksum,
                         file_size,
-                        archive_file_name
+                        archive_file_name,
+                        file_type
                     )
                     .execute(&mut *transaction)
                     .await?;
