@@ -1,13 +1,28 @@
 use std::sync::Arc;
 
-use core_types::Sha1Checksum;
-use sqlx::{Pool, QueryBuilder, Sqlite};
+use core_types::{FileType, Sha1Checksum};
+use sqlx::{prelude::FromRow, sqlite::SqliteRow, Pool, QueryBuilder, Row, Sqlite};
 
 use crate::{database_error::Error, models::FileInfo};
 
 #[derive(Debug)]
 pub struct FileInfoRepository {
     pool: Arc<Pool<Sqlite>>,
+}
+
+impl FromRow<'_, SqliteRow> for FileInfo {
+    fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
+        let file_type_int: u8 = row.try_get("file_type")?;
+        let file_type: FileType =
+            FileType::from_db_int(file_type_int).expect("Invalid file type in DB");
+        Ok(Self {
+            id: row.try_get("id")?,
+            file_type,
+            sha1_checksum: row.try_get("sha1_checksum")?,
+            file_size: row.try_get("file_size")?,
+            archive_file_name: row.try_get("archive_file_name")?,
+        })
+    }
 }
 
 impl FileInfoRepository {
@@ -20,7 +35,7 @@ impl FileInfoRepository {
         checksums: Vec<Sha1Checksum>,
     ) -> Result<Vec<FileInfo>, Error> {
         let mut query_builder = QueryBuilder::<Sqlite>::new(
-            "SELECT id, sha1_checksum, file_size, archive_file_name 
+            "SELECT id, sha1_checksum, file_size, archive_file_name, file_type 
              FROM file_info WHERE sha1_checksum IN (",
         );
         let mut separated = query_builder.separated(", ");
@@ -38,7 +53,7 @@ impl FileInfoRepository {
         file_set_id: i64,
     ) -> Result<Vec<FileInfo>, Error> {
         let query = sqlx::query_as::<_, FileInfo>(
-            "SELECT id, sha1_checksum, file_size, archive_file_name
+            "SELECT id, sha1_checksum, file_size, archive_file_name, file_type
              FROM file_info fi
              JOIN file_set_file_info fsfi ON fi.id = fsfi.file_info_id
              WHERE fsfi.file_set_id = ?",
@@ -50,7 +65,7 @@ impl FileInfoRepository {
 }
 #[cfg(test)]
 mod tests {
-    use crate::{models::FileType, setup_test_db};
+    use crate::setup_test_db;
 
     use super::*;
     use sqlx::query;
@@ -62,32 +77,36 @@ mod tests {
         let file_info_repository = FileInfoRepository::new(pool.clone());
         let checksum_1 = Sha1Checksum::from([0; 20]);
         let checksum_2 = Sha1Checksum::from([1; 20]);
+        let file_type = FileType::Rom.to_db_int();
 
         query(
             "INSERT INTO file_info (
                 sha1_checksum, 
                 file_size, 
-                archive_file_name
-                ) VALUES (?, ?, ?)",
+                archive_file_name,
+                file_type
+                ) VALUES (?, ?, ?, ?)",
         )
         .bind(checksum_1.to_vec())
         .bind(1234)
         .bind("test_archive_name_1")
+        .bind(file_type)
         .execute(&*pool)
         .await
         .unwrap();
 
         query(
             "INSERT INTO file_info (
-                sha1_checksum, 
-                file_size, 
-                archive_file_name
-                ) VALUES (?, ?, ?)",
+                sha1_checksum,
+                file_size,
+                archive_file_name,
+                file_type
+                ) VALUES (?, ?, ?, ?)",
         )
         .bind(checksum_2.to_vec())
         .bind(5678)
         .bind("test_archive_name_2")
-        .bind(false)
+        .bind(file_type)
         .execute(&*pool)
         .await
         .unwrap();
@@ -107,16 +126,19 @@ mod tests {
         let pool = Arc::new(pool);
         let file_info_repository = FileInfoRepository::new(pool.clone());
         let checksum_1: Vec<u8> = "test_sha1_1".as_bytes().to_vec();
+        let file_type = FileType::Rom.to_db_int();
 
         let result = query!(
             "INSERT INTO file_info (
                 sha1_checksum, 
                 file_size,
-                archive_file_name
-                ) VALUES (?, ?, ?)",
+                archive_file_name,
+                file_type
+                ) VALUES (?, ?, ?, ?)",
             checksum_1,
             1234,
             "test_archive_name_1",
+            file_type
         )
         .execute(&*pool)
         .await
@@ -129,11 +151,13 @@ mod tests {
             "INSERT INTO file_info (
                 sha1_checksum, 
                 file_size,
-                archive_file_name
-                ) VALUES (?, ?, ?)",
+                archive_file_name,
+                file_type
+                ) VALUES (?, ?, ?, ?)",
             checksum_2,
             5678,
             "test_archive_name_2",
+            file_type
         )
         .execute(&*pool)
         .await
@@ -145,7 +169,7 @@ mod tests {
             "INSERT INTO file_set (file_name, file_type, name) 
              VALUES (?, ?, ?)",
             "test_file_set",
-            FileType::Rom as i32,
+            file_type,
             "test_file_set_name"
         )
         .execute(&*pool)

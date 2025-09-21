@@ -4,12 +4,13 @@ use std::fmt::{Display, Formatter};
 
 use sqlx::FromRow;
 
-#[derive(Debug, Clone, PartialEq, FromRow)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FileInfo {
     pub id: i64,
     pub sha1_checksum: Vec<u8>,
     pub file_size: u64,
     pub archive_file_name: String,
+    pub file_type: FileType,
 }
 
 /// FileSet is a container of files related to a single software title release.
