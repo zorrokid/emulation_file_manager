@@ -33,11 +33,14 @@ impl FileInfoRepository {
     pub async fn get_file_infos_by_sha1_checksums(
         &self,
         checksums: Vec<Sha1Checksum>,
+        file_type: FileType,
     ) -> Result<Vec<FileInfo>, Error> {
         let mut query_builder = QueryBuilder::<Sqlite>::new(
-            "SELECT id, sha1_checksum, file_size, archive_file_name, file_type 
-             FROM file_info WHERE sha1_checksum IN (",
+            "SELECT id, sha1_checksum, file_size, archive_file_name, file_type
+             FROM file_info WHERE file_type = ",
         );
+        query_builder.push_bind(file_type.to_db_int());
+        query_builder.push(" AND sha1_checksum IN (");
         let mut separated = query_builder.separated(", ");
         for checksum in &checksums {
             separated.push_bind(checksum.to_vec());
@@ -113,7 +116,7 @@ mod tests {
 
         let checksums: Vec<Sha1Checksum> = vec![checksum_1, checksum_2];
         let file_infos = file_info_repository
-            .get_file_infos_by_sha1_checksums(checksums)
+            .get_file_infos_by_sha1_checksums(checksums, FileType::Rom)
             .await
             .unwrap();
 
