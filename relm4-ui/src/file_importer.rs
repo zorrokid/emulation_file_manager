@@ -25,8 +25,7 @@ pub struct PickedFileContent {
 #[derive(Debug)]
 pub struct FileImporter {
     current_picked_files: Vec<PickedFile>,
-    // todo: get & set
-    pub selected_file_type: Option<FileType>,
+    selected_file_type: Option<FileType>,
 }
 
 impl Display for FileImporter {

@@ -309,7 +309,6 @@ impl Component for FileSetFormModel {
             settings: init_model.settings,
             file_importer: FileImporter::new(),
             files,
-            //selected_file_type: None,
             selected_system_ids: Vec::new(),
             file_set_name: String::new(),
             file_set_file_name: String::new(),
