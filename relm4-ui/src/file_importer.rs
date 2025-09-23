@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use core_types::{ImportedFile, ReadFile, Sha1Checksum};
+use core_types::{FileType, ImportedFile, ReadFile, Sha1Checksum};
 use database::models::FileInfo;
 use utils::file_util;
 
@@ -25,6 +25,7 @@ pub struct PickedFileContent {
 #[derive(Debug)]
 pub struct FileImporter {
     current_picked_files: Vec<PickedFile>,
+    selected_file_type: Option<FileType>,
 }
 
 impl Display for FileImporter {
@@ -49,11 +50,19 @@ impl FileImporter {
     pub fn new() -> Self {
         Self {
             current_picked_files: vec![],
+            selected_file_type: None,
         }
     }
 
+    pub fn set_selected_file_type(&mut self, file_type: FileType) {
+        self.selected_file_type = Some(file_type);
+    }
+    pub fn get_selected_file_type(&self) -> Option<FileType> {
+        self.selected_file_type
+    }
     pub fn clear(&mut self) {
         self.current_picked_files.clear();
+        self.selected_file_type = None;
     }
 
     pub fn get_current_picked_files(&self) -> &Vec<PickedFile> {

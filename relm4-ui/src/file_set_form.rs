@@ -148,11 +148,8 @@ pub enum CommandMsg {
         content: HashMap<Sha1Checksum, ReadFile>,
         result: Result<Vec<FileInfo>, DatabaseError>,
     },
-    FilesImported(
-        Result<HashMap<Sha1Checksum, ImportedFile>, FileImportError>,
-        FileType,
-    ),
-    FilesSavedToDatabase(Result<i64, DatabaseError>, FileType),
+    FilesImported(Result<HashMap<Sha1Checksum, ImportedFile>, FileImportError>),
+    FilesSavedToDatabase(Result<i64, DatabaseError>),
 }
 
 pub struct FileSetFormInit {
@@ -166,7 +163,7 @@ pub struct FileSetFormModel {
     settings: Arc<Settings>,
     file_importer: FileImporter,
     files: FactoryVecDeque<File>,
-    selected_file_type: Option<FileType>,
+    //selected_file_type: Option<FileType>,
     selected_system_ids: Vec<i64>,
     file_set_name: String,
     file_set_file_name: String,
@@ -221,6 +218,8 @@ impl Component for FileSetFormModel {
                 gtk::Button {
                     set_label: "Open file selector",
                     connect_clicked => FileSetFormMsg::OpenFileSelector,
+                    #[watch]
+                    set_sensitive: model.file_importer.get_selected_file_type().is_some(),
                 },
 
                 #[name = "selected_file_label"]
@@ -310,7 +309,6 @@ impl Component for FileSetFormModel {
             settings: init_model.settings,
             file_importer: FileImporter::new(),
             files,
-            selected_file_type: None,
             selected_system_ids: Vec::new(),
             file_set_name: String::new(),
             file_set_file_name: String::new(),
@@ -328,31 +326,33 @@ impl Component for FileSetFormModel {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         match msg {
             FileSetFormMsg::OpenFileSelector => {
-                println!("Open file selector button clicked");
-                let dialog = FileChooserDialog::builder()
-                    .title("Select Files")
-                    .action(gtk::FileChooserAction::Open)
-                    .modal(true)
-                    .transient_for(root)
-                    .build();
+                if let Some(file_type) = self.file_importer.get_selected_file_type() {
+                    println!("Open file selector button clicked");
+                    let dialog = FileChooserDialog::builder()
+                        .title("Select Files")
+                        .action(gtk::FileChooserAction::Open)
+                        .modal(true)
+                        .transient_for(root)
+                        .build();
 
-                dialog.add_button("Cancel", gtk::ResponseType::Cancel);
-                dialog.add_button("Open", gtk::ResponseType::Accept);
+                    dialog.add_button("Cancel", gtk::ResponseType::Cancel);
+                    dialog.add_button("Open", gtk::ResponseType::Accept);
 
-                dialog.connect_response(clone!(
-                    #[strong]
-                    sender,
-                    move |dialog, response| {
-                        if response == gtk::ResponseType::Accept {
-                            if let Some(path) = dialog.file().and_then(|f| f.path()) {
-                                sender.input(FileSetFormMsg::FileSelected(path));
+                    dialog.connect_response(clone!(
+                        #[strong]
+                        sender,
+                        move |dialog, response| {
+                            if response == gtk::ResponseType::Accept {
+                                if let Some(path) = dialog.file().and_then(|f| f.path()) {
+                                    sender.input(FileSetFormMsg::FileSelected(path));
+                                }
                             }
+                            dialog.close();
                         }
-                        dialog.close();
-                    }
-                ));
+                    ));
 
-                dialog.present();
+                    dialog.present();
+                }
             }
             FileSetFormMsg::FileSelected(path) => {
                 println!("File selected: {:?}", path);
@@ -388,37 +388,38 @@ impl Component for FileSetFormModel {
                 }
             }
             FileSetFormMsg::CreateFileSetFromSelectedFiles => {
-                if let Some(file_type) = self.selected_file_type {
-                    if self.file_importer.is_selected_files() {
-                        let target_path =
-                            resolve_file_type_path(&self.settings.collection_root_dir, &file_type);
-                        let new_files_file_name_filter = self
+                if self.file_importer.is_selected_files() {
+                    let file_type = self.file_importer.get_selected_file_type().expect(
+                        "File type must be selected (should have been checked in beginning of process)",
+                    );
+                    let target_path =
+                        resolve_file_type_path(&self.settings.collection_root_dir, &file_type);
+                    let new_files_file_name_filter = self
+                        .file_importer
+                        .get_selected_files_from_current_picked_files_that_are_new()
+                        .iter()
+                        .map(|file| file.file_name.clone())
+                        .collect::<HashSet<String>>();
+
+                    let file_import_model = FileImportModel {
+                        file_path: self
                             .file_importer
-                            .get_selected_files_from_current_picked_files_that_are_new()
+                            .get_current_picked_files()
                             .iter()
-                            .map(|file| file.file_name.clone())
-                            .collect::<HashSet<String>>();
+                            .map(|f| f.path.clone())
+                            .collect::<Vec<PathBuf>>(),
+                        output_dir: target_path.to_path_buf(),
+                        file_name: self.file_set_file_name.clone(),
+                        file_set_name: self.file_set_name.clone(),
+                        file_type,
+                        new_files_file_name_filter,
+                    };
 
-                        let file_import_model = FileImportModel {
-                            file_path: self
-                                .file_importer
-                                .get_current_picked_files()
-                                .iter()
-                                .map(|f| f.path.clone())
-                                .collect::<Vec<PathBuf>>(),
-                            output_dir: target_path.to_path_buf(),
-                            file_name: self.file_set_file_name.clone(),
-                            file_set_name: self.file_set_name.clone(),
-                            file_type,
-                            new_files_file_name_filter,
-                        };
-
-                        println!("Prepared file import model: {:?}", file_import_model);
-                        sender.oneshot_command(async move {
-                            let res = file_import::import(&file_import_model);
-                            CommandMsg::FilesImported(res, file_type)
-                        });
-                    }
+                    println!("Prepared file import model: {:?}", file_import_model);
+                    sender.oneshot_command(async move {
+                        let res = file_import::import(&file_import_model);
+                        CommandMsg::FilesImported(res)
+                    });
                 }
             }
             FileSetFormMsg::FileSetNameChanged(name) => {
@@ -432,17 +433,18 @@ impl Component for FileSetFormModel {
             }
             FileSetFormMsg::FileTypeChanged(file_type) => {
                 println!("File type changed: {:?}", file_type);
-                self.selected_file_type = Some(file_type);
+                self.file_importer.set_selected_file_type(file_type);
             }
             FileSetFormMsg::Show {
                 selected_system_ids,
                 selected_file_type,
             } => {
+                self.file_importer.clear();
+                self.file_importer
+                    .set_selected_file_type(selected_file_type);
                 self.selected_system_ids = selected_system_ids;
-                self.selected_file_type = Some(selected_file_type);
                 self.file_set_name.clear();
                 self.file_set_file_name.clear();
-                self.file_importer.clear();
                 self.source.clear();
                 self.files.guard().clear();
                 self.dropdown
@@ -466,10 +468,13 @@ impl Component for FileSetFormModel {
                 println!("File contents read successfully: {:?}", &content);
                 let file_checksums = content.keys().cloned().collect::<Vec<Sha1Checksum>>();
                 let repository_manager = Arc::clone(&self.repository_manager);
+                let file_type = self.file_importer.get_selected_file_type().expect(
+                    "File type must be selected (should have been checked in beginning of process)",
+                );
                 sender.oneshot_command(async move {
                     let existing_files_file_info = repository_manager
                         .get_file_info_repository()
-                        .get_file_infos_by_sha1_checksums(file_checksums)
+                        .get_file_infos_by_sha1_checksums(file_checksums, file_type)
                         .await;
                     CommandMsg::ExistingFilesRead {
                         path,
@@ -478,7 +483,7 @@ impl Component for FileSetFormModel {
                     }
                 });
             }
-            CommandMsg::FileContentsRead(path, Err(e)) => {
+            CommandMsg::FileContentsRead(_, Err(e)) => {
                 eprintln!("Error reading file contents: {:?}", e);
                 // TODO: show error to user
             }
@@ -505,7 +510,7 @@ impl Component for FileSetFormModel {
                     eprintln!("Error reading existing files: {:?}", e);
                 }
             },
-            CommandMsg::FilesImported(Ok(imported_files_map), file_type) => {
+            CommandMsg::FilesImported(Ok(imported_files_map)) => {
                 println!("Files imported successfully: {:?}", imported_files_map);
                 self.file_importer
                     .set_imported_files(imported_files_map.clone());
@@ -517,6 +522,9 @@ impl Component for FileSetFormModel {
                 let file_set_name = self.file_set_name.clone();
                 let file_set_file_name = self.file_set_file_name.clone();
                 let source = self.source.clone();
+                let file_type = self.file_importer.get_selected_file_type().expect(
+                    "File type must be selected (should have been checked in beginning of process)",
+                );
                 assert!(!files_in_file_set.is_empty());
                 assert!(!file_set_file_name.is_empty());
                 sender.oneshot_command(async move {
@@ -531,19 +539,22 @@ impl Component for FileSetFormModel {
                             &system_ids,
                         )
                         .await;
-                    CommandMsg::FilesSavedToDatabase(result, file_type)
+                    CommandMsg::FilesSavedToDatabase(result)
                 });
             }
-            CommandMsg::FilesImported(Err(e), _file_type) => {
+            CommandMsg::FilesImported(Err(e)) => {
                 eprintln!("Error importing files: {:?}", e);
                 // TODO: show error to user
             }
-            CommandMsg::FilesSavedToDatabase(Ok(id), file_type) => {
+            CommandMsg::FilesSavedToDatabase(Ok(id)) => {
                 println!("Files saved to database successfully with ID: {}", id);
+                let file_type = self.file_importer.get_selected_file_type().expect(
+                    "File type must be selected (should have been checked in beginning of process)",
+                );
                 let file_set_list_model = FileSetListModel {
                     id,
                     file_set_name: self.file_set_name.clone(),
-                    file_type: file_type,
+                    file_type,
                     file_name: self.file_set_file_name.clone(),
                 };
                 let res = sender.output(FileSetFormOutputMsg::FileSetCreated(file_set_list_model));
@@ -555,7 +566,7 @@ impl Component for FileSetFormModel {
                     root.close();
                 }
             }
-            CommandMsg::FilesSavedToDatabase(Err(e), _file_type) => {
+            CommandMsg::FilesSavedToDatabase(Err(e)) => {
                 eprintln!("Error saving files to database: {:?}", e);
             }
             _ => {}
