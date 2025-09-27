@@ -89,16 +89,25 @@ impl Component for FileSelectModel {
         gtk::Window {
             set_default_width: 800,
             set_default_height: 800,
+            set_title: Some("Select File Set"),
 
             connect_close_request[sender] => move |_| {
                 sender.input(FileSelectMsg::Hide);
-                glib::Propagation::Proceed
+                glib::Propagation::Stop
             },
 
             gtk::Box {
-                set_orientation: gtk::Orientation::Horizontal,
+                set_orientation: gtk::Orientation::Vertical,
                 set_spacing: 10,
                 set_margin_all: 10,
+
+                gtk::Paned {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    set_start_child: Some(&main_box),
+                    set_end_child: Some(&file_set_details),
+                },
+
+                #[name = "main_box"]
                 gtk::Box {
                     set_orientation: gtk::Orientation::Vertical,
                     gtk::Label {
@@ -124,10 +133,14 @@ impl Component for FileSelectModel {
                         set_sensitive: model.selected_file_set.is_some() && model.selected_file_type.is_some(),
                     },
                 },
-                #[local_ref]
-                file_set_details_view -> gtk::Box {},
-            }
-        }
+
+                #[name = "file_set_details"]
+                gtk::Box {
+                    #[local_ref]
+                    file_set_details_view -> gtk::Box {},
+                },
+            },
+        },
     }
 
     fn init(
