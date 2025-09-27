@@ -19,7 +19,7 @@ use service::{
 use ui_components::{DropDownOutputMsg, FileTypeDropDown, FileTypeSelectedMsg};
 
 use crate::{
-    file_set_details_view::{FileSetDetailsInit, FileSetDetailsView},
+    file_set_details_view::{FileSetDetailsInit, FileSetDetailsMsg, FileSetDetailsView},
     file_set_form::{FileSetFormInit, FileSetFormModel, FileSetFormMsg, FileSetFormOutputMsg},
     list_item::ListItem,
 };
@@ -282,10 +282,12 @@ impl Component for FileSelectModel {
                     let file_set_list_model = FileSetListModel {
                         id: file_set.id,
                         file_set_name: file_set.name.clone(),
-                        file_type: file_type,
+                        file_type,
                         file_name: file_set.name.clone(), // TODO?
                     };
                     self.selected_file_set = Some(file_set_list_model);
+                    self.file_set_details_view
+                        .emit(FileSetDetailsMsg::LoadFileSet(file_set.id));
                 } else {
                     eprintln!("No file set found at index {}", index);
                 }
