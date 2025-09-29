@@ -274,6 +274,7 @@ impl Component for ImageFilesetViewer {
                         MyGridItem::new(thumbnail_path.clone(), file_name.clone().into())
                     });
 
+                self.grid_view_wrapper.clear();
                 self.grid_view_wrapper.extend_from_iter(grid_items);
 
                 self.thumbnails_mapping = thumbnails_mapping;
