@@ -167,6 +167,7 @@ pub struct ReleaseListModel {
     pub name: String,
     pub system_names: Vec<String>,
     pub file_types: Vec<String>,
+    pub software_title_names: Vec<String>,
 }
 
 impl From<&ReleaseExtended> for ReleaseListModel {
@@ -176,6 +177,7 @@ impl From<&ReleaseExtended> for ReleaseListModel {
             name: release.name.clone(),
             system_names: release.system_names.clone(),
             file_types: release.file_types.iter().map(|ft| ft.to_string()).collect(),
+            software_title_names: release.software_title_names.clone(),
         }
     }
 }

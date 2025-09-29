@@ -44,6 +44,7 @@ impl ReleaseRepository {
         &self,
         system_id: Option<i64>,
         software_title_id: Option<i64>,
+        file_set_id: Option<i64>,
     ) -> Result<Vec<ReleaseExtended>, Error> {
         let query = r#"
             SELECT
@@ -69,6 +70,7 @@ impl ReleaseRepository {
             WHERE
                 (? IS NULL OR s.id = ?)
                 AND (? IS NULL OR st.id = ?)
+                AND (? IS NULL OR fs.id = ?)
              GROUP BY
                 r.id, r.name;
         "#;
@@ -78,6 +80,8 @@ impl ReleaseRepository {
             .bind(system_id)
             .bind(software_title_id)
             .bind(software_title_id)
+            .bind(file_set_id)
+            .bind(file_set_id)
             .fetch_all(&*self.pool)
             .await?;
 

@@ -13,10 +13,11 @@ use crate::{
 
 use core_types::{ArgumentType, FileType};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ReleaseFilter {
     pub system_id: Option<i64>,
     pub software_title_id: Option<i64>,
+    pub file_set_id: Option<i64>,
 }
 
 #[derive(Debug)]
@@ -264,6 +265,22 @@ impl ViewModelService {
         Ok(list_models)
     }
 
+    pub async fn get_systems_for_file_set(
+        &self,
+        file_set_id: i64,
+    ) -> Result<Vec<SystemListModel>, Error> {
+        let systems = self
+            .repository_manager
+            .get_system_repository()
+            .get_systems_by_file_set(file_set_id)
+            .await
+            .map_err(|err| Error::DbError(err.to_string()))?;
+
+        let list_models: Vec<SystemListModel> = systems.iter().map(SystemListModel::from).collect();
+
+        Ok(list_models)
+    }
+
     pub async fn get_release_list_models(
         &self,
         filters: ReleaseFilter,
@@ -271,7 +288,11 @@ impl ViewModelService {
         let releases = self
             .repository_manager
             .get_release_repository()
-            .get_releases(filters.system_id, filters.software_title_id)
+            .get_releases(
+                filters.system_id,
+                filters.software_title_id,
+                filters.file_set_id,
+            )
             .await
             .map_err(|err| Error::DbError(err.to_string()))?;
 
