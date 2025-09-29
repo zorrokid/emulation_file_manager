@@ -116,7 +116,7 @@ impl Component for ImageFilesetViewer {
             set_default_size: (800, 600),
             connect_close_request[sender] => move |_| {
                 sender.input(ImageFilesetViewerMsg::Hide);
-                glib::Propagation::Proceed
+                glib::Propagation::Stop
             },
 
             gtk::Box {
@@ -228,7 +228,7 @@ impl Component for ImageFilesetViewer {
                 root.show();
             }
             ImageFilesetViewerMsg::Hide => {
-                root.close();
+                root.hide();
             }
         }
     }
