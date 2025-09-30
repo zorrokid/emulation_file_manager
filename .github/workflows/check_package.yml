@@ -1,0 +1,47 @@
+name: Check Package Version
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: "Package name to check"
+        required: true
+        type: string
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update apt
+        run: sudo apt-get update
+
+      - name: Check package availability
+        run: |
+          PKG="${{ github.event.inputs.package }}"
+
+          echo "Checking package: $PKG"
+          if apt-cache show "$PKG" > /dev/null 2>&1; then
+            echo "::notice::Package '$PKG' is available in apt"
+          else
+            echo "::error::Package '$PKG' is NOT available in apt"
+            exit 1
+          fi
+
+      - name: Show apt-cache policy
+        run: |
+          PKG="${{ github.event.inputs.package }}"
+          echo "::group::apt-cache policy $PKG"
+          apt-cache policy "$PKG" || true
+          echo "::endgroup::"
+
+      - name: Show installed version (if installed)
+        run: |
+          PKG="${{ github.event.inputs.package }}"
+          if command -v "$PKG" > /dev/null 2>&1; then
+            echo "::group::${PKG} --version"
+            "$PKG" --version || dpkg -s "$PKG" || true
+            echo "::endgroup::"
+          else
+            echo "::notice::Package '$PKG' is not installed by default"
+          fi
+
