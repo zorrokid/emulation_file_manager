@@ -176,6 +176,7 @@ impl Component for ReleasesModel {
                             .get_release_list_models(ReleaseFilter {
                                 software_title_id: Some(software_title_id),
                                 system_id: None,
+                                file_set_id: None,
                             })
                             .await;
                         CommandMsg::FetchedReleases(releases_result)

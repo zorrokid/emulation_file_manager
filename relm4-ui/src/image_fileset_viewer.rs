@@ -116,7 +116,7 @@ impl Component for ImageFilesetViewer {
             set_default_size: (800, 600),
             connect_close_request[sender] => move |_| {
                 sender.input(ImageFilesetViewerMsg::Hide);
-                glib::Propagation::Proceed
+                glib::Propagation::Stop
             },
 
             gtk::Box {
@@ -228,7 +228,7 @@ impl Component for ImageFilesetViewer {
                 root.show();
             }
             ImageFilesetViewerMsg::Hide => {
-                root.close();
+                root.hide();
             }
         }
     }
@@ -274,6 +274,7 @@ impl Component for ImageFilesetViewer {
                         MyGridItem::new(thumbnail_path.clone(), file_name.clone().into())
                     });
 
+                self.grid_view_wrapper.clear();
                 self.grid_view_wrapper.extend_from_iter(grid_items);
 
                 self.thumbnails_mapping = thumbnails_mapping;

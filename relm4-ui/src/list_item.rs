@@ -4,7 +4,7 @@ use relm4::{
     typed_view::list::RelmListItem,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ListItem {
     pub name: String,
     pub id: i64,

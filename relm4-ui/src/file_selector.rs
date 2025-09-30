@@ -3,11 +3,11 @@ use std::sync::Arc;
 use core_types::FileType;
 use database::{database_error::Error as DatabaseError, repository_manager::RepositoryManager};
 use relm4::{
-    Component, ComponentController, ComponentParts, ComponentSender, Controller,
+    Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
         self,
         glib::{self, clone},
-        prelude::{ButtonExt, GtkWindowExt, OrientableExt, WidgetExt},
+        prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt},
     },
     typed_view::list::TypedListView,
 };
@@ -19,6 +19,7 @@ use service::{
 use ui_components::{DropDownOutputMsg, FileTypeDropDown, FileTypeSelectedMsg};
 
 use crate::{
+    file_set_details_view::{FileSetDetailsInit, FileSetDetailsMsg, FileSetDetailsView},
     file_set_form::{FileSetFormInit, FileSetFormModel, FileSetFormMsg, FileSetFormOutputMsg},
     list_item::ListItem,
 };
@@ -73,6 +74,7 @@ pub struct FileSelectModel {
     selected_file_set: Option<FileSetListModel>,
     selected_file_set_ids: Vec<i64>,
     dropdown: Controller<FileTypeDropDown>,
+    file_set_details_view: Controller<FileSetDetailsView>,
 }
 
 #[relm4::component(pub)]
@@ -87,38 +89,58 @@ impl Component for FileSelectModel {
         gtk::Window {
             set_default_width: 800,
             set_default_height: 800,
+            set_title: Some("Select File Set"),
 
             connect_close_request[sender] => move |_| {
                 sender.input(FileSelectMsg::Hide);
-                glib::Propagation::Proceed
+                glib::Propagation::Stop
             },
 
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
-                gtk::Label {
-                    set_label: "File Selector",
-                },
-                #[local_ref]
-                file_types_dropdown -> gtk::Box {},
-                gtk::Button {
-                    set_label: "Add File Set",
-                    connect_clicked => FileSelectMsg::OpenFileSetForm,
+                set_spacing: 10,
+                set_margin_all: 10,
+
+                gtk::Paned {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    set_start_child: Some(&main_box),
+                    set_end_child: Some(&file_set_details),
                 },
 
-                gtk::ScrolledWindow {
-                    set_vexpand: true,
+                #[name = "main_box"]
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Vertical,
+                    gtk::Label {
+                        set_label: "File Selector",
+                    },
                     #[local_ref]
-                    file_set_list_view -> gtk::ListView {}
+                    file_types_dropdown -> gtk::Box {},
+                    gtk::Button {
+                        set_label: "Add File Set",
+                        connect_clicked => FileSelectMsg::OpenFileSetForm,
+                    },
+
+                    gtk::ScrolledWindow {
+                        set_vexpand: true,
+                        #[local_ref]
+                        file_set_list_view -> gtk::ListView {}
+                    },
+
+                    gtk::Button {
+                        set_label: "Select File Set",
+                        connect_clicked => FileSelectMsg::SelectClicked,
+                        #[watch]
+                        set_sensitive: model.selected_file_set.is_some() && model.selected_file_type.is_some(),
+                    },
                 },
 
-                gtk::Button {
-                    set_label: "Select File Set",
-                    connect_clicked => FileSelectMsg::SelectClicked,
-                    #[watch]
-                    set_sensitive: model.selected_file_set.is_some() && model.selected_file_type.is_some(),
+                #[name = "file_set_details"]
+                gtk::Box {
+                    #[local_ref]
+                    file_set_details_view -> gtk::Box {},
                 },
-            }
-        }
+            },
+        },
     }
 
     fn init(
@@ -145,6 +167,7 @@ impl Component for FileSelectModel {
             //selected_system_ids: self.selected_system_ids.clone(),
             //selected_file_type,
         };
+
         let file_set_form = FileSetFormModel::builder()
             .transient_for(&root)
             .launch(file_set_form_init_model)
@@ -154,6 +177,15 @@ impl Component for FileSelectModel {
                 }
                 _ => FileSelectMsg::Ignore,
             });
+
+        let file_set_details_view_init = FileSetDetailsInit {
+            view_model_service: Arc::clone(&init_model.view_model_service),
+        };
+
+        // TODO: is this needed to be Controller?
+        let file_set_details_view = FileSetDetailsView::builder()
+            .launch(file_set_details_view_init)
+            .forward(sender.input_sender(), |_| FileSelectMsg::Ignore);
 
         let model = FileSelectModel {
             view_model_service: init_model.view_model_service,
@@ -167,9 +199,11 @@ impl Component for FileSelectModel {
             selected_file_set: None,
             selected_file_set_ids: Vec::new(),
             dropdown,
+            file_set_details_view,
         };
         let file_types_dropdown = model.dropdown.widget();
         let file_set_list_view = &model.list_view_wrapper.view;
+        let file_set_details_view = model.file_set_details_view.widget();
         model
             .list_view_wrapper
             .selection_model
@@ -248,10 +282,12 @@ impl Component for FileSelectModel {
                     let file_set_list_model = FileSetListModel {
                         id: file_set.id,
                         file_set_name: file_set.name.clone(),
-                        file_type: file_type,
+                        file_type,
                         file_name: file_set.name.clone(), // TODO?
                     };
                     self.selected_file_set = Some(file_set_list_model);
+                    self.file_set_details_view
+                        .emit(FileSetDetailsMsg::LoadFileSet(file_set.id));
                 } else {
                     eprintln!("No file set found at index {}", index);
                 }
