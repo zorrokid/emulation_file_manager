@@ -31,6 +31,9 @@ jobs:
           libgdk-pixbuf-2.0-dev \
           libgraphene-1.0-dev
 
+    - name: Install sqlx-cli
+      run: cargo install sqlx-cli --no-default-features --features sqlite
+
     - name: Run database migrations
       run: cargo sqlx migrate run
 
