@@ -8,6 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  DATABASE_URL: "sqlite::memory:?cache=shared"
 
 jobs:
   build:
@@ -29,6 +30,9 @@ jobs:
           libpango1.0-dev \
           libgdk-pixbuf-2.0-dev \
           libgraphene-1.0-dev
+
+    - name: Run database migrations
+      run: cargo sqlx migrate run
 
     - name: Build
       run: cargo build --verbose
