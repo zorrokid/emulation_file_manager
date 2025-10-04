@@ -97,4 +97,12 @@ File info and file set meta data is stored in database with this structure:
 
 When file is used with emulator or external viewer, file is exported to a temporary directory. File is exported with file set specific file name. Emulator files are exported either as a complete file set as a zip archive or as individual files depending on the emulator configuration.
 
+### Cloud storage (TODO / WIP)
 
+User can enable cloud storage from settings. The application supports AWS S3 compatible cloud storage providers. User needs to provide the endpoint URL, access key, secret key and bucket name.
+
+When cloud storage is enabled, files are uploaded to cloud storage when they are imported. When file is used with emulator or external viewer, file is downloaded to local cache directory if it's not already there.
+
+User can synchronize files from cloud storage to local directory and vice versa. So cloud storage can be disabled any time when synchronization is done. Then user can change the cloude storage settings and enable it again for example with different cloud storage provider as long it's AWS S3 compatible.
+
+The SQLite database file can be also backed up to cloud storage. User can enable automatic backup to cloud storage from settings. Backup is done when application is beind closed. User can also create manual backup to cloud storage any time.
