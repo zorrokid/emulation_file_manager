@@ -70,7 +70,7 @@ async fn download_file(
     Ok(())
 }
 
-async fn multipart_upload(
+pub async fn multipart_upload(
     bucket: &Bucket,
     file_path: &Path,
     key: &str,

@@ -9,4 +9,5 @@ file_system = { path = "../file_system" }
 file_export = { path = "../file_export" }
 async-std = { version = "1.13.1", features = ["attributes"] }
 core_types = { path = "../core_types" }
+cloud_storage = { path = "../cloud_storage" }
 serde_json = "1.0.142"
