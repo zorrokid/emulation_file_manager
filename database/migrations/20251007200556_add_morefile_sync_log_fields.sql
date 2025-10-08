@@ -1,0 +1,1 @@
+ALTER TABLE file_sync_log ADD COLUMN cloud_key TEXT NOT NULL DEFAULT '';
