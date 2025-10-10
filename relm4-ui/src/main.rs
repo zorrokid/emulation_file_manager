@@ -23,6 +23,8 @@ mod tabbed_image_viewer;
 
 use std::{path::PathBuf, sync::Arc};
 
+use async_std::{channel::unbounded, task};
+use cloud_storage::SyncEvent;
 use database::{get_db_pool, repository_manager::RepositoryManager};
 use release::{ReleaseInitModel, ReleaseModel, ReleaseMsg, ReleaseOutputMsg};
 use releases::{ReleasesInit, ReleasesModel, ReleasesMsg, ReleasesOutputMsg};
@@ -37,6 +39,7 @@ use relm4::{
     once_cell::sync::OnceCell,
 };
 use service::{
+    cloud_storage_sync_service::CloudStorageSyncService,
     view_model_service::ViewModelService,
     view_models::{Settings, SoftwareTitleListModel},
 };
@@ -47,6 +50,7 @@ struct InitResult {
     repository_manager: Arc<RepositoryManager>,
     view_model_service: Arc<ViewModelService>,
     settings: Arc<Settings>,
+    sync_service: Arc<CloudStorageSyncService>,
 }
 
 #[derive(Debug)]
@@ -58,6 +62,8 @@ enum AppMsg {
     ReleaseSelected { id: i64 },
     ExportAllFiles,
     ExportFolderSelected(PathBuf),
+    SyncWithCloud,
+    FileProcessed(SyncEvent),
 }
 
 #[derive(Debug)]
@@ -70,6 +76,7 @@ struct AppModel {
     repository_manager: OnceCell<Arc<RepositoryManager>>,
     view_model_service: OnceCell<Arc<ViewModelService>>,
     settings: OnceCell<Arc<Settings>>,
+    sync_service: OnceCell<Arc<CloudStorageSyncService>>,
     software_titles: OnceCell<Controller<SoftwareTitlesList>>,
     releases_view: gtk::Box,
     releases: OnceCell<Controller<ReleasesModel>>,
@@ -116,6 +123,22 @@ impl Component for AppModel {
         ));
 
         header_bar.pack_end(&export_button);
+
+        let sync_button = gtk::Button::builder()
+            .icon_name("folder-sync-symbolic")
+            .tooltip_text("Sync with Cloud Storage")
+            .build();
+
+        sync_button.connect_clicked(clone!(
+            #[strong]
+            sender,
+            move |_| {
+                sender.input(AppMsg::SyncWithCloud);
+            }
+        ));
+
+        header_bar.pack_end(&sync_button);
+
         root.set_titlebar(Some(&header_bar));
 
         let main_layout_hbox = gtk::Paned::builder()
@@ -154,6 +177,7 @@ impl Component for AppModel {
             releases: OnceCell::new(),
             release: OnceCell::new(),
             software_titles: OnceCell::new(),
+            sync_service: OnceCell::new(),
         };
 
         sender.input(AppMsg::Initialize);
@@ -165,6 +189,10 @@ impl Component for AppModel {
         match msg {
             AppMsg::Initialize => {
                 sender.oneshot_command(async {
+                    // TODO: Replace `expect` calls with proper error handling.
+                    //       Instead of panicking on initialization failure,
+                    //       return a `Result<InitResult, InitError>` and handle it in
+                    //       `CommandMsg::InitializationDone`.
                     let pool = get_db_pool().await.expect("DB pool initialization failed");
                     let repository_manager = Arc::new(RepositoryManager::new(pool));
                     let view_model_service =
@@ -174,10 +202,18 @@ impl Component for AppModel {
                         .await
                         .expect("Failed to get config");
                     let settings = Arc::new(settings);
+                    let sync_service = Arc::new(CloudStorageSyncService::new(
+                        Arc::clone(&repository_manager),
+                        Arc::clone(&settings),
+                    ));
+
+                    // TODO: Consider adding a temporary “Loading…” or spinner view in your UI
+                    //       while initialization runs, and disable main controls until complete.
                     CommandMsg::InitializationDone(InitResult {
                         repository_manager,
                         view_model_service,
                         settings,
+                        sync_service,
                     })
                 });
             }
@@ -265,6 +301,34 @@ impl Component for AppModel {
                     eprintln!("Selected path is not a directory: {:?}", path);
                 }
             }
+            AppMsg::SyncWithCloud => {
+                let sync_service = self
+                    .sync_service
+                    .get()
+                    .expect("Sync service not initialized");
+                let sync_service_clone = Arc::clone(sync_service);
+                let ui_sender = sender.clone();
+
+                task::spawn(async move {
+                    let (tx, rx) = unbounded::<SyncEvent>();
+
+                    // Spawn task to forward progress messages to UI
+                    task::spawn(async move {
+                        let ui_sender = ui_sender.clone();
+                        while let Ok(event) = rx.recv().await {
+                            ui_sender.input(AppMsg::FileProcessed(event));
+                        }
+                    });
+
+                    if let Err(e) = sync_service_clone.sync_files_to_cloud(tx).await {
+                        eprintln!("Error during sync: {}", e);
+                    }
+                });
+            }
+            AppMsg::FileProcessed(event) => {
+                // Handle sync progress events here, e.g., update a progress bar or log
+                println!("Sync event: {:?}", event);
+            }
         }
     }
 
@@ -340,6 +404,9 @@ impl Component for AppModel {
                 self.settings
                     .set(init_result.settings)
                     .expect("Settings already initialized");
+                self.sync_service
+                    .set(init_result.sync_service)
+                    .expect("Sync service already initialized");
 
                 self.release
                     .set(release_model)
