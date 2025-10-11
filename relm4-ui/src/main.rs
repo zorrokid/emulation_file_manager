@@ -108,64 +108,7 @@ impl Component for AppModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        // Create header bar with simple button
-        let header_bar = gtk::HeaderBar::new();
-        let export_button = gtk::Button::builder()
-            .icon_name("document-save-symbolic")
-            .tooltip_text("Export All Files")
-            .build();
-
-        export_button.connect_clicked(clone!(
-            #[strong]
-            sender,
-            move |_| {
-                sender.input(AppMsg::ExportAllFiles);
-            }
-        ));
-
-        header_bar.pack_end(&export_button);
-
-        let sync_button = gtk::Button::builder()
-            .icon_name("folder-sync-symbolic")
-            .tooltip_text("Sync with Cloud Storage")
-            .build();
-
-        sync_button.connect_clicked(clone!(
-            #[strong]
-            sender,
-            move |_| {
-                sender.input(AppMsg::SyncWithCloud);
-            }
-        ));
-
-        header_bar.pack_end(&sync_button);
-
-        let menu_button = gtk::MenuButton::builder()
-            .icon_name("open-menu-symbolic")
-            .tooltip_text("Menu")
-            .build();
-
-        let menu = gio::Menu::new();
-        menu.append(Some("Settings"), Some("app.settings"));
-        let popover = gtk::PopoverMenu::from_model(Some(&menu));
-
-        menu_button.set_popover(Some(&popover));
-
-        header_bar.pack_start(&menu_button);
-
-        let settings_action = gio::SimpleAction::new("settings", None);
-        settings_action.connect_activate(clone!(
-            #[strong]
-            sender,
-            move |_, _| {
-                sender.input(AppMsg::OpenSettings);
-                println!("Settings action activated");
-            }
-        ));
-        let app = relm4::main_application();
-        app.add_action(&settings_action);
-
-        root.set_titlebar(Some(&header_bar));
+        Self::build_header_bar(&root, &sender);
 
         let main_layout_hbox = gtk::Paned::builder()
             .orientation(gtk::Orientation::Horizontal)
@@ -452,6 +395,69 @@ impl Component for AppModel {
                 }
             },
         }
+    }
+}
+
+impl AppModel {
+    fn build_header_bar(root: &gtk::Window, sender: &ComponentSender<Self>) {
+        // Create header bar with simple button
+        let header_bar = gtk::HeaderBar::new();
+        let export_button = gtk::Button::builder()
+            .icon_name("document-save-symbolic")
+            .tooltip_text("Export All Files")
+            .build();
+
+        export_button.connect_clicked(clone!(
+            #[strong]
+            sender,
+            move |_| {
+                sender.input(AppMsg::ExportAllFiles);
+            }
+        ));
+
+        header_bar.pack_end(&export_button);
+
+        let sync_button = gtk::Button::builder()
+            .icon_name("folder-sync-symbolic")
+            .tooltip_text("Sync with Cloud Storage")
+            .build();
+
+        sync_button.connect_clicked(clone!(
+            #[strong]
+            sender,
+            move |_| {
+                sender.input(AppMsg::SyncWithCloud);
+            }
+        ));
+
+        header_bar.pack_end(&sync_button);
+
+        let menu_button = gtk::MenuButton::builder()
+            .icon_name("open-menu-symbolic")
+            .tooltip_text("Menu")
+            .build();
+
+        let menu = gio::Menu::new();
+        menu.append(Some("Settings"), Some("app.settings"));
+        let popover = gtk::PopoverMenu::from_model(Some(&menu));
+
+        menu_button.set_popover(Some(&popover));
+
+        header_bar.pack_start(&menu_button);
+
+        let settings_action = gio::SimpleAction::new("settings", None);
+        settings_action.connect_activate(clone!(
+            #[strong]
+            sender,
+            move |_, _| {
+                sender.input(AppMsg::OpenSettings);
+                println!("Settings action activated");
+            }
+        ));
+        let app = relm4::main_application();
+        app.add_action(&settings_action);
+
+        root.set_titlebar(Some(&header_bar));
     }
 }
 
