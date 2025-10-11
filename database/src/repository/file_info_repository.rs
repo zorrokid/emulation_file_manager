@@ -69,15 +69,17 @@ impl FileInfoRepository {
     pub async fn get_file_infos_without_sync_log(
         &self,
         limit: i64,
+        offset: i64,
     ) -> Result<Vec<FileInfo>, Error> {
         let query = sqlx::query_as::<_, FileInfo>(
-            "SELECT id, sha1_checksum, file_size, archive_file_name, file_type
+            "SELECT fi.id, fi.sha1_checksum, fi.file_size, fi.archive_file_name, fi.file_type
              FROM file_info fi
              LEFT JOIN file_sync_log fsl ON fi.id = fsl.file_info_id
              WHERE fsl.file_info_id IS NULL 
-             LIMIT ?",
+             LIMIT ? OFFSET ?",
         )
-        .bind(limit);
+        .bind(limit)
+        .bind(offset);
         let file_infos = query.fetch_all(&*self.pool).await?;
         Ok(file_infos)
     }

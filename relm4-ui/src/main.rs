@@ -63,7 +63,7 @@ enum AppMsg {
     ExportAllFiles,
     ExportFolderSelected(PathBuf),
     SyncWithCloud,
-    FileProcessed(SyncEvent),
+    ProcessFileSyncEvent(SyncEvent),
 }
 
 #[derive(Debug)]
@@ -316,7 +316,7 @@ impl Component for AppModel {
                     task::spawn(async move {
                         let ui_sender = ui_sender.clone();
                         while let Ok(event) = rx.recv().await {
-                            ui_sender.input(AppMsg::FileProcessed(event));
+                            ui_sender.input(AppMsg::ProcessFileSyncEvent(event));
                         }
                     });
 
@@ -325,7 +325,7 @@ impl Component for AppModel {
                     }
                 });
             }
-            AppMsg::FileProcessed(event) => {
+            AppMsg::ProcessFileSyncEvent(event) => {
                 // Handle sync progress events here, e.g., update a progress bar or log
                 println!("Sync event: {:?}", event);
             }

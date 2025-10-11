@@ -72,18 +72,22 @@ impl FileSyncLogRepository {
 
     pub async fn get_logs_and_file_info_by_sync_status(
         &self,
-        limit: i64,
-        status: FileSyncStatus,
+        limit: u32,
+        offset: u32,
     ) -> Result<Vec<FileSyncLogWithFileInfo>, sqlx::Error> {
+        let pending_status = FileSyncStatus::Pending.to_db_int();
+        let error_status = FileSyncStatus::Failed.to_db_int();
         let logs = sqlx::query_as::<_, FileSyncLogWithFileInfo>(
             "SELECT log.id, log.file_info_id, log.sync_time, log.status, log.message, log.cloud_key, fi.sha1_checksum, fi.file_size, fi.archive_file_name, fi.file_type 
              FROM file_sync_log log
              INNER JOIN file_info fi ON log.file_info_id = fi.id
-             WHERE log.status = ?
-             LIMIT ?",
+             WHERE log.status = ? OR log.status = ?
+             LIMIT ? OFFSET ?",
         )
-        .bind(status.to_db_int())
+        .bind(pending_status)
+        .bind(error_status)
         .bind(limit)
+        .bind(offset)
         .fetch_all(&*self.pool)
         .await?;
         Ok(logs)
