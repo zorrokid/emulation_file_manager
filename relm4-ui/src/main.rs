@@ -64,6 +64,7 @@ enum AppMsg {
     ExportFolderSelected(PathBuf),
     SyncWithCloud,
     ProcessFileSyncEvent(SyncEvent),
+    OpenSettings,
 }
 
 #[derive(Debug)]
@@ -138,6 +139,31 @@ impl Component for AppModel {
         ));
 
         header_bar.pack_end(&sync_button);
+
+        let menu_button = gtk::MenuButton::builder()
+            .icon_name("open-menu-symbolic")
+            .tooltip_text("Menu")
+            .build();
+
+        let menu = gio::Menu::new();
+        menu.append(Some("Settings"), Some("app.settings"));
+        let popover = gtk::PopoverMenu::from_model(Some(&menu));
+
+        menu_button.set_popover(Some(&popover));
+
+        header_bar.pack_start(&menu_button);
+
+        let settings_action = gio::SimpleAction::new("settings", None);
+        settings_action.connect_activate(clone!(
+            #[strong]
+            sender,
+            move |_, _| {
+                sender.input(AppMsg::OpenSettings);
+                println!("Settings action activated");
+            }
+        ));
+        let app = relm4::main_application();
+        app.add_action(&settings_action);
 
         root.set_titlebar(Some(&header_bar));
 
@@ -328,6 +354,9 @@ impl Component for AppModel {
             AppMsg::ProcessFileSyncEvent(event) => {
                 // Handle sync progress events here, e.g., update a progress bar or log
                 println!("Sync event: {:?}", event);
+            }
+            AppMsg::OpenSettings => {
+                println!("Open Settings requested!");
             }
         }
     }
