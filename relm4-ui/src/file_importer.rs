@@ -112,10 +112,10 @@ impl FileImporter {
                 .iter_mut()
                 .find(|f| f.content.contains_key(sha1_checksum));
 
-            if let Some(file) = file {
-                if let Some(picked_content) = file.content.get_mut(sha1_checksum) {
-                    picked_content.imported_file = Some(imported_file.clone());
-                }
+            if let Some(file) = file
+                && let Some(picked_content) = file.content.get_mut(sha1_checksum)
+            {
+                picked_content.imported_file = Some(imported_file.clone());
             }
         }
     }
