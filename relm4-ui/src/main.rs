@@ -300,17 +300,16 @@ impl Component for AppModel {
                 if self.settings_form.get().is_none() {
                     let settings_form_init = settings_form::SettingsFormInit {
                         repository_manager: Arc::clone(
-                            &self
-                                .repository_manager
+                            self.repository_manager
                                 .get()
                                 .expect("Repository manager not initialized"),
                         ),
                         settings: Arc::clone(
-                            &self.settings.get().expect("Settings not initialized"),
+                            self.settings.get().expect("Settings not initialized"),
                         ),
                     };
                     let settings_form = SettingsForm::builder()
-                        .transient_for(&root)
+                        .transient_for(root)
                         .launch(settings_form_init)
                         .forward(sender.input_sender(), |msg| match msg {
                             settings_form::SettingsFormOutputMsg::SettingsChanged => {
