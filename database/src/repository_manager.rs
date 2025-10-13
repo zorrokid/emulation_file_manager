@@ -79,7 +79,7 @@ impl RepositoryManager {
         &self.software_title_repository
     }
 
-    pub fn settings(&self) -> &SettingRepository {
+    pub fn get_settings_repository(&self) -> &SettingRepository {
         &self.setting_repository
     }
 

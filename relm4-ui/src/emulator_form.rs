@@ -292,8 +292,7 @@ impl Component for EmulatorFormModel {
                 root.show();
             }
             EmulatorFormMsg::Hide => {
-                println!("Hiding emulator form");
-                root.hide();
+                root.close();
             }
             EmulatorFormMsg::ArgumentsChanged(arguments) => {
                 self.arguments = arguments;

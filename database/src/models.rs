@@ -108,18 +108,6 @@ pub struct SoftwareTitle {
     pub franchise_id: Option<i64>,
 }
 
-pub enum SettingName {
-    CollectionRootDir,
-}
-
-impl SettingName {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            SettingName::CollectionRootDir => "collection_root_dir",
-        }
-    }
-}
-
 pub struct FileSyncLog {
     pub id: i64,
     pub file_info_id: i64,

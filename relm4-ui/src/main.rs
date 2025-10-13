@@ -14,6 +14,7 @@ mod list_item;
 mod release;
 mod release_form;
 mod releases;
+mod settings_form;
 mod software_title_form;
 mod software_title_selector;
 mod software_titles_list;
@@ -45,12 +46,13 @@ use service::{
 };
 use software_titles_list::{SoftwareTitleListInit, SoftwareTitlesList};
 
+use crate::settings_form::{SettingsForm, SettingsFormMsg};
+
 #[derive(Debug)]
 struct InitResult {
     repository_manager: Arc<RepositoryManager>,
     view_model_service: Arc<ViewModelService>,
     settings: Arc<Settings>,
-    sync_service: Arc<CloudStorageSyncService>,
 }
 
 #[derive(Debug)]
@@ -65,6 +67,7 @@ enum AppMsg {
     SyncWithCloud,
     ProcessFileSyncEvent(SyncEvent),
     OpenSettings,
+    UpdateSettings,
 }
 
 #[derive(Debug)]
@@ -83,6 +86,7 @@ struct AppModel {
     releases: OnceCell<Controller<ReleasesModel>>,
     release_view: gtk::Box,
     release: OnceCell<Controller<ReleaseModel>>,
+    settings_form: OnceCell<Controller<settings_form::SettingsForm>>,
 }
 
 struct AppWidgets {}
@@ -147,6 +151,7 @@ impl Component for AppModel {
             release: OnceCell::new(),
             software_titles: OnceCell::new(),
             sync_service: OnceCell::new(),
+            settings_form: OnceCell::new(),
         };
 
         sender.input(AppMsg::Initialize);
@@ -171,18 +176,11 @@ impl Component for AppModel {
                         .await
                         .expect("Failed to get config");
                     let settings = Arc::new(settings);
-                    let sync_service = Arc::new(CloudStorageSyncService::new(
-                        Arc::clone(&repository_manager),
-                        Arc::clone(&settings),
-                    ));
 
-                    // TODO: Consider adding a temporary “Loading…” or spinner view in your UI
-                    //       while initialization runs, and disable main controls until complete.
                     CommandMsg::InitializationDone(InitResult {
                         repository_manager,
                         view_model_service,
                         settings,
-                        sync_service,
                     })
                 });
             }
@@ -299,7 +297,37 @@ impl Component for AppModel {
                 println!("Sync event: {:?}", event);
             }
             AppMsg::OpenSettings => {
-                println!("Open Settings requested!");
+                if self.settings_form.get().is_none() {
+                    let settings_form_init = settings_form::SettingsFormInit {
+                        repository_manager: Arc::clone(
+                            &self
+                                .repository_manager
+                                .get()
+                                .expect("Repository manager not initialized"),
+                        ),
+                        settings: Arc::clone(
+                            &self.settings.get().expect("Settings not initialized"),
+                        ),
+                    };
+                    let settings_form = SettingsForm::builder()
+                        .transient_for(&root)
+                        .launch(settings_form_init)
+                        .forward(sender.input_sender(), |msg| match msg {
+                            settings_form::SettingsFormOutputMsg::SettingsChanged => {
+                                AppMsg::UpdateSettings
+                            }
+                        });
+                    self.settings_form
+                        .set(settings_form)
+                        .expect("SettingsForm already initialized");
+                }
+                self.settings_form
+                    .get()
+                    .expect("SettingsForm not initialized")
+                    .emit(SettingsFormMsg::Show);
+            }
+            AppMsg::UpdateSettings => {
+                // TODO
             }
         }
     }
@@ -367,6 +395,11 @@ impl Component for AppModel {
                 );
                 self.release_view.append(release_model.widget());
 
+                let sync_service = Arc::new(CloudStorageSyncService::new(
+                    Arc::clone(&init_result.repository_manager),
+                    Arc::clone(&init_result.settings),
+                ));
+
                 self.view_model_service
                     .set(init_result.view_model_service)
                     .expect("view model service already initialized?");
@@ -377,7 +410,7 @@ impl Component for AppModel {
                     .set(init_result.settings)
                     .expect("Settings already initialized");
                 self.sync_service
-                    .set(init_result.sync_service)
+                    .set(sync_service)
                     .expect("Sync service already initialized");
 
                 self.release
@@ -400,7 +433,6 @@ impl Component for AppModel {
 
 impl AppModel {
     fn build_header_bar(root: &gtk::Window, sender: &ComponentSender<Self>) {
-        // Create header bar with simple button
         let header_bar = gtk::HeaderBar::new();
         let export_button = gtk::Button::builder()
             .icon_name("document-save-symbolic")

@@ -1,6 +1,8 @@
-// User needs to set the following environment variables:
+// User needs to export the following environment variables:
 // - key id (AWS_ACCESS_KEY_ID)
 // - application key (AWS_SECRET_ACCESS_KEY)
+//
+// The following will be stored to settings:
 // - endpoint for cloud storage, for example: s3.eu-central-003.backblazeb2.com
 // - region for cloud storage, for example: eu-central-003
 // - bucket name, for example: my-efm-bucket

@@ -212,6 +212,27 @@ fn parse_argument(argument_string: &str) -> Result<ArgumentType, CoreTypeError> 
     })
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum SettingName {
+    CollectionRootDir,
+    S3EndPoint,
+    S3Region,
+    S3Bucket,
+    S3FileSyncEnabled,
+}
+
+impl SettingName {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SettingName::CollectionRootDir => "collection_root_dir",
+            SettingName::S3EndPoint => "s3_endpoint",
+            SettingName::S3Region => "s3_region",
+            SettingName::S3Bucket => "s3_bucket",
+            SettingName::S3FileSyncEnabled => "s3_file_sync_enabled",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Copy)]
 #[repr(u8)]
 pub enum FileSyncStatus {

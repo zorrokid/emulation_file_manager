@@ -4,10 +4,9 @@ use std::{
     path::PathBuf,
 };
 
-use core_types::{ArgumentType, DocumentType, FileType};
+use core_types::{ArgumentType, DocumentType, FileType, SettingName};
 use database::models::{
-    DocumentViewer, Emulator, FileSet, FileSetFileInfo, ReleaseExtended, SettingName,
-    SoftwareTitle, System,
+    DocumentViewer, Emulator, FileSet, FileSetFileInfo, ReleaseExtended, SoftwareTitle, System,
 };
 use file_system::get_files_root_dir;
 
@@ -48,10 +47,19 @@ impl Display for EmulatorListModel {
     }
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct S3Settings {
+    pub endpoint: String,
+    pub region: String,
+    pub bucket: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct Settings {
     pub collection_root_dir: PathBuf,
     pub temp_output_dir: PathBuf,
+    pub s3_settings: Option<S3Settings>,
+    pub s3_sync_enabled: bool,
 }
 
 impl From<HashMap<String, String>> for Settings {
@@ -60,9 +68,26 @@ impl From<HashMap<String, String>> for Settings {
             .get(SettingName::CollectionRootDir.as_str())
             .map(PathBuf::from)
             .unwrap_or_else(get_files_root_dir);
+        let s3_endpoint = map.get(SettingName::S3EndPoint.as_str());
+        let s3_region = map.get(SettingName::S3Region.as_str());
+        let s3_bucket = map.get(SettingName::S3Bucket.as_str());
+        let s3_settings = match (s3_endpoint, s3_region, s3_bucket) {
+            (Some(endpoint), Some(region), Some(bucket)) => Some(S3Settings {
+                endpoint: endpoint.clone(),
+                region: region.clone(),
+                bucket: bucket.clone(),
+            }),
+            _ => None,
+        };
+        let s3_sync_enabled = map
+            .get(SettingName::S3FileSyncEnabled.as_str())
+            .map(|v| v == "true")
+            .unwrap_or(false);
         Self {
             collection_root_dir,
             temp_output_dir: std::env::temp_dir(),
+            s3_settings,
+            s3_sync_enabled,
         }
     }
 }
