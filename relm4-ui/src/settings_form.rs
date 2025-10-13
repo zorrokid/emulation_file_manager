@@ -96,31 +96,61 @@ impl Component for SettingsForm {
                     set_margin_bottom: 10,
                 },
 
-                #[name = "s3_bucket_name_entry"]
-                gtk::Entry {
-                    set_placeholder_text: Some("S3 Bucket Name"),
-                    set_text: &model.s3_bucket_name,
-                    connect_changed[sender] => move |entry| {
-                        let buffer = entry.buffer();
-                        sender.input(SettingsFormMsg::S3BucketNameChanged(buffer.text().into()));
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    set_spacing: 5,
+
+                    gtk::Label {
+                        set_label: "S3 Bucket name",
+                    },
+
+                    #[name = "s3_bucket_name_entry"]
+                    gtk::Entry {
+                        set_placeholder_text: Some("S3 Bucket Name"),
+                        set_text: &model.s3_bucket_name,
+                        connect_changed[sender] => move |entry| {
+                            let buffer = entry.buffer();
+                            sender.input(SettingsFormMsg::S3BucketNameChanged(buffer.text().into()));
+                        },
+                    },
+
+                 },
+
+
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    set_spacing: 5,
+
+                    gtk::Label {
+                        set_label: "S3 endpoint URL",
+                    },
+
+                    #[name = "s3_endpoint_entry"]
+                    gtk::Entry {
+                        set_placeholder_text: Some("S3 Endpoint"),
+                        set_text: &model.s3_endpoint,
+                        connect_changed[sender] => move |entry| {
+                            let buffer = entry.buffer();
+                            sender.input(SettingsFormMsg::S3EndpointChanged(buffer.text().into()));
+                        },
                     },
                 },
-                #[name = "s3_endpoint_entry"]
-                gtk::Entry {
-                    set_placeholder_text: Some("S3 Endpoint"),
-                    set_text: &model.s3_endpoint,
-                    connect_changed[sender] => move |entry| {
-                        let buffer = entry.buffer();
-                        sender.input(SettingsFormMsg::S3EndpointChanged(buffer.text().into()));
+
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    set_spacing: 5,
+                    gtk::Label {
+                        set_label: "S3 region",
                     },
-                },
-                #[name = "s3_region_entry"]
-                gtk::Entry {
-                    set_placeholder_text: Some("S3 Region"),
-                    set_text: &model.s3_region,
-                    connect_changed[sender] => move |entry| {
-                        let buffer = entry.buffer();
-                        sender.input(SettingsFormMsg::S3RegionChanged(buffer.text().into()));
+
+                    #[name = "s3_region_entry"]
+                    gtk::Entry {
+                        set_placeholder_text: Some("S3 Region"),
+                        set_text: &model.s3_region,
+                        connect_changed[sender] => move |entry| {
+                            let buffer = entry.buffer();
+                            sender.input(SettingsFormMsg::S3RegionChanged(buffer.text().into()));
+                        },
                     },
                 },
                 gtk::Button {

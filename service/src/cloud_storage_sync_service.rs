@@ -77,7 +77,20 @@ impl CloudStorageSyncService {
         progress_tx: Sender<SyncEvent>,
     ) -> Result<(), CloudStorageError> {
         self.prepare_files_for_sync().await?;
-        let bucket = connect_bucket().await?;
+        let s3_settings = match &self.settings.s3_settings {
+            Some(s) => s,
+            None => {
+                return Err(CloudStorageError::Other(
+                    "S3 settings are not configured".to_string(),
+                ))
+            }
+        };
+        let bucket = connect_bucket(
+            &s3_settings.endpoint,
+            &s3_settings.region,
+            &s3_settings.bucket,
+        )
+        .await?;
 
         let mut offset = 0;
 

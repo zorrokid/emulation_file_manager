@@ -39,16 +39,20 @@ pub enum CloudStorageError {
     Other(String),
 }
 
-pub async fn connect_bucket() -> Result<Box<Bucket>, CloudStorageError> {
+pub async fn connect_bucket(
+    endpoint: &str,
+    region: &str,
+    bucket: &str,
+) -> Result<Box<Bucket>, CloudStorageError> {
     let region = Region::Custom {
-        region: "eu-central-003".into(),
-        endpoint: "s3.eu-central-003.backblazeb2.com".into(),
+        region: region.to_string(),
+        endpoint: endpoint.to_string(),
     };
 
     let credentials = Credentials::default()
         .map_err(|e| CloudStorageError::Other(format!("Credentials error: {e}")))?;
 
-    let bucket = Bucket::new("efm-files", region, credentials)?.with_path_style();
+    let bucket = Bucket::new(bucket, region, credentials)?.with_path_style();
 
     Ok(bucket)
 }
