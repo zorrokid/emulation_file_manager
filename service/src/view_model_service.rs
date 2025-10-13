@@ -176,7 +176,7 @@ impl ViewModelService {
     pub async fn get_settings(&self) -> Result<Settings, Error> {
         let settings_map = self
             .repository_manager
-            .settings()
+            .get_settings_repository()
             .get_settings()
             .await
             .map_err(|err| Error::DbError(err.to_string()))?;
@@ -449,7 +449,7 @@ mod tests {
         let view_model_service = ViewModelService::new(repository_manager.clone());
 
         repository_manager
-            .settings()
+            .get_settings_repository()
             .add_setting(SettingName::CollectionRootDir.as_str(), "test_value")
             .await
             .unwrap();

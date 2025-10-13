@@ -1,5 +1,6 @@
+use chrono::NaiveDateTime;
 use core::fmt;
-use core_types::{DocumentType, FileType};
+use core_types::{DocumentType, FileSyncStatus, FileType};
 use std::fmt::{Display, Formatter};
 
 use sqlx::FromRow;
@@ -107,14 +108,24 @@ pub struct SoftwareTitle {
     pub franchise_id: Option<i64>,
 }
 
-pub enum SettingName {
-    CollectionRootDir,
+pub struct FileSyncLog {
+    pub id: i64,
+    pub file_info_id: i64,
+    pub sync_time: NaiveDateTime,
+    pub status: FileSyncStatus,
+    pub message: String,
+    pub cloud_key: String,
 }
 
-impl SettingName {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            SettingName::CollectionRootDir => "collection_root_dir",
-        }
-    }
+pub struct FileSyncLogWithFileInfo {
+    pub id: i64,
+    pub file_info_id: i64,
+    pub sync_time: NaiveDateTime,
+    pub status: FileSyncStatus,
+    pub message: String,
+    pub cloud_key: String,
+    pub sha1_checksum: Vec<u8>,
+    pub file_size: i64,
+    pub archive_file_name: String,
+    pub file_type: FileType,
 }

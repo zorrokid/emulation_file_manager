@@ -14,6 +14,7 @@ mod list_item;
 mod release;
 mod release_form;
 mod releases;
+mod settings_form;
 mod software_title_form;
 mod software_title_selector;
 mod software_titles_list;
@@ -23,6 +24,8 @@ mod tabbed_image_viewer;
 
 use std::{path::PathBuf, sync::Arc};
 
+use async_std::{channel::unbounded, task};
+use cloud_storage::SyncEvent;
 use database::{get_db_pool, repository_manager::RepositoryManager};
 use release::{ReleaseInitModel, ReleaseModel, ReleaseMsg, ReleaseOutputMsg};
 use releases::{ReleasesInit, ReleasesModel, ReleasesMsg, ReleasesOutputMsg};
@@ -37,10 +40,13 @@ use relm4::{
     once_cell::sync::OnceCell,
 };
 use service::{
+    cloud_storage_sync_service::CloudStorageSyncService,
     view_model_service::ViewModelService,
     view_models::{Settings, SoftwareTitleListModel},
 };
 use software_titles_list::{SoftwareTitleListInit, SoftwareTitlesList};
+
+use crate::settings_form::{SettingsForm, SettingsFormMsg};
 
 #[derive(Debug)]
 struct InitResult {
@@ -58,6 +64,10 @@ enum AppMsg {
     ReleaseSelected { id: i64 },
     ExportAllFiles,
     ExportFolderSelected(PathBuf),
+    SyncWithCloud,
+    ProcessFileSyncEvent(SyncEvent),
+    OpenSettings,
+    UpdateSettings,
 }
 
 #[derive(Debug)]
@@ -70,11 +80,13 @@ struct AppModel {
     repository_manager: OnceCell<Arc<RepositoryManager>>,
     view_model_service: OnceCell<Arc<ViewModelService>>,
     settings: OnceCell<Arc<Settings>>,
+    sync_service: OnceCell<Arc<CloudStorageSyncService>>,
     software_titles: OnceCell<Controller<SoftwareTitlesList>>,
     releases_view: gtk::Box,
     releases: OnceCell<Controller<ReleasesModel>>,
     release_view: gtk::Box,
     release: OnceCell<Controller<ReleaseModel>>,
+    settings_form: OnceCell<Controller<settings_form::SettingsForm>>,
 }
 
 struct AppWidgets {}
@@ -100,23 +112,7 @@ impl Component for AppModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        // Create header bar with simple button
-        let header_bar = gtk::HeaderBar::new();
-        let export_button = gtk::Button::builder()
-            .icon_name("document-save-symbolic")
-            .tooltip_text("Export All Files")
-            .build();
-
-        export_button.connect_clicked(clone!(
-            #[strong]
-            sender,
-            move |_| {
-                sender.input(AppMsg::ExportAllFiles);
-            }
-        ));
-
-        header_bar.pack_end(&export_button);
-        root.set_titlebar(Some(&header_bar));
+        Self::build_header_bar(&root, &sender);
 
         let main_layout_hbox = gtk::Paned::builder()
             .orientation(gtk::Orientation::Horizontal)
@@ -154,6 +150,8 @@ impl Component for AppModel {
             releases: OnceCell::new(),
             release: OnceCell::new(),
             software_titles: OnceCell::new(),
+            sync_service: OnceCell::new(),
+            settings_form: OnceCell::new(),
         };
 
         sender.input(AppMsg::Initialize);
@@ -165,6 +163,10 @@ impl Component for AppModel {
         match msg {
             AppMsg::Initialize => {
                 sender.oneshot_command(async {
+                    // TODO: Replace `expect` calls with proper error handling.
+                    //       Instead of panicking on initialization failure,
+                    //       return a `Result<InitResult, InitError>` and handle it in
+                    //       `CommandMsg::InitializationDone`.
                     let pool = get_db_pool().await.expect("DB pool initialization failed");
                     let repository_manager = Arc::new(RepositoryManager::new(pool));
                     let view_model_service =
@@ -174,6 +176,7 @@ impl Component for AppModel {
                         .await
                         .expect("Failed to get config");
                     let settings = Arc::new(settings);
+
                     CommandMsg::InitializationDone(InitResult {
                         repository_manager,
                         view_model_service,
@@ -265,6 +268,66 @@ impl Component for AppModel {
                     eprintln!("Selected path is not a directory: {:?}", path);
                 }
             }
+            AppMsg::SyncWithCloud => {
+                let sync_service = self
+                    .sync_service
+                    .get()
+                    .expect("Sync service not initialized");
+                let sync_service_clone = Arc::clone(sync_service);
+                let ui_sender = sender.clone();
+
+                task::spawn(async move {
+                    let (tx, rx) = unbounded::<SyncEvent>();
+
+                    // Spawn task to forward progress messages to UI
+                    task::spawn(async move {
+                        let ui_sender = ui_sender.clone();
+                        while let Ok(event) = rx.recv().await {
+                            ui_sender.input(AppMsg::ProcessFileSyncEvent(event));
+                        }
+                    });
+
+                    if let Err(e) = sync_service_clone.sync_files_to_cloud(tx).await {
+                        eprintln!("Error during sync: {}", e);
+                    }
+                });
+            }
+            AppMsg::ProcessFileSyncEvent(event) => {
+                // Handle sync progress events here, e.g., update a progress bar or log
+                println!("Sync event: {:?}", event);
+            }
+            AppMsg::OpenSettings => {
+                if self.settings_form.get().is_none() {
+                    let settings_form_init = settings_form::SettingsFormInit {
+                        repository_manager: Arc::clone(
+                            self.repository_manager
+                                .get()
+                                .expect("Repository manager not initialized"),
+                        ),
+                        settings: Arc::clone(
+                            self.settings.get().expect("Settings not initialized"),
+                        ),
+                    };
+                    let settings_form = SettingsForm::builder()
+                        .transient_for(root)
+                        .launch(settings_form_init)
+                        .forward(sender.input_sender(), |msg| match msg {
+                            settings_form::SettingsFormOutputMsg::SettingsChanged => {
+                                AppMsg::UpdateSettings
+                            }
+                        });
+                    self.settings_form
+                        .set(settings_form)
+                        .expect("SettingsForm already initialized");
+                }
+                self.settings_form
+                    .get()
+                    .expect("SettingsForm not initialized")
+                    .emit(SettingsFormMsg::Show);
+            }
+            AppMsg::UpdateSettings => {
+                // TODO
+            }
         }
     }
 
@@ -331,6 +394,11 @@ impl Component for AppModel {
                 );
                 self.release_view.append(release_model.widget());
 
+                let sync_service = Arc::new(CloudStorageSyncService::new(
+                    Arc::clone(&init_result.repository_manager),
+                    Arc::clone(&init_result.settings),
+                ));
+
                 self.view_model_service
                     .set(init_result.view_model_service)
                     .expect("view model service already initialized?");
@@ -340,6 +408,9 @@ impl Component for AppModel {
                 self.settings
                     .set(init_result.settings)
                     .expect("Settings already initialized");
+                self.sync_service
+                    .set(sync_service)
+                    .expect("Sync service already initialized");
 
                 self.release
                     .set(release_model)
@@ -356,6 +427,68 @@ impl Component for AppModel {
                 }
             },
         }
+    }
+}
+
+impl AppModel {
+    fn build_header_bar(root: &gtk::Window, sender: &ComponentSender<Self>) {
+        let header_bar = gtk::HeaderBar::new();
+        let export_button = gtk::Button::builder()
+            .icon_name("document-save-symbolic")
+            .tooltip_text("Export All Files")
+            .build();
+
+        export_button.connect_clicked(clone!(
+            #[strong]
+            sender,
+            move |_| {
+                sender.input(AppMsg::ExportAllFiles);
+            }
+        ));
+
+        header_bar.pack_end(&export_button);
+
+        let sync_button = gtk::Button::builder()
+            .icon_name("folder-sync-symbolic")
+            .tooltip_text("Sync with Cloud Storage")
+            .build();
+
+        sync_button.connect_clicked(clone!(
+            #[strong]
+            sender,
+            move |_| {
+                sender.input(AppMsg::SyncWithCloud);
+            }
+        ));
+
+        header_bar.pack_end(&sync_button);
+
+        let menu_button = gtk::MenuButton::builder()
+            .icon_name("open-menu-symbolic")
+            .tooltip_text("Menu")
+            .build();
+
+        let menu = gio::Menu::new();
+        menu.append(Some("Settings"), Some("app.settings"));
+        let popover = gtk::PopoverMenu::from_model(Some(&menu));
+
+        menu_button.set_popover(Some(&popover));
+
+        header_bar.pack_start(&menu_button);
+
+        let settings_action = gio::SimpleAction::new("settings", None);
+        settings_action.connect_activate(clone!(
+            #[strong]
+            sender,
+            move |_, _| {
+                sender.input(AppMsg::OpenSettings);
+                println!("Settings action activated");
+            }
+        ));
+        let app = relm4::main_application();
+        app.add_action(&settings_action);
+
+        root.set_titlebar(Some(&header_bar));
     }
 }
 

@@ -212,6 +212,54 @@ fn parse_argument(argument_string: &str) -> Result<ArgumentType, CoreTypeError> 
     })
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum SettingName {
+    CollectionRootDir,
+    S3EndPoint,
+    S3Region,
+    S3Bucket,
+    S3FileSyncEnabled,
+}
+
+impl SettingName {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SettingName::CollectionRootDir => "collection_root_dir",
+            SettingName::S3EndPoint => "s3_endpoint",
+            SettingName::S3Region => "s3_region",
+            SettingName::S3Bucket => "s3_bucket",
+            SettingName::S3FileSyncEnabled => "s3_file_sync_enabled",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Copy)]
+#[repr(u8)]
+pub enum FileSyncStatus {
+    Pending,
+    InProgress,
+    Completed,
+    Failed,
+}
+
+impl FileSyncStatus {
+    pub fn to_db_int(&self) -> u8 {
+        *self as u8
+    }
+
+    pub fn from_db_int(value: u8) -> Result<Self, CoreTypeError> {
+        match value {
+            0 => Ok(FileSyncStatus::Pending),
+            1 => Ok(FileSyncStatus::InProgress),
+            2 => Ok(FileSyncStatus::Completed),
+            3 => Ok(FileSyncStatus::Failed),
+            _ => Err(CoreTypeError::ConversionError(
+                "Failed convert to FileSyncStatus".to_string(),
+            )),
+        }
+    }
+}
+
 // TODO add test for From<&str> for ArgumentType
 #[cfg(test)]
 mod tests {

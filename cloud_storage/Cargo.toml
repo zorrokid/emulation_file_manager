@@ -1,0 +1,13 @@
+[package]
+name = "cloud_storage"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+async-std = { version = "1.13.2", features = ["attributes"] }
+rust-s3 = { version = "0.37.0", default-features = false, features = [
+    "with-async-std",
+    "async-std-rustls-tls"
+] }
+thiserror = "2.0.17"
+uuid = { version="1.17.0", features = ["v4"] }

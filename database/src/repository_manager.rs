@@ -5,9 +5,9 @@ use sqlx::{Pool, Sqlite};
 use crate::repository::{
     document_viewer_repository::DocumentViewerRepository, emulator_repository::EmulatorRepository,
     file_info_repository::FileInfoRepository, file_set_repository::FileSetRepository,
-    franchise_repository::FranchiseRepository, release_repository::ReleaseRepository,
-    setting_repository::SettingRepository, software_title_repository::SoftwareTitleRepository,
-    system_repository::SystemRepository,
+    file_sync_log_repository::FileSyncLogRepository, franchise_repository::FranchiseRepository,
+    release_repository::ReleaseRepository, setting_repository::SettingRepository,
+    software_title_repository::SoftwareTitleRepository, system_repository::SystemRepository,
 };
 
 #[derive(Debug)]
@@ -21,6 +21,7 @@ pub struct RepositoryManager {
     software_title_repository: SoftwareTitleRepository,
     setting_repository: SettingRepository,
     document_viewer_repository: DocumentViewerRepository,
+    file_sync_log_repository: FileSyncLogRepository,
 }
 
 impl RepositoryManager {
@@ -34,6 +35,7 @@ impl RepositoryManager {
         let software_title_repository = SoftwareTitleRepository::new(pool.clone());
         let setting_repository = SettingRepository::new(pool.clone());
         let document_viewer_repository = DocumentViewerRepository::new(pool.clone());
+        let file_sync_log_repository = FileSyncLogRepository::new(pool.clone());
 
         Self {
             file_info_repository,
@@ -45,6 +47,7 @@ impl RepositoryManager {
             software_title_repository,
             setting_repository,
             document_viewer_repository,
+            file_sync_log_repository,
         }
     }
 
@@ -76,11 +79,15 @@ impl RepositoryManager {
         &self.software_title_repository
     }
 
-    pub fn settings(&self) -> &SettingRepository {
+    pub fn get_settings_repository(&self) -> &SettingRepository {
         &self.setting_repository
     }
 
     pub fn get_document_viewer_repository(&self) -> &DocumentViewerRepository {
         &self.document_viewer_repository
+    }
+
+    pub fn get_file_sync_log_repository(&self) -> &FileSyncLogRepository {
+        &self.file_sync_log_repository
     }
 }

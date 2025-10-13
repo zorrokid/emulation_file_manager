@@ -1,5 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
+use core_types::SettingName;
 use sqlx::{Pool, Sqlite};
 
 use crate::database_error::DatabaseError;
@@ -56,11 +57,26 @@ impl SettingRepository {
         Ok(())
     }
 
-    pub async fn add_or_update_setting(&self, key: &str, value: &str) -> Result<(), DatabaseError> {
+    pub async fn add_or_update_setting(
+        &self,
+        key: &SettingName,
+        value: &str,
+    ) -> Result<(), DatabaseError> {
+        let key = key.as_str();
         if self.get_setting(key).await.is_ok() {
             self.update_setting(key, value).await?;
         } else {
             self.add_setting(key, value).await?;
+        }
+        Ok(())
+    }
+
+    pub async fn add_or_update_settings(
+        &self,
+        settings: &HashMap<SettingName, String>,
+    ) -> Result<(), DatabaseError> {
+        for (key, value) in settings {
+            self.add_or_update_setting(key, value).await?;
         }
         Ok(())
     }
@@ -69,6 +85,8 @@ impl SettingRepository {
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+
+    use core_types::SettingName;
 
     use crate::setup_test_db;
 
@@ -94,7 +112,7 @@ mod tests {
         let setting = repository.get_setting("test_key").await.unwrap();
         assert_eq!(setting, "updated_value");
         repository
-            .add_or_update_setting("test_key", "new_value")
+            .add_or_update_setting(&SettingName::S3Region, "new_value")
             .await
             .unwrap();
         let setting = repository.get_setting("test_key").await.unwrap();
