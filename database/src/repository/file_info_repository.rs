@@ -30,6 +30,16 @@ impl FileInfoRepository {
         Self { pool }
     }
 
+    pub async fn get_file_info(&self, id: i64) -> Result<FileInfo, Error> {
+        let query = sqlx::query_as::<_, FileInfo>(
+            "SELECT id, sha1_checksum, file_size, archive_file_name, file_type
+             FROM file_info WHERE id = ?",
+        )
+        .bind(id);
+        let file_info = query.fetch_one(&*self.pool).await?;
+        Ok(file_info)
+    }
+
     pub async fn get_file_infos_by_sha1_checksums(
         &self,
         checksums: Vec<Sha1Checksum>,

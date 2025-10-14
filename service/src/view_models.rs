@@ -186,6 +186,15 @@ pub struct FileSetFileViewModel {
     pub file_path: PathBuf,
 }
 
+#[derive(Debug)]
+pub struct FileInfoViewModel {
+    pub id: i64,
+    pub sha1_checksum: Vec<u8>,
+    pub file_size: u64,
+    pub archive_file_name: String,
+    pub belongs_to_file_sets: Vec<FileSetListModel>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ReleaseListModel {
     pub id: i64,

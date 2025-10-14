@@ -12,7 +12,7 @@ use relm4::{
 use service::{
     error::Error,
     view_model_service::{ReleaseFilter, ViewModelService},
-    view_models::{FileSetViewModel, ReleaseListModel, SystemListModel},
+    view_models::{FileInfoViewModel, FileSetViewModel, ReleaseListModel, SystemListModel},
 };
 
 use crate::list_item::ListItem;
@@ -36,6 +36,7 @@ pub enum FileSetDetailsCmdMsg {
     FileSetLoaded(Result<FileSetViewModel, Error>),
     ReleasesLoaded(Result<Vec<ReleaseListModel>, Error>),
     FileSetSystemsLoaded(Result<Vec<SystemListModel>, Error>),
+    FileInfoLoaded(Result<FileInfoViewModel, Error>),
 }
 
 #[derive(Debug)]
@@ -160,6 +161,19 @@ impl relm4::Component for FileSetDetailsView {
                 });
             }
             FileSetDetailsMsg::FileSelected { index } => {
+                let selected_item = self.files_list_view_wrapper.get_visible(index);
+                if let Some(item) = selected_item {
+                    println!("Selected file: {:?}", item);
+                    let id = item.borrow().id;
+                    let view_model_service = Arc::clone(&self.view_model_service);
+                    sender.oneshot_command(async move {
+                        let result = view_model_service.get_file_info_view_model(id).await;
+                        FileSetDetailsCmdMsg::FileInfoLoaded(result)
+                    });
+                } else {
+                    println!("No file selected at index: {}", index);
+                }
+
                 println!("File selected at index: {}", index);
             }
         }
@@ -216,6 +230,13 @@ impl relm4::Component for FileSetDetailsView {
             }
             FileSetDetailsCmdMsg::FileSetSystemsLoaded(Err(err)) => {
                 eprintln!("Error loading Systems: {:?}", err);
+            }
+            FileSetDetailsCmdMsg::FileInfoLoaded(Ok(file_info)) => {
+                println!("Loaded File Info: {:?}", file_info);
+                // TODO: update file info details with list of file sets it belongs to
+            }
+            FileSetDetailsCmdMsg::FileInfoLoaded(Err(err)) => {
+                eprintln!("Error loading File Info: {:?}", err);
             }
         }
     }

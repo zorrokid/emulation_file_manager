@@ -51,6 +51,22 @@ impl FileSetRepository {
         Ok(file_sets)
     }
 
+    pub async fn get_file_sets_by_file_info(
+        &self,
+        file_info_id: i64,
+    ) -> Result<Vec<FileSet>, DatabaseError> {
+        let file_sets = sqlx::query_as(
+            "SELECT fs.id, fs.file_name, fs.file_type, fs.name, fs.source
+             FROM file_set fs
+             INNER JOIN file_set_file_info fsfi ON fs.id = fsfi.file_set_id
+             WHERE fsfi.file_info_id = ?",
+        )
+        .bind(file_info_id)
+        .fetch_all(&*self.pool)
+        .await?;
+        Ok(file_sets)
+    }
+
     pub async fn is_file_set_in_release(&self, file_set_id: i64) -> Result<bool, DatabaseError> {
         let count = sqlx::query_scalar!(
             "SELECT COUNT(*) 
