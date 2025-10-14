@@ -89,7 +89,9 @@ struct AppModel {
     settings_form: OnceCell<Controller<settings_form::SettingsForm>>,
 }
 
-struct AppWidgets {}
+struct AppWidgets {
+    sync_button: gtk::Button,
+}
 
 impl Component for AppModel {
     type Input = AppMsg;
@@ -112,7 +114,7 @@ impl Component for AppModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        Self::build_header_bar(&root, &sender);
+        let sync_button = Self::build_header_bar(&root, &sender);
 
         let main_layout_hbox = gtk::Paned::builder()
             .orientation(gtk::Orientation::Horizontal)
@@ -139,7 +141,7 @@ impl Component for AppModel {
 
         root.set_child(Some(&main_layout_hbox));
 
-        let widgets = AppWidgets {};
+        let widgets = AppWidgets { sync_button };
 
         let model = AppModel {
             repository_manager: OnceCell::new(),
@@ -335,7 +337,7 @@ impl Component for AppModel {
         &mut self,
         message: Self::CommandOutput,
         sender: ComponentSender<Self>,
-        _: &Self::Root,
+        root: &Self::Root,
     ) {
         match message {
             CommandMsg::InitializationDone(init_result) => {
@@ -428,10 +430,19 @@ impl Component for AppModel {
             },
         }
     }
+
+    fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        let is_sync_enabled = self
+            .settings
+            .get()
+            .map(|s| s.s3_sync_enabled)
+            .unwrap_or(false);
+        widgets.sync_button.set_sensitive(is_sync_enabled);
+    }
 }
 
 impl AppModel {
-    fn build_header_bar(root: &gtk::Window, sender: &ComponentSender<Self>) {
+    fn build_header_bar(root: &gtk::Window, sender: &ComponentSender<Self>) -> gtk::Button {
         let header_bar = gtk::HeaderBar::new();
         let export_button = gtk::Button::builder()
             .icon_name("document-save-symbolic")
@@ -461,6 +472,8 @@ impl AppModel {
             }
         ));
 
+        sync_button.set_sensitive(false);
+
         header_bar.pack_end(&sync_button);
 
         let menu_button = gtk::MenuButton::builder()
@@ -489,6 +502,7 @@ impl AppModel {
         app.add_action(&settings_action);
 
         root.set_titlebar(Some(&header_bar));
+        sync_button
     }
 }
 
