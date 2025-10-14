@@ -25,7 +25,7 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub enum FileSelectMsg {
+pub enum FileSetSelectorMsg {
     FetchFiles,
     SelectClicked,
     OpenFileSetForm,
@@ -43,7 +43,7 @@ pub enum FileSelectMsg {
 }
 
 #[derive(Debug)]
-pub enum FileSelectOutputMsg {
+pub enum FileSetSelectorOutputMsg {
     FileSetSelected(FileSetListModel),
     //FileSetUpdated(FileSetListModel),
 }
@@ -55,14 +55,14 @@ pub enum CommandMsg {
     AddingFileSetFailed(DatabaseError),
 }
 
-pub struct FileSelectInit {
+pub struct FileSetSelectorInit {
     pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
     pub settings: Arc<Settings>,
 }
 
 #[derive(Debug)]
-pub struct FileSelectModel {
+pub struct FileSetSelector {
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
     settings: Arc<Settings>,
@@ -78,11 +78,11 @@ pub struct FileSelectModel {
 }
 
 #[relm4::component(pub)]
-impl Component for FileSelectModel {
-    type Input = FileSelectMsg;
-    type Output = FileSelectOutputMsg;
+impl Component for FileSetSelector {
+    type Input = FileSetSelectorMsg;
+    type Output = FileSetSelectorOutputMsg;
     type CommandOutput = CommandMsg;
-    type Init = FileSelectInit;
+    type Init = FileSetSelectorInit;
 
     view! {
         #[root]
@@ -92,7 +92,7 @@ impl Component for FileSelectModel {
             set_title: Some("Select File Set"),
 
             connect_close_request[sender] => move |_| {
-                sender.input(FileSelectMsg::Hide);
+                sender.input(FileSetSelectorMsg::Hide);
                 glib::Propagation::Stop
             },
 
@@ -117,7 +117,7 @@ impl Component for FileSelectModel {
                     file_types_dropdown -> gtk::Box {},
                     gtk::Button {
                         set_label: "Add File Set",
-                        connect_clicked => FileSelectMsg::OpenFileSetForm,
+                        connect_clicked => FileSetSelectorMsg::OpenFileSetForm,
                     },
 
                     gtk::ScrolledWindow {
@@ -128,7 +128,7 @@ impl Component for FileSelectModel {
 
                     gtk::Button {
                         set_label: "Select File Set",
-                        connect_clicked => FileSelectMsg::SelectClicked,
+                        connect_clicked => FileSetSelectorMsg::SelectClicked,
                         #[watch]
                         set_sensitive: model.selected_file_set.is_some() && model.selected_file_type.is_some(),
                     },
@@ -155,7 +155,7 @@ impl Component for FileSelectModel {
             |msg| match msg {
                 DropDownOutputMsg::ItemSelected(FileTypeSelectedMsg::FileTypeSelected(
                     file_type,
-                )) => FileSelectMsg::FileTypeChanged(file_type),
+                )) => FileSetSelectorMsg::FileTypeChanged(file_type),
                 _ => unreachable!(),
             },
         );
@@ -173,9 +173,9 @@ impl Component for FileSelectModel {
             .launch(file_set_form_init_model)
             .forward(sender.input_sender(), |msg| match msg {
                 FileSetFormOutputMsg::FileSetCreated(file_set_liset_model) => {
-                    FileSelectMsg::FileSetCreated(file_set_liset_model)
+                    FileSetSelectorMsg::FileSetCreated(file_set_liset_model)
                 }
-                _ => FileSelectMsg::Ignore,
+                _ => FileSetSelectorMsg::Ignore,
             });
 
         let file_set_details_view_init = FileSetDetailsInit {
@@ -185,9 +185,9 @@ impl Component for FileSelectModel {
         // TODO: is this needed to be Controller?
         let file_set_details_view = FileSetDetailsView::builder()
             .launch(file_set_details_view_init)
-            .forward(sender.input_sender(), |_| FileSelectMsg::Ignore);
+            .forward(sender.input_sender(), |_| FileSetSelectorMsg::Ignore);
 
-        let model = FileSelectModel {
+        let model = FileSetSelector {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
             settings: init_model.settings,
@@ -213,17 +213,17 @@ impl Component for FileSelectModel {
                 move |selection| {
                     let selected = selection.selected();
                     println!("File Select - Selected item index: {:?}", selected);
-                    sender.input(FileSelectMsg::FileSetSelected { index: selected });
+                    sender.input(FileSetSelectorMsg::FileSetSelected { index: selected });
                 }
             ));
         let widgets = view_output!();
-        sender.input(FileSelectMsg::FetchFiles);
+        sender.input(FileSetSelectorMsg::FetchFiles);
         ComponentParts { model, widgets }
     }
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         match msg {
-            FileSelectMsg::OpenFileSetForm => {
+            FileSetSelectorMsg::OpenFileSetForm => {
                 if let Some(selected_file_type) = self.selected_file_type {
                     self.file_set_form.emit(FileSetFormMsg::Show {
                         selected_system_ids: self.selected_system_ids.clone(),
@@ -231,14 +231,14 @@ impl Component for FileSelectModel {
                     });
                 }
             }
-            FileSelectMsg::FileSetCreated(file_set_list_model) => {
+            FileSetSelectorMsg::FileSetCreated(file_set_list_model) => {
                 println!("File Selector - File set created {}", file_set_list_model);
                 self.list_view_wrapper.append(ListItem {
                     id: file_set_list_model.id,
                     name: file_set_list_model.file_set_name.clone(),
                 });
             }
-            FileSelectMsg::SelectClicked => {
+            FileSetSelectorMsg::SelectClicked => {
                 let selection = self.list_view_wrapper.selection_model.selected();
                 println!("File Select Clicked - Selected item: {:?}", selection);
                 if let (Some(selected_item), Some(file_type)) = (
@@ -256,8 +256,9 @@ impl Component for FileSelectModel {
                         file_type: file_type,
                         file_name: selected_item.name.clone(),
                     };
-                    let res =
-                        sender.output(FileSelectOutputMsg::FileSetSelected(file_set_list_model));
+                    let res = sender.output(FileSetSelectorOutputMsg::FileSetSelected(
+                        file_set_list_model,
+                    ));
                     if let Err(e) = res {
                         eprintln!("Failed to send output message: {:?}", e);
                         // TODO handle error
@@ -269,7 +270,7 @@ impl Component for FileSelectModel {
                     eprintln!("No file set selected");
                 }
             }
-            FileSelectMsg::FileSetSelected { index } => {
+            FileSetSelectorMsg::FileSetSelected { index } => {
                 println!("File set selected at index: {}", index);
                 if let (Some(file_set), Some(file_type)) =
                     (self.list_view_wrapper.get(index), self.selected_file_type)
@@ -292,12 +293,12 @@ impl Component for FileSelectModel {
                     eprintln!("No file set found at index {}", index);
                 }
             }
-            FileSelectMsg::FileTypeChanged(file_type) => {
+            FileSetSelectorMsg::FileTypeChanged(file_type) => {
                 println!("File type changed to: {:?}", file_type);
                 self.selected_file_type = Some(file_type);
-                sender.input(FileSelectMsg::FetchFiles);
+                sender.input(FileSetSelectorMsg::FetchFiles);
             }
-            FileSelectMsg::FetchFiles => {
+            FileSetSelectorMsg::FetchFiles => {
                 println!("Fetching file sets for selected systems and file type");
                 if let Some(file_type) = self.selected_file_type {
                     println!("Selected file type: {:?}", file_type);
@@ -316,16 +317,16 @@ impl Component for FileSelectModel {
                     ));
                 }
             }
-            FileSelectMsg::Show {
+            FileSetSelectorMsg::Show {
                 selected_system_ids,
                 selected_file_set_ids,
             } => {
                 self.selected_system_ids = selected_system_ids;
                 self.selected_file_set_ids = selected_file_set_ids;
-                sender.input(FileSelectMsg::FetchFiles);
+                sender.input(FileSetSelectorMsg::FetchFiles);
                 root.show();
             }
-            FileSelectMsg::Hide => {
+            FileSetSelectorMsg::Hide => {
                 root.hide();
             }
             _ => {}
