@@ -21,10 +21,37 @@ use s3::serde_types::Part;
 
 #[derive(Debug, Clone)]
 pub enum SyncEvent {
-    Started { key: String },
-    PartUploaded { key: String, part: u32 },
-    Completed { key: String },
-    Failed { key: String, error: String },
+    SyncStarted {
+        total_files_count: usize,
+    },
+    FileUploadStarted {
+        key: String,
+        file_number: usize,
+        total_files: usize,
+    },
+    PartUploaded {
+        key: String,
+        part: u32,
+    },
+    PartUploadFailed {
+        key: String,
+        error: String,
+    },
+    FileUploadCompleted {
+        key: String,
+        file_number: usize,
+        total_files: usize,
+    },
+    FileUploadFailed {
+        key: String,
+        error: String,
+        file_number: usize,
+        total_files: usize,
+    },
+    SyncCompleted {
+        successful: usize,
+        failed: usize,
+    },
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -93,14 +120,6 @@ pub async fn multipart_upload(
 ) -> Result<(), CloudStorageError> {
     use async_std::io::ReadExt;
 
-    if let Some(tx) = &progress_tx {
-        tx.send(SyncEvent::Started {
-            key: key.to_string(),
-        })
-        .await
-        .ok();
-    }
-
     let mut file = async_std::fs::File::open(file_path).await?;
     // 5 MB chunk size
     let mut buffer = vec![0u8; 5 * 1024 * 1024];
@@ -146,7 +165,7 @@ pub async fn multipart_upload(
             Err(e) => {
                 eprintln!("Error uploading part {}: {}", part_number, e);
                 if let Some(tx) = &progress_tx {
-                    tx.send(SyncEvent::Failed {
+                    tx.send(SyncEvent::PartUploadFailed {
                         key: key.to_string(),
                         error: format!("{}", e),
                     })

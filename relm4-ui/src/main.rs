@@ -18,6 +18,7 @@ mod settings_form;
 mod software_title_form;
 mod software_title_selector;
 mod software_titles_list;
+mod status_bar;
 mod system_form;
 mod system_selector;
 mod tabbed_image_viewer;
@@ -46,7 +47,10 @@ use service::{
 };
 use software_titles_list::{SoftwareTitleListInit, SoftwareTitlesList};
 
-use crate::settings_form::{SettingsForm, SettingsFormMsg};
+use crate::{
+    settings_form::{SettingsForm, SettingsFormMsg},
+    status_bar::{StatusBarModel, StatusBarMsg},
+};
 
 #[derive(Debug)]
 struct InitResult {
@@ -87,9 +91,12 @@ struct AppModel {
     release_view: gtk::Box,
     release: OnceCell<Controller<ReleaseModel>>,
     settings_form: OnceCell<Controller<settings_form::SettingsForm>>,
+    status_bar: Controller<StatusBarModel>,
 }
 
-struct AppWidgets {}
+struct AppWidgets {
+    sync_button: gtk::Button,
+}
 
 impl Component for AppModel {
     type Input = AppMsg;
@@ -112,7 +119,11 @@ impl Component for AppModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        Self::build_header_bar(&root, &sender);
+        let sync_button = Self::build_header_bar(&root, &sender);
+
+        let main_container = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .build();
 
         let main_layout_hbox = gtk::Paned::builder()
             .orientation(gtk::Orientation::Horizontal)
@@ -137,9 +148,12 @@ impl Component for AppModel {
         let title_label = gtk::Label::builder().label("Software Titles").build();
         left_vbox.append(&title_label);
 
-        root.set_child(Some(&main_layout_hbox));
+        main_container.append(&main_layout_hbox);
+        let status_bar = StatusBarModel::builder().launch(()).detach();
+        main_container.append(status_bar.widget());
+        root.set_child(Some(&main_container));
 
-        let widgets = AppWidgets {};
+        let widgets = AppWidgets { sync_button };
 
         let model = AppModel {
             repository_manager: OnceCell::new(),
@@ -152,6 +166,7 @@ impl Component for AppModel {
             software_titles: OnceCell::new(),
             sync_service: OnceCell::new(),
             settings_form: OnceCell::new(),
+            status_bar,
         };
 
         sender.input(AppMsg::Initialize);
@@ -230,10 +245,10 @@ impl Component for AppModel {
                     #[strong]
                     sender,
                     move |dialog, response| {
-                        if response == gtk::ResponseType::Accept {
-                            if let Some(path) = dialog.file().and_then(|f| f.path()) {
-                                sender.input(AppMsg::ExportFolderSelected(path));
-                            }
+                        if response == gtk::ResponseType::Accept
+                            && let Some(path) = dialog.file().and_then(|f| f.path())
+                        {
+                            sender.input(AppMsg::ExportFolderSelected(path));
                         }
                         dialog.close();
                     }
@@ -292,10 +307,34 @@ impl Component for AppModel {
                     }
                 });
             }
-            AppMsg::ProcessFileSyncEvent(event) => {
-                // Handle sync progress events here, e.g., update a progress bar or log
-                println!("Sync event: {:?}", event);
-            }
+            AppMsg::ProcessFileSyncEvent(event) => match event {
+                SyncEvent::SyncStarted { total_files_count } => {
+                    self.status_bar.emit(StatusBarMsg::StartProgress {
+                        total: total_files_count,
+                    });
+                }
+                SyncEvent::FileUploadStarted { .. } => {}
+                SyncEvent::PartUploaded { .. } => {}
+                SyncEvent::FileUploadCompleted {
+                    file_number,
+                    total_files,
+                    ..
+                } => {
+                    self.status_bar.emit(StatusBarMsg::UpdateProgress {
+                        done: file_number,
+                        total: total_files,
+                    });
+                }
+                SyncEvent::FileUploadFailed { error, .. } => {
+                    self.status_bar.emit(StatusBarMsg::Fail(error));
+                }
+                SyncEvent::SyncCompleted { .. } => {
+                    self.status_bar.emit(StatusBarMsg::Finish);
+                }
+                SyncEvent::PartUploadFailed { error, .. } => {
+                    self.status_bar.emit(StatusBarMsg::Fail(error));
+                }
+            },
             AppMsg::OpenSettings => {
                 if self.settings_form.get().is_none() {
                     let settings_form_init = settings_form::SettingsFormInit {
@@ -335,7 +374,7 @@ impl Component for AppModel {
         &mut self,
         message: Self::CommandOutput,
         sender: ComponentSender<Self>,
-        _: &Self::Root,
+        _root: &Self::Root,
     ) {
         match message {
             CommandMsg::InitializationDone(init_result) => {
@@ -428,10 +467,19 @@ impl Component for AppModel {
             },
         }
     }
+
+    fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        let is_sync_enabled = self
+            .settings
+            .get()
+            .map(|s| s.s3_sync_enabled)
+            .unwrap_or(false);
+        widgets.sync_button.set_sensitive(is_sync_enabled);
+    }
 }
 
 impl AppModel {
-    fn build_header_bar(root: &gtk::Window, sender: &ComponentSender<Self>) {
+    fn build_header_bar(root: &gtk::Window, sender: &ComponentSender<Self>) -> gtk::Button {
         let header_bar = gtk::HeaderBar::new();
         let export_button = gtk::Button::builder()
             .icon_name("document-save-symbolic")
@@ -461,6 +509,8 @@ impl AppModel {
             }
         ));
 
+        sync_button.set_sensitive(false);
+
         header_bar.pack_end(&sync_button);
 
         let menu_button = gtk::MenuButton::builder()
@@ -489,6 +539,7 @@ impl AppModel {
         app.add_action(&settings_action);
 
         root.set_titlebar(Some(&header_bar));
+        sync_button
     }
 }
 
