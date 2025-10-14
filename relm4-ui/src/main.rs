@@ -232,10 +232,10 @@ impl Component for AppModel {
                     #[strong]
                     sender,
                     move |dialog, response| {
-                        if response == gtk::ResponseType::Accept {
-                            if let Some(path) = dialog.file().and_then(|f| f.path()) {
-                                sender.input(AppMsg::ExportFolderSelected(path));
-                            }
+                        if response == gtk::ResponseType::Accept
+                            && let Some(path) = dialog.file().and_then(|f| f.path())
+                        {
+                            sender.input(AppMsg::ExportFolderSelected(path));
                         }
                         dialog.close();
                     }
@@ -337,7 +337,7 @@ impl Component for AppModel {
         &mut self,
         message: Self::CommandOutput,
         sender: ComponentSender<Self>,
-        root: &Self::Root,
+        _root: &Self::Root,
     ) {
         match message {
             CommandMsg::InitializationDone(init_result) => {
