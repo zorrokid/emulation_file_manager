@@ -29,8 +29,9 @@ impl CloudStorageSyncService {
     /// Goes though the list of files. If file info is missing in sync log, add an entry for it with
     /// pending status and creates a cloud key for file.
     /// Processes file infos in batches of 1000.
-    pub async fn prepare_files_for_sync(&self) -> Result<(), CloudStorageError> {
+    pub async fn prepare_files_for_sync(&self) -> Result<usize, CloudStorageError> {
         println!("Preparing files for sync...");
+        let mut total_count = 0;
         let mut offset = 0;
         loop {
             let file_infos = self
@@ -44,6 +45,7 @@ impl CloudStorageSyncService {
                 break;
             }
             offset += file_infos.len() as i64;
+            total_count += file_infos.len();
             for file_info in &file_infos {
                 let cloud_key = format!(
                     "{}/{}",
@@ -68,7 +70,7 @@ impl CloudStorageSyncService {
         }
 
         println!("Preparing files for sync...DONE");
-        Ok(())
+        Ok(total_count)
     }
 
     /// Goes through the list of pending and failed files and uploads them to cloud storage
@@ -76,7 +78,15 @@ impl CloudStorageSyncService {
         &self,
         progress_tx: Sender<SyncEvent>,
     ) -> Result<(), CloudStorageError> {
-        self.prepare_files_for_sync().await?;
+        let total_files_count = self.prepare_files_for_sync().await?;
+        let mut successful_files_count = 0;
+        let mut failed_files_count = 0;
+        let mut file_count = 0;
+        progress_tx
+            .send(SyncEvent::SyncStarted { total_files_count })
+            .await
+            .ok();
+
         let s3_settings = match &self.settings.s3_settings {
             Some(s) => s,
             None => {
@@ -123,6 +133,15 @@ impl CloudStorageSyncService {
                     "Uploading file to cloud: id={}, key={}",
                     file.id, file.cloud_key
                 );
+                file_count += 1;
+                progress_tx
+                    .send(SyncEvent::FileUploadStarted {
+                        key: file.cloud_key.clone(),
+                        file_number: file_count,
+                        total_files: total_files_count,
+                    })
+                    .await
+                    .ok();
                 let res = multipart_upload(
                     &bucket,
                     local_path.as_path(),
@@ -138,6 +157,15 @@ impl CloudStorageSyncService {
                             .update_log_entry(file.id, FileSyncStatus::Completed, "")
                             .await
                             .map_err(|e| CloudStorageError::Other(e.to_string()))?;
+                        successful_files_count += 1;
+                        progress_tx
+                            .send(SyncEvent::FileUploadCompleted {
+                                key: file.cloud_key.clone(),
+                                file_number: file_count,
+                                total_files: total_files_count,
+                            })
+                            .await
+                            .ok();
                     }
                     Err(e) => {
                         println!(
@@ -149,11 +177,27 @@ impl CloudStorageSyncService {
                             .update_log_entry(file.id, FileSyncStatus::Failed, &format!("{}", e))
                             .await
                             .map_err(|e| CloudStorageError::Other(e.to_string()))?;
+                        failed_files_count += 1;
+                        progress_tx
+                            .send(SyncEvent::FileUploadFailed {
+                                key: file.cloud_key.clone(),
+                                error: format!("{}", e),
+                                file_number: file_count,
+                                total_files: total_files_count,
+                            })
+                            .await
+                            .ok();
                     }
                 }
             }
         }
-
+        progress_tx
+            .send(SyncEvent::SyncCompleted {
+                successful: successful_files_count,
+                failed: failed_files_count,
+            })
+            .await
+            .ok();
         Ok(())
     }
 }

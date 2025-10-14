@@ -18,6 +18,7 @@ mod settings_form;
 mod software_title_form;
 mod software_title_selector;
 mod software_titles_list;
+mod status_bar;
 mod system_form;
 mod system_selector;
 mod tabbed_image_viewer;
@@ -46,7 +47,10 @@ use service::{
 };
 use software_titles_list::{SoftwareTitleListInit, SoftwareTitlesList};
 
-use crate::settings_form::{SettingsForm, SettingsFormMsg};
+use crate::{
+    settings_form::{SettingsForm, SettingsFormMsg},
+    status_bar::{StatusBarModel, StatusBarMsg},
+};
 
 #[derive(Debug)]
 struct InitResult {
@@ -87,6 +91,7 @@ struct AppModel {
     release_view: gtk::Box,
     release: OnceCell<Controller<ReleaseModel>>,
     settings_form: OnceCell<Controller<settings_form::SettingsForm>>,
+    status_bar: Controller<StatusBarModel>,
 }
 
 struct AppWidgets {
@@ -116,6 +121,10 @@ impl Component for AppModel {
     ) -> ComponentParts<Self> {
         let sync_button = Self::build_header_bar(&root, &sender);
 
+        let main_container = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .build();
+
         let main_layout_hbox = gtk::Paned::builder()
             .orientation(gtk::Orientation::Horizontal)
             .vexpand(true)
@@ -139,7 +148,10 @@ impl Component for AppModel {
         let title_label = gtk::Label::builder().label("Software Titles").build();
         left_vbox.append(&title_label);
 
-        root.set_child(Some(&main_layout_hbox));
+        main_container.append(&main_layout_hbox);
+        let status_bar = StatusBarModel::builder().launch(()).detach();
+        main_container.append(status_bar.widget());
+        root.set_child(Some(&main_container));
 
         let widgets = AppWidgets { sync_button };
 
@@ -154,6 +166,7 @@ impl Component for AppModel {
             software_titles: OnceCell::new(),
             sync_service: OnceCell::new(),
             settings_form: OnceCell::new(),
+            status_bar,
         };
 
         sender.input(AppMsg::Initialize);
@@ -294,10 +307,34 @@ impl Component for AppModel {
                     }
                 });
             }
-            AppMsg::ProcessFileSyncEvent(event) => {
-                // Handle sync progress events here, e.g., update a progress bar or log
-                println!("Sync event: {:?}", event);
-            }
+            AppMsg::ProcessFileSyncEvent(event) => match event {
+                SyncEvent::SyncStarted { total_files_count } => {
+                    self.status_bar.emit(StatusBarMsg::StartProgress {
+                        total: total_files_count,
+                    });
+                }
+                SyncEvent::FileUploadStarted { .. } => {}
+                SyncEvent::PartUploaded { .. } => {}
+                SyncEvent::FileUploadCompleted {
+                    file_number,
+                    total_files,
+                    ..
+                } => {
+                    self.status_bar.emit(StatusBarMsg::UpdateProgress {
+                        done: file_number,
+                        total: total_files,
+                    });
+                }
+                SyncEvent::FileUploadFailed { error, .. } => {
+                    self.status_bar.emit(StatusBarMsg::Fail(error));
+                }
+                SyncEvent::SyncCompleted { .. } => {
+                    self.status_bar.emit(StatusBarMsg::Finish);
+                }
+                SyncEvent::PartUploadFailed { error, .. } => {
+                    self.status_bar.emit(StatusBarMsg::Fail(error));
+                }
+            },
             AppMsg::OpenSettings => {
                 if self.settings_form.get().is_none() {
                     let settings_form_init = settings_form::SettingsFormInit {

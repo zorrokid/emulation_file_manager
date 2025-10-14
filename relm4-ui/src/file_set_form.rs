@@ -169,6 +169,7 @@ pub struct FileSetFormModel {
     file_set_file_name: String,
     source: String,
     dropdown: Controller<FileTypeDropDown>,
+    processing: bool,
 }
 
 impl FileSetFormModel {
@@ -274,11 +275,11 @@ impl Component for FileSetFormModel {
                     }
                 },
 
-                gtk::Button {
+               gtk::Button {
                     set_label: "Create File Set",
                     connect_clicked => FileSetFormMsg::CreateFileSetFromSelectedFiles,
                     #[watch]
-                    set_sensitive: model.file_importer.is_selected_files(),
+                    set_sensitive: model.file_importer.is_selected_files() && !model.processing,
                 },
             }
         }
@@ -314,6 +315,7 @@ impl Component for FileSetFormModel {
             file_set_file_name: String::new(),
             source: String::new(),
             dropdown,
+            processing: false,
         };
         let file_types_dropdown = model.dropdown.widget();
 
@@ -388,7 +390,8 @@ impl Component for FileSetFormModel {
                 }
             }
             FileSetFormMsg::CreateFileSetFromSelectedFiles => {
-                if self.file_importer.is_selected_files() {
+                if self.file_importer.is_selected_files() && !self.processing {
+                    self.processing = true;
                     let file_type = self.file_importer.get_selected_file_type().expect(
                         "File type must be selected (should have been checked in beginning of process)",
                     );
@@ -511,6 +514,7 @@ impl Component for FileSetFormModel {
                 }
             },
             CommandMsg::FilesImported(Ok(imported_files_map)) => {
+                self.processing = false;
                 println!("Files imported successfully: {:?}", imported_files_map);
                 self.file_importer
                     .set_imported_files(imported_files_map.clone());
@@ -543,6 +547,7 @@ impl Component for FileSetFormModel {
                 });
             }
             CommandMsg::FilesImported(Err(e)) => {
+                self.processing = false;
                 eprintln!("Error importing files: {:?}", e);
                 // TODO: show error to user
             }
