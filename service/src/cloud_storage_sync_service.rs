@@ -108,7 +108,11 @@ impl CloudStorageSyncService {
             let pending_files_to_upload = self
                 .repository_manager
                 .get_file_sync_log_repository()
-                .get_logs_and_file_info_by_sync_status(10, offset)
+                .get_logs_and_file_info_by_sync_status(
+                    &[FileSyncStatus::UploadPending, FileSyncStatus::UploadFailed],
+                    10,
+                    offset,
+                )
                 .await
                 .map_err(|e| CloudStorageError::Other(e.to_string()))?;
 

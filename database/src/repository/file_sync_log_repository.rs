@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use core_types::FileSyncStatus;
-use sqlx::{prelude::FromRow, sqlite::SqliteRow, Pool, QueryBuilder, Row, Sqlite};
+use sqlx::{prelude::FromRow, query, sqlite::SqliteRow, Pool, QueryBuilder, Row, Sqlite};
 
 use crate::models::{FileSyncLog, FileSyncLogWithFileInfo};
 
@@ -77,12 +77,11 @@ impl FileSyncLogRepository {
     /// set.
     pub async fn get_logs_and_file_info_by_sync_status(
         &self,
+        statuses: &[FileSyncStatus],
         limit: u32,
         offset: u32,
     ) -> Result<Vec<FileSyncLogWithFileInfo>, sqlx::Error> {
-        let pending_status = FileSyncStatus::UploadPending.to_db_int();
-        let error_status = FileSyncStatus::UploadFailed.to_db_int();
-        let logs = sqlx::query_as::<_, FileSyncLogWithFileInfo>(
+        let mut query_builder = sqlx::QueryBuilder::<Sqlite>::new(
             "SELECT log.id, log.file_info_id, log.sync_time, log.status, log.message, log.cloud_key, fi.sha1_checksum, fi.file_size, fi.archive_file_name, fi.file_type 
              FROM file_sync_log log
              INNER JOIN file_info fi ON log.file_info_id = fi.id
@@ -90,18 +89,23 @@ impl FileSyncLogRepository {
                 SELECT file_info_id, MAX(sync_time) AS max_sync_time
                 FROM file_sync_log
                 GROUP BY file_info_id
-             ) latest ON log.id = latest.file_info_id AND log.sync_time = latest.max_sync_time
-             WHERE log.status = ? OR log.status = ?
-             ORDER BY log.sync_time DESC 
+             ) latest ON log.file_info_id = latest.file_info_id AND log.sync_time = latest.max_sync_time
+             WHERE log.status IN (");
+        let mut separated = query_builder.separated(", ");
+        for status in statuses {
+            separated.push_bind(status.to_db_int());
+        }
+        separated.push_unseparated(
+            ") ORDER BY log.sync_time DESC
              LIMIT ? OFFSET ?",
-        )
-        .bind(pending_status)
-        .bind(error_status)
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(&*self.pool)
-        .await?;
-        Ok(logs)
+        );
+
+        let query = query_builder
+            .build_query_as::<FileSyncLogWithFileInfo>()
+            .bind(limit)
+            .bind(offset);
+        let entries = query.fetch_all(&*self.pool).await?;
+        Ok(entries)
     }
 
     pub async fn add_log_entry(
@@ -166,7 +170,7 @@ mod tests {
             .await
             .unwrap();
         let res = repository
-            .get_logs_and_file_info_by_sync_status(1, 0)
+            .get_logs_and_file_info_by_sync_status(&[FileSyncStatus::UploadFailed], 1, 0)
             .await
             .unwrap();
         assert_eq!(res.len(), 1);
