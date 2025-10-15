@@ -12,7 +12,7 @@ use relm4::{
 use service::{
     error::Error,
     view_model_service::{ReleaseFilter, ViewModelService},
-    view_models::{FileInfoViewModel, FileSetViewModel, ReleaseListModel, SystemListModel},
+    view_models::{FileSetViewModel, ReleaseListModel, SystemListModel},
 };
 
 use crate::{
@@ -40,7 +40,6 @@ pub enum FileSetDetailsCmdMsg {
     FileSetLoaded(Result<FileSetViewModel, Error>),
     ReleasesLoaded(Result<Vec<ReleaseListModel>, Error>),
     FileSetSystemsLoaded(Result<Vec<SystemListModel>, Error>),
-    //FileInfoLoaded(Result<FileInfoViewModel, Error>),
 }
 
 #[derive(Debug)]
@@ -186,11 +185,6 @@ impl relm4::Component for FileSetDetailsView {
                     let id = item.borrow().id;
                     self.file_info_details
                         .emit(FileInfoDetailsMsg::LoadFileInfo(id));
-                    /*let view_model_service = Arc::clone(&self.view_model_service);
-                    sender.oneshot_command(async move {
-                        let result = view_model_service.get_file_info_view_model(id).await;
-                        FileSetDetailsCmdMsg::FileInfoLoaded(result)
-                    });*/
                 }
             }
         }
@@ -247,13 +241,7 @@ impl relm4::Component for FileSetDetailsView {
             }
             FileSetDetailsCmdMsg::FileSetSystemsLoaded(Err(err)) => {
                 eprintln!("Error loading Systems: {:?}", err);
-            } /*FileSetDetailsCmdMsg::FileInfoLoaded(Ok(file_info)) => {
-                  println!("Loaded File Info: {:?}", file_info);
-                  // TODO: update file info details with list of file sets it belongs to
-              }
-              FileSetDetailsCmdMsg::FileInfoLoaded(Err(err)) => {
-                  eprintln!("Error loading File Info: {:?}", err);
-              }*/
+            }
         }
     }
 }

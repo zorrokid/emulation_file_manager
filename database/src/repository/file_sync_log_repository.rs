@@ -70,18 +70,29 @@ impl FileSyncLogRepository {
         Ok(logs)
     }
 
+    /// Fetches the most recent log entries for each file_info_id where the status is either
+    /// UploadPending or UploadFailed, with pagination support.
+    /// This is useful for identifying files that need to be retried for upload.
+    /// Note: if user has a later log entry with different status it will be excluded from result
+    /// set.
     pub async fn get_logs_and_file_info_by_sync_status(
         &self,
         limit: u32,
         offset: u32,
     ) -> Result<Vec<FileSyncLogWithFileInfo>, sqlx::Error> {
-        let pending_status = FileSyncStatus::Pending.to_db_int();
-        let error_status = FileSyncStatus::Failed.to_db_int();
+        let pending_status = FileSyncStatus::UploadPending.to_db_int();
+        let error_status = FileSyncStatus::UploadFailed.to_db_int();
         let logs = sqlx::query_as::<_, FileSyncLogWithFileInfo>(
             "SELECT log.id, log.file_info_id, log.sync_time, log.status, log.message, log.cloud_key, fi.sha1_checksum, fi.file_size, fi.archive_file_name, fi.file_type 
              FROM file_sync_log log
              INNER JOIN file_info fi ON log.file_info_id = fi.id
+             INNER JOIN (
+                SELECT file_info_id, MAX(sync_time) AS max_sync_time
+                FROM file_sync_log
+                GROUP BY file_info_id
+             ) latest ON log.id = latest.file_info_id AND log.sync_time = latest.max_sync_time
              WHERE log.status = ? OR log.status = ?
+             ORDER BY log.sync_time DESC 
              LIMIT ? OFFSET ?",
         )
         .bind(pending_status)
@@ -132,5 +143,53 @@ impl FileSyncLogRepository {
         .execute(&*self.pool)
         .await?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{repository::file_info_repository::FileInfoRepository, setup_test_db};
+    use sqlx::{query, query_scalar};
+
+    #[async_std::test]
+    async fn test_get_logs_and_file_info_by_sync_status() {
+        let pool = Arc::new(setup_test_db().await);
+        let repository = FileSyncLogRepository::new(Arc::clone(&pool));
+        let file_info_id = insert_file_info(&pool).await;
+        repository
+            .add_log_entry(file_info_id, FileSyncStatus::UploadPending, "", "")
+            .await
+            .unwrap();
+        repository
+            .add_log_entry(file_info_id, FileSyncStatus::UploadFailed, "", "")
+            .await
+            .unwrap();
+        let res = repository
+            .get_logs_and_file_info_by_sync_status(1, 0)
+            .await
+            .unwrap();
+        assert_eq!(res.len(), 1);
+    }
+
+    async fn insert_file_info(pool: &Pool<Sqlite>) -> i64 {
+        let bytes: Vec<u8> = vec![1, 2, 3];
+        let result = sqlx::query!(
+            "INSERT INTO file_info (
+                sha1_checksum,
+                file_size,
+                archive_file_name,
+                file_type
+            ) VALUES (?, ?, ?, ?)",
+            bytes,
+            1,
+            "test_file_1",
+            1
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+
+        result.last_insert_rowid()
     }
 }

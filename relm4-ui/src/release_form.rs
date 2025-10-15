@@ -43,9 +43,9 @@ pub enum ReleaseFormMsg {
     OpenSoftwareTitleSelector,
     SoftwareTitleCreated(SoftwareTitleListModel),
     SoftwareTitleUpdated(SoftwareTitleListModel),
-    RemoveSoftwareTitle,
-    RemoveSystem,
-    RemoveFileSet,
+    UnlinkSoftwareTitle,
+    UnlinkSystem,
+    UnlinkFileSet,
     Show { release: Option<ReleaseViewModel> },
     Hide,
     EditFileSet,
@@ -148,8 +148,8 @@ impl Component for ReleaseFormModel {
                             connect_clicked => ReleaseFormMsg::OpenSoftwareTitleSelector,
                         },
                         gtk::Button {
-                            set_label: "Remove Software Title",
-                            connect_clicked => ReleaseFormMsg::RemoveSoftwareTitle,
+                            set_label: "Unlink Software Title",
+                            connect_clicked => ReleaseFormMsg::UnlinkSoftwareTitle,
                         },
                     },
                 },
@@ -174,8 +174,8 @@ impl Component for ReleaseFormModel {
                             connect_clicked => ReleaseFormMsg::OpenSystemSelector,
                         },
                         gtk::Button {
-                            set_label: "Remove System",
-                            connect_clicked => ReleaseFormMsg::RemoveSystem,
+                            set_label: "Unlink System",
+                            connect_clicked => ReleaseFormMsg::UnlinkSystem,
                         },
                     },
 
@@ -206,8 +206,8 @@ impl Component for ReleaseFormModel {
                             connect_clicked => ReleaseFormMsg::EditFileSet,
                         },
                         gtk::Button {
-                            set_label: "Remove File Set",
-                            connect_clicked => ReleaseFormMsg::RemoveFileSet,
+                            set_label: "Unlink File Set",
+                            connect_clicked => ReleaseFormMsg::UnlinkFileSet,
                         },
                     },
                 },
@@ -413,13 +413,13 @@ impl Component for ReleaseFormModel {
                     eprintln!("Error in sending message {:?}", msg);
                 }
             }
-            ReleaseFormMsg::RemoveSoftwareTitle => {
+            ReleaseFormMsg::UnlinkSoftwareTitle => {
                 remove_selected(&mut self.selected_software_titles_list_view_wrapper);
             }
-            ReleaseFormMsg::RemoveSystem => {
+            ReleaseFormMsg::UnlinkSystem => {
                 remove_selected(&mut self.selected_systems_list_view_wrapper);
             }
-            ReleaseFormMsg::RemoveFileSet => {
+            ReleaseFormMsg::UnlinkFileSet => {
                 remove_selected(&mut self.selected_file_sets_list_view_wrapper);
             }
             ReleaseFormMsg::Show { release } => {

@@ -482,7 +482,7 @@ mod tests {
 
         repository_manager
             .get_settings_repository()
-            .add_setting(SettingName::CollectionRootDir.as_str(), "test_value")
+            .add_setting(&SettingName::CollectionRootDir, "test_value")
             .await
             .unwrap();
 

@@ -28,6 +28,7 @@ use crate::{
 pub enum FileSetSelectorMsg {
     FetchFiles,
     SelectClicked,
+    DeleteClicked,
     OpenFileSetForm,
     FileSetCreated(FileSetListModel),
     FileSetSelected {
@@ -131,6 +132,15 @@ impl Component for FileSetSelector {
                         connect_clicked => FileSetSelectorMsg::SelectClicked,
                         #[watch]
                         set_sensitive: model.selected_file_set.is_some() && model.selected_file_type.is_some(),
+                    },
+                    gtk::Button {
+                        set_label: "Delete File Set",
+                        connect_clicked => FileSetSelectorMsg::DeleteClicked,
+                        #[watch]
+                        set_sensitive: model.selected_file_set.is_some(),
+                    },
+                    gtk::Label {
+                        set_label: "When deleting a file set, also that actual files will be deleted unless they are linked to other file sets (in that case only those files that are linked won't be deleted).",
                     },
                 },
 

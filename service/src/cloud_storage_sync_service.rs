@@ -60,7 +60,7 @@ impl CloudStorageSyncService {
                     .get_file_sync_log_repository()
                     .add_log_entry(
                         file_info.id,
-                        FileSyncStatus::Pending,
+                        FileSyncStatus::UploadPending,
                         "",
                         cloud_key.as_str(),
                     )
@@ -121,7 +121,7 @@ impl CloudStorageSyncService {
             for file in pending_files_to_upload {
                 self.repository_manager
                     .get_file_sync_log_repository()
-                    .update_log_entry(file.id, FileSyncStatus::InProgress, "")
+                    .update_log_entry(file.id, FileSyncStatus::UploadInProgress, "")
                     .await
                     .map_err(|e| CloudStorageError::Other(e.to_string()))?;
                 let folder_name = file.file_type.dir_name();
@@ -154,7 +154,7 @@ impl CloudStorageSyncService {
                         println!("Upload completed: id={}, key={}", file.id, file.cloud_key);
                         self.repository_manager
                             .get_file_sync_log_repository()
-                            .update_log_entry(file.id, FileSyncStatus::Completed, "")
+                            .update_log_entry(file.id, FileSyncStatus::UploadCompleted, "")
                             .await
                             .map_err(|e| CloudStorageError::Other(e.to_string()))?;
                         successful_files_count += 1;
@@ -174,7 +174,11 @@ impl CloudStorageSyncService {
                         );
                         self.repository_manager
                             .get_file_sync_log_repository()
-                            .update_log_entry(file.id, FileSyncStatus::Failed, &format!("{}", e))
+                            .update_log_entry(
+                                file.id,
+                                FileSyncStatus::UploadFailed,
+                                &format!("{}", e),
+                            )
                             .await
                             .map_err(|e| CloudStorageError::Other(e.to_string()))?;
                         failed_files_count += 1;

@@ -236,10 +236,14 @@ impl SettingName {
 #[derive(Debug, Clone, PartialEq, Copy)]
 #[repr(u8)]
 pub enum FileSyncStatus {
-    Pending,
-    InProgress,
-    Completed,
-    Failed,
+    UploadPending,
+    UploadInProgress,
+    UploadCompleted,
+    UploadFailed,
+    DeletionPending,
+    DeletionInProgress,
+    DeletionCompleted,
+    DeletionFailed,
 }
 
 impl FileSyncStatus {
@@ -249,10 +253,14 @@ impl FileSyncStatus {
 
     pub fn from_db_int(value: u8) -> Result<Self, CoreTypeError> {
         match value {
-            0 => Ok(FileSyncStatus::Pending),
-            1 => Ok(FileSyncStatus::InProgress),
-            2 => Ok(FileSyncStatus::Completed),
-            3 => Ok(FileSyncStatus::Failed),
+            0 => Ok(FileSyncStatus::UploadPending),
+            1 => Ok(FileSyncStatus::UploadInProgress),
+            2 => Ok(FileSyncStatus::UploadCompleted),
+            3 => Ok(FileSyncStatus::UploadFailed),
+            4 => Ok(FileSyncStatus::DeletionPending),
+            5 => Ok(FileSyncStatus::DeletionInProgress),
+            6 => Ok(FileSyncStatus::DeletionCompleted),
+            7 => Ok(FileSyncStatus::DeletionFailed),
             _ => Err(CoreTypeError::ConversionError(
                 "Failed convert to FileSyncStatus".to_string(),
             )),
