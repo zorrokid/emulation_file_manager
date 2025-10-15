@@ -86,10 +86,10 @@ impl FileSyncLogRepository {
              FROM file_sync_log log
              INNER JOIN file_info fi ON log.file_info_id = fi.id
              INNER JOIN (
-                SELECT file_info_id, MAX(sync_time) AS max_sync_time
+                SELECT file_info_id, MAX(id) AS max_id
                 FROM file_sync_log
                 GROUP BY file_info_id
-             ) latest ON log.file_info_id = latest.file_info_id AND log.sync_time = latest.max_sync_time
+             ) latest ON log.file_info_id = latest.file_info_id AND log.id = latest.max_id
              WHERE log.status IN (");
         let mut separated = query_builder.separated(", ");
         for status in statuses {
@@ -174,6 +174,52 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(res.len(), 1);
+
+        // add another file_info and log entries for it
+        let file_info_id_2 = insert_file_info(&pool).await;
+        repository
+            .add_log_entry(file_info_id_2, FileSyncStatus::UploadPending, "", "")
+            .await
+            .unwrap();
+        repository
+            .add_log_entry(file_info_id_2, FileSyncStatus::UploadFailed, "", "")
+            .await
+            .unwrap();
+
+        // test pagination
+        let res = repository
+            .get_logs_and_file_info_by_sync_status(&[FileSyncStatus::UploadFailed], 1, 0)
+            .await
+            .unwrap();
+        assert_eq!(res.len(), 1);
+        let first = res.first().unwrap();
+        assert_eq!(first.file_info_id, file_info_id);
+        let res = repository
+            .get_logs_and_file_info_by_sync_status(&[FileSyncStatus::UploadFailed], 1, 1)
+            .await
+            .unwrap();
+        assert_eq!(res.len(), 1);
+        let first = res.first().unwrap();
+        assert_eq!(first.file_info_id, file_info_id_2);
+
+        // add one more log entry
+        repository
+            .add_log_entry(file_info_id, FileSyncStatus::DeletionPending, "", "")
+            .await
+            .unwrap();
+        repository
+            .add_log_entry(file_info_id_2, FileSyncStatus::DeletionPending, "", "")
+            .await
+            .unwrap();
+
+        // now UploadFailed status shouldn't return anything since there is more recent log entry
+        // for both files with different status
+        //
+        let res = repository
+            .get_logs_and_file_info_by_sync_status(&[FileSyncStatus::UploadFailed], 10, 0)
+            .await
+            .unwrap();
+        assert_eq!(res.len(), 0);
     }
 
     async fn insert_file_info(pool: &Pool<Sqlite>) -> i64 {
