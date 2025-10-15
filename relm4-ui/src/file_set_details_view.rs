@@ -1,7 +1,7 @@
 use std::{collections::HashSet, sync::Arc};
 
 use relm4::{
-    ComponentParts, ComponentSender, RelmWidgetExt,
+    ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
         self,
         glib::clone,
@@ -15,7 +15,10 @@ use service::{
     view_models::{FileInfoViewModel, FileSetViewModel, ReleaseListModel, SystemListModel},
 };
 
-use crate::list_item::ListItem;
+use crate::{
+    file_info_details::{FileInfoDetails, FileInfoDetailsInit, FileInfoDetailsMsg},
+    list_item::ListItem,
+};
 
 #[derive(Debug)]
 pub struct FileSetDetailsView {
@@ -23,6 +26,7 @@ pub struct FileSetDetailsView {
     files_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     systems_list_view_wrapper: TypedListView<ListItem, gtk::NoSelection>,
     software_titles_list_view_wrapper: TypedListView<ListItem, gtk::NoSelection>,
+    file_info_details: Controller<FileInfoDetails>,
 }
 
 #[derive(Debug)]
@@ -36,7 +40,7 @@ pub enum FileSetDetailsCmdMsg {
     FileSetLoaded(Result<FileSetViewModel, Error>),
     ReleasesLoaded(Result<Vec<ReleaseListModel>, Error>),
     FileSetSystemsLoaded(Result<Vec<SystemListModel>, Error>),
-    FileInfoLoaded(Result<FileInfoViewModel, Error>),
+    //FileInfoLoaded(Result<FileInfoViewModel, Error>),
 }
 
 #[derive(Debug)]
@@ -54,44 +58,51 @@ impl relm4::Component for FileSetDetailsView {
     view! {
         #[root]
         gtk::Box {
-            set_orientation: gtk::Orientation::Vertical,
+            set_orientation: gtk::Orientation::Horizontal,
             set_spacing: 10,
-            set_margin_all: 10,
 
-            #[name = "file_set_name_label"]
-            gtk::Label {
-                set_label: "File Set Details",
+            gtk::Box {
+                set_orientation: gtk::Orientation::Vertical,
+                set_spacing: 10,
+                set_margin_all: 10,
+
+                #[name = "file_set_name_label"]
+                gtk::Label {
+                    set_label: "File Set Details",
+                },
+
+                gtk::Label {
+                    set_label: "Files in file set:",
+                },
+
+                gtk::ScrolledWindow {
+                    set_vexpand: true,
+                    #[local_ref]
+                    files_list -> gtk::ListView {}
+                },
+
+                gtk::Label {
+                    set_label: "Systems linked to file set:",
+                },
+
+               gtk::ScrolledWindow {
+                    set_vexpand: true,
+                    #[local_ref]
+                    systems_list -> gtk::ListView {}
+                },
+
+                gtk::Label {
+                    set_label: "Software titles linked to file set:",
+                },
+
+                gtk::ScrolledWindow {
+                    set_vexpand: true,
+                    #[local_ref]
+                    software_titles_list -> gtk::ListView {}
+                }
             },
-
-            gtk::Label {
-                set_label: "Files in file set:",
-            },
-
-            gtk::ScrolledWindow {
-                set_vexpand: true,
-                #[local_ref]
-                files_list -> gtk::ListView {}
-            },
-
-            gtk::Label {
-                set_label: "Systems linked to file set:",
-            },
-
-           gtk::ScrolledWindow {
-                set_vexpand: true,
-                #[local_ref]
-                systems_list -> gtk::ListView {}
-            },
-
-            gtk::Label {
-                set_label: "Software titles linked to file set:",
-            },
-
-            gtk::ScrolledWindow {
-                set_vexpand: true,
-                #[local_ref]
-                software_titles_list -> gtk::ListView {}
-            }
+            #[local_ref]
+            file_info_details_widget -> gtk::Box,
         }
     }
 
@@ -103,12 +114,19 @@ impl relm4::Component for FileSetDetailsView {
         let files_list_view_wrapper = TypedListView::<ListItem, gtk::SingleSelection>::new();
         let systems_list_view_wrapper = TypedListView::<ListItem, gtk::NoSelection>::new();
         let software_titles_list_view_wrapper = TypedListView::<ListItem, gtk::NoSelection>::new();
+        let file_info_details_init = FileInfoDetailsInit {
+            view_model_service: Arc::clone(&init.view_model_service),
+        };
+        let file_info_details = FileInfoDetails::builder()
+            .launch(file_info_details_init)
+            .detach();
 
         let model = FileSetDetailsView {
             view_model_service: init.view_model_service,
             files_list_view_wrapper,
             systems_list_view_wrapper,
             software_titles_list_view_wrapper,
+            file_info_details,
         };
 
         let files_list = &model.files_list_view_wrapper.view;
@@ -126,6 +144,7 @@ impl relm4::Component for FileSetDetailsView {
                 }
             ));
 
+        let file_info_details_widget = model.file_info_details.widget();
         let widgets = view_output!();
 
         ComponentParts { model, widgets }
@@ -165,16 +184,14 @@ impl relm4::Component for FileSetDetailsView {
                 if let Some(item) = selected_item {
                     println!("Selected file: {:?}", item);
                     let id = item.borrow().id;
-                    let view_model_service = Arc::clone(&self.view_model_service);
+                    self.file_info_details
+                        .emit(FileInfoDetailsMsg::LoadFileInfo(id));
+                    /*let view_model_service = Arc::clone(&self.view_model_service);
                     sender.oneshot_command(async move {
                         let result = view_model_service.get_file_info_view_model(id).await;
                         FileSetDetailsCmdMsg::FileInfoLoaded(result)
-                    });
-                } else {
-                    println!("No file selected at index: {}", index);
+                    });*/
                 }
-
-                println!("File selected at index: {}", index);
             }
         }
     }
@@ -230,14 +247,13 @@ impl relm4::Component for FileSetDetailsView {
             }
             FileSetDetailsCmdMsg::FileSetSystemsLoaded(Err(err)) => {
                 eprintln!("Error loading Systems: {:?}", err);
-            }
-            FileSetDetailsCmdMsg::FileInfoLoaded(Ok(file_info)) => {
-                println!("Loaded File Info: {:?}", file_info);
-                // TODO: update file info details with list of file sets it belongs to
-            }
-            FileSetDetailsCmdMsg::FileInfoLoaded(Err(err)) => {
-                eprintln!("Error loading File Info: {:?}", err);
-            }
+            } /*FileSetDetailsCmdMsg::FileInfoLoaded(Ok(file_info)) => {
+                  println!("Loaded File Info: {:?}", file_info);
+                  // TODO: update file info details with list of file sets it belongs to
+              }
+              FileSetDetailsCmdMsg::FileInfoLoaded(Err(err)) => {
+                  eprintln!("Error loading File Info: {:?}", err);
+              }*/
         }
     }
 }

@@ -186,7 +186,7 @@ pub struct FileSetFileViewModel {
     pub file_path: PathBuf,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FileInfoViewModel {
     pub id: i64,
     pub sha1_checksum: Vec<u8>,

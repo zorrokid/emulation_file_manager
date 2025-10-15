@@ -253,7 +253,7 @@ impl Component for FileSetSelector {
                     let file_set_list_model = FileSetListModel {
                         id: selected_item.id,
                         file_set_name: selected_item.name.clone(), // TODO
-                        file_type: file_type,
+                        file_type,
                         file_name: selected_item.name.clone(),
                     };
                     let res = sender.output(FileSetSelectorOutputMsg::FileSetSelected(
