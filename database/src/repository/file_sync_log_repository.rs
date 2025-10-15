@@ -125,7 +125,7 @@ impl FileSyncLogRepository {
         Ok(result.last_insert_rowid())
     }
 
-    pub async fn update_log_entry(
+    /*pub async fn update_log_entry(
         &self,
         log_id: i64,
         status: FileSyncStatus,
@@ -133,7 +133,7 @@ impl FileSyncLogRepository {
     ) -> Result<(), sqlx::Error> {
         let status = status.to_db_int();
         sqlx::query!(
-            "UPDATE file_sync_log 
+            "UPDATE file_sync_log
              SET status = ?, message = ?, sync_time = datetime('now')
              WHERE id = ?",
             status,
@@ -143,7 +143,7 @@ impl FileSyncLogRepository {
         .execute(&*self.pool)
         .await?;
         Ok(())
-    }
+    }*/
 }
 
 #[cfg(test)]
