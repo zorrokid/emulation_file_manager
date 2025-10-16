@@ -340,8 +340,8 @@ impl FileSetRepository {
         Ok(id)
     }
 
-    pub async fn delete_file_set(&self, id: i64) -> Result<i64, DatabaseError> {
-        let is_in_use = sqlx::query_scalar!(
+    pub async fn is_in_use(&self, id: i64) -> Result<bool, DatabaseError> {
+        let count = sqlx::query_scalar!(
             "SELECT COUNT(*) 
              FROM release_file_set
              WHERE file_set_id = ?",
@@ -349,8 +349,11 @@ impl FileSetRepository {
         )
         .fetch_one(&*self.pool)
         .await?;
+        Ok(count > 0)
+    }
 
-        if is_in_use > 0 {
+    pub async fn delete_file_set(&self, id: i64) -> Result<i64, DatabaseError> {
+        if self.is_in_use(id).await? {
             return Err(DatabaseError::InUse);
         }
 

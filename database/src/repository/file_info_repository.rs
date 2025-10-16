@@ -93,6 +93,12 @@ impl FileInfoRepository {
         let file_infos = query.fetch_all(&*self.pool).await?;
         Ok(file_infos)
     }
+
+    pub async fn delete_file_info(&self, id: i64) -> Result<(), Error> {
+        let query = sqlx::query("DELETE FROM file_info WHERE id = ?").bind(id);
+        query.execute(&*self.pool).await?;
+        Ok(())
+    }
 }
 #[cfg(test)]
 mod tests {

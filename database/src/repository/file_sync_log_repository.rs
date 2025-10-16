@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use core_types::FileSyncStatus;
-use sqlx::{prelude::FromRow, query, sqlite::SqliteRow, Pool, QueryBuilder, Row, Sqlite};
+use sqlx::{prelude::FromRow, sqlite::SqliteRow, Pool, Row, Sqlite};
 
 use crate::models::{FileSyncLog, FileSyncLogWithFileInfo};
 
@@ -128,33 +128,12 @@ impl FileSyncLogRepository {
         .await?;
         Ok(result.last_insert_rowid())
     }
-
-    /*pub async fn update_log_entry(
-        &self,
-        log_id: i64,
-        status: FileSyncStatus,
-        message: &str,
-    ) -> Result<(), sqlx::Error> {
-        let status = status.to_db_int();
-        sqlx::query!(
-            "UPDATE file_sync_log
-             SET status = ?, message = ?, sync_time = datetime('now')
-             WHERE id = ?",
-            status,
-            message,
-            log_id
-        )
-        .execute(&*self.pool)
-        .await?;
-        Ok(())
-    }*/
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{repository::file_info_repository::FileInfoRepository, setup_test_db};
-    use sqlx::{query, query_scalar};
+    use crate::setup_test_db;
 
     #[async_std::test]
     async fn test_get_logs_and_file_info_by_sync_status() {
