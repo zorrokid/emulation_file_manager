@@ -375,10 +375,10 @@ impl Component for ReleaseFormModel {
                                     .get_release_repository()
                                     .update_release_full(
                                         id,
-                                        "".to_string(),
-                                        software_title_ids,
-                                        file_set_ids,
-                                        system_ids,
+                                        "",
+                                        &software_title_ids,
+                                        &file_set_ids,
+                                        &system_ids,
                                     )
                                     .await
                             }
@@ -387,10 +387,10 @@ impl Component for ReleaseFormModel {
                                 repository_manager
                                     .get_release_repository()
                                     .add_release_full(
-                                        "".to_string(),
-                                        software_title_ids,
-                                        file_set_ids,
-                                        system_ids,
+                                        "",
+                                        &software_title_ids,
+                                        &file_set_ids,
+                                        &system_ids,
                                     )
                                     .await
                             }

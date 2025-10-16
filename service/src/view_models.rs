@@ -54,12 +54,27 @@ pub struct S3Settings {
     pub bucket: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Settings {
     pub collection_root_dir: PathBuf,
     pub temp_output_dir: PathBuf,
     pub s3_settings: Option<S3Settings>,
     pub s3_sync_enabled: bool,
+}
+
+impl Settings {
+    /// Get the path to a specific file type directory within the collection root
+    pub fn get_file_type_path(&self, file_type: &FileType) -> PathBuf {
+        self.collection_root_dir.join(file_type.dir_name())
+    }
+
+    /// Get the full path to a specific file within the collection
+    /// Automatically appends the .zst extension to the archive_file_name
+    pub fn get_file_path(&self, file_type: &FileType, archive_file_name: &str) -> PathBuf {
+        self.get_file_type_path(file_type)
+            .join(archive_file_name)
+            .with_extension("zst")
+    }
 }
 
 impl From<HashMap<String, String>> for Settings {

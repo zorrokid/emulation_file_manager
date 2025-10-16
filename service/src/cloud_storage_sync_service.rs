@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc};
+use std::sync::Arc;
 
 use async_std::channel::Sender;
 use cloud_storage::{connect_bucket, multipart_upload, CloudStorageError, SyncEvent};
@@ -133,10 +133,9 @@ impl CloudStorageSyncService {
                     )
                     .await
                     .map_err(|e| CloudStorageError::Other(e.to_string()))?;
-                let folder_name = file.file_type.dir_name();
-                let local_path = PathBuf::from(&self.settings.collection_root_dir)
-                    .join(folder_name)
-                    .join(format!("{}.{}", &file.archive_file_name, "zst"));
+                let local_path = self
+                    .settings
+                    .get_file_path(&file.file_type, &file.archive_file_name);
                 println!("Local path: {:?}", local_path);
                 println!(
                     "Uploading file to cloud: id={}, key={}",
