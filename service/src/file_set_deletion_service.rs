@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use core_types::{FileSyncStatus, Sha1Checksum};
+use core_types::FileSyncStatus;
 use database::{models::FileInfo, repository_manager::RepositoryManager};
 
 use crate::{
@@ -741,7 +741,7 @@ mod tests {
             .unwrap();
 
         let mut context = DeletionContext {
-            file_set_id: 1,
+            file_set_id,
             repository_manager: repo_manager.clone(),
             settings: settings.clone(),
             fs_ops: fs_ops.clone(),
@@ -763,6 +763,49 @@ mod tests {
 
         let action = step.execute(&mut context).await.unwrap();
         assert!(matches!(action, StepAction::Continue));
+    }
+
+    #[async_std::test]
+    async fn test_fetch_file_infos_step() {
+        let pool = Arc::new(setup_test_db().await);
+        let repo_manager = Arc::new(RepositoryManager::new(pool));
+        let settings = Arc::new(Settings::default());
+        let fs_ops = Arc::new(MockFileSystemOps::new());
+        let file1 = ImportedFile {
+            original_file_name: "file1.zst".to_string(),
+            archive_file_name: "file1.zst".to_string(),
+            sha1_checksum: Sha1Checksum::from([0; 20]),
+            file_size: 1234,
+        };
+        let files_in_file_set = vec![file1];
+        let file_set_id = repo_manager
+            .get_file_set_repository()
+            .add_file_set(
+                "test_set",
+                "file name",
+                &FileType::Rom,
+                "",
+                &files_in_file_set,
+                &[],
+            )
+            .await
+            .unwrap();
+
+        let mut context = DeletionContext {
+            file_set_id,
+            repository_manager: repo_manager.clone(),
+            settings: settings.clone(),
+            fs_ops: fs_ops.clone(),
+            deletion_results: HashMap::new(),
+        };
+        let step = FetchFileInfosStep;
+        let action = step.execute(&mut context).await.unwrap();
+        assert!(matches!(action, StepAction::Continue));
+        assert_eq!(context.deletion_results.len(), 1);
+        let deletion_result = context.deletion_results.values().next().unwrap();
+        assert_eq!(deletion_result.file_info.archive_file_name, "file1.zst");
+        // at this point we don't know if the file is deletable yet
+        assert!(!deletion_result.is_deletable);
     }
 
     #[async_std::test]
@@ -965,7 +1008,7 @@ mod tests {
             .unwrap();
 
         let mut context = DeletionContext {
-            file_set_id: 1,
+            file_set_id,
             repository_manager: repo_manager.clone(),
             settings: settings.clone(),
             fs_ops: fs_ops.clone(),
@@ -1033,7 +1076,7 @@ mod tests {
         mock_fs.add_file(file_path.to_string_lossy().as_ref());
 
         let mut context = DeletionContext {
-            file_set_id: 1,
+            file_set_id,
             repository_manager: repo_manager.clone(),
             settings: settings.clone(),
             fs_ops: mock_fs.clone(),
@@ -1068,5 +1111,80 @@ mod tests {
         );
 
         assert_eq!(res, StepAction::Continue);
+    }
+
+    #[async_std::test]
+    async fn test_delete_file_infos_step() {
+        let pool = Arc::new(setup_test_db().await);
+        let repo_manager = Arc::new(RepositoryManager::new(pool));
+        let settings = Arc::new(Settings::default());
+        let fs_ops = Arc::new(MockFileSystemOps::new());
+
+        let file1 = ImportedFile {
+            original_file_name: "file1.zst".to_string(),
+            archive_file_name: "file1.zst".to_string(),
+            sha1_checksum: Sha1Checksum::from([0; 20]),
+            file_size: 1234,
+        };
+        let files_in_file_set = vec![file1];
+        let file_set_id = repo_manager
+            .get_file_set_repository()
+            .add_file_set(
+                "test_set",
+                "file name",
+                &FileType::Rom,
+                "",
+                &files_in_file_set,
+                &[],
+            )
+            .await
+            .unwrap();
+
+        let file_infos = repo_manager
+            .get_file_info_repository()
+            .get_file_infos_by_file_set(file_set_id)
+            .await
+            .unwrap();
+
+        let file_info = file_infos.first().unwrap();
+
+        let mut context = DeletionContext {
+            file_set_id,
+            repository_manager: repo_manager.clone(),
+            settings: settings.clone(),
+            fs_ops: fs_ops.clone(),
+            deletion_results: HashMap::from([(
+                file_info.sha1_checksum.clone(),
+                FileDeletionResult {
+                    file_info: file_info.clone(),
+                    file_path: None,
+                    file_deletion_success: true,
+                    error_messages: vec![],
+                    is_deletable: true,
+                    was_deleted_from_db: false,
+                    cloud_sync_marked: false,
+                },
+            )]),
+        };
+
+        let delete_file_set_step = DeleteFileSetStep;
+        delete_file_set_step.execute(&mut context).await.unwrap();
+
+        let step = DeleteFileInfosStep;
+        let action = step.execute(&mut context).await.unwrap();
+        assert_eq!(action, StepAction::Continue);
+
+        let deletion_result = context
+            .deletion_results
+            .get(&file_info.sha1_checksum)
+            .unwrap();
+
+        assert!(deletion_result.was_deleted_from_db);
+
+        let res = repo_manager
+            .get_file_info_repository()
+            .get_file_info(file_info.id)
+            .await;
+        assert!(res.is_err());
     }
 }
