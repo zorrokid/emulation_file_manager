@@ -108,6 +108,7 @@ pub struct SoftwareTitle {
     pub franchise_id: Option<i64>,
 }
 
+#[derive(Debug, Clone)]
 pub struct FileSyncLog {
     pub id: i64,
     pub file_info_id: i64,

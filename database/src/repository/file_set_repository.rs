@@ -168,7 +168,9 @@ impl FileSetRepository {
         Ok(file_sets)
     }
 
-    // TODO: update file set
+    /// Adds a new file set along with its associated files and system links.
+    /// Checks for existing file info entries to avoid duplicates.
+    /// Returns the ID of the newly created file set.
     pub async fn add_file_set(
         &self,
         file_set_name: &str,

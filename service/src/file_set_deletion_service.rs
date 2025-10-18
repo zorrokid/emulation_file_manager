@@ -1,6 +1,6 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
-use core_types::FileSyncStatus;
+use core_types::{FileSyncStatus, Sha1Checksum};
 use database::{models::FileInfo, repository_manager::RepositoryManager};
 
 use crate::{
@@ -33,19 +33,23 @@ pub struct DeletionContext<F: FileSystemOps> {
     pub fs_ops: Arc<F>,
 
     // Accumulated state as pipeline progresses
-    pub files_to_delete: Vec<FileInfo>,
-    pub deletion_results: Vec<FileDeletionResult>,
+    //pub files_to_delete: Vec<FileInfo>,
+    pub deletion_results: HashMap<Vec<u8> /*Sha1Checksum*/, FileDeletionResult>,
 }
 
 #[derive(Debug, Clone)]
 pub struct FileDeletionResult {
-    pub file_path: String,
-    pub success: bool,
-    pub error_message: Option<String>,
+    pub file_info: FileInfo,
+    pub file_path: Option<String>,
+    pub file_deletion_success: bool,
+    pub error_messages: Vec<String>,
+    pub is_deletable: bool,
+    pub was_deleted_from_db: bool,
+    pub cloud_sync_marked: bool,
 }
 
 /// Result of executing a pipeline step
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum StepAction {
     /// Continue to the next step
     Continue,
@@ -108,20 +112,72 @@ impl<F: FileSystemOps> DeletionStep<F> for FetchFileInfosStep {
     }
 
     async fn execute(&self, context: &mut DeletionContext<F>) -> Result<StepAction, Error> {
-        let file_infos = context
+        let file_infos_res = context
             .repository_manager
             .get_file_info_repository()
             .get_file_infos_by_file_set(context.file_set_id)
-            .await
-            .map_err(|e| Error::DbError(e.to_string()))?;
+            .await;
 
-        // Store in context for next steps
-        context.files_to_delete = file_infos;
-        Ok(StepAction::Continue)
+        match file_infos_res {
+            Ok(file_infos) => {
+                // even if file_infos is empty, continue to delete the file set
+                context.deletion_results = file_infos
+                    .into_iter()
+                    .map(|fi| {
+                        (
+                            fi.sha1_checksum.clone(),
+                            FileDeletionResult {
+                                file_info: fi,
+                                file_path: None,
+                                file_deletion_success: false,
+                                error_messages: vec![],
+                                is_deletable: false,
+                                was_deleted_from_db: false,
+                                cloud_sync_marked: false,
+                            },
+                        )
+                    })
+                    .collect();
+
+                Ok(StepAction::Continue)
+            }
+            Err(e) => Ok(StepAction::Abort(Error::DbError(format!(
+                "Failed to fetch file infos: {}",
+                e
+            )))),
+        }
     }
 }
 
-/// Step 3: Filter files that are only in this file set (safe to delete)
+/// Step 3: Delete the file set from database
+struct DeleteFileSetStep;
+
+#[async_trait::async_trait]
+impl<F: FileSystemOps> DeletionStep<F> for DeleteFileSetStep {
+    fn name(&self) -> &'static str {
+        "delete_file_set"
+    }
+
+    async fn execute(&self, context: &mut DeletionContext<F>) -> Result<StepAction, Error> {
+        let res = context
+            .repository_manager
+            .get_file_set_repository()
+            .delete_file_set(context.file_set_id)
+            .await;
+
+        match res {
+            Ok(_) => Ok(StepAction::Continue),
+            Err(e) => {
+                return Ok(StepAction::Abort(Error::DbError(format!(
+                    "Failed to delete file set: {}",
+                    e
+                ))))
+            }
+        }
+    }
+}
+
+/// Step 4: Filter files that are only in this file set (safe to delete)
 struct FilterDeletableFilesStep;
 
 #[async_trait::async_trait]
@@ -130,30 +186,42 @@ impl<F: FileSystemOps> DeletionStep<F> for FilterDeletableFilesStep {
         "filter_deletable_files"
     }
 
-    async fn execute(&self, context: &mut DeletionContext<F>) -> Result<StepAction, Error> {
-        let mut deletable_files = vec![];
+    fn should_execute(&self, context: &DeletionContext<F>) -> bool {
+        // Only execute if there are files to process
+        !context.deletion_results.is_empty()
+    }
 
-        for file_info in &context.files_to_delete {
-            let file_sets = context
+    async fn execute(&self, context: &mut DeletionContext<F>) -> Result<StepAction, Error> {
+        for deletion_result in context.deletion_results.values_mut() {
+            let file_sets_res = context
                 .repository_manager
                 .get_file_set_repository()
-                .get_file_sets_by_file_info(file_info.id)
-                .await?;
+                .get_file_sets_by_file_info(deletion_result.file_info.id)
+                .await;
 
-            // Only delete if file is used in exactly this one file set
-            if let [entry] = &file_sets[..] {
-                if entry.id == context.file_set_id {
-                    deletable_files.push(file_info.clone());
+            match file_sets_res {
+                Err(e) => {
+                    return Ok(StepAction::Abort(Error::DbError(format!(
+                        "Failed to fetch file sets for file info {}: {}",
+                        deletion_result.file_info.id, e
+                    ))))
+                }
+                Ok(file_sets) => {
+                    // Only delete if file is used in exactly this one file set
+                    if let [single_entry] = &file_sets[..] {
+                        if single_entry.id == context.file_set_id {
+                            deletion_result.is_deletable = true;
+                        }
+                    }
                 }
             }
         }
 
-        context.files_to_delete = deletable_files;
         Ok(StepAction::Continue)
     }
 }
 
-/// Step 4: Mark files for cloud deletion (if synced)
+/// Step 5: Mark files for cloud deletion (if synced)
 struct MarkForCloudDeletionStep;
 
 #[async_trait::async_trait]
@@ -164,87 +232,49 @@ impl<F: FileSystemOps> DeletionStep<F> for MarkForCloudDeletionStep {
 
     fn should_execute(&self, context: &DeletionContext<F>) -> bool {
         // Only execute if there are files to process
-        !context.files_to_delete.is_empty()
+        context.deletion_results.values().any(|r| r.is_deletable)
     }
 
     async fn execute(&self, context: &mut DeletionContext<F>) -> Result<StepAction, Error> {
-        for file_info in &context.files_to_delete {
-            let sync_logs = context
+        for deletion_result in context.deletion_results.values_mut() {
+            let sync_logs_res = context
                 .repository_manager
                 .get_file_sync_log_repository()
-                .get_logs_by_file_info(file_info.id)
-                .await
-                .map_err(|e| Error::DbError(e.to_string()))?;
+                .get_logs_by_file_info(deletion_result.file_info.id)
+                .await;
 
-            if let Some(entry) = sync_logs.last() {
-                context
-                    .repository_manager
-                    .get_file_sync_log_repository()
-                    .add_log_entry(
-                        file_info.id,
-                        FileSyncStatus::DeletionPending,
-                        "",
-                        entry.cloud_key.as_str(),
-                    )
-                    .await
-                    .map_err(|e| Error::DbError(e.to_string()))?;
-            }
-        }
+            println!(
+                "Marking file info {} for cloud deletion check",
+                deletion_result.file_info.id
+            );
 
-        Ok(StepAction::Continue)
-    }
-}
-
-/// Step 5: Delete local files and track results
-struct DeleteLocalFilesStep;
-
-#[async_trait::async_trait]
-impl<F: FileSystemOps> DeletionStep<F> for DeleteLocalFilesStep {
-    fn name(&self) -> &'static str {
-        "delete_local_files"
-    }
-
-    fn should_execute(&self, context: &DeletionContext<F>) -> bool {
-        !context.files_to_delete.is_empty()
-    }
-
-    async fn execute(&self, context: &mut DeletionContext<F>) -> Result<StepAction, Error> {
-        for file_info in &context.files_to_delete {
-            let file_path = context
-                .settings
-                .get_file_path(&file_info.file_type, &file_info.archive_file_name);
-
-            let path_str = file_path.to_string_lossy().to_string();
-
-            if context.fs_ops.exists(&file_path) {
-                match context.fs_ops.remove_file(&file_path) {
-                    Ok(_) => {
-                        // Successfully deleted - remove from database
-                        context
+            match sync_logs_res {
+                Err(e) => {
+                    return Ok(StepAction::Abort(Error::DbError(format!(
+                        "Failed to fetch sync logs for file info {}: {}",
+                        deletion_result.file_info.id, e
+                    ))))
+                }
+                Ok(sync_logs) => {
+                    if let Some(entry) = sync_logs.last() {
+                        let update_res = context
                             .repository_manager
-                            .get_file_info_repository()
-                            .delete_file_info(file_info.id)
-                            .await
-                            .map_err(|e| Error::DbError(e.to_string()))?;
-
-                        context.deletion_results.push(FileDeletionResult {
-                            file_path: path_str,
-                            success: true,
-                            error_message: None,
-                        });
-                    }
-                    Err(e) => {
-                        // Log error but continue with other files
-                        eprintln!(
-                            "Failed to delete file: {:?}, error: {}. Continuing with next file.",
-                            file_path, e
-                        );
-
-                        context.deletion_results.push(FileDeletionResult {
-                            file_path: path_str,
-                            success: false,
-                            error_message: Some(e.to_string()),
-                        });
+                            .get_file_sync_log_repository()
+                            .add_log_entry(
+                                deletion_result.file_info.id,
+                                FileSyncStatus::DeletionPending,
+                                "",
+                                entry.cloud_key.as_str(),
+                            )
+                            .await;
+                        if let Err(e) = update_res {
+                            // TODO: should this abort?
+                            return Ok(StepAction::Abort(Error::DbError(format!(
+                                "Failed to mark file info {} for cloud deletion: {}",
+                                deletion_result.file_info.id, e
+                            ))));
+                        }
+                        deletion_result.cloud_sync_marked = true;
                     }
                 }
             }
@@ -254,22 +284,81 @@ impl<F: FileSystemOps> DeletionStep<F> for DeleteLocalFilesStep {
     }
 }
 
-/// Step 6: Delete the file set from database
-struct DeleteFileSetStep;
+/// Step 6: Delete local files and track results
+struct DeleteLocalFilesStep;
 
 #[async_trait::async_trait]
-impl<F: FileSystemOps> DeletionStep<F> for DeleteFileSetStep {
+impl<F: FileSystemOps> DeletionStep<F> for DeleteLocalFilesStep {
     fn name(&self) -> &'static str {
-        "delete_file_set"
+        "delete_local_files"
+    }
+
+    fn should_execute(&self, context: &DeletionContext<F>) -> bool {
+        context.deletion_results.values().any(|v| v.is_deletable)
     }
 
     async fn execute(&self, context: &mut DeletionContext<F>) -> Result<StepAction, Error> {
+        for deletion_result in context.deletion_results.values_mut() {
+            let file_path = context.settings.get_file_path(
+                &deletion_result.file_info.file_type,
+                &deletion_result.file_info.archive_file_name,
+            );
+
+            let path_str = file_path.to_string_lossy().to_string();
+            deletion_result.file_path = Some(path_str.clone());
+
+            if context.fs_ops.exists(&file_path) {
+                match context.fs_ops.remove_file(&file_path) {
+                    Ok(_) => {
+                        deletion_result.file_deletion_success = true;
+                    }
+                    Err(e) => {
+                        deletion_result.file_deletion_success = false;
+                        deletion_result.error_messages.push(e.to_string());
+                    }
+                }
+            }
+        }
+
+        Ok(StepAction::Continue)
+    }
+}
+
+/// Step 7: Delete file_info entries for deleted files from database
+struct DeleteFileInfosStep;
+
+#[async_trait::async_trait]
+impl<F: FileSystemOps> DeletionStep<F> for DeleteFileInfosStep {
+    fn name(&self) -> &'static str {
+        "delete_file_info_entries"
+    }
+
+    fn should_execute(&self, context: &DeletionContext<F>) -> bool {
         context
-            .repository_manager
-            .get_file_set_repository()
-            .delete_file_set(context.file_set_id)
-            .await
-            .map_err(|e| Error::DbError(e.to_string()))?;
+            .deletion_results
+            .values()
+            .any(|v| v.is_deletable && v.file_deletion_success)
+    }
+
+    async fn execute(&self, context: &mut DeletionContext<F>) -> Result<StepAction, Error> {
+        for dr in context.deletion_results.values_mut() {
+            let delete_res = context
+                .repository_manager
+                .get_file_info_repository()
+                .delete_file_info(dr.file_info.id)
+                .await;
+
+            match delete_res {
+                Ok(_) => {
+                    dr.was_deleted_from_db = true;
+                }
+                Err(e) => {
+                    dr.was_deleted_from_db = false;
+                    dr.error_messages
+                        .push(format!("Failed to delete file_info from DB: {}", e));
+                }
+            }
+        }
 
         Ok(StepAction::Continue)
     }
@@ -289,10 +378,10 @@ impl<F: FileSystemOps> DeletionPipeline<F> {
             steps: vec![
                 Box::new(ValidateNotInUseStep),
                 Box::new(FetchFileInfosStep),
+                Box::new(DeleteFileSetStep),
                 Box::new(FilterDeletableFilesStep),
                 Box::new(MarkForCloudDeletionStep),
                 Box::new(DeleteLocalFilesStep),
-                Box::new(DeleteFileSetStep),
             ],
         }
     }
@@ -353,8 +442,7 @@ impl<F: FileSystemOps> FileSetDeletionService<F> {
             repository_manager: self.repository_manager.clone(),
             settings: self.settings.clone(),
             fs_ops: self.fs_ops.clone(),
-            files_to_delete: vec![],
-            deletion_results: vec![],
+            deletion_results: HashMap::new(),
         };
 
         let pipeline = DeletionPipeline::new();
@@ -363,13 +451,13 @@ impl<F: FileSystemOps> FileSetDeletionService<F> {
         // You can now access deletion results if needed
         let successful_deletions = context
             .deletion_results
-            .iter()
-            .filter(|r| r.success)
+            .values()
+            .filter(|r| r.file_deletion_success && r.was_deleted_from_db)
             .count();
         let failed_deletions = context
             .deletion_results
-            .iter()
-            .filter(|r| !r.success)
+            .values()
+            .filter(|r| !r.file_deletion_success || !r.was_deleted_from_db)
             .count();
 
         eprintln!(
@@ -400,6 +488,16 @@ impl<F: FileSystemOps> FileSetDeletionService<F> {
             .repository_manager
             .get_file_info_repository()
             .get_file_infos_by_file_set(file_set_id)
+            .await
+            .map_err(|e| Error::DbError(e.to_string()))?;
+
+        // file set has to be deleted first before file infos, because of foreign key
+        // constraints
+        // TODO:
+        // -- ensure that release_file_set link entry will be deleted also
+        self.repository_manager
+            .get_file_set_repository()
+            .delete_file_set(file_set_id)
             .await
             .map_err(|e| Error::DbError(e.to_string()))?;
 
@@ -470,16 +568,6 @@ impl<F: FileSystemOps> FileSetDeletionService<F> {
             }
         }
 
-        // unlink the file set from any releases
-
-        // When all file infos are processed, delete the file set from db
-        // TODO:
-        // -- ensure that release_file_set link entry will be deleted also
-        self.repository_manager
-            .get_file_set_repository()
-            .delete_file_set(file_set_id)
-            .await
-            .map_err(|e| Error::DbError(e.to_string()))?;
         Ok(())
     }
 }
@@ -657,8 +745,7 @@ mod tests {
             repository_manager: repo_manager.clone(),
             settings: settings.clone(),
             fs_ops: fs_ops.clone(),
-            files_to_delete: vec![],
-            deletion_results: vec![],
+            deletion_results: HashMap::new(),
         };
 
         let step = ValidateNotInUseStep;
@@ -676,5 +763,310 @@ mod tests {
 
         let action = step.execute(&mut context).await.unwrap();
         assert!(matches!(action, StepAction::Continue));
+    }
+
+    #[async_std::test]
+    async fn test_filter_deletable_files_step() {
+        let pool = Arc::new(setup_test_db().await);
+        let repo_manager = Arc::new(RepositoryManager::new(pool));
+        let settings = Arc::new(Settings::default());
+        let fs_ops = Arc::new(MockFileSystemOps::new());
+
+        let file1 = ImportedFile {
+            original_file_name: "file1.zst".to_string(),
+            archive_file_name: "file1.zst".to_string(),
+            sha1_checksum: Sha1Checksum::from([0; 20]),
+            file_size: 1234,
+        };
+
+        let file2 = ImportedFile {
+            original_file_name: "file2.zst".to_string(),
+            archive_file_name: "file2.zst".to_string(),
+            sha1_checksum: Sha1Checksum::from([1; 20]),
+            file_size: 5678,
+        };
+
+        let file2_clone = file2.clone();
+
+        let files_in_file_set = vec![file1, file2];
+        let file_set_id = repo_manager
+            .get_file_set_repository()
+            .add_file_set(
+                "test_set",
+                "file name",
+                &FileType::Rom,
+                "",
+                &files_in_file_set,
+                &[],
+            )
+            .await
+            .unwrap();
+
+        // add another file set that uses file2
+        let _another_file_set_id = repo_manager
+            .get_file_set_repository()
+            .add_file_set(
+                "another_set",
+                "file name",
+                &FileType::Rom,
+                "",
+                &[file2_clone],
+                &[],
+            )
+            .await
+            .unwrap();
+
+        let file_infos = repo_manager
+            .get_file_info_repository()
+            .get_file_infos_by_file_set(file_set_id)
+            .await
+            .unwrap();
+
+        assert_eq!(file_infos.len(), 2);
+        let file_info_1 = file_infos
+            .iter()
+            .find(|fi| fi.archive_file_name == "file1.zst")
+            .unwrap();
+        let file_info_2 = file_infos
+            .iter()
+            .find(|fi| fi.archive_file_name == "file2.zst")
+            .unwrap();
+
+        let mut context = DeletionContext {
+            file_set_id,
+            repository_manager: repo_manager.clone(),
+            settings: settings.clone(),
+            fs_ops: fs_ops.clone(),
+            deletion_results: HashMap::from([
+                (
+                    file_info_1.sha1_checksum.clone(),
+                    FileDeletionResult {
+                        file_info: file_info_1.clone(),
+                        file_path: None,
+                        file_deletion_success: false,
+                        error_messages: vec![],
+                        is_deletable: false,
+                        was_deleted_from_db: false,
+                        cloud_sync_marked: false,
+                    },
+                ),
+                (
+                    file_info_2.sha1_checksum.clone(),
+                    FileDeletionResult {
+                        file_info: file_info_2.clone(),
+                        file_path: None,
+                        file_deletion_success: false,
+                        error_messages: vec![],
+                        is_deletable: false,
+                        was_deleted_from_db: false,
+                        cloud_sync_marked: false,
+                    },
+                ),
+            ]),
+        };
+
+        // Fetch file infos to populate context
+        let fetch_step = FetchFileInfosStep;
+        fetch_step.execute(&mut context).await.unwrap();
+
+        let filter_step = FilterDeletableFilesStep;
+        filter_step.execute(&mut context).await.unwrap();
+
+        // only file1 should be deletable
+        assert_eq!(
+            context
+                .deletion_results
+                .values()
+                .filter(|f| f.is_deletable)
+                .count(),
+            1
+        );
+        let deletable_file = context
+            .deletion_results
+            .values()
+            .find(|f| f.is_deletable)
+            .unwrap();
+        assert_eq!(deletable_file.file_info.archive_file_name, "file1.zst");
+    }
+
+    #[async_std::test]
+    async fn test_mark_for_cloud_deletion_step() {
+        let pool = Arc::new(setup_test_db().await);
+        let repo_manager = Arc::new(RepositoryManager::new(pool));
+        let settings = Arc::new(Settings::default());
+        let fs_ops = Arc::new(MockFileSystemOps::new());
+
+        let file1 = ImportedFile {
+            original_file_name: "file1.zst".to_string(),
+            archive_file_name: "file1.zst".to_string(),
+            sha1_checksum: Sha1Checksum::from([0; 20]),
+            file_size: 1234,
+        };
+
+        let system_id = repo_manager
+            .get_system_repository()
+            .add_system("Test System")
+            .await
+            .unwrap();
+
+        let files_in_file_set = vec![file1];
+        let file_set_id = repo_manager
+            .get_file_set_repository()
+            .add_file_set(
+                "test_set",
+                "file name",
+                &FileType::Rom,
+                "",
+                &files_in_file_set,
+                &[system_id],
+            )
+            .await
+            .unwrap();
+
+        let file_infos = repo_manager
+            .get_file_info_repository()
+            .get_file_infos_by_file_set(file_set_id)
+            .await
+            .unwrap();
+
+        let file_info = file_infos.first().unwrap();
+
+        let file_info_id = file_info.id;
+
+        repo_manager
+            .get_file_sync_log_repository()
+            .add_log_entry(
+                file_info_id,
+                FileSyncStatus::UploadPending,
+                "",
+                "cloud/key/file.zst",
+            )
+            .await
+            .unwrap();
+        repo_manager
+            .get_file_sync_log_repository()
+            .add_log_entry(
+                file_info_id,
+                FileSyncStatus::UploadInProgress,
+                "",
+                "cloud/key/file.zst",
+            )
+            .await
+            .unwrap();
+        repo_manager
+            .get_file_sync_log_repository()
+            .add_log_entry(
+                file_info_id,
+                FileSyncStatus::UploadCompleted,
+                "",
+                "cloud/key/file.zst",
+            )
+            .await
+            .unwrap();
+
+        let mut context = DeletionContext {
+            file_set_id: 1,
+            repository_manager: repo_manager.clone(),
+            settings: settings.clone(),
+            fs_ops: fs_ops.clone(),
+            deletion_results: HashMap::from([(
+                file_info.sha1_checksum.clone(),
+                FileDeletionResult {
+                    file_info: file_info.clone(),
+                    file_path: None,
+                    file_deletion_success: false,
+                    error_messages: vec![],
+                    is_deletable: true,
+                    was_deleted_from_db: false,
+                    cloud_sync_marked: false,
+                },
+            )]),
+        };
+        let step = MarkForCloudDeletionStep;
+        step.execute(&mut context).await.unwrap();
+        let logs = repo_manager
+            .get_file_sync_log_repository()
+            .get_logs_by_file_info(file_info_id)
+            .await
+            .unwrap();
+        assert_eq!(logs.len(), 4);
+        assert_eq!(logs[0].status, FileSyncStatus::DeletionPending);
+    }
+
+    #[async_std::test]
+    async fn test_delete_local_files_step() {
+        let pool = Arc::new(setup_test_db().await);
+        let repo_manager = Arc::new(RepositoryManager::new(pool));
+        let settings = Arc::new(Settings {
+            collection_root_dir: PathBuf::from("/"),
+            ..Default::default()
+        });
+        let mock_fs = Arc::new(MockFileSystemOps::new());
+        let file1 = ImportedFile {
+            original_file_name: "file1.zst".to_string(),
+            archive_file_name: "file1.zst".to_string(),
+            sha1_checksum: Sha1Checksum::from([0; 20]),
+            file_size: 1234,
+        };
+
+        let files_in_file_set = vec![file1];
+        let file_set_id = repo_manager
+            .get_file_set_repository()
+            .add_file_set(
+                "test_set",
+                "file name",
+                &FileType::Rom,
+                "",
+                &files_in_file_set,
+                &[],
+            )
+            .await
+            .unwrap();
+
+        let file_infos = repo_manager
+            .get_file_info_repository()
+            .get_file_infos_by_file_set(file_set_id)
+            .await
+            .unwrap();
+        let file_info = file_infos.first().unwrap();
+        let file_path = settings.get_file_path(&file_info.file_type, &file_info.archive_file_name);
+        mock_fs.add_file(file_path.to_string_lossy().as_ref());
+
+        let mut context = DeletionContext {
+            file_set_id: 1,
+            repository_manager: repo_manager.clone(),
+            settings: settings.clone(),
+            fs_ops: mock_fs.clone(),
+            deletion_results: HashMap::from([(
+                file_info.sha1_checksum.clone(),
+                FileDeletionResult {
+                    file_info: file_info.clone(),
+                    file_path: None,
+                    file_deletion_success: false,
+                    error_messages: vec![],
+                    is_deletable: true,
+                    was_deleted_from_db: false,
+                    cloud_sync_marked: false,
+                },
+            )]),
+        };
+        let step = DeleteLocalFilesStep;
+        let res = step.execute(&mut context).await.unwrap();
+        assert!(mock_fs.was_deleted(
+            settings
+                .get_file_path(&file_info.file_type, &file_info.archive_file_name)
+                .to_string_lossy()
+                .as_ref()
+        ));
+
+        assert!(
+            context
+                .deletion_results
+                .get(&file_info.sha1_checksum)
+                .unwrap()
+                .file_deletion_success
+        );
+
+        assert_eq!(res, StepAction::Continue);
     }
 }
