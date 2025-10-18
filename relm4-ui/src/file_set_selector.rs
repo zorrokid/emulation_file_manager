@@ -13,6 +13,7 @@ use relm4::{
 };
 use service::{
     error::Error as ServiceError,
+    file_set_deletion_service::FileSetDeletionService,
     view_model_service::ViewModelService,
     view_models::{FileSetListModel, Settings},
 };
@@ -54,6 +55,7 @@ pub enum CommandMsg {
     FilesFetched(Result<Vec<FileSetListModel>, ServiceError>),
     FileSetAdded(FileSetListModel),
     AddingFileSetFailed(DatabaseError),
+    FilesSetDeletionFinished(Result<(), ServiceError>),
 }
 
 pub struct FileSetSelectorInit {
@@ -76,6 +78,7 @@ pub struct FileSetSelector {
     selected_file_set_ids: Vec<i64>,
     dropdown: Controller<FileTypeDropDown>,
     file_set_details_view: Controller<FileSetDetailsView>,
+    file_set_deletion_service: Arc<FileSetDeletionService>,
 }
 
 #[relm4::component(pub)]
@@ -197,6 +200,11 @@ impl Component for FileSetSelector {
             .launch(file_set_details_view_init)
             .forward(sender.input_sender(), |_| FileSetSelectorMsg::Ignore);
 
+        let file_set_deletion_service = Arc::new(FileSetDeletionService::new(
+            Arc::clone(&init_model.repository_manager),
+            Arc::clone(&init_model.settings),
+        ));
+
         let model = FileSetSelector {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
@@ -210,6 +218,7 @@ impl Component for FileSetSelector {
             selected_file_set_ids: Vec::new(),
             dropdown,
             file_set_details_view,
+            file_set_deletion_service,
         };
         let file_types_dropdown = model.dropdown.widget();
         let file_set_list_view = &model.list_view_wrapper.view;
@@ -339,6 +348,22 @@ impl Component for FileSetSelector {
             FileSetSelectorMsg::Hide => {
                 root.hide();
             }
+            FileSetSelectorMsg::DeleteClicked => {
+                if let Some(selected_file_set) = &self.selected_file_set {
+                    let file_set_deletion_service = self.file_set_deletion_service.clone();
+                    let file_set_id = selected_file_set.id;
+
+                    sender.oneshot_command(clone!(
+                        #[strong]
+                        file_set_deletion_service,
+                        async move {
+                            let res = file_set_deletion_service.delete_file_set(file_set_id).await;
+                            // Return a command message if needed
+                            CommandMsg::FilesSetDeletionFinished(res)
+                        }
+                    ));
+                }
+            }
             _ => {}
         }
     }
@@ -366,6 +391,14 @@ impl Component for FileSetSelector {
             }
             CommandMsg::FilesFetched(Err(e)) => {
                 eprintln!("Failed to fetch file sets: {:?}", e);
+                // TODO handle error
+            }
+            CommandMsg::FilesSetDeletionFinished(Ok(())) => {
+                println!("File set deleted successfully.");
+                // Refresh the file sets list
+            }
+            CommandMsg::FilesSetDeletionFinished(Err(e)) => {
+                eprintln!("Failed to delete file set: {:?}", e);
                 // TODO handle error
             }
             _ => {

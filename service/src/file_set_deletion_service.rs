@@ -9,6 +9,7 @@ use crate::{
     view_models::Settings,
 };
 
+#[derive(Debug)]
 pub struct FileSetDeletionService<F: FileSystemOps = StdFileSystemOps> {
     repository_manager: Arc<RepositoryManager>,
     settings: Arc<Settings>,
