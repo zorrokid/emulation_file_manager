@@ -33,8 +33,7 @@ pub struct DeletionContext<F: FileSystemOps> {
     pub fs_ops: Arc<F>,
 
     // Accumulated state as pipeline progresses
-    //pub files_to_delete: Vec<FileInfo>,
-    pub deletion_results: HashMap<Vec<u8> /*Sha1Checksum*/, FileDeletionResult>,
+    pub deletion_results: HashMap<Vec<u8>, FileDeletionResult>,
 }
 
 #[derive(Debug, Clone)]
@@ -62,7 +61,6 @@ pub enum StepAction {
 /// Trait for pipeline steps in the deletion process
 #[async_trait::async_trait]
 pub trait DeletionStep<F: FileSystemOps>: Send + Sync {
-    /// Returns the name of this step (for logging/debugging)
     fn name(&self) -> &'static str;
 
     /// Determines if this step should execute based on current context
@@ -168,7 +166,14 @@ impl<F: FileSystemOps> DeletionStep<F> for DeleteFileSetStep {
 
         println!("Deleted file set {}: {:?}", context.file_set_id, res);
         match res {
-            Ok(_) => Ok(StepAction::Continue),
+            Ok(_) => {
+                if context.deletion_results.is_empty() {
+                    // No files to process, can skip remaining steps
+                    Ok(StepAction::Skip)
+                } else {
+                    Ok(StepAction::Continue)
+                }
+            }
             Err(e) => {
                 return Ok(StepAction::Abort(Error::DbError(format!(
                     "Failed to delete file set: {}",
