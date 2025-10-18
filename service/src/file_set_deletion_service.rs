@@ -69,7 +69,7 @@ pub trait DeletionStep<F: FileSystemOps>: Send + Sync {
     }
 
     /// Execute the step, modifying the context and returning the next action
-    async fn execute(&self, context: &mut DeletionContext<F>) -> Result<StepAction, Error>;
+    async fn execute(&self, context: &mut DeletionContext<F>) -> StepAction;
 }
 
 // ============================================================================
@@ -85,18 +85,27 @@ impl<F: FileSystemOps> DeletionStep<F> for ValidateNotInUseStep {
         "validate_not_in_use"
     }
 
-    async fn execute(&self, context: &mut DeletionContext<F>) -> Result<StepAction, Error> {
-        if context
+    async fn execute(&self, context: &mut DeletionContext<F>) -> StepAction {
+        let is_in_use_res = context
             .repository_manager
             .get_file_set_repository()
             .is_in_use(context.file_set_id)
-            .await?
-        {
-            return Ok(StepAction::Abort(Error::DbError(
-                "File set is in use by one or more releases".to_string(),
-            )));
+            .await;
+        match is_in_use_res {
+            Err(e) => StepAction::Abort(Error::DbError(format!(
+                "Failed to check if file set is in use: {}",
+                e
+            ))),
+            Ok(in_use) => {
+                if in_use {
+                    StepAction::Abort(Error::DbError(
+                        "File set is in use by one or more releases".to_string(),
+                    ))
+                } else {
+                    StepAction::Continue
+                }
+            }
         }
-        Ok(StepAction::Continue)
     }
 }
 
@@ -109,7 +118,7 @@ impl<F: FileSystemOps> DeletionStep<F> for FetchFileInfosStep {
         "fetch_file_infos"
     }
 
-    async fn execute(&self, context: &mut DeletionContext<F>) -> Result<StepAction, Error> {
+    async fn execute(&self, context: &mut DeletionContext<F>) -> StepAction {
         let file_infos_res = context
             .repository_manager
             .get_file_info_repository()
@@ -137,12 +146,11 @@ impl<F: FileSystemOps> DeletionStep<F> for FetchFileInfosStep {
                     })
                     .collect();
 
-                Ok(StepAction::Continue)
+                StepAction::Continue
             }
-            Err(e) => Ok(StepAction::Abort(Error::DbError(format!(
-                "Failed to fetch file infos: {}",
-                e
-            )))),
+            Err(e) => {
+                StepAction::Abort(Error::DbError(format!("Failed to fetch file infos: {}", e)))
+            }
         }
     }
 }
@@ -156,7 +164,7 @@ impl<F: FileSystemOps> DeletionStep<F> for DeleteFileSetStep {
         "delete_file_set"
     }
 
-    async fn execute(&self, context: &mut DeletionContext<F>) -> Result<StepAction, Error> {
+    async fn execute(&self, context: &mut DeletionContext<F>) -> StepAction {
         println!("Deleting file set {}", context.file_set_id);
         let res = context
             .repository_manager
@@ -169,16 +177,13 @@ impl<F: FileSystemOps> DeletionStep<F> for DeleteFileSetStep {
             Ok(_) => {
                 if context.deletion_results.is_empty() {
                     // No files to process, can skip remaining steps
-                    Ok(StepAction::Skip)
+                    StepAction::Skip
                 } else {
-                    Ok(StepAction::Continue)
+                    StepAction::Continue
                 }
             }
             Err(e) => {
-                return Ok(StepAction::Abort(Error::DbError(format!(
-                    "Failed to delete file set: {}",
-                    e
-                ))))
+                StepAction::Abort(Error::DbError(format!("Failed to delete file set: {}", e)))
             }
         }
     }
@@ -198,7 +203,7 @@ impl<F: FileSystemOps> DeletionStep<F> for FilterDeletableFilesStep {
         !context.deletion_results.is_empty()
     }
 
-    async fn execute(&self, context: &mut DeletionContext<F>) -> Result<StepAction, Error> {
+    async fn execute(&self, context: &mut DeletionContext<F>) -> StepAction {
         for deletion_result in context.deletion_results.values_mut() {
             let file_sets_res = context
                 .repository_manager
@@ -208,10 +213,10 @@ impl<F: FileSystemOps> DeletionStep<F> for FilterDeletableFilesStep {
 
             match file_sets_res {
                 Err(e) => {
-                    return Ok(StepAction::Abort(Error::DbError(format!(
+                    return StepAction::Abort(Error::DbError(format!(
                         "Failed to fetch file sets for file info {}: {}",
                         deletion_result.file_info.id, e
-                    ))))
+                    )))
                 }
                 Ok(file_sets) => {
                     // Only delete if file is used in exactly this one file set
@@ -224,7 +229,7 @@ impl<F: FileSystemOps> DeletionStep<F> for FilterDeletableFilesStep {
             }
         }
 
-        Ok(StepAction::Continue)
+        StepAction::Continue
     }
 }
 
@@ -242,7 +247,7 @@ impl<F: FileSystemOps> DeletionStep<F> for MarkForCloudDeletionStep {
         context.deletion_results.values().any(|r| r.is_deletable)
     }
 
-    async fn execute(&self, context: &mut DeletionContext<F>) -> Result<StepAction, Error> {
+    async fn execute(&self, context: &mut DeletionContext<F>) -> StepAction {
         for deletion_result in context.deletion_results.values_mut() {
             let sync_logs_res = context
                 .repository_manager
@@ -257,10 +262,10 @@ impl<F: FileSystemOps> DeletionStep<F> for MarkForCloudDeletionStep {
 
             match sync_logs_res {
                 Err(e) => {
-                    return Ok(StepAction::Abort(Error::DbError(format!(
+                    return StepAction::Abort(Error::DbError(format!(
                         "Failed to fetch sync logs for file info {}: {}",
                         deletion_result.file_info.id, e
-                    ))))
+                    )))
                 }
                 Ok(sync_logs) => {
                     if let Some(entry) = sync_logs.last() {
@@ -276,10 +281,10 @@ impl<F: FileSystemOps> DeletionStep<F> for MarkForCloudDeletionStep {
                             .await;
                         if let Err(e) = update_res {
                             // TODO: should this abort?
-                            return Ok(StepAction::Abort(Error::DbError(format!(
+                            return StepAction::Abort(Error::DbError(format!(
                                 "Failed to mark file info {} for cloud deletion: {}",
                                 deletion_result.file_info.id, e
-                            ))));
+                            )));
                         }
                         deletion_result.cloud_sync_marked = true;
                     }
@@ -287,7 +292,7 @@ impl<F: FileSystemOps> DeletionStep<F> for MarkForCloudDeletionStep {
             }
         }
 
-        Ok(StepAction::Continue)
+        StepAction::Continue
     }
 }
 
@@ -304,7 +309,7 @@ impl<F: FileSystemOps> DeletionStep<F> for DeleteLocalFilesStep {
         context.deletion_results.values().any(|v| v.is_deletable)
     }
 
-    async fn execute(&self, context: &mut DeletionContext<F>) -> Result<StepAction, Error> {
+    async fn execute(&self, context: &mut DeletionContext<F>) -> StepAction {
         for deletion_result in context.deletion_results.values_mut() {
             let file_path = context.settings.get_file_path(
                 &deletion_result.file_info.file_type,
@@ -327,7 +332,7 @@ impl<F: FileSystemOps> DeletionStep<F> for DeleteLocalFilesStep {
             }
         }
 
-        Ok(StepAction::Continue)
+        StepAction::Continue
     }
 }
 
@@ -347,7 +352,7 @@ impl<F: FileSystemOps> DeletionStep<F> for DeleteFileInfosStep {
             .any(|v| v.is_deletable && v.file_deletion_success)
     }
 
-    async fn execute(&self, context: &mut DeletionContext<F>) -> Result<StepAction, Error> {
+    async fn execute(&self, context: &mut DeletionContext<F>) -> StepAction {
         for dr in context.deletion_results.values_mut() {
             println!(
                 "Deleting file_info {} from DB",
@@ -375,7 +380,7 @@ impl<F: FileSystemOps> DeletionStep<F> for DeleteFileInfosStep {
             }
         }
 
-        Ok(StepAction::Continue)
+        StepAction::Continue
     }
 }
 
@@ -411,7 +416,7 @@ impl<F: FileSystemOps> DeletionPipeline<F> {
 
             eprintln!("Executing step: {}", step.name());
 
-            match step.execute(context).await? {
+            match step.execute(context).await {
                 StepAction::Continue => {
                     // Proceed to next step
                     continue;
@@ -744,7 +749,7 @@ mod tests {
 
         let step = ValidateNotInUseStep;
 
-        let action = step.execute(&mut context).await.unwrap();
+        let action = step.execute(&mut context).await;
         assert!(matches!(action, StepAction::Abort(_)));
 
         // Delete release - link to file set should have been deleted also and file set can be
@@ -755,7 +760,7 @@ mod tests {
             .await
             .unwrap();
 
-        let action = step.execute(&mut context).await.unwrap();
+        let action = step.execute(&mut context).await;
         assert!(matches!(action, StepAction::Continue));
     }
 
@@ -790,7 +795,7 @@ mod tests {
             deletion_results: HashMap::new(),
         };
         let step = FetchFileInfosStep;
-        let action = step.execute(&mut context).await.unwrap();
+        let action = step.execute(&mut context).await;
         assert!(matches!(action, StepAction::Continue));
         assert_eq!(context.deletion_results.len(), 1);
         let deletion_result = context.deletion_results.values().next().unwrap();
@@ -896,10 +901,10 @@ mod tests {
 
         // Fetch file infos to populate context
         let fetch_step = FetchFileInfosStep;
-        fetch_step.execute(&mut context).await.unwrap();
+        fetch_step.execute(&mut context).await;
 
         let filter_step = FilterDeletableFilesStep;
-        filter_step.execute(&mut context).await.unwrap();
+        filter_step.execute(&mut context).await;
 
         // only file1 should be deletable
         assert_eq!(
@@ -1001,7 +1006,7 @@ mod tests {
             )]),
         };
         let step = MarkForCloudDeletionStep;
-        step.execute(&mut context).await.unwrap();
+        step.execute(&mut context).await;
         let logs = repo_manager
             .get_file_sync_log_repository()
             .get_logs_by_file_info(file_info_id)
@@ -1062,7 +1067,7 @@ mod tests {
             )]),
         };
         let step = DeleteLocalFilesStep;
-        let res = step.execute(&mut context).await.unwrap();
+        let res = step.execute(&mut context).await;
         assert!(fs_ops.was_deleted(
             settings
                 .get_file_path(&file_info.file_type, &file_info.archive_file_name)
@@ -1132,10 +1137,10 @@ mod tests {
         };
 
         let delete_file_set_step = DeleteFileSetStep;
-        delete_file_set_step.execute(&mut context).await.unwrap();
+        delete_file_set_step.execute(&mut context).await;
 
         let step = DeleteFileInfosStep;
-        let action = step.execute(&mut context).await.unwrap();
+        let action = step.execute(&mut context).await;
         assert_eq!(action, StepAction::Continue);
 
         let deletion_result = context
