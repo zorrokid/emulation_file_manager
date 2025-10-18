@@ -683,16 +683,7 @@ mod tests {
 
     #[async_std::test]
     async fn test_validate_not_in_use_step() {
-        let pool = Arc::new(setup_test_db().await);
-        let repo_manager = Arc::new(RepositoryManager::new(pool));
-        let settings = Arc::new(Settings::default());
-        let fs_ops = Arc::new(MockFileSystemOps::new());
-
-        let system_id = repo_manager
-            .get_system_repository()
-            .add_system("Test System")
-            .await
-            .unwrap();
+        let (settings, repo_manager, fs_ops, system_id) = prepare_test().await;
 
         let file1 = ImportedFile {
             original_file_name: "file1.zst".to_string(),
@@ -767,10 +758,8 @@ mod tests {
 
     #[async_std::test]
     async fn test_fetch_file_infos_step() {
-        let pool = Arc::new(setup_test_db().await);
-        let repo_manager = Arc::new(RepositoryManager::new(pool));
-        let settings = Arc::new(Settings::default());
-        let fs_ops = Arc::new(MockFileSystemOps::new());
+        let (settings, repo_manager, fs_ops, _) = prepare_test().await;
+
         let file1 = ImportedFile {
             original_file_name: "file1.zst".to_string(),
             archive_file_name: "file1.zst".to_string(),
@@ -810,11 +799,7 @@ mod tests {
 
     #[async_std::test]
     async fn test_filter_deletable_files_step() {
-        let pool = Arc::new(setup_test_db().await);
-        let repo_manager = Arc::new(RepositoryManager::new(pool));
-        let settings = Arc::new(Settings::default());
-        let fs_ops = Arc::new(MockFileSystemOps::new());
-
+        let (settings, repo_manager, fs_ops, _) = prepare_test().await;
         let file1 = ImportedFile {
             original_file_name: "file1.zst".to_string(),
             archive_file_name: "file1.zst".to_string(),
@@ -934,10 +919,7 @@ mod tests {
 
     #[async_std::test]
     async fn test_mark_for_cloud_deletion_step() {
-        let pool = Arc::new(setup_test_db().await);
-        let repo_manager = Arc::new(RepositoryManager::new(pool));
-        let settings = Arc::new(Settings::default());
-        let fs_ops = Arc::new(MockFileSystemOps::new());
+        let (settings, repo_manager, fs_ops, _) = prepare_test().await;
 
         let file1 = ImportedFile {
             original_file_name: "file1.zst".to_string(),
@@ -1038,13 +1020,7 @@ mod tests {
 
     #[async_std::test]
     async fn test_delete_local_files_step() {
-        let pool = Arc::new(setup_test_db().await);
-        let repo_manager = Arc::new(RepositoryManager::new(pool));
-        let settings = Arc::new(Settings {
-            collection_root_dir: PathBuf::from("/"),
-            ..Default::default()
-        });
-        let mock_fs = Arc::new(MockFileSystemOps::new());
+        let (settings, repo_manager, mock_fs, _) = prepare_test().await;
         let file1 = ImportedFile {
             original_file_name: "file1.zst".to_string(),
             archive_file_name: "file1.zst".to_string(),
@@ -1115,10 +1091,7 @@ mod tests {
 
     #[async_std::test]
     async fn test_delete_file_infos_step() {
-        let pool = Arc::new(setup_test_db().await);
-        let repo_manager = Arc::new(RepositoryManager::new(pool));
-        let settings = Arc::new(Settings::default());
-        let fs_ops = Arc::new(MockFileSystemOps::new());
+        let (settings, repo_manager, fs_ops, _) = prepare_test().await;
 
         let file1 = ImportedFile {
             original_file_name: "file1.zst".to_string(),
@@ -1186,5 +1159,27 @@ mod tests {
             .get_file_info(file_info.id)
             .await;
         assert!(res.is_err());
+    }
+
+    async fn prepare_test() -> (
+        Arc<Settings>,
+        Arc<RepositoryManager>,
+        Arc<MockFileSystemOps>,
+        i64,
+    ) {
+        let pool = Arc::new(setup_test_db().await);
+        let repo_manager = Arc::new(RepositoryManager::new(pool));
+        let settings = Arc::new(Settings {
+            collection_root_dir: PathBuf::from("/"),
+            ..Default::default()
+        });
+        let fs_ops = Arc::new(MockFileSystemOps::new());
+
+        let system_id = repo_manager
+            .get_system_repository()
+            .add_system("Test System")
+            .await
+            .unwrap();
+        (settings, repo_manager, fs_ops, system_id)
     }
 }
