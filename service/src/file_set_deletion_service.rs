@@ -159,12 +159,14 @@ impl<F: FileSystemOps> DeletionStep<F> for DeleteFileSetStep {
     }
 
     async fn execute(&self, context: &mut DeletionContext<F>) -> Result<StepAction, Error> {
+        println!("Deleting file set {}", context.file_set_id);
         let res = context
             .repository_manager
             .get_file_set_repository()
             .delete_file_set(context.file_set_id)
             .await;
 
+        println!("Deleted file set {}: {:?}", context.file_set_id, res);
         match res {
             Ok(_) => Ok(StepAction::Continue),
             Err(e) => {
@@ -342,11 +344,19 @@ impl<F: FileSystemOps> DeletionStep<F> for DeleteFileInfosStep {
 
     async fn execute(&self, context: &mut DeletionContext<F>) -> Result<StepAction, Error> {
         for dr in context.deletion_results.values_mut() {
+            println!(
+                "Deleting file_info {} from DB",
+                dr.file_info.archive_file_name
+            );
             let delete_res = context
                 .repository_manager
                 .get_file_info_repository()
                 .delete_file_info(dr.file_info.id)
                 .await;
+            println!(
+                "Delete file_info {} result: {:?}",
+                dr.file_info.archive_file_name, delete_res
+            );
 
             match delete_res {
                 Ok(_) => {
@@ -683,14 +693,13 @@ mod tests {
 
     #[async_std::test]
     async fn test_validate_not_in_use_step() {
-        let (settings, repo_manager, fs_ops, system_id) = prepare_test().await;
-
-        let file1 = ImportedFile {
-            original_file_name: "file1.zst".to_string(),
-            archive_file_name: "file1.zst".to_string(),
-            sha1_checksum: Sha1Checksum::from([0; 20]),
-            file_size: 1234,
-        };
+        let TestSetup {
+            settings,
+            repo_manager,
+            fs_ops,
+            system_id,
+            file1,
+        } = prepare_test().await;
 
         let file2 = ImportedFile {
             original_file_name: "file2.zst".to_string(),
@@ -699,19 +708,8 @@ mod tests {
             file_size: 5678,
         };
 
-        let files_in_file_set = vec![file1, file2];
-        let file_set_id = repo_manager
-            .get_file_set_repository()
-            .add_file_set(
-                "test_set",
-                "file name",
-                &FileType::Rom,
-                "",
-                &files_in_file_set,
-                &[system_id],
-            )
-            .await
-            .unwrap();
+        let file_set_id =
+            prepare_file_set_with_files(&repo_manager, system_id, &[file1, file2]).await;
 
         let software_title_id = repo_manager
             .get_software_title_repository()
@@ -758,15 +756,14 @@ mod tests {
 
     #[async_std::test]
     async fn test_fetch_file_infos_step() {
-        let (settings, repo_manager, fs_ops, _) = prepare_test().await;
+        let TestSetup {
+            settings,
+            repo_manager,
+            fs_ops,
+            system_id,
+            file1,
+        } = prepare_test().await;
 
-        let file1 = ImportedFile {
-            original_file_name: "file1.zst".to_string(),
-            archive_file_name: "file1.zst".to_string(),
-            sha1_checksum: Sha1Checksum::from([0; 20]),
-            file_size: 1234,
-        };
-        let files_in_file_set = vec![file1];
         let file_set_id = repo_manager
             .get_file_set_repository()
             .add_file_set(
@@ -774,8 +771,8 @@ mod tests {
                 "file name",
                 &FileType::Rom,
                 "",
-                &files_in_file_set,
-                &[],
+                &[file1],
+                &[system_id],
             )
             .await
             .unwrap();
@@ -799,13 +796,13 @@ mod tests {
 
     #[async_std::test]
     async fn test_filter_deletable_files_step() {
-        let (settings, repo_manager, fs_ops, _) = prepare_test().await;
-        let file1 = ImportedFile {
-            original_file_name: "file1.zst".to_string(),
-            archive_file_name: "file1.zst".to_string(),
-            sha1_checksum: Sha1Checksum::from([0; 20]),
-            file_size: 1234,
-        };
+        let TestSetup {
+            settings,
+            repo_manager,
+            fs_ops,
+            system_id,
+            file1,
+        } = prepare_test().await;
 
         let file2 = ImportedFile {
             original_file_name: "file2.zst".to_string(),
@@ -816,7 +813,6 @@ mod tests {
 
         let file2_clone = file2.clone();
 
-        let files_in_file_set = vec![file1, file2];
         let file_set_id = repo_manager
             .get_file_set_repository()
             .add_file_set(
@@ -824,8 +820,8 @@ mod tests {
                 "file name",
                 &FileType::Rom,
                 "",
-                &files_in_file_set,
-                &[],
+                &[file1, file2],
+                &[system_id],
             )
             .await
             .unwrap();
@@ -839,7 +835,7 @@ mod tests {
                 &FileType::Rom,
                 "",
                 &[file2_clone],
-                &[],
+                &[system_id],
             )
             .await
             .unwrap();
@@ -919,22 +915,14 @@ mod tests {
 
     #[async_std::test]
     async fn test_mark_for_cloud_deletion_step() {
-        let (settings, repo_manager, fs_ops, _) = prepare_test().await;
+        let TestSetup {
+            settings,
+            repo_manager,
+            fs_ops,
+            system_id,
+            file1,
+        } = prepare_test().await;
 
-        let file1 = ImportedFile {
-            original_file_name: "file1.zst".to_string(),
-            archive_file_name: "file1.zst".to_string(),
-            sha1_checksum: Sha1Checksum::from([0; 20]),
-            file_size: 1234,
-        };
-
-        let system_id = repo_manager
-            .get_system_repository()
-            .add_system("Test System")
-            .await
-            .unwrap();
-
-        let files_in_file_set = vec![file1];
         let file_set_id = repo_manager
             .get_file_set_repository()
             .add_file_set(
@@ -942,7 +930,7 @@ mod tests {
                 "file name",
                 &FileType::Rom,
                 "",
-                &files_in_file_set,
+                &[file1],
                 &[system_id],
             )
             .await
@@ -1020,15 +1008,14 @@ mod tests {
 
     #[async_std::test]
     async fn test_delete_local_files_step() {
-        let (settings, repo_manager, mock_fs, _) = prepare_test().await;
-        let file1 = ImportedFile {
-            original_file_name: "file1.zst".to_string(),
-            archive_file_name: "file1.zst".to_string(),
-            sha1_checksum: Sha1Checksum::from([0; 20]),
-            file_size: 1234,
-        };
+        let TestSetup {
+            settings,
+            repo_manager,
+            fs_ops,
+            system_id,
+            file1,
+        } = prepare_test().await;
 
-        let files_in_file_set = vec![file1];
         let file_set_id = repo_manager
             .get_file_set_repository()
             .add_file_set(
@@ -1036,8 +1023,8 @@ mod tests {
                 "file name",
                 &FileType::Rom,
                 "",
-                &files_in_file_set,
-                &[],
+                &[file1],
+                &[system_id],
             )
             .await
             .unwrap();
@@ -1049,13 +1036,13 @@ mod tests {
             .unwrap();
         let file_info = file_infos.first().unwrap();
         let file_path = settings.get_file_path(&file_info.file_type, &file_info.archive_file_name);
-        mock_fs.add_file(file_path.to_string_lossy().as_ref());
+        fs_ops.add_file(file_path.to_string_lossy().as_ref());
 
         let mut context = DeletionContext {
             file_set_id,
             repository_manager: repo_manager.clone(),
             settings: settings.clone(),
-            fs_ops: mock_fs.clone(),
+            fs_ops: fs_ops.clone(),
             deletion_results: HashMap::from([(
                 file_info.sha1_checksum.clone(),
                 FileDeletionResult {
@@ -1071,7 +1058,7 @@ mod tests {
         };
         let step = DeleteLocalFilesStep;
         let res = step.execute(&mut context).await.unwrap();
-        assert!(mock_fs.was_deleted(
+        assert!(fs_ops.was_deleted(
             settings
                 .get_file_path(&file_info.file_type, &file_info.archive_file_name)
                 .to_string_lossy()
@@ -1091,15 +1078,14 @@ mod tests {
 
     #[async_std::test]
     async fn test_delete_file_infos_step() {
-        let (settings, repo_manager, fs_ops, _) = prepare_test().await;
+        let TestSetup {
+            settings,
+            repo_manager,
+            fs_ops,
+            system_id,
+            file1,
+        } = prepare_test().await;
 
-        let file1 = ImportedFile {
-            original_file_name: "file1.zst".to_string(),
-            archive_file_name: "file1.zst".to_string(),
-            sha1_checksum: Sha1Checksum::from([0; 20]),
-            file_size: 1234,
-        };
-        let files_in_file_set = vec![file1];
         let file_set_id = repo_manager
             .get_file_set_repository()
             .add_file_set(
@@ -1107,8 +1093,8 @@ mod tests {
                 "file name",
                 &FileType::Rom,
                 "",
-                &files_in_file_set,
-                &[],
+                &[file1],
+                &[system_id],
             )
             .await
             .unwrap();
@@ -1161,12 +1147,15 @@ mod tests {
         assert!(res.is_err());
     }
 
-    async fn prepare_test() -> (
-        Arc<Settings>,
-        Arc<RepositoryManager>,
-        Arc<MockFileSystemOps>,
-        i64,
-    ) {
+    struct TestSetup {
+        settings: Arc<Settings>,
+        repo_manager: Arc<RepositoryManager>,
+        fs_ops: Arc<MockFileSystemOps>,
+        system_id: i64,
+        file1: ImportedFile,
+    }
+
+    async fn prepare_test() -> TestSetup {
         let pool = Arc::new(setup_test_db().await);
         let repo_manager = Arc::new(RepositoryManager::new(pool));
         let settings = Arc::new(Settings {
@@ -1180,6 +1169,39 @@ mod tests {
             .add_system("Test System")
             .await
             .unwrap();
-        (settings, repo_manager, fs_ops, system_id)
+
+        let file1 = ImportedFile {
+            original_file_name: "file1.zst".to_string(),
+            archive_file_name: "file1.zst".to_string(),
+            sha1_checksum: Sha1Checksum::from([0; 20]),
+            file_size: 1234,
+        };
+
+        TestSetup {
+            settings,
+            repo_manager,
+            fs_ops,
+            system_id,
+            file1,
+        }
+    }
+
+    async fn prepare_file_set_with_files(
+        repo_manager: &RepositoryManager,
+        system_id: i64,
+        files: &[ImportedFile],
+    ) -> i64 {
+        repo_manager
+            .get_file_set_repository()
+            .add_file_set(
+                "test_set",
+                "file name",
+                &FileType::Rom,
+                "",
+                files,
+                &[system_id],
+            )
+            .await
+            .unwrap()
     }
 }
