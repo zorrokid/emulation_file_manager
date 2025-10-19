@@ -335,6 +335,7 @@ impl Component for AppModel {
                 SyncEvent::PartUploadFailed { error, .. } => {
                     self.status_bar.emit(StatusBarMsg::Fail(error));
                 }
+                _ => { /* Handle other events as needed */ }
             },
             AppMsg::OpenSettings => {
                 if self.settings_form.get().is_none() {

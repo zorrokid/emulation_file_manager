@@ -13,7 +13,7 @@ use std::path::Path;
 use async_std::channel::Sender;
 use async_std::io::{ReadExt, WriteExt};
 use async_std::stream::StreamExt;
-use s3::bucket::Bucket;
+pub use s3::bucket::Bucket;
 use s3::creds::Credentials;
 use s3::error::S3Error;
 use s3::region::Region;
@@ -21,13 +21,14 @@ use s3::serde_types::Part;
 
 #[derive(Debug, Clone)]
 pub enum SyncEvent {
+    // TODO: use same events for upload and deletion, add process type field
     SyncStarted {
-        total_files_count: usize,
+        total_files_count: i64,
     },
     FileUploadStarted {
         key: String,
-        file_number: usize,
-        total_files: usize,
+        file_number: i64,
+        total_files: i64,
     },
     PartUploaded {
         key: String,
@@ -39,18 +40,34 @@ pub enum SyncEvent {
     },
     FileUploadCompleted {
         key: String,
-        file_number: usize,
-        total_files: usize,
+        file_number: i64,
+        total_files: i64,
     },
     FileUploadFailed {
         key: String,
         error: String,
-        file_number: usize,
-        total_files: usize,
+        file_number: i64,
+        total_files: i64,
     },
     SyncCompleted {
-        successful: usize,
-        failed: usize,
+        successful: i64,
+        failed: i64,
+    },
+    FileDeletionStarted {
+        key: String,
+        file_number: i64,
+        total_files: i64,
+    },
+    FileDeletionCompleted {
+        key: String,
+        file_number: i64,
+        total_files: i64,
+    },
+    FileDeletionFailed {
+        key: String,
+        error: String,
+        file_number: i64,
+        total_files: i64,
     },
 }
 
@@ -177,5 +194,10 @@ pub async fn multipart_upload(
             }
         };
     }
+    Ok(())
+}
+
+pub async fn delete_file(bucket: &Bucket, key: &str) -> Result<(), CloudStorageError> {
+    bucket.delete_object(key).await?;
     Ok(())
 }
