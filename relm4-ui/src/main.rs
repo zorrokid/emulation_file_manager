@@ -303,7 +303,7 @@ impl Component for AppModel {
                         }
                     });
 
-                    if let Err(e) = sync_service_clone.sync_files_to_cloud(tx).await {
+                    if let Err(e) = sync_service_clone.sync(tx).await {
                         eprintln!("Error during sync: {}", e);
                     }
                 });

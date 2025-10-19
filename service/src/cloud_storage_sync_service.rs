@@ -26,11 +26,18 @@ impl CloudStorageSyncService {
         }
     }
 
+    pub async fn sync(&self, progress_tx: Sender<SyncEvent>) -> Result<(), CloudStorageError> {
+        let count = self.prepare_files_for_sync().await?;
+        self.sync_files_to_cloud(progress_tx.clone(), count).await?;
+        self.delete_files_from_cloud(progress_tx.clone()).await?;
+        Ok(())
+    }
+
     // STEP 1
     /// Goes though the list of files. If file info is missing in sync log, add an entry for it with
     /// pending status and creates a cloud key for file.
     /// Processes file infos in batches of 1000.
-    pub async fn prepare_files_for_sync(&self) -> Result<i64, CloudStorageError> {
+    async fn prepare_files_for_sync(&self) -> Result<i64, CloudStorageError> {
         println!("Preparing files for sync...");
         let mut total_count: i64 = 0;
         let mut offset = 0;
@@ -76,11 +83,11 @@ impl CloudStorageSyncService {
 
     // STEP 2
     /// Goes through the list of pending and failed files and uploads them to cloud storage
-    pub async fn sync_files_to_cloud(
+    async fn sync_files_to_cloud(
         &self,
         progress_tx: Sender<SyncEvent>,
+        total_files_count: i64,
     ) -> Result<(), CloudStorageError> {
-        let total_files_count = self.prepare_files_for_sync().await?;
         let mut successful_files_count = 0;
         let mut failed_files_count = 0;
         let mut file_count = 0;
