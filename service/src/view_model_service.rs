@@ -373,18 +373,6 @@ impl ViewModelService {
         let files = self
             .repository_manager
             .get_file_set_repository()
-            /*
-                         *    Key refactoring recommendations:
-                 - Extract file system operations - Move std::fs::remove_file behind a trait to enable mocking in tests.
-                 - Extract the path construction logic - The PathBuf::from(&collection_root_dir).join(...).join(...) could be a separate method.
-                 - Break down the monolithic method - The delete_file_set method does too much (checking usage, collecting files, syncing, deleting). Split it into smaller, testable functions like collect_deletable_files,
-               mark_for_cloud_deletion, and delete_local_file.
-                 - Better error handling - Line 95-98 uses eprintln! and swallows errors. Consider collecting errors and returning them, or using proper logging.
-                 - Remove TODOs before production - Lines 101-103 and 116-117 have TODOs about ensuring cascade deletions work. These should be verified and the comments removed, or the logic should be implemented.
-                 - Inconsistent error mapping - Sometimes you use ? operator (line 28), sometimes .map_err(|e| Error::DbError(e.to_string()))? (line 42). Consider implementing From trait for consistent error conversion.
-                 - Magic slice pattern - Line 57 uses if let [entry] = &res[..] which is correct but could be clearer with a comment or extracted to a named function like is_only_in_file_set.
-                 - Separate concerns - The cloud sync logic (lines 68-85) could be its own method to simplify testing and improve readability.
-            */
             .get_file_set_file_info(file_set.id)
             .await
             .map_err(|err| Error::DbError(err.to_string()))?;
