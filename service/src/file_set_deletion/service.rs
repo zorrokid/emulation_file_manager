@@ -77,61 +77,8 @@ mod tests {
     use super::*;
     use crate::file_system_ops::mock::MockFileSystemOps;
 
-    /// Example test demonstrating how to use MockFileSystemOps
-    ///
-    /// This test shows the basic pattern for testing file deletion:
-    /// 1. Create a mock file system
-    /// 2. Add files that should exist
-    /// 3. Create the service with the mock
-    /// 4. Call the method under test
-    /// 5. Verify the mock's state (files deleted, errors handled, etc.)
-    ///
-    /// Note: This is a template test. To make it work, you'd need to:
-    /// - Set up a test database with RepositoryManager
-    /// - Create test data (file sets, file infos, etc.)
-    /// - Handle the async test setup properly
     #[async_std::test]
-    #[ignore] // Ignored because it needs full database setup
-    async fn test_delete_file_set_with_mock_fs() {
-        // Example of how to use the mock:
-        let mock_fs = Arc::new(MockFileSystemOps::new());
-
-        // Add files that should exist in the mock file system
-        mock_fs.add_file("/test/rom/game1.zst");
-        mock_fs.add_file("/test/rom/game2.zst");
-
-        let test_db_pool = Arc::new(setup_test_db().await);
-        let repository_manager = Arc::new(RepositoryManager::new(test_db_pool));
-        let settings = Arc::new(Settings {
-            collection_root_dir: PathBuf::from("/"),
-            ..Default::default()
-        });
-
-        let service =
-            FileSetDeletionService::new_with_fs_ops(repository_manager, settings, mock_fs.clone());
-
-        // You would create the service with the mock:
-        // let service = FileSetDeletionService::new_with_fs_ops(
-        //     repo_manager,
-        //     settings,
-        //     mock_fs.clone(),
-        // );
-
-        // Call the method under test:
-        // service.delete_file_set(file_set_id).await.unwrap();
-
-        // Verify files were deleted:
-        // assert!(mock_fs.was_deleted("/test/rom/game1.zst"));
-        // assert_eq!(mock_fs.get_deleted_files().len(), 1);
-    }
-
-    #[async_std::test]
-    #[ignore] // Ignored because it needs full database setup
-    async fn test_delete_file_set_handles_deletion_failure() {
-        // Example of simulating failure:
-        let mock_fs = Arc::new(MockFileSystemOps::new());
-        mock_fs.add_file("/test/rom/game.zst");
-
+    async fn test_delete_file_set() {
         let test_db_pool = Arc::new(setup_test_db().await);
         let repo_manager = Arc::new(RepositoryManager::new(test_db_pool));
         let settings = Arc::new(Settings {
@@ -145,12 +92,6 @@ mod tests {
             .await
             .unwrap();
 
-        let software_title_id = repo_manager
-            .get_software_title_repository()
-            .add_software_title("Test Software", None)
-            .await
-            .unwrap();
-
         let file1 = ImportedFile {
             original_file_name: "file1.zst".to_string(),
             archive_file_name: "file1.zst".to_string(),
@@ -158,15 +99,18 @@ mod tests {
             file_size: 1234,
         };
 
-        let file_set_id = prepare_file_set_with_files(&repo_manager, system_id, &[file1]).await;
+        let mock_fs = Arc::new(MockFileSystemOps::new());
+        let file_path = settings.get_file_path(&FileType::Rom, &file1.archive_file_name);
+        mock_fs.add_file(file_path.to_string_lossy().as_ref());
 
-        // link file set to release
-        let release_id = repo_manager
-            .get_release_repository()
-            .add_release_full(
-                "Test Release",
-                &[software_title_id],
-                &[file_set_id],
+        let file_set_id = repo_manager
+            .get_file_set_repository()
+            .add_file_set(
+                "test_set",
+                "file name",
+                &FileType::Rom,
+                "",
+                &[file1],
                 &[system_id],
             )
             .await
@@ -175,64 +119,7 @@ mod tests {
         let service =
             FileSetDeletionService::new_with_fs_ops(repo_manager, settings, mock_fs.clone());
 
-        // Make the deletion fail
-        mock_fs.fail_delete_with("Permission denied");
-
-        // The service should log the error and continue
-        // (not fail the entire operation)
-
-        // You would verify that:
-        // - The error was logged (currently uses eprintln!)
-        // - The file_info was NOT deleted from the database
-        // - The operation continued for other files
-    }
-
-    /// Example test demonstrating the hybrid pipeline pattern (v2)
-    #[test]
-    #[ignore] // Ignored because it needs full database setup
-    fn test_delete_file_set() {
-        // Example of using the new pipeline-based deletion:
-        let mock_fs = Arc::new(MockFileSystemOps::new());
-        mock_fs.add_file("/test/rom/game1.zst");
-        mock_fs.add_file("/test/rom/game2.zst");
-
-        // You would create the service with the mock:
-        // let service = FileSetDeletionService::new_with_fs_ops(
-        //     repo_manager,
-        //     settings,
-        //     mock_fs.clone(),
-        // );
-
-        // Use the new pipeline version:
-        // service.delete_file_set_v2(file_set_id).await.unwrap();
-
-        // Benefits of pipeline version:
-        // 1. Each step is isolated and testable
-        // 2. Steps can be conditionally executed (should_execute)
-        // 3. Clear separation of concerns
-        // 4. Easy to add logging/metrics between steps
-        // 5. Returns detailed results (deletion_results in context)
-
-        // Verify files were deleted:
-        // assert!(mock_fs.was_deleted("/test/rom/game1.zst"));
-        // assert!(mock_fs.was_deleted("/test/rom/game2.zst"));
-    }
-    async fn prepare_file_set_with_files(
-        repo_manager: &RepositoryManager,
-        system_id: i64,
-        files: &[ImportedFile],
-    ) -> i64 {
-        repo_manager
-            .get_file_set_repository()
-            .add_file_set(
-                "test_set",
-                "file name",
-                &FileType::Rom,
-                "",
-                files,
-                &[system_id],
-            )
-            .await
-            .unwrap()
+        let result = service.delete_file_set(file_set_id).await;
+        assert!(result.is_ok());
     }
 }
