@@ -46,6 +46,17 @@ pub trait FileSystemOps: Send + Sync {
 - `StdFileSystemOps` - Production implementation using `std::fs`
 - `MockFileSystemOps` - Test implementation (only available in test builds)
 
+**Why Send + Sync?**
+- `Send` - The implementation can be moved between threads (required for `Arc<F>`)
+- `Sync` - The implementation can be shared between threads via `&self` (required for async/Tokio)
+
+**Mock Features**:
+- `add_file(path)` - Add files to the mock file system
+- `fail_delete_with(error)` - Simulate deletion failures  
+- `get_deleted_files()` - Get list of deleted files
+- `was_deleted(path)` - Check if a specific file was deleted
+- `clear()` - Reset mock state between tests
+
 **Service Changes**:
 
 ```rust
@@ -55,7 +66,7 @@ pub struct FileSetDeletionService {
     settings: Arc<Settings>,
 }
 
-// After
+// After (modularized into file_set_deletion/ directory)
 pub struct FileSetDeletionService<F: FileSystemOps = StdFileSystemOps> {
     repository_manager: Arc<RepositoryManager>,
     settings: Arc<Settings>,
@@ -63,88 +74,119 @@ pub struct FileSetDeletionService<F: FileSystemOps = StdFileSystemOps> {
 }
 ```
 
-**Backwards Compatibility**: The default generic parameter means existing code continues to work:
+### 3. Modular Structure (Completed ✓)
+
+**Directory**: `service/src/file_set_deletion/` (NEW)
+
+Split the monolithic file into separate modules:
+
+```
+file_set_deletion/
+├── mod.rs        - Module exports
+├── context.rs    - DeletionContext and FileDeletionResult  
+├── service.rs    - FileSetDeletionService implementation
+├── executor.rs   - DeletionPipeline executor
+└── steps.rs      - All 6 pipeline step implementations
+```
+
+**Benefits**:
+- Easier to navigate and understand
+- Each module has a single responsibility
+- Tests are organized by module
+- Easier to find and modify specific steps
+
+### 4. Hybrid Pipeline Pattern (Completed ✓)
+
+**Key Change**: Step return type changed from `Result<StepAction, Error>` to just `StepAction`
 
 ```rust
-// This still works exactly as before
-let service = FileSetDeletionService::new(repo_manager, settings);
+// Before
+async fn execute(&self, context: &mut DeletionContext<F>) -> Result<StepAction, Error>;
 
-// For testing, you can now do:
+// After  
+async fn execute(&self, context: &mut DeletionContext<F>) -> StepAction;
+```
+
+Errors are now returned as `StepAction::Abort(Error)` instead of `Err(e)`. This is cleaner and more explicit about the control flow.
+
+**Pipeline Steps** (in execution order):
+1. ValidateNotInUseStep
+2. FetchFileInfosStep
+3. DeleteFileSetStep (moved earlier to handle foreign keys)
+4. FilterDeletableFilesStep
+5. MarkForCloudDeletionStep
+6. DeleteLocalFilesStep
+
+**Context Structure**:
+- Uses `HashMap<Vec<u8>, FileDeletionResult>` keyed by SHA1 checksum
+- Tracks detailed state per file: deletability, cloud sync status, deletion success, errors
+- Accumulates results as pipeline progresses
+
+### 5. Database Migration (Completed ✓)
+
+**File**: `database/migrations/20251018200839_file_info_system_on_delete_cascade.sql` (NEW)
+
+Added `ON DELETE CASCADE` to `file_info_system` table:
+
+```sql
+PRAGMA foreign_keys = OFF;
+
+ALTER TABLE file_info_system RENAME TO file_info_system_old;
+
+CREATE TABLE file_info_system (
+    file_info_id INTEGER NOT NULL,
+    system_id INTEGER NOT NULL,
+    PRIMARY KEY (file_info_id, system_id),
+    FOREIGN KEY (file_info_id) REFERENCES file_info(id) ON DELETE CASCADE,
+    FOREIGN KEY (system_id) REFERENCES system(id)
+);
+
+INSERT INTO file_info_system (file_info_id, system_id)
+SELECT file_info_id, system_id FROM file_info_system_old;
+
+DROP TABLE file_info_system_old;
+
+PRAGMA foreign_keys = ON;
+```
+
+**Why This Was Needed**:
+- Without `ON DELETE CASCADE`, deleting a `file_info` would fail with foreign key constraint error
+- The `file_info_system` entries would prevent file_info deletion
+- Now when a file_info is deleted, related file_info_system entries are automatically removed
+
+**Important**: When modifying migrations, you must clear the sqlx cache:
+```bash
+rm -rf .sqlx database/.sqlx
+cargo test
+```
+
+### 6. Tests (Completed ✓)
+
+Added comprehensive tests for each pipeline step:
+
+**Test Structure**:
+- `test_validate_not_in_use_step` - Tests validation logic
+- `test_fetch_file_infos_step` - Tests file info fetching
+- `test_filter_deletable_files_step` - Tests filtering logic
+- `test_mark_for_cloud_deletion_step` - Tests cloud sync marking
+- `test_delete_local_files_step` - Tests file deletion with mock FS
+- `test_delete_file_infos_step` - Tests database cleanup
+- `test_delete_file_set` - Integration test
+
+**Mock Usage Example**:
+```rust
+let mock_fs = Arc::new(MockFileSystemOps::new());
+mock_fs.add_file("/collection/rom/game.zst");
+
 let service = FileSetDeletionService::new_with_fs_ops(
     repo_manager,
     settings,
-    Arc::new(MockFileSystemOps::new()),
+    mock_fs.clone(),
 );
-```
 
-**Mock Features**:
-- `add_file(path)` - Add files to the mock file system
-- `fail_delete_with(error)` - Simulate deletion failures
-- `get_deleted_files()` - Get list of deleted files
-- `was_deleted(path)` - Check if a specific file was deleted
-- `clear()` - Reset mock state between tests
+service.delete_file_set(file_set_id).await.unwrap();
 
-### 3. Test Examples (Completed ✓)
-
-Added example tests in `file_set_deletion_service.rs` showing:
-- How to set up mock file system
-- How to verify file deletions
-- How to test error handling
-
-## Remaining Refactoring Opportunities
-
-The following items from the original refactoring notes are NOT yet implemented:
-
-### 3. Break Down Monolithic Method
-
-The `delete_file_set` method still does too much. Consider splitting into:
-- `collect_deletable_files()` - Identify files to delete
-- `mark_for_cloud_deletion()` - Handle cloud sync status
-- `delete_local_file()` - Delete individual files
-
-### 4. Better Error Handling
-
-Lines 118-122 use `eprintln!` and swallow errors. Consider:
-- Using proper logging (e.g., `tracing` or `log` crate)
-- Collecting errors and returning them
-- Or at least using a structured error type
-
-### 5. Remove TODOs
-
-Lines 125-127 and 140-141 have TODOs about cascade deletions. These should be:
-- Verified that they work correctly
-- Removed if confirmed
-- Or implemented if they don't work
-
-### 6. Inconsistent Error Mapping
-
-Sometimes uses `?` operator, sometimes `.map_err(|e| Error::DbError(e.to_string()))?`.
-Consider implementing `From` trait for consistent conversion:
-
-```rust
-impl From<DatabaseError> for Error {
-    fn from(e: DatabaseError) -> Self {
-        Error::DbError(e.to_string())
-    }
-}
-```
-
-### 7. Magic Slice Pattern
-
-Line 69: `if let [entry] = &res[..]` could be clearer with a helper method:
-
-```rust
-fn is_only_in_file_set(&self, file_sets: &[FileSet], file_set_id: i64) -> bool {
-    matches!(file_sets, [entry] if entry.id == file_set_id)
-}
-```
-
-### 8. Separate Concerns
-
-The cloud sync logic (lines 78-95) could be its own method to simplify testing:
-
-```rust
-async fn mark_file_for_cloud_deletion(&self, file_info_id: i64) -> Result<(), Error>
+assert!(mock_fs.was_deleted("/collection/rom/game.zst"));
 ```
 
 ## Testing Guide
@@ -197,14 +239,35 @@ mod tests {
 }
 ```
 
-## Summary Statistics
 
-- **Files created**: 1 (`file_system_ops.rs`)
-- **Files modified**: 4
-- **Lines added**: ~120
-- **Lines removed**: ~16
-- **Net change**: +104 lines
-- **Tests added**: 2 (template/example tests)
-- **Breaking changes**: None (backwards compatible)
+## Remaining Improvement Opportunities
 
-All changes compile successfully and existing tests pass.
+The following could still be improved (lower priority):
+
+### Better Logging
+
+Currently uses `eprintln!` for output. Consider:
+- Using `tracing` or `log` crate for structured logging
+- Log levels (debug, info, warn, error)
+- Contextual information in logs
+
+### Error Handling Improvements
+
+Could implement `From` trait for cleaner error conversion:
+
+```rust
+impl From<DatabaseError> for Error {
+    fn from(e: DatabaseError) -> Self {
+        Error::DbError(e.to_string())
+    }
+}
+```
+
+This would eliminate `.map_err(|e| Error::DbError(e.to_string()))?` calls.
+
+### Configuration
+
+Make batch sizes and other constants configurable:
+- Number of files per batch
+- Retry attempts
+- Timeout values

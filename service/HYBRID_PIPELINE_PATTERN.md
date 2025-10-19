@@ -2,11 +2,23 @@
 
 ## Overview
 
-The `FileSetDeletionService` now supports a **Hybrid Pipeline Pattern** through the `delete_file_set_v2()` method. This combines the best of both Pipeline and Chain of Responsibility patterns.
+The `FileSetDeletionService` uses a **Hybrid Pipeline Pattern** that combines the best of both Pipeline and Chain of Responsibility patterns. The service has been modularized into separate files for better organization and testability.
+
+## Module Structure
+
+```
+service/src/file_set_deletion/
+├── mod.rs        - Module declaration
+├── context.rs    - DeletionContext and FileDeletionResult types
+├── service.rs    - Service implementation  
+├── executor.rs   - Pipeline executor
+└── steps.rs      - All pipeline step implementations
+```
 
 ## Key Components
 
 ### 1. DeletionContext
+
 A context object that flows through the pipeline, accumulating state:
 
 ```rust
@@ -16,13 +28,23 @@ pub struct DeletionContext<F: FileSystemOps> {
     pub settings: Arc<Settings>,
     pub fs_ops: Arc<F>,
     
-    // Accumulated state
-    pub files_to_delete: Vec<FileInfo>,
-    pub deletion_results: Vec<FileDeletionResult>,
+    // Accumulated state (keyed by SHA1 checksum)
+    pub deletion_results: HashMap<Vec<u8>, FileDeletionResult>,
+}
+
+pub struct FileDeletionResult {
+    pub file_info: FileInfo,
+    pub file_path: Option<String>,
+    pub file_deletion_success: bool,
+    pub error_messages: Vec<String>,
+    pub is_deletable: bool,
+    pub was_deleted_from_db: bool,
+    pub cloud_sync_marked: bool,
 }
 ```
 
 ### 2. StepAction
+
 Each step returns an action that controls pipeline flow:
 
 ```rust
@@ -34,6 +56,7 @@ pub enum StepAction {
 ```
 
 ### 3. DeletionStep Trait
+
 Each step implements this trait:
 
 ```rust
@@ -45,7 +68,7 @@ pub trait DeletionStep<F: FileSystemOps>: Send + Sync {
         true // By default, always execute
     }
     
-    async fn execute(&self, context: &mut DeletionContext<F>) -> Result<StepAction, Error>;
+    async fn execute(&self, context: &mut DeletionContext<F>) -> StepAction;
 }
 ```
 
@@ -53,61 +76,56 @@ pub trait DeletionStep<F: FileSystemOps>: Send + Sync {
 
 The deletion process has 6 clear steps:
 
-1. **ValidateNotInUseStep** - Check if file set is in use
+1. **ValidateNotInUseStep** - Check if file set is in use by releases
    - Returns `Abort` if in use
    
-2. **FetchFileInfosStep** - Fetch file infos from database
-   - Stores results in `context.files_to_delete`
+2. **FetchFileInfosStep** - Fetch all file infos for the file set
+   - Stores results in `context.deletion_results` (HashMap keyed by checksum)
+   - Creates `FileDeletionResult` for each file with initial state
    
-3. **FilterDeletableFilesStep** - Keep only files used in this file set alone
-   - Filters `context.files_to_delete`
+3. **DeleteFileSetStep** - Delete the file_set record from database
+   - Removes file_set and cascades to file_set_file_info entries
+   - Executed before filtering to handle foreign keys properly
    
-4. **MarkForCloudDeletionStep** - Mark synced files for cloud deletion
-   - Only executes if `files_to_delete` is not empty
+4. **FilterDeletableFilesStep** - Identify files safe to delete
+   - Checks if each file is used in other file sets
+   - Marks files as `is_deletable` if they're only in this file set
    
-5. **DeleteLocalFilesStep** - Delete files from local storage
-   - Tracks results in `context.deletion_results`
+5. **MarkForCloudDeletionStep** - Mark synced files for cloud deletion
+   - Only executes if there are deletable files
+   - Updates sync log with `DeletionPending` status
+   
+6. **DeleteLocalFilesStep** - Delete files from local storage
+   - Only processes files marked as deletable
    - Continues on individual file failures
-   
-6. **DeleteFileSetStep** - Remove file set from database
-   - Final cleanup step
+   - Removes file_info from database on successful deletion
+   - Tracks detailed results per file
 
-## Benefits vs. Original Implementation
-
-### Original (`delete_file_set`)
+### Modular Pipeline 
 ```rust
+// service/src/file_set_deletion/service.rs
 pub async fn delete_file_set(&self, file_set_id: i64) -> Result<(), Error> {
-    // 150+ lines of mixed logic
-    // Hard to test individual parts
-    // Error handling spread throughout
-    // No visibility into what happened
-}
-```
-
-### Hybrid Pipeline (`delete_file_set_v2`)
-```rust
-pub async fn delete_file_set_v2(&self, file_set_id: i64) -> Result<(), Error> {
     let mut context = DeletionContext { /* ... */ };
     let pipeline = DeletionPipeline::new();
     pipeline.execute(&mut context).await?;
     
     // Access detailed results
-    println!("{} successful, {} failed", 
-        context.deletion_results.iter().filter(|r| r.success).count(),
-        context.deletion_results.iter().filter(|r| !r.success).count()
-    );
+    let successful = context.deletion_results.values()
+        .filter(|r| r.file_deletion_success && r.was_deleted_from_db)
+        .count();
 }
 ```
 
 **Advantages:**
 
-1. **Testability** - Each step can be tested in isolation
-2. **Clarity** - Clear sequence of operations
-3. **Flexibility** - Steps can be conditional (`should_execute`)
-4. **Observability** - Context tracks what happened
-5. **Error Handling** - Centralized in pipeline executor
-6. **Extensibility** - Easy to add/remove/reorder steps
-7. **Debugging** - Step names make logs clear
+1. **Modular Structure** - Separated into context, executor, steps, and service
+2. **Testability** - Each step can be tested in isolation
+3. **Clarity** - Clear sequence of operations with descriptive names
+4. **Flexibility** - Steps can be conditional (`should_execute`)
+5. **Observability** - Detailed tracking via `FileDeletionResult`
+6. **Error Handling** - Centralized in executor, errors are `StepAction::Abort`
+7. **Extensibility** - Easy to add/remove/reorder steps
+8. **Debugging** - Step names in logs make debugging easier
 
 ## Example: Testing Individual Steps
 
@@ -178,19 +196,6 @@ ValidateNotInUse → FetchFileInfos → FilterDeletable → MarkForCloud → STO
   Continue           Continue           Continue         Skip
                                      (0 files to delete)
 ```
-
-## Migration Strategy
-
-Both versions coexist:
-
-1. **Keep `delete_file_set()`** - Original implementation (for backwards compatibility)
-2. **Add `delete_file_set_v2()`** - New pipeline version
-
-You can:
-- Test the new version alongside the old one
-- Gradually migrate callers
-- Eventually deprecate and remove the old version
-- Or keep both if you prefer different approaches for different scenarios
 
 ## Future Enhancements
 
