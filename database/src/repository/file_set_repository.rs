@@ -51,6 +51,22 @@ impl FileSetRepository {
         Ok(file_sets)
     }
 
+    pub async fn get_file_sets_by_file_info(
+        &self,
+        file_info_id: i64,
+    ) -> Result<Vec<FileSet>, DatabaseError> {
+        let file_sets = sqlx::query_as(
+            "SELECT fs.id, fs.file_name, fs.file_type, fs.name, fs.source
+             FROM file_set fs
+             INNER JOIN file_set_file_info fsfi ON fs.id = fsfi.file_set_id
+             WHERE fsfi.file_info_id = ?",
+        )
+        .bind(file_info_id)
+        .fetch_all(&*self.pool)
+        .await?;
+        Ok(file_sets)
+    }
+
     pub async fn is_file_set_in_release(&self, file_set_id: i64) -> Result<bool, DatabaseError> {
         let count = sqlx::query_scalar!(
             "SELECT COUNT(*) 
@@ -152,7 +168,9 @@ impl FileSetRepository {
         Ok(file_sets)
     }
 
-    // TODO: update file set
+    /// Adds a new file set along with its associated files and system links.
+    /// Checks for existing file info entries to avoid duplicates.
+    /// Returns the ID of the newly created file set.
     pub async fn add_file_set(
         &self,
         file_set_name: &str,
@@ -324,8 +342,8 @@ impl FileSetRepository {
         Ok(id)
     }
 
-    pub async fn delete_file_set(&self, id: i64) -> Result<i64, DatabaseError> {
-        let is_in_use = sqlx::query_scalar!(
+    pub async fn is_in_use(&self, id: i64) -> Result<bool, DatabaseError> {
+        let count = sqlx::query_scalar!(
             "SELECT COUNT(*) 
              FROM release_file_set
              WHERE file_set_id = ?",
@@ -333,8 +351,11 @@ impl FileSetRepository {
         )
         .fetch_one(&*self.pool)
         .await?;
+        Ok(count > 0)
+    }
 
-        if is_in_use > 0 {
+    pub async fn delete_file_set(&self, id: i64) -> Result<i64, DatabaseError> {
+        if self.is_in_use(id).await? {
             return Err(DatabaseError::InUse);
         }
 

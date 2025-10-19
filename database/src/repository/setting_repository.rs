@@ -24,14 +24,16 @@ impl SettingRepository {
         Ok(settings)
     }
 
-    pub async fn get_setting(&self, key: &str) -> Result<String, DatabaseError> {
+    pub async fn get_setting(&self, key: &SettingName) -> Result<String, DatabaseError> {
+        let key = key.as_str();
         let row = sqlx::query!("SELECT value FROM setting WHERE key = ?", key)
             .fetch_one(&*self.pool)
             .await?;
         Ok(row.value)
     }
 
-    pub async fn add_setting(&self, key: &str, value: &str) -> Result<(), DatabaseError> {
+    pub async fn add_setting(&self, key: &SettingName, value: &str) -> Result<(), DatabaseError> {
+        let key = key.as_str();
         sqlx::query!(
             "INSERT INTO setting (key, value) 
              VALUES (?, ?)
@@ -44,7 +46,12 @@ impl SettingRepository {
         Ok(())
     }
 
-    pub async fn update_setting(&self, key: &str, value: &str) -> Result<(), DatabaseError> {
+    pub async fn update_setting(
+        &self,
+        key: &SettingName,
+        value: &str,
+    ) -> Result<(), DatabaseError> {
+        let key = key.as_str();
         sqlx::query!(
             "UPDATE setting SET value = ? 
              WHERE key = ?
@@ -62,7 +69,6 @@ impl SettingRepository {
         key: &SettingName,
         value: &str,
     ) -> Result<(), DatabaseError> {
-        let key = key.as_str();
         if self.get_setting(key).await.is_ok() {
             self.update_setting(key, value).await?;
         } else {
@@ -97,25 +103,35 @@ mod tests {
         let pool = Arc::new(setup_test_db().await);
         let repository = SettingRepository::new(pool.clone());
         repository
-            .add_setting("test_key", "test_value")
+            .add_setting(&SettingName::S3Region, "test_value")
             .await
             .unwrap();
 
         let settings = repository.get_settings().await.unwrap();
-        assert_eq!(settings.get("test_key").unwrap(), "test_value");
+        assert_eq!(
+            settings.get(SettingName::S3Region.as_str()).unwrap(),
+            "test_value"
+        );
 
         repository
-            .update_setting("test_key", "updated_value")
+            .update_setting(&SettingName::S3Region, "updated_value")
             .await
             .unwrap();
 
-        let setting = repository.get_setting("test_key").await.unwrap();
+        let setting = repository
+            .get_setting(&SettingName::S3Region)
+            .await
+            .unwrap();
         assert_eq!(setting, "updated_value");
+
         repository
             .add_or_update_setting(&SettingName::S3Region, "new_value")
             .await
             .unwrap();
-        let setting = repository.get_setting("test_key").await.unwrap();
+        let setting = repository
+            .get_setting(&SettingName::S3Region)
+            .await
+            .unwrap();
         assert_eq!(setting, "new_value");
     }
 }

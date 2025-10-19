@@ -18,8 +18,10 @@ use service::{
 };
 
 use crate::{
-    file_selector::{FileSelectInit, FileSelectModel, FileSelectMsg, FileSelectOutputMsg},
     file_set_editor::FileSetEditor,
+    file_set_selector::{
+        FileSetSelector, FileSetSelectorInit, FileSetSelectorMsg, FileSetSelectorOutputMsg,
+    },
     list_item::ListItem,
     software_title_selector::{
         SoftwareTitleSelectInit, SoftwareTitleSelectModel, SoftwareTitleSelectMsg,
@@ -41,9 +43,9 @@ pub enum ReleaseFormMsg {
     OpenSoftwareTitleSelector,
     SoftwareTitleCreated(SoftwareTitleListModel),
     SoftwareTitleUpdated(SoftwareTitleListModel),
-    RemoveSoftwareTitle,
-    RemoveSystem,
-    RemoveFileSet,
+    UnlinkSoftwareTitle,
+    UnlinkSystem,
+    UnlinkFileSet,
     Show { release: Option<ReleaseViewModel> },
     Hide,
     EditFileSet,
@@ -68,7 +70,7 @@ pub struct ReleaseFormModel {
     repository_manager: Arc<RepositoryManager>,
     settings: Arc<Settings>,
     system_selector: Controller<SystemSelectModel>,
-    file_selector: Controller<FileSelectModel>,
+    file_selector: Controller<FileSetSelector>,
     software_title_selector: Controller<SoftwareTitleSelectModel>,
     selected_software_titles_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     selected_systems_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
@@ -146,8 +148,8 @@ impl Component for ReleaseFormModel {
                             connect_clicked => ReleaseFormMsg::OpenSoftwareTitleSelector,
                         },
                         gtk::Button {
-                            set_label: "Remove Software Title",
-                            connect_clicked => ReleaseFormMsg::RemoveSoftwareTitle,
+                            set_label: "Unlink Software Title",
+                            connect_clicked => ReleaseFormMsg::UnlinkSoftwareTitle,
                         },
                     },
                 },
@@ -172,8 +174,8 @@ impl Component for ReleaseFormModel {
                             connect_clicked => ReleaseFormMsg::OpenSystemSelector,
                         },
                         gtk::Button {
-                            set_label: "Remove System",
-                            connect_clicked => ReleaseFormMsg::RemoveSystem,
+                            set_label: "Unlink System",
+                            connect_clicked => ReleaseFormMsg::UnlinkSystem,
                         },
                     },
 
@@ -204,8 +206,8 @@ impl Component for ReleaseFormModel {
                             connect_clicked => ReleaseFormMsg::EditFileSet,
                         },
                         gtk::Button {
-                            set_label: "Remove File Set",
-                            connect_clicked => ReleaseFormMsg::RemoveFileSet,
+                            set_label: "Unlink File Set",
+                            connect_clicked => ReleaseFormMsg::UnlinkFileSet,
                         },
                     },
                 },
@@ -267,16 +269,16 @@ impl Component for ReleaseFormModel {
                 }
             });
 
-        let file_selector_init_model = FileSelectInit {
+        let file_selector_init_model = FileSetSelectorInit {
             view_model_service: Arc::clone(&init_model.view_model_service),
             repository_manager: Arc::clone(&init_model.repository_manager),
             settings: Arc::clone(&init_model.settings),
         };
-        let file_selector = FileSelectModel::builder()
+        let file_selector = FileSetSelector::builder()
             .transient_for(&root)
             .launch(file_selector_init_model)
             .forward(sender.input_sender(), |msg| match msg {
-                FileSelectOutputMsg::FileSetSelected(file_set_liset_model) => {
+                FileSetSelectorOutputMsg::FileSetSelected(file_set_liset_model) => {
                     ReleaseFormMsg::FileSetSelected(file_set_liset_model)
                 }
             });
@@ -311,7 +313,7 @@ impl Component for ReleaseFormModel {
                 });
             }
             ReleaseFormMsg::OpenFileSelector => {
-                self.file_selector.emit(FileSelectMsg::Show {
+                self.file_selector.emit(FileSetSelectorMsg::Show {
                     selected_system_ids: get_item_ids(&self.selected_systems_list_view_wrapper),
                     selected_file_set_ids: get_item_ids(&self.selected_file_sets_list_view_wrapper),
                 });
@@ -373,10 +375,10 @@ impl Component for ReleaseFormModel {
                                     .get_release_repository()
                                     .update_release_full(
                                         id,
-                                        "".to_string(),
-                                        software_title_ids,
-                                        file_set_ids,
-                                        system_ids,
+                                        "",
+                                        &software_title_ids,
+                                        &file_set_ids,
+                                        &system_ids,
                                     )
                                     .await
                             }
@@ -385,10 +387,10 @@ impl Component for ReleaseFormModel {
                                 repository_manager
                                     .get_release_repository()
                                     .add_release_full(
-                                        "".to_string(),
-                                        software_title_ids,
-                                        file_set_ids,
-                                        system_ids,
+                                        "",
+                                        &software_title_ids,
+                                        &file_set_ids,
+                                        &system_ids,
                                     )
                                     .await
                             }
@@ -411,13 +413,13 @@ impl Component for ReleaseFormModel {
                     eprintln!("Error in sending message {:?}", msg);
                 }
             }
-            ReleaseFormMsg::RemoveSoftwareTitle => {
+            ReleaseFormMsg::UnlinkSoftwareTitle => {
                 remove_selected(&mut self.selected_software_titles_list_view_wrapper);
             }
-            ReleaseFormMsg::RemoveSystem => {
+            ReleaseFormMsg::UnlinkSystem => {
                 remove_selected(&mut self.selected_systems_list_view_wrapper);
             }
-            ReleaseFormMsg::RemoveFileSet => {
+            ReleaseFormMsg::UnlinkFileSet => {
                 remove_selected(&mut self.selected_file_sets_list_view_wrapper);
             }
             ReleaseFormMsg::Show { release } => {

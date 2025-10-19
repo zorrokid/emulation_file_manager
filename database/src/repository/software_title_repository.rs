@@ -58,7 +58,7 @@ impl SoftwareTitleRepository {
 
     pub async fn add_software_title(
         &self,
-        name: &String,
+        name: &str,
         franchise_id: Option<i64>,
     ) -> Result<i64, Error> {
         let result = sqlx::query!(

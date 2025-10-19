@@ -150,10 +150,10 @@ impl ReleaseRepository {
 
     pub async fn add_release_full(
         &self,
-        release_name: String,
-        software_title_ids: Vec<i64>,
-        file_set_ids: Vec<i64>,
-        system_ids: Vec<i64>,
+        release_name: &str,
+        software_title_ids: &[i64],
+        file_set_ids: &[i64],
+        system_ids: &[i64],
     ) -> Result<i64, Error> {
         let mut transaction = self.pool.begin().await?;
 
@@ -201,10 +201,10 @@ impl ReleaseRepository {
     pub async fn update_release_full(
         &self,
         release_id: i64,
-        release_name: String,
-        software_title_ids: Vec<i64>,
-        file_set_ids: Vec<i64>,
-        system_ids: Vec<i64>,
+        release_name: &str,
+        software_title_ids: &[i64],
+        file_set_ids: &[i64],
+        system_ids: &[i64],
     ) -> Result<i64, Error> {
         let mut transaction = self.pool.begin().await?;
 
@@ -437,7 +437,7 @@ mod tests {
         let software_title_repository = SoftwareTitleRepository::new(pool.clone());
 
         let software_title_id = software_title_repository
-            .add_software_title(&"Test Software Title".to_string(), None)
+            .add_software_title("Test Software Title", None)
             .await
             .unwrap();
 
@@ -507,39 +507,30 @@ mod tests {
         let software_title_repository = SoftwareTitleRepository::new(pool.clone());
 
         let software_title_1_id = software_title_repository
-            .add_software_title(&"Software 1".to_string(), None)
+            .add_software_title("Software 1", None)
             .await
             .unwrap();
 
         let software_title_2_id = software_title_repository
-            .add_software_title(&"Software 1".to_string(), None)
+            .add_software_title("Software 1", None)
             .await
             .unwrap();
 
         let software_title_3_id = software_title_repository
-            .add_software_title(&"Software 3".to_string(), None)
+            .add_software_title("Software 3", None)
             .await
             .unwrap();
 
         let system_repository = SystemRepository::new(pool.clone());
-        let system_1_id = system_repository
-            .add_system(&"System 1".to_string())
-            .await
-            .unwrap();
-        let system_2_id = system_repository
-            .add_system(&"System 2".to_string())
-            .await
-            .unwrap();
-        let system_3_id = system_repository
-            .add_system(&"System 3".to_string())
-            .await
-            .unwrap();
+        let system_1_id = system_repository.add_system("System 1").await.unwrap();
+        let system_2_id = system_repository.add_system("System 2").await.unwrap();
+        let system_3_id = system_repository.add_system("System 3").await.unwrap();
 
         let file_set_repository = FileSetRepository::new(pool.clone());
         let file_set_1_id = file_set_repository
             .add_file_set(
-                &"Test file set".to_string(),
-                &"File Set 1".to_string(),
+                "Test file set",
+                "File Set 1",
                 &FileType::Rom,
                 "",
                 &[ImportedFile {
@@ -555,8 +546,8 @@ mod tests {
 
         let file_set_2_id = file_set_repository
             .add_file_set(
-                &"Test file set 2".to_string(),
-                &"File Set 2".to_string(),
+                "Test file set 2",
+                "File Set 2",
                 &FileType::Rom,
                 "",
                 &[ImportedFile {
@@ -572,8 +563,8 @@ mod tests {
 
         let file_set_3_id = file_set_repository
             .add_file_set(
-                &"Test file set 3".to_string(),
-                &"File Set 3".to_string(),
+                "Test file set 3",
+                "File Set 3",
                 &FileType::Rom,
                 "",
                 &[ImportedFile {
@@ -590,10 +581,10 @@ mod tests {
         // Add a release
         let release_id = release_repository
             .add_release_full(
-                "Test Release".to_string(),
-                vec![software_title_1_id],
-                vec![file_set_1_id],
-                vec![system_1_id],
+                "Test Release",
+                &[software_title_1_id],
+                &[file_set_1_id],
+                &[system_1_id],
             )
             .await
             .unwrap();
@@ -637,10 +628,10 @@ mod tests {
         let updated_release_id = release_repository
             .update_release_full(
                 release_id,
-                "Updated Release".to_string(),
-                vec![software_title_2_id, software_title_3_id],
-                vec![file_set_2_id, file_set_3_id],
-                vec![system_2_id, system_3_id],
+                "Updated Release",
+                &[software_title_2_id, software_title_3_id],
+                &[file_set_2_id, file_set_3_id],
+                &[system_2_id, system_3_id],
             )
             .await
             .unwrap();

@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc};
+use std::sync::Arc;
 
 use async_std::channel::Sender;
 use cloud_storage::{connect_bucket, multipart_upload, CloudStorageError, SyncEvent};
@@ -60,7 +60,7 @@ impl CloudStorageSyncService {
                     .get_file_sync_log_repository()
                     .add_log_entry(
                         file_info.id,
-                        FileSyncStatus::Pending,
+                        FileSyncStatus::UploadPending,
                         "",
                         cloud_key.as_str(),
                     )
@@ -108,7 +108,11 @@ impl CloudStorageSyncService {
             let pending_files_to_upload = self
                 .repository_manager
                 .get_file_sync_log_repository()
-                .get_logs_and_file_info_by_sync_status(10, offset)
+                .get_logs_and_file_info_by_sync_status(
+                    &[FileSyncStatus::UploadPending, FileSyncStatus::UploadFailed],
+                    10,
+                    offset,
+                )
                 .await
                 .map_err(|e| CloudStorageError::Other(e.to_string()))?;
 
@@ -121,13 +125,17 @@ impl CloudStorageSyncService {
             for file in pending_files_to_upload {
                 self.repository_manager
                     .get_file_sync_log_repository()
-                    .update_log_entry(file.id, FileSyncStatus::InProgress, "")
+                    .add_log_entry(
+                        file.id,
+                        FileSyncStatus::UploadInProgress,
+                        "",
+                        &file.cloud_key,
+                    )
                     .await
                     .map_err(|e| CloudStorageError::Other(e.to_string()))?;
-                let folder_name = file.file_type.dir_name();
-                let local_path = PathBuf::from(&self.settings.collection_root_dir)
-                    .join(folder_name)
-                    .join(format!("{}.{}", &file.archive_file_name, "zst"));
+                let local_path = self
+                    .settings
+                    .get_file_path(&file.file_type, &file.archive_file_name);
                 println!("Local path: {:?}", local_path);
                 println!(
                     "Uploading file to cloud: id={}, key={}",
@@ -154,7 +162,12 @@ impl CloudStorageSyncService {
                         println!("Upload completed: id={}, key={}", file.id, file.cloud_key);
                         self.repository_manager
                             .get_file_sync_log_repository()
-                            .update_log_entry(file.id, FileSyncStatus::Completed, "")
+                            .add_log_entry(
+                                file.id,
+                                FileSyncStatus::UploadCompleted,
+                                "",
+                                &file.cloud_key,
+                            )
                             .await
                             .map_err(|e| CloudStorageError::Other(e.to_string()))?;
                         successful_files_count += 1;
@@ -174,7 +187,12 @@ impl CloudStorageSyncService {
                         );
                         self.repository_manager
                             .get_file_sync_log_repository()
-                            .update_log_entry(file.id, FileSyncStatus::Failed, &format!("{}", e))
+                            .add_log_entry(
+                                file.id,
+                                FileSyncStatus::UploadFailed,
+                                &format!("{}", e),
+                                &file.cloud_key,
+                            )
                             .await
                             .map_err(|e| CloudStorageError::Other(e.to_string()))?;
                         failed_files_count += 1;

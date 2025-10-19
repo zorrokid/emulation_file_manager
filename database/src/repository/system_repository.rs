@@ -94,7 +94,7 @@ impl SystemRepository {
         Ok(releases_count > 0 || files_count > 0 || emulators_count > 0)
     }
 
-    pub async fn add_system(&self, name: &String) -> Result<i64, Error> {
+    pub async fn add_system(&self, name: &str) -> Result<i64, Error> {
         let result = sqlx::query!("INSERT INTO system (name) VALUES (?)", name)
             .execute(&*self.pool)
             .await?;

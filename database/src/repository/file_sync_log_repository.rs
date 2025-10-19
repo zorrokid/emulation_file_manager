@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use core_types::FileSyncStatus;
-use sqlx::{prelude::FromRow, sqlite::SqliteRow, Pool, QueryBuilder, Row, Sqlite};
+use sqlx::{prelude::FromRow, sqlite::SqliteRow, Pool, Row, Sqlite};
 
 use crate::models::{FileSyncLog, FileSyncLogWithFileInfo};
 
@@ -70,27 +70,42 @@ impl FileSyncLogRepository {
         Ok(logs)
     }
 
+    /// Fetches the most recent log entries for each file_info_id where the status is either
+    /// UploadPending or UploadFailed, with pagination support.
+    /// This is useful for identifying files that need to be retried for upload.
+    /// Note: if user has a later log entry with different status it will be excluded from result
+    /// set.
     pub async fn get_logs_and_file_info_by_sync_status(
         &self,
+        statuses: &[FileSyncStatus],
         limit: u32,
         offset: u32,
     ) -> Result<Vec<FileSyncLogWithFileInfo>, sqlx::Error> {
-        let pending_status = FileSyncStatus::Pending.to_db_int();
-        let error_status = FileSyncStatus::Failed.to_db_int();
-        let logs = sqlx::query_as::<_, FileSyncLogWithFileInfo>(
+        let mut query_builder = sqlx::QueryBuilder::<Sqlite>::new(
             "SELECT log.id, log.file_info_id, log.sync_time, log.status, log.message, log.cloud_key, fi.sha1_checksum, fi.file_size, fi.archive_file_name, fi.file_type 
              FROM file_sync_log log
              INNER JOIN file_info fi ON log.file_info_id = fi.id
-             WHERE log.status = ? OR log.status = ?
+             INNER JOIN (
+                SELECT file_info_id, MAX(id) AS max_id
+                FROM file_sync_log
+                GROUP BY file_info_id
+             ) latest ON log.file_info_id = latest.file_info_id AND log.id = latest.max_id
+             WHERE log.status IN (");
+        let mut separated = query_builder.separated(", ");
+        for status in statuses {
+            separated.push_bind(status.to_db_int());
+        }
+        separated.push_unseparated(
+            ") ORDER BY log.sync_time DESC
              LIMIT ? OFFSET ?",
-        )
-        .bind(pending_status)
-        .bind(error_status)
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(&*self.pool)
-        .await?;
-        Ok(logs)
+        );
+
+        let query = query_builder
+            .build_query_as::<FileSyncLogWithFileInfo>()
+            .bind(limit)
+            .bind(offset);
+        let entries = query.fetch_all(&*self.pool).await?;
+        Ok(entries)
     }
 
     pub async fn add_log_entry(
@@ -113,24 +128,97 @@ impl FileSyncLogRepository {
         .await?;
         Ok(result.last_insert_rowid())
     }
+}
 
-    pub async fn update_log_entry(
-        &self,
-        log_id: i64,
-        status: FileSyncStatus,
-        message: &str,
-    ) -> Result<(), sqlx::Error> {
-        let status = status.to_db_int();
-        sqlx::query!(
-            "UPDATE file_sync_log 
-             SET status = ?, message = ?, sync_time = datetime('now')
-             WHERE id = ?",
-            status,
-            message,
-            log_id
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::setup_test_db;
+
+    #[async_std::test]
+    async fn test_get_logs_and_file_info_by_sync_status() {
+        let pool = Arc::new(setup_test_db().await);
+        let repository = FileSyncLogRepository::new(Arc::clone(&pool));
+        let file_info_id = insert_file_info(&pool).await;
+        repository
+            .add_log_entry(file_info_id, FileSyncStatus::UploadPending, "", "")
+            .await
+            .unwrap();
+        repository
+            .add_log_entry(file_info_id, FileSyncStatus::UploadFailed, "", "")
+            .await
+            .unwrap();
+        let res = repository
+            .get_logs_and_file_info_by_sync_status(&[FileSyncStatus::UploadFailed], 1, 0)
+            .await
+            .unwrap();
+        assert_eq!(res.len(), 1);
+
+        // add another file_info and log entries for it
+        let file_info_id_2 = insert_file_info(&pool).await;
+        repository
+            .add_log_entry(file_info_id_2, FileSyncStatus::UploadPending, "", "")
+            .await
+            .unwrap();
+        repository
+            .add_log_entry(file_info_id_2, FileSyncStatus::UploadFailed, "", "")
+            .await
+            .unwrap();
+
+        // test pagination
+        let res = repository
+            .get_logs_and_file_info_by_sync_status(&[FileSyncStatus::UploadFailed], 1, 0)
+            .await
+            .unwrap();
+        assert_eq!(res.len(), 1);
+        let first = res.first().unwrap();
+        assert_eq!(first.file_info_id, file_info_id);
+        let res = repository
+            .get_logs_and_file_info_by_sync_status(&[FileSyncStatus::UploadFailed], 1, 1)
+            .await
+            .unwrap();
+        assert_eq!(res.len(), 1);
+        let first = res.first().unwrap();
+        assert_eq!(first.file_info_id, file_info_id_2);
+
+        // add one more log entry
+        repository
+            .add_log_entry(file_info_id, FileSyncStatus::DeletionPending, "", "")
+            .await
+            .unwrap();
+        repository
+            .add_log_entry(file_info_id_2, FileSyncStatus::DeletionPending, "", "")
+            .await
+            .unwrap();
+
+        // now UploadFailed status shouldn't return anything since there is more recent log entry
+        // for both files with different status
+        //
+        let res = repository
+            .get_logs_and_file_info_by_sync_status(&[FileSyncStatus::UploadFailed], 10, 0)
+            .await
+            .unwrap();
+        assert_eq!(res.len(), 0);
+    }
+
+    async fn insert_file_info(pool: &Pool<Sqlite>) -> i64 {
+        let bytes: Vec<u8> = vec![1, 2, 3];
+        let result = sqlx::query!(
+            "INSERT INTO file_info (
+                sha1_checksum,
+                file_size,
+                archive_file_name,
+                file_type
+            ) VALUES (?, ?, ?, ?)",
+            bytes,
+            1,
+            "test_file_1",
+            1
         )
-        .execute(&*self.pool)
-        .await?;
-        Ok(())
+        .execute(pool)
+        .await
+        .unwrap();
+
+        result.last_insert_rowid()
     }
 }

@@ -1,7 +1,7 @@
 use std::{collections::HashSet, sync::Arc};
 
 use relm4::{
-    ComponentParts, ComponentSender, RelmWidgetExt,
+    ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
         self,
         glib::clone,
@@ -15,7 +15,10 @@ use service::{
     view_models::{FileSetViewModel, ReleaseListModel, SystemListModel},
 };
 
-use crate::list_item::ListItem;
+use crate::{
+    file_info_details::{FileInfoDetails, FileInfoDetailsInit, FileInfoDetailsMsg},
+    list_item::ListItem,
+};
 
 #[derive(Debug)]
 pub struct FileSetDetailsView {
@@ -23,6 +26,7 @@ pub struct FileSetDetailsView {
     files_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     systems_list_view_wrapper: TypedListView<ListItem, gtk::NoSelection>,
     software_titles_list_view_wrapper: TypedListView<ListItem, gtk::NoSelection>,
+    file_info_details: Controller<FileInfoDetails>,
 }
 
 #[derive(Debug)]
@@ -53,44 +57,51 @@ impl relm4::Component for FileSetDetailsView {
     view! {
         #[root]
         gtk::Box {
-            set_orientation: gtk::Orientation::Vertical,
+            set_orientation: gtk::Orientation::Horizontal,
             set_spacing: 10,
-            set_margin_all: 10,
 
-            #[name = "file_set_name_label"]
-            gtk::Label {
-                set_label: "File Set Details",
+            gtk::Box {
+                set_orientation: gtk::Orientation::Vertical,
+                set_spacing: 10,
+                set_margin_all: 10,
+
+                #[name = "file_set_name_label"]
+                gtk::Label {
+                    set_label: "File Set Details",
+                },
+
+                gtk::Label {
+                    set_label: "Files in file set:",
+                },
+
+                gtk::ScrolledWindow {
+                    set_vexpand: true,
+                    #[local_ref]
+                    files_list -> gtk::ListView {}
+                },
+
+                gtk::Label {
+                    set_label: "Systems linked to file set:",
+                },
+
+               gtk::ScrolledWindow {
+                    set_vexpand: true,
+                    #[local_ref]
+                    systems_list -> gtk::ListView {}
+                },
+
+                gtk::Label {
+                    set_label: "Software titles linked to file set:",
+                },
+
+                gtk::ScrolledWindow {
+                    set_vexpand: true,
+                    #[local_ref]
+                    software_titles_list -> gtk::ListView {}
+                }
             },
-
-            gtk::Label {
-                set_label: "Files in file set:",
-            },
-
-            gtk::ScrolledWindow {
-                set_vexpand: true,
-                #[local_ref]
-                files_list -> gtk::ListView {}
-            },
-
-            gtk::Label {
-                set_label: "Systems linked to file set:",
-            },
-
-           gtk::ScrolledWindow {
-                set_vexpand: true,
-                #[local_ref]
-                systems_list -> gtk::ListView {}
-            },
-
-            gtk::Label {
-                set_label: "Software titles linked to file set:",
-            },
-
-            gtk::ScrolledWindow {
-                set_vexpand: true,
-                #[local_ref]
-                software_titles_list -> gtk::ListView {}
-            }
+            #[local_ref]
+            file_info_details_widget -> gtk::Box,
         }
     }
 
@@ -102,12 +113,19 @@ impl relm4::Component for FileSetDetailsView {
         let files_list_view_wrapper = TypedListView::<ListItem, gtk::SingleSelection>::new();
         let systems_list_view_wrapper = TypedListView::<ListItem, gtk::NoSelection>::new();
         let software_titles_list_view_wrapper = TypedListView::<ListItem, gtk::NoSelection>::new();
+        let file_info_details_init = FileInfoDetailsInit {
+            view_model_service: Arc::clone(&init.view_model_service),
+        };
+        let file_info_details = FileInfoDetails::builder()
+            .launch(file_info_details_init)
+            .detach();
 
         let model = FileSetDetailsView {
             view_model_service: init.view_model_service,
             files_list_view_wrapper,
             systems_list_view_wrapper,
             software_titles_list_view_wrapper,
+            file_info_details,
         };
 
         let files_list = &model.files_list_view_wrapper.view;
@@ -125,6 +143,7 @@ impl relm4::Component for FileSetDetailsView {
                 }
             ));
 
+        let file_info_details_widget = model.file_info_details.widget();
         let widgets = view_output!();
 
         ComponentParts { model, widgets }
@@ -160,7 +179,13 @@ impl relm4::Component for FileSetDetailsView {
                 });
             }
             FileSetDetailsMsg::FileSelected { index } => {
-                println!("File selected at index: {}", index);
+                let selected_item = self.files_list_view_wrapper.get_visible(index);
+                if let Some(item) = selected_item {
+                    println!("Selected file: {:?}", item);
+                    let id = item.borrow().id;
+                    self.file_info_details
+                        .emit(FileInfoDetailsMsg::LoadFileInfo(id));
+                }
             }
         }
     }

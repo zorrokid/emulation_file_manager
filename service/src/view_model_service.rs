@@ -5,9 +5,9 @@ use database::repository_manager::RepositoryManager;
 use crate::{
     error::Error,
     view_models::{
-        DocumentViewerListModel, DocumentViewerViewModel, EmulatorViewModel, FileSetListModel,
-        FileSetViewModel, ReleaseListModel, ReleaseViewModel, Settings, SoftwareTitleListModel,
-        SystemListModel,
+        DocumentViewerListModel, DocumentViewerViewModel, EmulatorViewModel, FileInfoViewModel,
+        FileSetListModel, FileSetViewModel, ReleaseListModel, ReleaseViewModel, Settings,
+        SoftwareTitleListModel, SystemListModel,
     },
 };
 
@@ -386,6 +386,37 @@ impl ViewModelService {
             source: file_set.source.clone(),
         })
     }
+
+    pub async fn get_file_info_view_model(
+        &self,
+        file_info_id: i64,
+    ) -> Result<FileInfoViewModel, Error> {
+        let file_info = self
+            .repository_manager
+            .get_file_info_repository()
+            .get_file_info(file_info_id)
+            .await
+            .map_err(|err| Error::DbError(err.to_string()))?;
+
+        let file_sets = self
+            .repository_manager
+            .get_file_set_repository()
+            .get_file_sets_by_file_info(file_info_id)
+            .await
+            .map_err(|err| Error::DbError(err.to_string()))?;
+
+        let list_models: Vec<FileSetListModel> =
+            file_sets.iter().map(FileSetListModel::from).collect();
+
+        let view_model = FileInfoViewModel {
+            id: file_info.id,
+            sha1_checksum: file_info.sha1_checksum,
+            file_size: file_info.file_size,
+            archive_file_name: file_info.archive_file_name,
+            belongs_to_file_sets: list_models,
+        };
+        Ok(view_model)
+    }
 }
 
 #[cfg(test)]
@@ -394,7 +425,8 @@ mod tests {
     use std::path::PathBuf;
 
     use super::*;
-    use database::{models::SettingName, setup_test_db};
+    use core_types::SettingName;
+    use database::setup_test_db;
 
     #[async_std::test]
     async fn test_get_emulator_view_model() {
@@ -450,7 +482,7 @@ mod tests {
 
         repository_manager
             .get_settings_repository()
-            .add_setting(SettingName::CollectionRootDir.as_str(), "test_value")
+            .add_setting(&SettingName::CollectionRootDir, "test_value")
             .await
             .unwrap();
 
