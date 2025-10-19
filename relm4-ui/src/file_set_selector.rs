@@ -13,7 +13,7 @@ use relm4::{
 };
 use service::{
     error::Error as ServiceError,
-    file_set_deletion_service::FileSetDeletionService,
+    file_set_deletion::service::FileSetDeletionService,
     view_model_service::ViewModelService,
     view_models::{FileSetListModel, Settings},
 };
