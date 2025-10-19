@@ -274,16 +274,23 @@ impl<F: FileSystemOps> DeletionStep<F> for DeleteLocalFilesStep {
             let path_str = file_path.to_string_lossy().to_string();
             deletion_result.file_path = Some(path_str.clone());
 
+            println!("Deleting local file: {}", path_str);
             if context.fs_ops.exists(&file_path) {
+                println!("File exists, attempting deletion: {}", path_str);
                 match context.fs_ops.remove_file(&file_path) {
                     Ok(_) => {
+                        println!("Deleted local file: {}", path_str);
                         deletion_result.file_deletion_success = true;
                     }
                     Err(e) => {
+                        println!("Failed to delete local file {}: {}", path_str, e);
                         deletion_result.file_deletion_success = false;
                         deletion_result.error_messages.push(e.to_string());
                     }
                 }
+            } else {
+                println!("File does not exist, skipping deletion: {}", path_str);
+                deletion_result.file_deletion_success = true; // consider non-existing file as "deleted" (user might have done it manually)
             }
         }
 
@@ -665,6 +672,143 @@ mod tests {
     }
 
     #[async_std::test]
+    async fn test_delete_local_files_step_when_file_does_not_exist() {
+        let TestSetup {
+            settings,
+            repo_manager,
+            fs_ops,
+            system_id,
+            file1,
+        } = prepare_test().await;
+
+        let file_set_id = repo_manager
+            .get_file_set_repository()
+            .add_file_set(
+                "test_set",
+                "file name",
+                &FileType::Rom,
+                "",
+                &[file1],
+                &[system_id],
+            )
+            .await
+            .unwrap();
+
+        let file_infos = repo_manager
+            .get_file_info_repository()
+            .get_file_infos_by_file_set(file_set_id)
+            .await
+            .unwrap();
+        let file_info = file_infos.first().unwrap();
+
+        // Let's not add the file to fs_ops, simulating that it doesn't exist
+        // let file_path = settings.get_file_path(&file_info.file_type, &file_info.archive_file_name);
+        // fs_ops.add_file(file_path.to_string_lossy().as_ref());
+
+        let mut context = DeletionContext {
+            file_set_id,
+            repository_manager: repo_manager.clone(),
+            settings: settings.clone(),
+            fs_ops: fs_ops.clone(),
+            deletion_results: HashMap::from([(
+                file_info.sha1_checksum.clone(),
+                FileDeletionResult {
+                    file_info: file_info.clone(),
+                    file_path: None,
+                    file_deletion_success: false,
+                    error_messages: vec![],
+                    is_deletable: true,
+                    was_deleted_from_db: false,
+                    cloud_sync_marked: false,
+                },
+            )]),
+        };
+        let step = DeleteLocalFilesStep;
+        let res = step.execute(&mut context).await;
+
+        println!(
+            "Deletion result: {:?}",
+            context.deletion_results.get(&file_info.sha1_checksum)
+        );
+
+        assert!(
+            context
+                .deletion_results
+                .get(&file_info.sha1_checksum)
+                .unwrap()
+                .file_deletion_success
+        );
+
+        assert_eq!(res, StepAction::Continue);
+    }
+
+    #[async_std::test]
+    async fn test_delete_local_files_step_with_delete_failure() {
+        let TestSetup {
+            settings,
+            repo_manager,
+            fs_ops,
+            system_id,
+            file1,
+        } = prepare_test().await;
+
+        fs_ops.fail_delete_with("Permission denied");
+
+        let file_set_id = repo_manager
+            .get_file_set_repository()
+            .add_file_set(
+                "test_set",
+                "file name",
+                &FileType::Rom,
+                "",
+                &[file1],
+                &[system_id],
+            )
+            .await
+            .unwrap();
+
+        let file_infos = repo_manager
+            .get_file_info_repository()
+            .get_file_infos_by_file_set(file_set_id)
+            .await
+            .unwrap();
+        let file_info = file_infos.first().unwrap();
+        let file_path = settings.get_file_path(&file_info.file_type, &file_info.archive_file_name);
+        fs_ops.add_file(file_path.to_string_lossy().as_ref());
+
+        let mut context = DeletionContext {
+            file_set_id,
+            repository_manager: repo_manager.clone(),
+            settings: settings.clone(),
+            fs_ops: fs_ops.clone(),
+            deletion_results: HashMap::from([(
+                file_info.sha1_checksum.clone(),
+                FileDeletionResult {
+                    file_info: file_info.clone(),
+                    file_path: None,
+                    file_deletion_success: false,
+                    error_messages: vec![],
+                    is_deletable: true,
+                    was_deleted_from_db: false,
+                    cloud_sync_marked: false,
+                },
+            )]),
+        };
+        let step = DeleteLocalFilesStep;
+        let res = step.execute(&mut context).await;
+
+        assert!(
+            !context
+                .deletion_results
+                .get(&file_info.sha1_checksum)
+                .unwrap()
+                .file_deletion_success
+        );
+
+        assert_eq!(res, StepAction::Continue);
+    }
+
+    #[async_std::test]
     async fn test_delete_local_files_step() {
         let TestSetup {
             settings,
@@ -722,6 +866,11 @@ mod tests {
                 .to_string_lossy()
                 .as_ref()
         ));
+
+        println!(
+            "Deletion result: {:?}",
+            context.deletion_results.get(&file_info.sha1_checksum)
+        );
 
         assert!(
             context

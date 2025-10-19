@@ -125,13 +125,55 @@ mod tests {
         // assert_eq!(mock_fs.get_deleted_files().len(), 1);
     }
 
-    /// Example test showing how to simulate file deletion failures
-    #[test]
+    #[async_std::test]
     #[ignore] // Ignored because it needs full database setup
-    fn test_delete_file_set_handles_deletion_failure() {
+    async fn test_delete_file_set_handles_deletion_failure() {
         // Example of simulating failure:
         let mock_fs = Arc::new(MockFileSystemOps::new());
         mock_fs.add_file("/test/rom/game.zst");
+
+        let test_db_pool = Arc::new(setup_test_db().await);
+        let repo_manager = Arc::new(RepositoryManager::new(test_db_pool));
+        let settings = Arc::new(Settings {
+            collection_root_dir: PathBuf::from("/"),
+            ..Default::default()
+        });
+
+        let system_id = repo_manager
+            .get_system_repository()
+            .add_system("Test System")
+            .await
+            .unwrap();
+
+        let software_title_id = repo_manager
+            .get_software_title_repository()
+            .add_software_title("Test Software", None)
+            .await
+            .unwrap();
+
+        let file1 = ImportedFile {
+            original_file_name: "file1.zst".to_string(),
+            archive_file_name: "file1.zst".to_string(),
+            sha1_checksum: Sha1Checksum::from([0; 20]),
+            file_size: 1234,
+        };
+
+        let file_set_id = prepare_file_set_with_files(&repo_manager, system_id, &[file1]).await;
+
+        // link file set to release
+        let release_id = repo_manager
+            .get_release_repository()
+            .add_release_full(
+                "Test Release",
+                &[software_title_id],
+                &[file_set_id],
+                &[system_id],
+            )
+            .await
+            .unwrap();
+
+        let service =
+            FileSetDeletionService::new_with_fs_ops(repo_manager, settings, mock_fs.clone());
 
         // Make the deletion fail
         mock_fs.fail_delete_with("Permission denied");
@@ -148,7 +190,7 @@ mod tests {
     /// Example test demonstrating the hybrid pipeline pattern (v2)
     #[test]
     #[ignore] // Ignored because it needs full database setup
-    fn test_delete_file_set_v2_with_pipeline() {
+    fn test_delete_file_set() {
         // Example of using the new pipeline-based deletion:
         let mock_fs = Arc::new(MockFileSystemOps::new());
         mock_fs.add_file("/test/rom/game1.zst");
@@ -174,5 +216,23 @@ mod tests {
         // Verify files were deleted:
         // assert!(mock_fs.was_deleted("/test/rom/game1.zst"));
         // assert!(mock_fs.was_deleted("/test/rom/game2.zst"));
+    }
+    async fn prepare_file_set_with_files(
+        repo_manager: &RepositoryManager,
+        system_id: i64,
+        files: &[ImportedFile],
+    ) -> i64 {
+        repo_manager
+            .get_file_set_repository()
+            .add_file_set(
+                "test_set",
+                "file name",
+                &FileType::Rom,
+                "",
+                files,
+                &[system_id],
+            )
+            .await
+            .unwrap()
     }
 }
