@@ -26,6 +26,7 @@ impl CloudStorageSyncService {
         }
     }
 
+    // STEP 1
     /// Goes though the list of files. If file info is missing in sync log, add an entry for it with
     /// pending status and creates a cloud key for file.
     /// Processes file infos in batches of 1000.
@@ -73,6 +74,7 @@ impl CloudStorageSyncService {
         Ok(total_count)
     }
 
+    // STEP 2
     /// Goes through the list of pending and failed files and uploads them to cloud storage
     pub async fn sync_files_to_cloud(
         &self,
@@ -218,4 +220,18 @@ impl CloudStorageSyncService {
             .ok();
         Ok(())
     }
+
+    // STEP 3
+    // Goes through the list of files marked for deletion and deletes them from cloud storage
+    /*pub async fn delete_files_from_cloud(
+        &self,
+        progress_tx: Sender<SyncEvent>,
+    ) -> Result<(), CloudStorageError> {
+        let total_files_pending_deletion = self
+            .repository_manager
+            .get_file_sync_log_repository()
+            .count_logs_by_sync_status(FileSyncStatus::DeletionPending)
+            .await
+            .map_err(|e| CloudStorageError::Other(e.to_string()))?;
+    }*/
 }

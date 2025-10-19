@@ -108,6 +108,29 @@ impl FileSyncLogRepository {
         Ok(entries)
     }
 
+    pub async fn count_logs_by_latest_status(
+        &self,
+        status: FileSyncStatus,
+    ) -> Result<i64, sqlx::Error> {
+        let status_int = status.to_db_int();
+        let row = sqlx::query!(
+            "SELECT COUNT(*) as count FROM (
+                -- Get the latest log entry for each file_info_id
+                SELECT file_info_id, MAX(id) AS max_id
+                FROM file_sync_log
+                GROUP BY file_info_id
+             ) latest
+             -- Join with the file_sync_log table to get the status of the latest entries
+             INNER JOIN file_sync_log log ON latest.file_info_id = log.file_info_id AND latest.max_id = log.id
+             -- And finally filter by the desired status
+             WHERE log.status = ?",
+            status_int
+        )
+        .fetch_one(&*self.pool)
+        .await?;
+        Ok(row.count)
+    }
+
     pub async fn add_log_entry(
         &self,
         file_info_id: i64,
@@ -199,6 +222,61 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(res.len(), 0);
+    }
+
+    #[async_std::test]
+    async fn test_count_logs_by_latest_status() {
+        let pool = Arc::new(setup_test_db().await);
+        let repository = FileSyncLogRepository::new(Arc::clone(&pool));
+        let file_info_id = insert_file_info(&pool).await;
+        repository
+            .add_log_entry(file_info_id, FileSyncStatus::UploadPending, "", "")
+            .await
+            .unwrap();
+        repository
+            .add_log_entry(file_info_id, FileSyncStatus::UploadFailed, "", "")
+            .await
+            .unwrap();
+
+        let count = repository
+            .count_logs_by_latest_status(FileSyncStatus::UploadFailed)
+            .await
+            .unwrap();
+        assert_eq!(count, 1);
+
+        let count = repository
+            .count_logs_by_latest_status(FileSyncStatus::UploadPending)
+            .await
+            .unwrap();
+        assert_eq!(count, 0);
+
+        // add another file_info and log entries for it
+        let file_info_id_2 = insert_file_info(&pool).await;
+        repository
+            .add_log_entry(file_info_id_2, FileSyncStatus::UploadPending, "", "")
+            .await
+            .unwrap();
+        repository
+            .add_log_entry(file_info_id_2, FileSyncStatus::UploadFailed, "", "")
+            .await
+            .unwrap();
+        let count = repository
+            .count_logs_by_latest_status(FileSyncStatus::UploadFailed)
+            .await
+            .unwrap();
+        assert_eq!(count, 2);
+
+        // add one more log entry with different status for first file_info
+        repository
+            .add_log_entry(file_info_id, FileSyncStatus::DeletionPending, "", "")
+            .await
+            .unwrap();
+
+        let count = repository
+            .count_logs_by_latest_status(FileSyncStatus::UploadFailed)
+            .await
+            .unwrap();
+        assert_eq!(count, 1);
     }
 
     async fn insert_file_info(pool: &Pool<Sqlite>) -> i64 {
