@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 async-std = { version = "1.13.2", features = ["attributes"] }
+async-trait = "0.1.89"
 rust-s3 = { version = "0.37.0", default-features = false, features = [
     "with-async-std",
     "async-std-rustls-tls"

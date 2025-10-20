@@ -13,11 +13,21 @@ use std::path::Path;
 use async_std::channel::Sender;
 use async_std::io::{ReadExt, WriteExt};
 use async_std::stream::StreamExt;
+use async_trait::async_trait;
 pub use s3::bucket::Bucket;
 use s3::creds::Credentials;
 use s3::error::S3Error;
 use s3::region::Region;
 use s3::serde_types::Part;
+
+// Re-export Bucket so it can be used by consumers
+pub use s3::bucket::Bucket as S3Bucket;
+
+mod ops;
+pub use ops::CloudStorageOps;
+
+#[cfg(test)]
+pub mod mock;
 
 #[derive(Debug, Clone)]
 pub enum SyncEvent {
@@ -200,4 +210,55 @@ pub async fn multipart_upload(
 pub async fn delete_file(bucket: &Bucket, key: &str) -> Result<(), CloudStorageError> {
     bucket.delete_object(key).await?;
     Ok(())
+}
+
+// ============================================================================
+// Production Implementation of CloudStorageOps
+// ============================================================================
+
+/// Production implementation of CloudStorageOps using real S3 bucket
+pub struct S3CloudStorage {
+    bucket: Box<Bucket>,
+}
+
+impl S3CloudStorage {
+    /// Connect to an S3-compatible storage bucket
+    pub async fn connect(
+        endpoint: &str,
+        region: &str,
+        bucket_name: &str,
+    ) -> Result<Self, CloudStorageError> {
+        let bucket = connect_bucket(endpoint, region, bucket_name).await?;
+        Ok(Self { bucket })
+    }
+
+    /// Get a reference to the underlying bucket (for advanced use cases)
+    pub fn bucket(&self) -> &Bucket {
+        &self.bucket
+    }
+}
+
+#[async_trait]
+impl CloudStorageOps for S3CloudStorage {
+    async fn upload_file(
+        &self,
+        file_path: &Path,
+        cloud_key: &str,
+        progress_tx: Option<&Sender<SyncEvent>>,
+    ) -> Result<(), CloudStorageError> {
+        // Delegate to existing multipart_upload function
+        multipart_upload(&self.bucket, file_path, cloud_key, progress_tx).await
+    }
+
+    async fn delete_file(&self, cloud_key: &str) -> Result<(), CloudStorageError> {
+        delete_file(&self.bucket, cloud_key).await
+    }
+
+    async fn file_exists(&self, cloud_key: &str) -> Result<bool, CloudStorageError> {
+        match self.bucket.head_object(cloud_key).await {
+            Ok(_) => Ok(true),
+            Err(S3Error::HttpFailWithBody(404, _)) => Ok(false),
+            Err(e) => Err(CloudStorageError::S3(e)),
+        }
+    }
 }

@@ -215,7 +215,7 @@ impl CloudStorageSyncService {
     }
 
     // STEP 3
-    // Goes through the list of files marked for deletion and deletes them from cloud storage
+    /// Goes through the list of files marked for deletion and deletes them from cloud storage
     pub async fn delete_files_from_cloud(
         &self,
         progress_tx: Sender<SyncEvent>,
@@ -226,6 +226,7 @@ impl CloudStorageSyncService {
             .count_logs_by_latest_status(FileSyncStatus::DeletionPending)
             .await
             .map_err(|e| CloudStorageError::Other(e.to_string()))?;
+
         let mut successful_files_count = 0;
         let mut failed_files_count = 0;
         let mut file_count = 0;
