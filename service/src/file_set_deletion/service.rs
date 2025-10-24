@@ -4,7 +4,7 @@ use database::repository_manager::RepositoryManager;
 
 use crate::{
     error::Error,
-    file_set_deletion::executor::DeletionPipeline,
+    file_set_deletion::pipeline::DeletionPipeline,
     file_system_ops::{FileSystemOps, StdFileSystemOps},
     view_models::Settings,
 };

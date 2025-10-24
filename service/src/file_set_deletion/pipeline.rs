@@ -3,12 +3,37 @@ use crate::{
     file_set_deletion::{
         context::DeletionContext,
         steps::{
-            DeleteFileSetStep, DeleteLocalFilesStep, DeletionStep, FetchFileInfosStep,
-            FilterDeletableFilesStep, MarkForCloudDeletionStep, StepAction, ValidateNotInUseStep,
+            DeleteFileSetStep, DeleteLocalFilesStep, FetchFileInfosStep, FilterDeletableFilesStep,
+            MarkForCloudDeletionStep, ValidateNotInUseStep,
         },
     },
     file_system_ops::FileSystemOps,
 };
+
+/// Result of executing a pipeline step
+#[derive(Debug, Clone, PartialEq)]
+pub enum StepAction {
+    /// Continue to the next step
+    Continue,
+    /// Skip all remaining steps (successful early exit)
+    Skip,
+    /// Abort the pipeline with an error
+    Abort(Error),
+}
+
+/// Trait for pipeline steps in the deletion process
+#[async_trait::async_trait]
+pub trait DeletionStep<F: FileSystemOps>: Send + Sync {
+    fn name(&self) -> &'static str;
+
+    /// Determines if this step should execute based on current context
+    fn should_execute(&self, _context: &DeletionContext<F>) -> bool {
+        true // By default, always execute
+    }
+
+    /// Execute the step, modifying the context and returning the next action
+    async fn execute(&self, context: &mut DeletionContext<F>) -> StepAction;
+}
 
 pub struct DeletionPipeline<F: FileSystemOps> {
     steps: Vec<Box<dyn DeletionStep<F>>>,

@@ -42,7 +42,7 @@ use relm4::{
     once_cell::sync::OnceCell,
 };
 use service::{
-    cloud_storage_sync_service::CloudStorageSyncService,
+    cloud_sync::service::CloudStorageSyncService,
     view_model_service::ViewModelService,
     view_models::{Settings, SoftwareTitleListModel},
 };
@@ -303,7 +303,7 @@ impl Component for AppModel {
                         }
                     });
 
-                    if let Err(e) = sync_service_clone.sync(tx).await {
+                    if let Err(e) = sync_service_clone.sync_to_cloud(tx).await {
                         eprintln!("Error during sync: {}", e);
                     }
                 });

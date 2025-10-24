@@ -1,0 +1,88 @@
+use cloud_storage::CloudStorageOps;
+
+use crate::{
+    cloud_sync::{
+        context::SyncContext,
+        steps::{
+            ConnectToCloudStep, DeleteMarkedFilesStep, PrepareFilesForUploadStep,
+            UploadPendingFilesStep,
+        },
+    },
+    error::Error,
+};
+
+// TODO: StepAction and Step trait can be generalized for any pipeline process
+/// Result of executing a pipeline step
+#[derive(Debug, Clone, PartialEq)]
+pub enum StepAction {
+    /// Continue to the next step
+    Continue,
+    /// Skip all remaining steps (successful early exit)
+    Skip,
+    /// Abort the pipeline with an error
+    Abort(Error),
+}
+
+/// Trait for pipeline steps in the deletion process
+#[async_trait::async_trait]
+pub trait CloudStorageSyncStep: Send + Sync {
+    fn name(&self) -> &'static str;
+
+    /// Determines if this step should execute based on current context
+    fn should_execute(&self, _context: &SyncContext) -> bool {
+        true // By default, always execute
+    }
+
+    /// Execute the step, modifying the context and returning the next action
+    async fn execute(&self, context: &mut SyncContext) -> StepAction;
+}
+
+// TODO: this pipeline structure can be generalized for any pipeline process
+pub struct SyncPipeline {
+    steps: Vec<Box<dyn CloudStorageSyncStep>>,
+}
+
+impl SyncPipeline {
+    // TODO: steps to pipeline could be given via constructor parameters when generalized
+    pub fn new() -> Self {
+        Self {
+            steps: vec![
+                Box::new(PrepareFilesForUploadStep),
+                Box::new(ConnectToCloudStep),
+                Box::new(UploadPendingFilesStep),
+                Box::new(DeleteMarkedFilesStep),
+            ],
+        }
+    }
+
+    pub async fn execute(&self, context: &mut SyncContext) -> Result<(), Error> {
+        for step in &self.steps {
+            // Check if step should execute
+            if !step.should_execute(context) {
+                eprintln!("Skipping step: {}", step.name());
+                continue;
+            }
+
+            eprintln!("Executing step: {}", step.name());
+
+            match step.execute(context).await {
+                StepAction::Continue => {
+                    // Proceed to next step
+                    continue;
+                }
+                StepAction::Skip => {
+                    // Early successful exit
+                    eprintln!("Step {} requested skip - stopping pipeline", step.name());
+                    return Ok(());
+                }
+                StepAction::Abort(error) => {
+                    // Error exit
+                    eprintln!("Step {} requested abort - stopping pipeline", step.name());
+                    return Err(error);
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
