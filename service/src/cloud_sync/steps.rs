@@ -554,7 +554,7 @@ mod tests {
     use crate::{
         cloud_sync::{
             context::SyncContext,
-            pipeline::CloudStorageSyncStep,
+            pipeline::{CloudStorageSyncStep, StepAction},
             steps::{PrepareFilesForDeletionStep, PrepareFilesForUploadStep},
         },
         file_system_ops::mock::MockFileSystemOps,
@@ -660,6 +660,59 @@ mod tests {
         assert_eq!(context.files_prepared_for_deletion, 1);
     }
 
+    #[async_std::test]
+    async fn test_upload_pending_files_step() {
+        let mut context = initialize_sync_context().await;
+
+        let file_info_id = context
+            .repository_manager
+            .get_file_info_repository()
+            .add_file_info(
+                &Sha1Checksum::from([0; 20]),
+                1234,
+                "file1.zst",
+                FileType::Rom,
+            )
+            .await
+            .unwrap();
+
+        context
+            .repository_manager
+            .get_file_sync_log_repository()
+            .add_log_entry(
+                file_info_id,
+                FileSyncStatus::UploadPending,
+                "",
+                "rom/file1.zst",
+            )
+            .await
+            .unwrap();
+
+        context.files_prepared_for_upload = 1;
+
+        let step = crate::cloud_sync::steps::UploadPendingFilesStep;
+        let action = step.execute(&mut context).await;
+
+        assert_eq!(action, StepAction::Continue);
+
+        let upload_result = context.upload_results.get("rom/file1.zst").unwrap();
+
+        assert!(upload_result.cloud_operation_success);
+        assert!(upload_result.db_update_success);
+
+        let log_entry = context
+            .repository_manager
+            .get_file_sync_log_repository()
+            .get_logs_by_file_info(file_info_id)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            log_entry.first().unwrap().status,
+            FileSyncStatus::UploadCompleted
+        );
+    }
+
     async fn initialize_sync_context() -> SyncContext {
         let pool = Arc::new(setup_test_db().await);
         let repo_manager = Arc::new(RepositoryManager::new(pool));
@@ -667,7 +720,6 @@ mod tests {
             collection_root_dir: PathBuf::from("/"),
             ..Default::default()
         });
-        let fs_ops = Arc::new(MockFileSystemOps::new());
         let cloud_ops = Arc::new(MockCloudStorage::new());
 
         let (tx, _rx) = async_std::channel::unbounded();
