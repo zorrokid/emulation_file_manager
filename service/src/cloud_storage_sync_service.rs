@@ -204,13 +204,7 @@ impl CloudStorageSyncService {
                 }
             }
         }
-        progress_tx
-            .send(SyncEvent::SyncCompleted {
-                successful: successful_files_count,
-                failed: failed_files_count,
-            })
-            .await
-            .ok();
+        progress_tx.send(SyncEvent::SyncCompleted {}).await.ok();
         Ok(())
     }
 

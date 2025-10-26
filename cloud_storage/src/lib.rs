@@ -26,7 +26,7 @@ pub use s3::bucket::Bucket as S3Bucket;
 mod ops;
 pub use ops::CloudStorageOps;
 
-#[cfg(test)]
+//#[cfg(test)]
 pub mod mock;
 
 #[derive(Debug, Clone)]
@@ -59,10 +59,7 @@ pub enum SyncEvent {
         file_number: i64,
         total_files: i64,
     },
-    SyncCompleted {
-        successful: i64,
-        failed: i64,
-    },
+    SyncCompleted {},
     FileDeletionStarted {
         key: String,
         file_number: i64,

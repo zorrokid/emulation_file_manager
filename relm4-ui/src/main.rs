@@ -326,14 +326,14 @@ impl Component for AppModel {
                         total: total_files,
                     });
                 }
-                SyncEvent::FileUploadFailed { error, .. } => {
-                    self.status_bar.emit(StatusBarMsg::Fail(error));
+                SyncEvent::FileUploadFailed { .. } => {
+                    // self.status_bar.emit(StatusBarMsg::Fail(error));
                 }
                 SyncEvent::SyncCompleted { .. } => {
                     self.status_bar.emit(StatusBarMsg::Finish);
                 }
                 SyncEvent::PartUploadFailed { error, .. } => {
-                    self.status_bar.emit(StatusBarMsg::Fail(error));
+                    // self.status_bar.emit(StatusBarMsg::Fail(error));
                 }
                 _ => { /* Handle other events as needed */ }
             },
