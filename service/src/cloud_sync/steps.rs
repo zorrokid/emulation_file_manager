@@ -563,40 +563,22 @@ mod tests {
 
     #[async_std::test]
     async fn test_prepare_files_for_upload_step() {
-        let TestSetup {
-            settings,
-            repo_manager,
-            fs_ops,
-            cloud_ops,
-        } = prepare_test().await;
+        let mut context = initialize_sync_context().await;
 
-        let system_id = repo_manager
-            .get_system_repository()
-            .add_system("Test System")
-            .await
-            .unwrap();
-
-        let file1 = ImportedFile {
-            original_file_name: "file1.zst".to_string(),
-            archive_file_name: "file1.zst".to_string(),
-            sha1_checksum: Sha1Checksum::from([0; 20]),
-            file_size: 1234,
-        };
-
-        repo_manager
-            .get_file_set_repository()
-            .add_file_set(
-                "test_set",
-                "file name",
-                &FileType::Rom,
-                "",
-                &[file1],
-                &[system_id],
+        let _file_info_id = context
+            .repository_manager
+            .get_file_info_repository()
+            .add_file_info(
+                &Sha1Checksum::from([0; 20]),
+                1234,
+                "file1.zst",
+                FileType::Rom,
             )
             .await
             .unwrap();
 
-        let pending_files_to_upload_result = repo_manager
+        let pending_files_to_upload_result = context
+            .repository_manager
             .get_file_sync_log_repository()
             .get_logs_and_file_info_by_sync_status(&[FileSyncStatus::UploadPending], 10, 0)
             .await
@@ -604,7 +586,8 @@ mod tests {
 
         assert_eq!(pending_files_to_upload_result.len(), 0);
 
-        let file_infos_res = repo_manager
+        let file_infos_res = context
+            .repository_manager
             .get_file_info_repository()
             .get_file_infos_without_sync_log(100, 0)
             .await
@@ -613,32 +596,21 @@ mod tests {
         assert_eq!(file_infos_res.len(), 1);
         assert_eq!(file_infos_res[0].archive_file_name, "file1.zst");
 
-        let (tx, _rx) = async_std::channel::unbounded();
-
-        let mut context = SyncContext {
-            settings,
-            repository_manager: repo_manager.clone(),
-            cloud_ops: Some(cloud_ops),
-            progress_tx: tx,
-            files_prepared_for_upload: 0,
-            files_prepared_for_deletion: 0,
-            upload_results: HashMap::new(),
-            deletion_results: HashMap::new(),
-        };
-
         let step = PrepareFilesForUploadStep;
         let action = step.execute(&mut context).await;
 
         assert_eq!(action, crate::cloud_sync::pipeline::StepAction::Continue);
         assert_eq!(context.files_prepared_for_upload, 1);
 
-        let file_infos_res = repo_manager
+        let file_infos_res = context
+            .repository_manager
             .get_file_info_repository()
             .get_file_infos_without_sync_log(100, 0)
             .await
             .unwrap();
 
-        let pending_files_to_upload_result = repo_manager
+        let pending_files_to_upload_result = context
+            .repository_manager
             .get_file_sync_log_repository()
             .get_logs_and_file_info_by_sync_status(&[FileSyncStatus::UploadPending], 10, 0)
             .await
@@ -655,14 +627,10 @@ mod tests {
 
     #[async_std::test]
     async fn test_prepare_files_for_deletion_step() {
-        let TestSetup {
-            settings,
-            repo_manager,
-            fs_ops,
-            cloud_ops,
-        } = prepare_test().await;
+        let mut context = initialize_sync_context().await;
 
-        let file_info_id = repo_manager
+        let file_info_id = context
+            .repository_manager
             .get_file_info_repository()
             .add_file_info(
                 &Sha1Checksum::from([0; 20]),
@@ -673,7 +641,8 @@ mod tests {
             .await
             .unwrap();
 
-        repo_manager
+        context
+            .repository_manager
             .get_file_sync_log_repository()
             .add_log_entry(
                 file_info_id,
@@ -684,19 +653,6 @@ mod tests {
             .await
             .unwrap();
 
-        let (tx, _rx) = async_std::channel::unbounded();
-
-        let mut context = SyncContext {
-            settings,
-            repository_manager: repo_manager.clone(),
-            cloud_ops: Some(cloud_ops),
-            progress_tx: tx,
-            files_prepared_for_upload: 0,
-            files_prepared_for_deletion: 0,
-            upload_results: HashMap::new(),
-            deletion_results: HashMap::new(),
-        };
-
         let step = PrepareFilesForDeletionStep;
         let action = step.execute(&mut context).await;
 
@@ -704,14 +660,7 @@ mod tests {
         assert_eq!(context.files_prepared_for_deletion, 1);
     }
 
-    struct TestSetup {
-        settings: Arc<Settings>,
-        repo_manager: Arc<RepositoryManager>,
-        fs_ops: Arc<MockFileSystemOps>,
-        cloud_ops: Arc<MockCloudStorage>,
-    }
-
-    async fn prepare_test() -> TestSetup {
+    async fn initialize_sync_context() -> SyncContext {
         let pool = Arc::new(setup_test_db().await);
         let repo_manager = Arc::new(RepositoryManager::new(pool));
         let settings = Arc::new(Settings {
@@ -720,11 +669,18 @@ mod tests {
         });
         let fs_ops = Arc::new(MockFileSystemOps::new());
         let cloud_ops = Arc::new(MockCloudStorage::new());
-        TestSetup {
+
+        let (tx, _rx) = async_std::channel::unbounded();
+
+        SyncContext {
             settings,
-            repo_manager,
-            fs_ops,
-            cloud_ops,
+            repository_manager: repo_manager,
+            cloud_ops: Some(cloud_ops),
+            progress_tx: tx,
+            files_prepared_for_upload: 0,
+            files_prepared_for_deletion: 0,
+            upload_results: HashMap::new(),
+            deletion_results: HashMap::new(),
         }
     }
 }
