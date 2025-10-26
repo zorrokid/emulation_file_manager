@@ -713,6 +713,51 @@ mod tests {
         );
     }
 
+    #[async_std::test]
+    async fn test_delete_marked_files_step() {
+        let mut context = initialize_sync_context().await;
+        let file_info_id = context
+            .repository_manager
+            .get_file_info_repository()
+            .add_file_info(
+                &Sha1Checksum::from([0; 20]),
+                1234,
+                "file1.zst",
+                FileType::Rom,
+            )
+            .await
+            .unwrap();
+        context
+            .repository_manager
+            .get_file_sync_log_repository()
+            .add_log_entry(
+                file_info_id,
+                FileSyncStatus::DeletionPending,
+                "",
+                "rom/file1.zst",
+            )
+            .await
+            .unwrap();
+
+        context.files_prepared_for_deletion = 1;
+        let step = crate::cloud_sync::steps::DeleteMarkedFilesStep;
+        let action = step.execute(&mut context).await;
+        assert_eq!(action, StepAction::Continue);
+        let deletion_result = context.deletion_results.get("rom/file1.zst").unwrap();
+        assert!(deletion_result.cloud_operation_success);
+        assert!(deletion_result.db_update_success);
+        let log_entry = context
+            .repository_manager
+            .get_file_sync_log_repository()
+            .get_logs_by_file_info(file_info_id)
+            .await
+            .unwrap();
+        assert_eq!(
+            log_entry.first().unwrap().status,
+            FileSyncStatus::DeletionCompleted
+        );
+    }
+
     async fn initialize_sync_context() -> SyncContext {
         let pool = Arc::new(setup_test_db().await);
         let repo_manager = Arc::new(RepositoryManager::new(pool));
