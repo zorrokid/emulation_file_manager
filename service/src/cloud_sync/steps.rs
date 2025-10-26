@@ -545,7 +545,7 @@ impl CloudStorageSyncStep for DeleteMarkedFilesStep {
 
 #[cfg(test)]
 mod tests {
-    use std::{path::PathBuf, sync::Arc};
+    use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
     use cloud_storage::mock::MockCloudStorage;
     use core_types::{FileSyncStatus, FileType, ImportedFile, Sha1Checksum};
@@ -553,7 +553,9 @@ mod tests {
 
     use crate::{
         cloud_sync::{
-            context::SyncContext, pipeline::CloudStorageSyncStep, steps::PrepareFilesForUploadStep,
+            context::SyncContext,
+            pipeline::CloudStorageSyncStep,
+            steps::{PrepareFilesForDeletionStep, PrepareFilesForUploadStep},
         },
         file_system_ops::mock::MockFileSystemOps,
         view_models::Settings,
@@ -614,14 +616,14 @@ mod tests {
         let (tx, _rx) = async_std::channel::unbounded();
 
         let mut context = SyncContext {
-            settings: settings.clone(),
+            settings,
             repository_manager: repo_manager.clone(),
-            cloud_ops: None,
+            cloud_ops: Some(cloud_ops),
             progress_tx: tx,
             files_prepared_for_upload: 0,
             files_prepared_for_deletion: 0,
-            upload_results: std::collections::HashMap::new(),
-            deletion_results: std::collections::HashMap::new(),
+            upload_results: HashMap::new(),
+            deletion_results: HashMap::new(),
         };
 
         let step = PrepareFilesForUploadStep;
@@ -649,6 +651,57 @@ mod tests {
         );
 
         assert_eq!(file_infos_res.len(), 0);
+    }
+
+    #[async_std::test]
+    async fn test_prepare_files_for_deletion_step() {
+        let TestSetup {
+            settings,
+            repo_manager,
+            fs_ops,
+            cloud_ops,
+        } = prepare_test().await;
+
+        let file_info_id = repo_manager
+            .get_file_info_repository()
+            .add_file_info(
+                &Sha1Checksum::from([0; 20]),
+                1234,
+                "file1.zst",
+                FileType::Rom,
+            )
+            .await
+            .unwrap();
+
+        repo_manager
+            .get_file_sync_log_repository()
+            .add_log_entry(
+                file_info_id,
+                FileSyncStatus::DeletionPending,
+                "",
+                "rom/file1.zst",
+            )
+            .await
+            .unwrap();
+
+        let (tx, _rx) = async_std::channel::unbounded();
+
+        let mut context = SyncContext {
+            settings,
+            repository_manager: repo_manager.clone(),
+            cloud_ops: Some(cloud_ops),
+            progress_tx: tx,
+            files_prepared_for_upload: 0,
+            files_prepared_for_deletion: 0,
+            upload_results: HashMap::new(),
+            deletion_results: HashMap::new(),
+        };
+
+        let step = PrepareFilesForDeletionStep;
+        let action = step.execute(&mut context).await;
+
+        assert_eq!(action, crate::cloud_sync::pipeline::StepAction::Continue);
+        assert_eq!(context.files_prepared_for_deletion, 1);
     }
 
     struct TestSetup {

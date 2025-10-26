@@ -30,6 +30,29 @@ impl FileInfoRepository {
         Self { pool }
     }
 
+    pub async fn add_file_info(
+        &self,
+        sha1_checksum: &Sha1Checksum,
+        file_size: i64,
+        archive_file_name: &str,
+        file_type: FileType,
+    ) -> Result<i64, Error> {
+        let query = sqlx::query(
+            "INSERT INTO file_info (
+                sha1_checksum, 
+                file_size, 
+                archive_file_name,
+                file_type
+                ) VALUES (?, ?, ?, ?)",
+        )
+        .bind(sha1_checksum.to_vec())
+        .bind(file_size)
+        .bind(archive_file_name)
+        .bind(file_type.to_db_int());
+        let result = query.execute(&*self.pool).await?;
+        Ok(result.last_insert_rowid())
+    }
+
     pub async fn get_file_info(&self, id: i64) -> Result<FileInfo, Error> {
         let query = sqlx::query_as::<_, FileInfo>(
             "SELECT id, sha1_checksum, file_size, archive_file_name, file_type
