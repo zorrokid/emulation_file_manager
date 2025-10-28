@@ -4,10 +4,7 @@ use async_std::channel::Sender;
 use cloud_storage::SyncEvent;
 use database::repository_manager::RepositoryManager;
 
-use crate::{
-    cloud_sync::{context::SyncContext, pipeline::SyncPipeline},
-    view_models::Settings,
-};
+use crate::{cloud_sync::context::SyncContext, pipeline::Pipeline, view_models::Settings};
 
 #[derive(Debug)]
 pub struct CloudStorageSyncService {
@@ -33,7 +30,7 @@ impl CloudStorageSyncService {
             progress_tx.clone(),
         );
 
-        let pipeline = SyncPipeline::new();
+        let pipeline = Pipeline::new();
         pipeline.execute(&mut context).await?;
         let successful_uploads = context.successful_uploads();
         let failed_uploads = context.failed_uploads();

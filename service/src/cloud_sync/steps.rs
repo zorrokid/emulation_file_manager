@@ -4,11 +4,8 @@ use cloud_storage::{S3CloudStorage, SyncEvent};
 use core_types::FileSyncStatus;
 
 use crate::{
-    cloud_sync::{
-        context::{FileSyncResult, SyncContext},
-        pipeline::{CloudStorageSyncStep, StepAction},
-    },
-    error::Error,
+    cloud_sync::context::{FileSyncResult, SyncContext},
+    error::Error, pipeline::{StepAction, SyncStep},
 };
 
 /// Step 1: Prepare files for upload. This involves marking files as pending upload in the
@@ -16,7 +13,7 @@ use crate::{
 pub struct PrepareFilesForUploadStep;
 
 #[async_trait::async_trait]
-impl CloudStorageSyncStep<SyncContext> for PrepareFilesForUploadStep {
+impl SyncStep<SyncContext> for PrepareFilesForUploadStep {
     fn name(&self) -> &'static str {
         "prepare_files"
     }
@@ -85,7 +82,7 @@ impl CloudStorageSyncStep<SyncContext> for PrepareFilesForUploadStep {
 pub struct PrepareFilesForDeletionStep;
 
 #[async_trait::async_trait]
-impl CloudStorageSyncStep<SyncContext> for PrepareFilesForDeletionStep {
+impl SyncStep<SyncContext> for PrepareFilesForDeletionStep {
     fn name(&self) -> &'static str {
         "prepare_files_for_deletion"
     }
@@ -116,7 +113,7 @@ impl CloudStorageSyncStep<SyncContext> for PrepareFilesForDeletionStep {
 pub struct ConnectToCloudStep;
 
 #[async_trait::async_trait]
-impl CloudStorageSyncStep<SyncContext> for ConnectToCloudStep {
+impl SyncStep<SyncContext> for ConnectToCloudStep {
     fn name(&self) -> &'static str {
         "connect_to_cloud"
     }
@@ -161,7 +158,7 @@ impl CloudStorageSyncStep<SyncContext> for ConnectToCloudStep {
 pub struct UploadPendingFilesStep;
 
 #[async_trait::async_trait]
-impl CloudStorageSyncStep<SyncContext> for UploadPendingFilesStep {
+impl SyncStep<SyncContext> for UploadPendingFilesStep {
     fn name(&self) -> &'static str {
         "upload_pending_files"
     }
@@ -367,7 +364,7 @@ impl CloudStorageSyncStep<SyncContext> for UploadPendingFilesStep {
 pub struct DeleteMarkedFilesStep;
 
 #[async_trait::async_trait]
-impl CloudStorageSyncStep<SyncContext> for DeleteMarkedFilesStep {
+impl SyncStep<SyncContext> for DeleteMarkedFilesStep {
     fn name(&self) -> &'static str {
         "delete_marked_files"
     }
@@ -554,12 +551,10 @@ mod tests {
     use crate::{
         cloud_sync::{
             context::SyncContext,
-            pipeline::{CloudStorageSyncStep, StepAction},
             steps::{
                 PrepareFilesForDeletionStep, PrepareFilesForUploadStep, UploadPendingFilesStep,
             },
-        },
-        view_models::Settings,
+        }, pipeline::{StepAction, SyncStep}, view_models::Settings
     };
 
     #[async_std::test]
@@ -600,7 +595,7 @@ mod tests {
         let step = PrepareFilesForUploadStep;
         let action = step.execute(&mut context).await;
 
-        assert_eq!(action, crate::cloud_sync::pipeline::StepAction::Continue);
+        assert_eq!(action, StepAction::Continue);
         assert_eq!(context.files_prepared_for_upload, 1);
 
         let file_infos_res = context
@@ -657,7 +652,7 @@ mod tests {
         let step = PrepareFilesForDeletionStep;
         let action = step.execute(&mut context).await;
 
-        assert_eq!(action, crate::cloud_sync::pipeline::StepAction::Continue);
+        assert_eq!(action, StepAction::Continue);
         assert_eq!(context.files_prepared_for_deletion, 1);
     }
 
