@@ -10,8 +10,13 @@ use crate::{
     pipeline::{Pipeline, StepAction},
 };
 
+impl Default for Pipeline<SyncContext> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Pipeline<SyncContext> {
-    // TODO: steps to pipeline could be given via constructor parameters when generalized
     pub fn new() -> Self {
         Self {
             steps: vec![

@@ -30,7 +30,7 @@ impl CloudStorageSyncService {
             progress_tx.clone(),
         );
 
-        let pipeline = Pipeline::new();
+        let pipeline = Pipeline::<SyncContext>::new();
         pipeline.execute(&mut context).await?;
         let successful_uploads = context.successful_uploads();
         let failed_uploads = context.failed_uploads();
