@@ -7,6 +7,7 @@ edition = "2021"
 database = { path = "../database" }
 file_system = { path = "../file_system" }
 file_export = { path = "../file_export" }
+credentials_storage = { path = "../credentials_storage" }
 async-std = { version = "1.13.2", features = ["attributes"] }
 async-trait = "0.1.89"
 core_types = { path = "../core_types" }

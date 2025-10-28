@@ -26,6 +26,8 @@ pub struct SettingsForm {
     pub s3_endpoint: String,
     pub s3_region: String,
     pub s3_sync_enabled: bool,
+    pub s3_access_key: String,
+    pub s3_secret_key: String,
 }
 
 pub struct SettingsFormInit {
@@ -47,6 +49,8 @@ pub enum SettingsFormMsg {
     S3BucketNameChanged(String),
     S3EndpointChanged(String),
     S3RegionChanged(String),
+    S3AccessKeyChanged(String),
+    S3SecretKeyChanged(String),
 }
 
 #[derive(Debug)]
@@ -153,6 +157,43 @@ impl Component for SettingsForm {
                         },
                     },
                 },
+
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    set_spacing: 5,
+                    gtk::Label {
+                        set_label: "S3 access key",
+                    },
+
+                    #[name = "s3_acces_key_entry"]
+                    gtk::Entry {
+                        set_placeholder_text: Some("S3 Access Key"),
+                        set_text: &model.s3_access_key,
+                        connect_changed[sender] => move |entry| {
+                            let buffer = entry.buffer();
+                            sender.input(SettingsFormMsg::S3AccessKeyChanged(buffer.text().into()));
+                        },
+                    },
+                },
+
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    set_spacing: 5,
+                    gtk::Label {
+                        set_label: "S3 secret key",
+                    },
+
+                    #[name = "s3_secret_key_entry"]
+                    gtk::Entry {
+                        set_placeholder_text: Some("S3 Secret Key"),
+                        set_text: &model.s3_secret_key,
+                        connect_changed[sender] => move |entry| {
+                            let buffer = entry.buffer();
+                            sender.input(SettingsFormMsg::S3SecretKeyChanged(buffer.text().into()));
+                        },
+                    },
+                },
+
                 gtk::Button {
                     set_label: "Save Settings",
                     connect_clicked => SettingsFormMsg::Submit,
@@ -171,6 +212,8 @@ impl Component for SettingsForm {
             s3_bucket_name: s3_settings.bucket.clone(),
             s3_endpoint: s3_settings.endpoint.clone(),
             s3_region: s3_settings.region.clone(),
+            s3_access_key: String::new(),
+            s3_secret_key: String::new(),
             s3_sync_enabled: init.settings.s3_sync_enabled,
             repository_manager: init.repository_manager,
             settings: init.settings,
@@ -200,6 +243,12 @@ impl Component for SettingsForm {
             SettingsFormMsg::S3RegionChanged(region) => {
                 self.s3_region = region;
             }
+            SettingsFormMsg::S3AccessKeyChanged(access_key) => {
+                self.s3_access_key = access_key;
+            }
+            SettingsFormMsg::S3SecretKeyChanged(secret_key) => {
+                self.s3_secret_key = secret_key;
+            }
             SettingsFormMsg::Submit => {
                 let repo = Arc::clone(&self.repository_manager);
                 let settings_map = HashMap::from([
@@ -215,6 +264,9 @@ impl Component for SettingsForm {
                         },
                     ),
                 ]);
+
+                // TODO: store credentials with credentials_storage crate
+
                 sender.oneshot_command(async move {
                     if let Err(e) = repo
                         .get_settings_repository()

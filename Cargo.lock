@@ -956,7 +956,9 @@ name = "credentials_storage"
 version = "0.1.0"
 dependencies = [
  "keyring",
- "uuid",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -3755,6 +3757,7 @@ dependencies = [
  "async-trait",
  "cloud_storage",
  "core_types",
+ "credentials_storage",
  "database",
  "file_export",
  "file_system",
