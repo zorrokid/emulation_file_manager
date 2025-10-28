@@ -6,21 +6,18 @@ use database::repository_manager::RepositoryManager;
 
 use crate::{error::Error, view_models::Settings};
 
-/// Service for managing application settings including database settings and secure credentials.
+/// Service for managing application settings including settings stored to database and secure credentials stored in system keyring.
 ///
 /// This service provides a unified interface for:
 /// - Saving/loading settings from the database
 /// - Storing/retrieving S3 credentials securely in the system keyring
-/// - Loading complete settings with credentials for use by other services
 pub struct SettingsService {
     repository_manager: Arc<RepositoryManager>,
 }
 
 impl SettingsService {
     pub fn new(repository_manager: Arc<RepositoryManager>) -> Self {
-        Self {
-            repository_manager,
-        }
+        Self { repository_manager }
     }
 
     /// Save S3 settings to the database and optionally store credentials in the keyring.
@@ -97,17 +94,11 @@ impl SettingsService {
         Ok(())
     }
 
-    /// Load complete settings including credentials from keyring or environment variables.
-    ///
-    /// This method loads settings from the database and attempts to load credentials
-    /// from the system keyring. If no credentials are found in the keyring, it falls
-    /// back to AWS environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY).
+    /// Load settings from database.
     ///
     /// # Returns
     ///
-    /// Returns a `Settings` object with S3 settings populated from the database.
-    /// Note: Credentials are not included in the Settings object - they should be
-    /// loaded separately using `load_credentials_for_sync()` when needed.
+    /// Returns a `Settings` object with application settings populated from the database.
     ///
     /// # Errors
     ///
@@ -125,8 +116,9 @@ impl SettingsService {
 
     /// Load S3 credentials from keyring with fallback to environment variables.
     ///
-    /// This is a convenience method for loading credentials when needed for sync operations.
-    /// It tries the keyring first, then falls back to environment variables.
+    /// This method tries the keyring first, then falls back to environment variables
+    /// (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY). It wraps the credentials_storage
+    /// functions and provides a consistent error handling pattern for the service layer.
     ///
     /// # Returns
     ///
@@ -167,7 +159,10 @@ impl SettingsService {
     ///
     /// Returns `true` if credentials are available, `false` otherwise.
     pub async fn has_credentials(&self) -> bool {
-        self.load_credentials_for_sync().await.unwrap_or(None).is_some()
+        self.load_credentials_for_sync()
+            .await
+            .unwrap_or(None)
+            .is_some()
     }
 }
 
