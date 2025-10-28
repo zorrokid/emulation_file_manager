@@ -25,24 +25,24 @@ pub enum StepAction {
 
 /// Trait for pipeline steps in the deletion process
 #[async_trait::async_trait]
-pub trait CloudStorageSyncStep: Send + Sync {
+pub trait CloudStorageSyncStep<T>: Send + Sync {
     fn name(&self) -> &'static str;
 
     /// Determines if this step should execute based on current context
-    fn should_execute(&self, _context: &SyncContext) -> bool {
+    fn should_execute(&self, _context: &T) -> bool {
         true // By default, always execute
     }
 
     /// Execute the step, modifying the context and returning the next action
-    async fn execute(&self, context: &mut SyncContext) -> StepAction;
+    async fn execute(&self, context: &mut T) -> StepAction;
 }
 
 // TODO: this pipeline structure can be generalized for any pipeline process
-pub struct SyncPipeline {
-    steps: Vec<Box<dyn CloudStorageSyncStep>>,
+pub struct SyncPipeline<T> {
+    steps: Vec<Box<dyn CloudStorageSyncStep<T>>>,
 }
 
-impl SyncPipeline {
+impl SyncPipeline<SyncContext> {
     // TODO: steps to pipeline could be given via constructor parameters when generalized
     pub fn new() -> Self {
         Self {

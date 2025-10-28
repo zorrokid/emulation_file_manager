@@ -5,10 +5,10 @@ use std::sync::{Arc, Mutex};
 use async_std::channel::Sender;
 use async_trait::async_trait;
 
-use crate::{ops::CloudStorageOps, CloudStorageError, SyncEvent};
+use crate::{CloudStorageError, SyncEvent, ops::CloudStorageOps};
 
 /// Mock implementation of CloudStorageOps for testing
-/// 
+///
 /// This mock allows you to:
 /// - Simulate file uploads and deletions
 /// - Test failure scenarios
@@ -18,16 +18,16 @@ use crate::{ops::CloudStorageOps, CloudStorageError, SyncEvent};
 pub struct MockCloudStorage {
     /// Stores uploaded files (cloud_key -> file content)
     uploaded_files: Arc<Mutex<HashMap<String, Vec<u8>>>>,
-    
+
     /// Tracks which files were deleted
     deleted_files: Arc<Mutex<HashSet<String>>>,
-    
+
     /// Keys that should fail on upload
     fail_upload_keys: Arc<Mutex<HashSet<String>>>,
-    
+
     /// Keys that should fail on deletion
     fail_delete_keys: Arc<Mutex<HashSet<String>>>,
-    
+
     /// Number of parts to simulate in multipart upload (default: 3)
     simulate_part_count: Arc<Mutex<u32>>,
 }
@@ -61,12 +61,18 @@ impl MockCloudStorage {
 
     /// Make upload fail for a specific key
     pub fn fail_upload_for(&self, cloud_key: impl Into<String>) {
-        self.fail_upload_keys.lock().unwrap().insert(cloud_key.into());
+        self.fail_upload_keys
+            .lock()
+            .unwrap()
+            .insert(cloud_key.into());
     }
 
     /// Make deletion fail for a specific key
     pub fn fail_delete_for(&self, cloud_key: impl Into<String>) {
-        self.fail_delete_keys.lock().unwrap().insert(cloud_key.into());
+        self.fail_delete_keys
+            .lock()
+            .unwrap()
+            .insert(cloud_key.into());
     }
 
     /// Set how many parts to simulate in multipart upload
@@ -101,12 +107,7 @@ impl MockCloudStorage {
 
     /// Get all deleted file keys
     pub fn get_deleted_keys(&self) -> Vec<String> {
-        self.deleted_files
-            .lock()
-            .unwrap()
-            .iter()
-            .cloned()
-            .collect()
+        self.deleted_files.lock().unwrap().iter().cloned().collect()
     }
 
     /// Get the number of uploaded files
@@ -148,7 +149,7 @@ impl CloudStorageOps for MockCloudStorage {
                 .await
                 .ok();
             }
-            
+
             return Err(CloudStorageError::Other(format!(
                 "Mock upload failure for key: {}",
                 cloud_key
@@ -172,9 +173,7 @@ impl CloudStorageOps for MockCloudStorage {
         // This allows testing without creating actual files
         let content = async_std::fs::read(file_path)
             .await
-            .unwrap_or_else(|_| {
-                format!("mock-content-for-{}", file_path.display()).into_bytes()
-            });
+            .unwrap_or_else(|_| format!("mock-content-for-{}", file_path.display()).into_bytes());
 
         // Store the uploaded file
         self.uploaded_files
@@ -210,7 +209,7 @@ impl CloudStorageOps for MockCloudStorage {
         // A file exists if it's in uploaded_files and not in deleted_files
         let is_uploaded = self.uploaded_files.lock().unwrap().contains_key(cloud_key);
         let is_deleted = self.deleted_files.lock().unwrap().contains(cloud_key);
-        
+
         Ok(is_uploaded && !is_deleted)
     }
 }
@@ -222,14 +221,10 @@ mod tests {
     #[async_std::test]
     async fn test_mock_upload() {
         let mock = MockCloudStorage::new();
-        
-        mock.upload_file(
-            Path::new("/test/file.zst"),
-            "rom/game.zst",
-            None,
-        )
-        .await
-        .unwrap();
+
+        mock.upload_file(Path::new("/test/file.zst"), "rom/game.zst", None)
+            .await
+            .unwrap();
 
         assert!(mock.was_uploaded("rom/game.zst"));
         assert_eq!(mock.uploaded_count(), 1);
@@ -275,14 +270,14 @@ mod tests {
     #[async_std::test]
     async fn test_file_exists() {
         let mock = MockCloudStorage::new();
-        
+
         // File doesn't exist initially
         assert!(!mock.file_exists("rom/game.zst").await.unwrap());
-        
+
         // Add file
         mock.add_file_dummy("rom/game.zst");
         assert!(mock.file_exists("rom/game.zst").await.unwrap());
-        
+
         // Delete file
         mock.delete_file("rom/game.zst").await.unwrap();
         assert!(!mock.file_exists("rom/game.zst").await.unwrap());
@@ -292,16 +287,12 @@ mod tests {
     async fn test_upload_with_progress_events() {
         let mock = MockCloudStorage::new();
         mock.set_part_count(5);
-        
+
         let (tx, rx) = async_std::channel::unbounded();
 
-        mock.upload_file(
-            Path::new("/test/file.zst"),
-            "rom/game.zst",
-            Some(&tx),
-        )
-        .await
-        .unwrap();
+        mock.upload_file(Path::new("/test/file.zst"), "rom/game.zst", Some(&tx))
+            .await
+            .unwrap();
 
         // Count part uploaded events
         let mut part_count = 0;
@@ -318,16 +309,16 @@ mod tests {
     #[async_std::test]
     async fn test_clear() {
         let mock = MockCloudStorage::new();
-        
+
         mock.add_file_dummy("file1.zst");
         mock.add_file_dummy("file2.zst");
         mock.delete_file("file1.zst").await.unwrap();
-        
+
         assert_eq!(mock.uploaded_count(), 1);
         assert_eq!(mock.deleted_count(), 1);
-        
+
         mock.clear();
-        
+
         assert_eq!(mock.uploaded_count(), 0);
         assert_eq!(mock.deleted_count(), 0);
     }

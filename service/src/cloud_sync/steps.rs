@@ -16,7 +16,7 @@ use crate::{
 pub struct PrepareFilesForUploadStep;
 
 #[async_trait::async_trait]
-impl CloudStorageSyncStep for PrepareFilesForUploadStep {
+impl CloudStorageSyncStep<SyncContext> for PrepareFilesForUploadStep {
     fn name(&self) -> &'static str {
         "prepare_files"
     }
@@ -85,7 +85,7 @@ impl CloudStorageSyncStep for PrepareFilesForUploadStep {
 pub struct PrepareFilesForDeletionStep;
 
 #[async_trait::async_trait]
-impl CloudStorageSyncStep for PrepareFilesForDeletionStep {
+impl CloudStorageSyncStep<SyncContext> for PrepareFilesForDeletionStep {
     fn name(&self) -> &'static str {
         "prepare_files_for_deletion"
     }
@@ -116,7 +116,7 @@ impl CloudStorageSyncStep for PrepareFilesForDeletionStep {
 pub struct ConnectToCloudStep;
 
 #[async_trait::async_trait]
-impl CloudStorageSyncStep for ConnectToCloudStep {
+impl CloudStorageSyncStep<SyncContext> for ConnectToCloudStep {
     fn name(&self) -> &'static str {
         "connect_to_cloud"
     }
@@ -161,7 +161,7 @@ impl CloudStorageSyncStep for ConnectToCloudStep {
 pub struct UploadPendingFilesStep;
 
 #[async_trait::async_trait]
-impl CloudStorageSyncStep for UploadPendingFilesStep {
+impl CloudStorageSyncStep<SyncContext> for UploadPendingFilesStep {
     fn name(&self) -> &'static str {
         "upload_pending_files"
     }
@@ -367,7 +367,7 @@ impl CloudStorageSyncStep for UploadPendingFilesStep {
 pub struct DeleteMarkedFilesStep;
 
 #[async_trait::async_trait]
-impl CloudStorageSyncStep for DeleteMarkedFilesStep {
+impl CloudStorageSyncStep<SyncContext> for DeleteMarkedFilesStep {
     fn name(&self) -> &'static str {
         "delete_marked_files"
     }
@@ -547,17 +547,18 @@ impl CloudStorageSyncStep for DeleteMarkedFilesStep {
 mod tests {
     use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
-    use cloud_storage::mock::MockCloudStorage;
-    use core_types::{FileSyncStatus, FileType, ImportedFile, Sha1Checksum};
+    use cloud_storage::{mock::MockCloudStorage, SyncEvent};
+    use core_types::{FileSyncStatus, FileType, Sha1Checksum};
     use database::{repository_manager::RepositoryManager, setup_test_db};
 
     use crate::{
         cloud_sync::{
             context::SyncContext,
             pipeline::{CloudStorageSyncStep, StepAction},
-            steps::{PrepareFilesForDeletionStep, PrepareFilesForUploadStep},
+            steps::{
+                PrepareFilesForDeletionStep, PrepareFilesForUploadStep, UploadPendingFilesStep,
+            },
         },
-        file_system_ops::mock::MockFileSystemOps,
         view_models::Settings,
     };
 
@@ -780,4 +781,84 @@ mod tests {
             deletion_results: HashMap::new(),
         }
     }
+
+     #[async_std::test]
+     async fn test_upload_progress_messages() {
+         let pool = Arc::new(setup_test_db().await);
+         let repo_manager = Arc::new(RepositoryManager::new(pool));
+         let settings = Arc::new(Settings {
+             collection_root_dir: PathBuf::from("/"),
+             ..Default::default()
+         });
+         let cloud_ops = Arc::new(MockCloudStorage::new());
+         
+         let (tx, rx) = async_std::channel::unbounded();
+         
+         let mut context = SyncContext {
+             settings,
+             repository_manager: repo_manager,
+             cloud_ops: Some(cloud_ops),
+             progress_tx: tx,
+             files_prepared_for_upload: 0,
+             files_prepared_for_deletion: 0,
+             upload_results: HashMap::new(),
+             deletion_results: HashMap::new(),
+         };
+     
+         let file_info_id = context
+             .repository_manager
+             .get_file_info_repository()
+             .add_file_info(&Sha1Checksum::from([0; 20]), 1234, "file1.zst", FileType::Rom)
+             .await
+             .unwrap();
+     
+         context
+             .repository_manager
+             .get_file_sync_log_repository()
+             .add_log_entry(file_info_id, FileSyncStatus::UploadPending, "", "rom/file1.zst")
+             .await
+             .unwrap();
+     
+         context.files_prepared_for_upload = 1;
+     
+         // Execute step
+         let step = UploadPendingFilesStep;
+         step.execute(&mut context).await;
+     
+         // Collect all messages from receiver
+         let mut messages = Vec::new();
+         while let Ok(msg) = rx.try_recv() {
+             messages.push(msg);
+         }
+     
+         // Assert expected messages
+         assert_eq!(messages.len(), 7);
+
+          assert!(matches!(messages[0], SyncEvent::SyncStarted { 
+             total_files_count: 1 
+         }));
+        
+         assert!(matches!(messages[1], SyncEvent::FileUploadStarted { 
+             ref key, file_number: 1, total_files: 1 
+         } if key == "rom/file1.zst"));
+
+        // by default the mock simulates uploading in 3 parts 
+        assert!(matches!(messages[2], SyncEvent::PartUploaded { 
+             ref key, part: 1 
+         } if key == "rom/file1.zst"));
+
+        assert!(matches!(messages[3], SyncEvent::PartUploaded { 
+             ref key, part: 2 
+         } if key == "rom/file1.zst"));
+
+        assert!(matches!(messages[4], SyncEvent::PartUploaded { 
+             ref key, part: 3 
+         } if key == "rom/file1.zst"));
+
+         assert!(matches!(messages[5], SyncEvent::FileUploadCompleted{ 
+             ref key, file_number: 1, total_files: 1 
+         } if key == "rom/file1.zst"));
+
+        assert!(matches!(messages[6], SyncEvent::SyncCompleted {}));
+     }
 }

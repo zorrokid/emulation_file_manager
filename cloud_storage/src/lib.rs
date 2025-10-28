@@ -209,11 +209,6 @@ pub async fn delete_file(bucket: &Bucket, key: &str) -> Result<(), CloudStorageE
     Ok(())
 }
 
-// ============================================================================
-// Production Implementation of CloudStorageOps
-// ============================================================================
-
-/// Production implementation of CloudStorageOps using real S3 bucket
 pub struct S3CloudStorage {
     bucket: Box<Bucket>,
 }
@@ -229,7 +224,7 @@ impl S3CloudStorage {
         Ok(Self { bucket })
     }
 
-    /// Get a reference to the underlying bucket (for advanced use cases)
+    /// Get a reference to the underlying bucket
     pub fn bucket(&self) -> &Bucket {
         &self.bucket
     }
@@ -243,7 +238,6 @@ impl CloudStorageOps for S3CloudStorage {
         cloud_key: &str,
         progress_tx: Option<&Sender<SyncEvent>>,
     ) -> Result<(), CloudStorageError> {
-        // Delegate to existing multipart_upload function
         multipart_upload(&self.bucket, file_path, cloud_key, progress_tx).await
     }
 
