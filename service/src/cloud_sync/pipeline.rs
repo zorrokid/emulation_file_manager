@@ -1,34 +1,34 @@
 use crate::{
-    error::Error,
-    file_set_deletion::{
-        context::DeletionContext,
+    cloud_sync::{
+        context::SyncContext,
         steps::{
-            DeleteFileSetStep, DeleteLocalFilesStep, DeletionStep, FetchFileInfosStep,
-            FilterDeletableFilesStep, MarkForCloudDeletionStep, StepAction, ValidateNotInUseStep,
+            ConnectToCloudStep, DeleteMarkedFilesStep, PrepareFilesForUploadStep,
+            UploadPendingFilesStep,
         },
     },
-    file_system_ops::FileSystemOps,
+    error::Error,
+    pipeline::{Pipeline, StepAction},
 };
 
-pub struct DeletionPipeline<F: FileSystemOps> {
-    steps: Vec<Box<dyn DeletionStep<F>>>,
+impl Default for Pipeline<SyncContext> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
-impl<F: FileSystemOps> DeletionPipeline<F> {
+impl Pipeline<SyncContext> {
     pub fn new() -> Self {
         Self {
             steps: vec![
-                Box::new(ValidateNotInUseStep),
-                Box::new(FetchFileInfosStep),
-                Box::new(DeleteFileSetStep),
-                Box::new(FilterDeletableFilesStep),
-                Box::new(MarkForCloudDeletionStep),
-                Box::new(DeleteLocalFilesStep),
+                Box::new(PrepareFilesForUploadStep),
+                Box::new(ConnectToCloudStep),
+                Box::new(UploadPendingFilesStep),
+                Box::new(DeleteMarkedFilesStep),
             ],
         }
     }
 
-    pub async fn execute(&self, context: &mut DeletionContext<F>) -> Result<(), Error> {
+    pub async fn execute(&self, context: &mut SyncContext) -> Result<(), Error> {
         for step in &self.steps {
             // Check if step should execute
             if !step.should_execute(context) {

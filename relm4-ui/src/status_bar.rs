@@ -5,8 +5,8 @@ use relm4::prelude::*;
 #[derive(Debug)]
 pub enum StatusBarMsg {
     SetStatus(String),
-    StartProgress { total: usize },
-    UpdateProgress { done: usize, total: usize },
+    StartProgress { total: i64 },
+    UpdateProgress { done: i64, total: i64 },
     Finish,
     Fail(String),
 }
@@ -14,8 +14,8 @@ pub enum StatusBarMsg {
 #[tracker::track]
 pub struct StatusBarModel {
     status_text: String,
-    total: usize,
-    done: usize,
+    total: i64,
+    done: i64,
     syncing: bool,
 }
 

@@ -6,6 +6,8 @@ pub enum Error {
     DeserializationError(String),
     ExportError(String),
     IoError(String),
+    CloudSyncError(String),
+    SettingsError(String),
 }
 
 impl Display for Error {
@@ -15,6 +17,8 @@ impl Display for Error {
             Error::DeserializationError(message) => write!(f, "Deserialization error: {}", message),
             Error::ExportError(message) => write!(f, "Export error: {}", message),
             Error::IoError(message) => write!(f, "IO error: {}", message),
+            Error::CloudSyncError(message) => write!(f, "Cloud sync error: {}", message),
+            Error::SettingsError(message) => write!(f, "Settings error: {}", message),
         }
     }
 }
@@ -22,5 +26,11 @@ impl Display for Error {
 impl From<database::database_error::DatabaseError> for Error {
     fn from(err: database::database_error::DatabaseError) -> Self {
         Error::DbError(err.to_string())
+    }
+}
+
+impl From<cloud_storage::CloudStorageError> for Error {
+    fn from(err: cloud_storage::CloudStorageError) -> Self {
+        Error::CloudSyncError(err.to_string())
     }
 }

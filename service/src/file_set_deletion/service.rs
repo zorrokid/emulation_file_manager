@@ -4,8 +4,8 @@ use database::repository_manager::RepositoryManager;
 
 use crate::{
     error::Error,
-    file_set_deletion::executor::DeletionPipeline,
     file_system_ops::{FileSystemOps, StdFileSystemOps},
+    pipeline::Pipeline,
     view_models::Settings,
 };
 
@@ -44,7 +44,7 @@ impl<F: FileSystemOps> FileSetDeletionService<F> {
             deletion_results: HashMap::new(),
         };
 
-        let pipeline = DeletionPipeline::new();
+        let pipeline = Pipeline::<crate::file_set_deletion::context::DeletionContext<F>>::new();
         pipeline.execute(&mut context).await?;
 
         let successful_deletions = context

@@ -42,7 +42,7 @@ use relm4::{
     once_cell::sync::OnceCell,
 };
 use service::{
-    cloud_storage_sync_service::CloudStorageSyncService,
+    cloud_sync::service::CloudStorageSyncService,
     view_model_service::ViewModelService,
     view_models::{Settings, SoftwareTitleListModel},
 };
@@ -303,7 +303,7 @@ impl Component for AppModel {
                         }
                     });
 
-                    if let Err(e) = sync_service_clone.sync_files_to_cloud(tx).await {
+                    if let Err(e) = sync_service_clone.sync_to_cloud(tx).await {
                         eprintln!("Error during sync: {}", e);
                     }
                 });
@@ -326,15 +326,16 @@ impl Component for AppModel {
                         total: total_files,
                     });
                 }
-                SyncEvent::FileUploadFailed { error, .. } => {
-                    self.status_bar.emit(StatusBarMsg::Fail(error));
+                SyncEvent::FileUploadFailed { .. } => {
+                    // self.status_bar.emit(StatusBarMsg::Fail(error));
                 }
                 SyncEvent::SyncCompleted { .. } => {
                     self.status_bar.emit(StatusBarMsg::Finish);
                 }
                 SyncEvent::PartUploadFailed { error, .. } => {
-                    self.status_bar.emit(StatusBarMsg::Fail(error));
+                    // self.status_bar.emit(StatusBarMsg::Fail(error));
                 }
+                _ => { /* Handle other events as needed */ }
             },
             AppMsg::OpenSettings => {
                 if self.settings_form.get().is_none() {
