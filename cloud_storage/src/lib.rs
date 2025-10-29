@@ -1,13 +1,3 @@
-// User needs to export the following environment variables:
-// - key id (AWS_ACCESS_KEY_ID)
-// - application key (AWS_SECRET_ACCESS_KEY)
-//
-// The following will be stored to settings:
-// - endpoint for cloud storage, for example: s3.eu-central-003.backblazeb2.com
-// - region for cloud storage, for example: eu-central-003
-// - bucket name, for example: my-efm-bucket
-//
-
 use std::path::Path;
 
 use async_std::channel::Sender;
@@ -94,14 +84,16 @@ pub async fn connect_bucket(
     endpoint: &str,
     region: &str,
     bucket: &str,
+    key_id: &str,
+    secret_key: &str,
 ) -> Result<Box<Bucket>, CloudStorageError> {
     let region = Region::Custom {
         region: region.to_string(),
         endpoint: endpoint.to_string(),
     };
 
-    let credentials = Credentials::default()
-        .map_err(|e| CloudStorageError::Other(format!("Credentials error: {e}")))?;
+    let credentials = Credentials::new(Some(key_id), Some(secret_key), None, None, None)
+        .map_err(|e| CloudStorageError::Other("Credentials error".to_string()))?;
 
     let bucket = Bucket::new(bucket, region, credentials)?.with_path_style();
 
@@ -219,8 +211,10 @@ impl S3CloudStorage {
         endpoint: &str,
         region: &str,
         bucket_name: &str,
+        key_id: &str,
+        secret_key: &str,
     ) -> Result<Self, CloudStorageError> {
-        let bucket = connect_bucket(endpoint, region, bucket_name).await?;
+        let bucket = connect_bucket(endpoint, region, bucket_name, key_id, secret_key).await?;
         Ok(Self { bucket })
     }
 

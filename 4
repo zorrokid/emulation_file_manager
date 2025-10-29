@@ -29,7 +29,7 @@ impl CloudStorageSyncService {
         }
     }
 
-    pub async fn sync(&self, progress_tx: Sender<SyncEvent>) -> Result<(), Error> {
+    pub async fn sync(&self, progress_tx: Sender<SyncEvent>) -> Result<(), CloudStorageError> {
         let count = self.prepare_files_for_sync().await?;
         self.sync_files_to_cloud(progress_tx.clone(), count).await?;
         self.delete_files_from_cloud(progress_tx.clone()).await?;
@@ -90,7 +90,7 @@ impl CloudStorageSyncService {
         &self,
         progress_tx: Sender<SyncEvent>,
         total_files_count: i64,
-    ) -> Result<(), Error> {
+    ) -> Result<(), CloudStorageError> {
         let mut successful_files_count = 0;
         let mut failed_files_count = 0;
         let mut file_count = 0;
@@ -216,7 +216,7 @@ impl CloudStorageSyncService {
     pub async fn delete_files_from_cloud(
         &self,
         progress_tx: Sender<SyncEvent>,
-    ) -> Result<(), Error> {
+    ) -> Result<(), CloudStorageError> {
         let total_files_count = self
             .repository_manager
             .get_file_sync_log_repository()
@@ -341,20 +341,7 @@ impl CloudStorageSyncService {
             }
         };
 
-        let credentials = match self.settings_service.load_credentials().await {
-            Ok(Some(creds)) => creds,
-            Ok(None) => {
-                return Err(Error::SettingsError(
-                    "S3 credentials are not configured".to_string(),
-                ))
-            }
-            Err(e) => {
-                return Err(Error::SettingsError(format!(
-                    "Failed to load S3 credentials: {}",
-                    e
-                )))
-            }
-        };
+        let credentials = self.settings_service.load_credentials().await?;
 
         let bucket = connect_bucket(
             &s3_settings.endpoint,

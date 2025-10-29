@@ -6,11 +6,21 @@ use database::repository_manager::RepositoryManager;
 
 use crate::{error::Error, view_models::Settings};
 
+pub struct SettingsSaveModel {
+    pub endpoint: String,
+    pub region: String,
+    pub bucket: String,
+    pub sync_enabled: bool,
+    pub access_key_id: String,
+    pub secret_access_key: String,
+}
+
 /// Service for managing application settings including settings stored to database and secure credentials stored in system keyring.
 ///
 /// This service provides a unified interface for:
 /// - Saving/loading settings from the database
 /// - Storing/retrieving S3 credentials securely in the system keyring
+#[derive(Debug)]
 pub struct SettingsService {
     repository_manager: Arc<RepositoryManager>,
 }
@@ -42,22 +52,14 @@ impl SettingsService {
     /// Returns an error if database operations fail. Credential storage errors are logged but
     /// don't cause the overall operation to fail, as the database settings can still be used
     /// with environment variable fallback for credentials.
-    pub async fn save_s3_settings(
-        &self,
-        endpoint: String,
-        region: String,
-        bucket: String,
-        sync_enabled: bool,
-        access_key_id: String,
-        secret_access_key: String,
-    ) -> Result<(), Error> {
+    pub async fn save_settings(&self, settings: SettingsSaveModel) -> Result<(), Error> {
         let settings_map = HashMap::from([
-            (SettingName::S3Bucket, bucket),
-            (SettingName::S3EndPoint, endpoint),
-            (SettingName::S3Region, region),
+            (SettingName::S3Bucket, settings.bucket),
+            (SettingName::S3EndPoint, settings.endpoint),
+            (SettingName::S3Region, settings.region),
             (
                 SettingName::S3FileSyncEnabled,
-                if sync_enabled {
+                if settings.sync_enabled {
                     "true".to_string()
                 } else {
                     "false".to_string()
@@ -73,18 +75,18 @@ impl SettingsService {
             .map_err(|e| Error::DbError(format!("Failed to save settings: {}", e)))?;
 
         // Handle credentials storage
-        if !access_key_id.is_empty() && !secret_access_key.is_empty() {
+        if !settings.access_key_id.is_empty() && !settings.secret_access_key.is_empty() {
             // Store credentials if both are provided
             let creds = CloudCredentials {
-                access_key_id,
-                secret_access_key,
+                access_key_id: settings.access_key_id,
+                secret_access_key: settings.secret_access_key,
             };
 
             if let Err(e) = credentials_storage::store_credentials(&creds) {
                 // Log error but don't fail - credentials can be provided via env vars
                 eprintln!("Warning: Failed to store credentials in keyring: {}", e);
             }
-        } else if access_key_id.is_empty() && secret_access_key.is_empty() {
+        } else if settings.access_key_id.is_empty() && settings.secret_access_key.is_empty() {
             // Delete credentials if both are empty
             if let Err(e) = credentials_storage::delete_credentials() {
                 eprintln!("Warning: Failed to delete credentials from keyring: {}", e);
@@ -140,7 +142,7 @@ impl SettingsService {
     ///     }
     /// }
     /// ```
-    pub async fn load_credentials_for_sync(&self) -> Result<Option<CloudCredentials>, Error> {
+    pub async fn load_credentials(&self) -> Result<Option<CloudCredentials>, Error> {
         match credentials_storage::load_credentials_with_fallback() {
             Ok(creds) => Ok(Some(creds)),
             Err(CredentialsError::NoCredentials) => Ok(None),
@@ -159,10 +161,7 @@ impl SettingsService {
     ///
     /// Returns `true` if credentials are available, `false` otherwise.
     pub async fn has_credentials(&self) -> bool {
-        self.load_credentials_for_sync()
-            .await
-            .unwrap_or(None)
-            .is_some()
+        self.load_credentials().await.unwrap_or(None).is_some()
     }
 }
 
@@ -179,7 +178,7 @@ mod tests {
 
         // Save settings
         let result = service
-            .save_s3_settings(
+            .save_settings(
                 "s3.example.com".to_string(),
                 "us-east-1".to_string(),
                 "my-bucket".to_string(),

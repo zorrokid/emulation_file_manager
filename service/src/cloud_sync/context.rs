@@ -4,10 +4,11 @@ use async_std::channel::Sender;
 use cloud_storage::{CloudStorageOps, SyncEvent};
 use database::repository_manager::RepositoryManager;
 
-use crate::view_models::Settings;
+use crate::{settings_service::SettingsService, view_models::Settings};
 
 pub struct SyncContext {
     pub repository_manager: Arc<RepositoryManager>,
+    pub settings_service: Arc<SettingsService>,
     pub settings: Arc<Settings>,
     pub progress_tx: Sender<SyncEvent>,
 
@@ -70,6 +71,7 @@ impl SyncContext {
         settings: Arc<Settings>,
         progress_tx: Sender<SyncEvent>,
     ) -> Self {
+        let settings_service = Arc::new(SettingsService::new(repository_manager.clone()));
         Self {
             repository_manager,
             settings,
@@ -79,6 +81,7 @@ impl SyncContext {
             upload_results: HashMap::new(),
             files_prepared_for_deletion: 0,
             deletion_results: HashMap::new(),
+            settings_service,
         }
     }
 

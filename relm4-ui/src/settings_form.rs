@@ -1,6 +1,5 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
-use core_types::SettingName;
 use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentParts, ComponentSender, RelmWidgetExt,
@@ -12,7 +11,11 @@ use relm4::{
         },
     },
 };
-use service::view_models::Settings;
+use service::{
+    error::Error,
+    settings_service::{SettingsSaveModel, SettingsService},
+    view_models::Settings,
+};
 
 #[derive(Debug)]
 pub struct SettingsForm {
@@ -26,8 +29,10 @@ pub struct SettingsForm {
     pub s3_endpoint: String,
     pub s3_region: String,
     pub s3_sync_enabled: bool,
-    pub s3_access_key: String,
-    pub s3_secret_key: String,
+    pub s3_access_key_id: String,
+    pub s3_secret_access_key: String,
+
+    pub settings_service: Arc<SettingsService>,
 }
 
 pub struct SettingsFormInit {
@@ -55,7 +60,7 @@ pub enum SettingsFormMsg {
 
 #[derive(Debug)]
 pub enum SettingsFormCommandMsg {
-    SettingsSaved,
+    SettingsSaved(Result<(), Error>),
 }
 
 #[relm4::component(pub)]
@@ -162,13 +167,13 @@ impl Component for SettingsForm {
                     set_orientation: gtk::Orientation::Horizontal,
                     set_spacing: 5,
                     gtk::Label {
-                        set_label: "S3 access key",
+                        set_label: "S3 Access Key ID",
                     },
 
                     #[name = "s3_acces_key_entry"]
                     gtk::Entry {
-                        set_placeholder_text: Some("S3 Access Key"),
-                        set_text: &model.s3_access_key,
+                        set_placeholder_text: Some("S3 Access Key ID"),
+                        set_text: &model.s3_access_key_id,
                         connect_changed[sender] => move |entry| {
                             let buffer = entry.buffer();
                             sender.input(SettingsFormMsg::S3AccessKeyChanged(buffer.text().into()));
@@ -180,13 +185,13 @@ impl Component for SettingsForm {
                     set_orientation: gtk::Orientation::Horizontal,
                     set_spacing: 5,
                     gtk::Label {
-                        set_label: "S3 secret key",
+                        set_label: "S3 Secret Access Key",
                     },
 
                     #[name = "s3_secret_key_entry"]
                     gtk::Entry {
-                        set_placeholder_text: Some("S3 Secret Key"),
-                        set_text: &model.s3_secret_key,
+                        set_placeholder_text: Some("S3 Secret Access Key"),
+                        set_text: &model.s3_secret_access_key,
                         connect_changed[sender] => move |entry| {
                             let buffer = entry.buffer();
                             sender.input(SettingsFormMsg::S3SecretKeyChanged(buffer.text().into()));
@@ -208,15 +213,17 @@ impl Component for SettingsForm {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let s3_settings = init.settings.s3_settings.clone().unwrap_or_default();
+        let settings_service = Arc::new(SettingsService::new(Arc::clone(&init.repository_manager)));
         let model = Self {
             s3_bucket_name: s3_settings.bucket.clone(),
             s3_endpoint: s3_settings.endpoint.clone(),
             s3_region: s3_settings.region.clone(),
-            s3_access_key: String::new(),
-            s3_secret_key: String::new(),
+            s3_access_key_id: String::new(),
+            s3_secret_access_key: String::new(),
             s3_sync_enabled: init.settings.s3_sync_enabled,
             repository_manager: init.repository_manager,
             settings: init.settings,
+            settings_service,
         };
         let widgets = view_output!();
 
@@ -244,38 +251,26 @@ impl Component for SettingsForm {
                 self.s3_region = region;
             }
             SettingsFormMsg::S3AccessKeyChanged(access_key) => {
-                self.s3_access_key = access_key;
+                self.s3_access_key_id = access_key;
             }
             SettingsFormMsg::S3SecretKeyChanged(secret_key) => {
-                self.s3_secret_key = secret_key;
+                self.s3_secret_access_key = secret_key;
             }
             SettingsFormMsg::Submit => {
-                let repo = Arc::clone(&self.repository_manager);
-                let settings_map = HashMap::from([
-                    (SettingName::S3Bucket, self.s3_bucket_name.clone()),
-                    (SettingName::S3EndPoint, self.s3_endpoint.clone()),
-                    (SettingName::S3Region, self.s3_region.clone()),
-                    (
-                        SettingName::S3FileSyncEnabled,
-                        if self.s3_sync_enabled {
-                            "true".to_string()
-                        } else {
-                            "false".to_string()
-                        },
-                    ),
-                ]);
+                let settings_service = Arc::clone(&self.settings_service);
 
-                // TODO: store credentials with credentials_storage crate
+                let settings = SettingsSaveModel {
+                    bucket: self.s3_bucket_name.clone(),
+                    endpoint: self.s3_endpoint.clone(),
+                    region: self.s3_region.clone(),
+                    sync_enabled: self.s3_sync_enabled,
+                    access_key_id: self.s3_access_key_id.clone(),
+                    secret_access_key: self.s3_secret_access_key.clone(),
+                };
 
                 sender.oneshot_command(async move {
-                    if let Err(e) = repo
-                        .get_settings_repository()
-                        .add_or_update_settings(&settings_map)
-                        .await
-                    {
-                        eprintln!("Error saving S3 bucket name: {}", e);
-                    }
-                    SettingsFormCommandMsg::SettingsSaved
+                    let res = settings_service.save_settings(settings).await;
+                    SettingsFormCommandMsg::SettingsSaved(res)
                 });
             }
             SettingsFormMsg::Show => {
@@ -297,13 +292,16 @@ impl Component for SettingsForm {
         root: &Self::Root,
     ) {
         match msg {
-            SettingsFormCommandMsg::SettingsSaved => {
+            SettingsFormCommandMsg::SettingsSaved(Ok(())) => {
                 // notify main application that settings have changed
                 let res = sender.output(SettingsFormOutputMsg::SettingsChanged);
                 if res.is_err() {
                     eprintln!("Error sending SettingsChanged message");
                 }
                 root.hide();
+            }
+            SettingsFormCommandMsg::SettingsSaved(Err(e)) => {
+                eprintln!("Error saving settings: {}", e);
             }
         }
     }

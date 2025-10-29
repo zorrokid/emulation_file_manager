@@ -131,10 +131,28 @@ impl SyncStep<SyncContext> for ConnectToCloudStep {
                 return StepAction::Abort(Error::SettingsError("S3 settings missing".to_string()));
             }
         };
+        let credentials = match context.settings_service.load_credentials().await {
+            Ok(Some(creds)) => creds,
+            Ok(None) => {
+                eprintln!("No S3 credentials found in keyring or environment.");
+                return StepAction::Abort(Error::SettingsError(
+                    "S3 credentials not found".to_string(),
+                ));
+            }
+            Err(e) => {
+                eprintln!("Error retrieving S3 credentials: {}", e);
+                return StepAction::Abort(Error::SettingsError(format!(
+                    "Failed to get S3 credentials: {}",
+                    e
+                )));
+            }
+        };
         let cloud_ops_res = S3CloudStorage::connect(
             s3_settings.endpoint.as_str(),
             s3_settings.region.as_str(),
             s3_settings.bucket.as_str(),
+            credentials.access_key_id.as_str(),
+            credentials.secret_access_key.as_str(),
         )
         .await;
 
