@@ -50,7 +50,7 @@ systemctl --user status gnome-keyring-daemon
 ```
 
 ### 3. Created Standalone Test
-Created `credentials_storage/examples/test_keyring.rs` to isolate the issue:
+Created a temporary test in `credentials_storage/examples/test_keyring.rs` to isolate the issue:
 ```rust
 use credentials_storage::{CloudCredentials, store_credentials, load_credentials};
 
@@ -66,7 +66,7 @@ fn main() {
 }
 ```
 
-This test failed with `default-features = false` and default features, but succeeded with `sync-secret-service`.
+This test failed with `default-features = false` and default features, but succeeded with `sync-secret-service`. The example was removed after debugging was complete.
 
 ### 4. Debug Logging
 Added detailed debug logging to trace the exact point of failure:
@@ -147,7 +147,6 @@ After the fix:
 
 - `credentials_storage/Cargo.toml` - Keyring dependency configuration
 - `credentials_storage/src/lib.rs` - Credentials storage implementation
-- `credentials_storage/examples/test_keyring.rs` - Standalone test
 - `service/src/settings_service.rs` - Service layer using credentials storage
 
 ## Date

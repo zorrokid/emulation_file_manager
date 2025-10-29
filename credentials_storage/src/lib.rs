@@ -46,12 +46,9 @@ pub enum CredentialsError {
 /// store_credentials(&creds)?;
 /// ```
 pub fn store_credentials(credentials: &CloudCredentials) -> Result<(), CredentialsError> {
-    eprintln!("DEBUG [credentials_storage]: Creating keyring entry (service='{}', username='{}')", SERVICE_NAME, USERNAME);
     let entry = Entry::new(SERVICE_NAME, USERNAME)?;
     let json = serde_json::to_string(credentials)?;
-    eprintln!("DEBUG [credentials_storage]: Serialized credentials to JSON (len={})", json.len());
     entry.set_password(&json)?;
-    eprintln!("DEBUG [credentials_storage]: ✓ Successfully called set_password on keyring");
     Ok(())
 }
 
@@ -72,24 +69,14 @@ pub fn store_credentials(credentials: &CloudCredentials) -> Result<(), Credentia
 /// }
 /// ```
 pub fn load_credentials() -> Result<CloudCredentials, CredentialsError> {
-    eprintln!("DEBUG [credentials_storage]: Creating keyring entry for load (service='{}', username='{}')", SERVICE_NAME, USERNAME);
     let entry = Entry::new(SERVICE_NAME, USERNAME)?;
-    eprintln!("DEBUG [credentials_storage]: Calling get_password on keyring...");
     match entry.get_password() {
         Ok(json) => {
-            eprintln!("DEBUG [credentials_storage]: ✓ Got password from keyring (len={})", json.len());
             let credentials = serde_json::from_str(&json)?;
-            eprintln!("DEBUG [credentials_storage]: ✓ Deserialized credentials successfully");
             Ok(credentials)
         }
-        Err(keyring::Error::NoEntry) => {
-            eprintln!("DEBUG [credentials_storage]: ✗ NoEntry error from keyring");
-            Err(CredentialsError::NoCredentials)
-        }
-        Err(e) => {
-            eprintln!("DEBUG [credentials_storage]: ✗ Keyring error: {:?}", e);
-            Err(CredentialsError::Keyring(e))
-        }
+        Err(keyring::Error::NoEntry) => Err(CredentialsError::NoCredentials),
+        Err(e) => Err(CredentialsError::Keyring(e)),
     }
 }
 

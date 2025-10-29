@@ -205,6 +205,7 @@ impl SyncStep<SyncContext> for UploadPendingFilesStep {
     }
 
     async fn execute(&self, context: &mut SyncContext) -> StepAction {
+        println!("UploadPendingFilesStep");
         let mut file_count = 0;
 
         context
@@ -230,9 +231,15 @@ impl SyncStep<SyncContext> for UploadPendingFilesStep {
 
             match pending_files_to_upload_result {
                 Err(e) => {
+                    eprintln!("Error fetching pending files for upload: {}", e);
                     return StepAction::Abort(Error::DbError(e.to_string()));
                 }
                 Ok(pending_files) => {
+                    println!(
+                        "Found {} pending files for upload (offset {})",
+                        pending_files.len(),
+                        offset
+                    );
                     if pending_files.is_empty() {
                         break;
                     }
@@ -240,6 +247,7 @@ impl SyncStep<SyncContext> for UploadPendingFilesStep {
                     offset += pending_files.len() as u32;
 
                     for file in pending_files {
+                        println!("Uploading file: id={}, key={}", file.file_info_id, file.cloud_key);
                         file_count += 1;
 
                         // TODO: maybe trigger only these events for progress tracking
@@ -254,7 +262,7 @@ impl SyncStep<SyncContext> for UploadPendingFilesStep {
                             .ok();
 
                         let mut file_sync_result = FileSyncResult {
-                            file_info_id: file.id,
+                            file_info_id: file.file_info_id,
                             cloud_key: file.cloud_key.clone(),
                             cloud_operation_success: false,
                             cloud_error: None,
@@ -266,7 +274,7 @@ impl SyncStep<SyncContext> for UploadPendingFilesStep {
                             .repository_manager
                             .get_file_sync_log_repository()
                             .add_log_entry(
-                                file.id,
+                                file.file_info_id,
                                 FileSyncStatus::UploadInProgress,
                                 "",
                                 &file.cloud_key,
@@ -274,6 +282,10 @@ impl SyncStep<SyncContext> for UploadPendingFilesStep {
                             .await;
 
                         if let Err(e) = update_res {
+                            eprintln!(
+                                "Error updating sync log for file_info id {}: {}",
+                                file.file_info_id, e
+                            );
                             file_sync_result.db_error = Some(format!("{}", e));
                             context
                                 .upload_results
@@ -311,13 +323,17 @@ impl SyncStep<SyncContext> for UploadPendingFilesStep {
 
                         match upload_res {
                             Ok(_) => {
+                                println!(
+                                    "Upload succeeded for file: id={}, key={}",
+                                    file.file_info_id, file.cloud_key
+                                );
                                 file_sync_result.cloud_operation_success = true;
 
                                 let update_res = context
                                     .repository_manager
                                     .get_file_sync_log_repository()
                                     .add_log_entry(
-                                        file.id,
+                                        file.file_info_id,
                                         FileSyncStatus::UploadCompleted,
                                         "",
                                         &file.cloud_key,
@@ -345,6 +361,10 @@ impl SyncStep<SyncContext> for UploadPendingFilesStep {
                                     .ok();
                             }
                             Err(e) => {
+                                eprintln!(
+                                    "Upload failed for file: id={}, key={}, error={}",
+                                    file.file_info_id, file.cloud_key, e
+                                );
                                 file_sync_result.cloud_operation_success = false;
                                 file_sync_result.cloud_error = Some(format!("{}", e));
 
@@ -352,7 +372,7 @@ impl SyncStep<SyncContext> for UploadPendingFilesStep {
                                     .repository_manager
                                     .get_file_sync_log_repository()
                                     .add_log_entry(
-                                        file.id,
+                                        file.file_info_id,
                                         FileSyncStatus::UploadFailed,
                                         &format!("{}", e),
                                         &file.cloud_key,

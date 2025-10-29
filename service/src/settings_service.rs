@@ -71,23 +71,15 @@ impl SettingsService {
 
         // Store credentials only if both are provided and non-empty
         if !settings.access_key_id.is_empty() && !settings.secret_access_key.is_empty() {
-            eprintln!("DEBUG: Storing credentials to keyring...");
             let creds = CloudCredentials {
                 access_key_id: settings.access_key_id.clone(),
                 secret_access_key: settings.secret_access_key.clone(),
             };
 
-            match credentials_storage::store_credentials(&creds) {
-                Ok(_) => eprintln!("DEBUG: ✓ Credentials stored successfully"),
-                Err(e) => {
-                    // Log error but don't fail - credentials can be provided via env vars
-                    eprintln!("Warning: Failed to store credentials in keyring: {}", e);
-                }
+            if let Err(e) = credentials_storage::store_credentials(&creds) {
+                // Log error but don't fail - credentials can be provided via env vars
+                eprintln!("Warning: Failed to store credentials in keyring: {}", e);
             }
-        } else {
-            eprintln!("DEBUG: Credentials fields are empty, not storing (access_key_id: '{}', secret_key: '{}')", 
-                if settings.access_key_id.is_empty() { "EMPTY" } else { "HAS_VALUE" },
-                if settings.secret_access_key.is_empty() { "EMPTY" } else { "HAS_VALUE" });
         }
         // If credentials are empty, we leave existing keyring credentials unchanged
         // Use delete_credentials() to explicitly remove them
@@ -142,23 +134,13 @@ impl SettingsService {
     /// }
     /// ```
     pub async fn load_credentials(&self) -> Result<Option<CloudCredentials>, Error> {
-        eprintln!("DEBUG: Attempting to load credentials from keyring...");
         match credentials_storage::load_credentials_with_fallback() {
-            Ok(creds) => {
-                eprintln!("DEBUG: ✓ Credentials loaded successfully (access_key_id: {})", creds.access_key_id);
-                Ok(Some(creds))
-            }
-            Err(CredentialsError::NoCredentials) => {
-                eprintln!("DEBUG: No credentials found in keyring or environment");
-                Ok(None)
-            }
-            Err(e) => {
-                eprintln!("DEBUG: Error loading credentials: {}", e);
-                Err(Error::SettingsError(format!(
-                    "Failed to load credentials: {}",
-                    e
-                )))
-            }
+            Ok(creds) => Ok(Some(creds)),
+            Err(CredentialsError::NoCredentials) => Ok(None),
+            Err(e) => Err(Error::SettingsError(format!(
+                "Failed to load credentials: {}",
+                e
+            ))),
         }
     }
 
