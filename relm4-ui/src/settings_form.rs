@@ -50,6 +50,7 @@ pub enum SettingsFormMsg {
     Submit,
     Show,
     Hide,
+    ClearCredentials,
     S3FileSyncToggled,
     S3BucketNameChanged(String),
     S3EndpointChanged(String),
@@ -100,9 +101,10 @@ impl Component for SettingsForm {
                 },
 
                 gtk::Label {
-                    set_label: "In addition to these settings, export the following environment variables:\n- AWS_ACCESS_KEY_ID\n- AWS_SECRET_ACCESS for optional cloud storage access",
+                    set_label: "Credentials are stored securely in your system keyring.\nLeave fields empty to use AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables.",
                     set_xalign: 0.0,
                     set_margin_bottom: 10,
+                    add_css_class: "dim-label",
                 },
 
                 gtk::Box {
@@ -170,13 +172,13 @@ impl Component for SettingsForm {
                         set_label: "S3 Access Key ID",
                     },
 
-                    #[name = "s3_acces_key_entry"]
-                    gtk::Entry {
+                    #[name = "s3_access_key_entry"]
+                    gtk::PasswordEntry {
                         set_placeholder_text: Some("S3 Access Key ID"),
                         set_text: &model.s3_access_key_id,
+                        set_show_peek_icon: true,  // Allow user to peek at the value if needed
                         connect_changed[sender] => move |entry| {
-                            let buffer = entry.buffer();
-                            sender.input(SettingsFormMsg::S3AccessKeyChanged(buffer.text().into()));
+                            sender.input(SettingsFormMsg::S3AccessKeyChanged(entry.text().into()));
                         },
                     },
                 },
@@ -189,19 +191,30 @@ impl Component for SettingsForm {
                     },
 
                     #[name = "s3_secret_key_entry"]
-                    gtk::Entry {
+                    gtk::PasswordEntry {
                         set_placeholder_text: Some("S3 Secret Access Key"),
                         set_text: &model.s3_secret_access_key,
+                        set_show_peek_icon: true,  // Allow user to peek at the value if needed
                         connect_changed[sender] => move |entry| {
-                            let buffer = entry.buffer();
-                            sender.input(SettingsFormMsg::S3SecretKeyChanged(buffer.text().into()));
+                            sender.input(SettingsFormMsg::S3SecretKeyChanged(entry.text().into()));
                         },
                     },
                 },
 
-                gtk::Button {
-                    set_label: "Save Settings",
-                    connect_clicked => SettingsFormMsg::Submit,
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    set_spacing: 5,
+
+                    gtk::Button {
+                        set_label: "Save Settings",
+                        connect_clicked => SettingsFormMsg::Submit,
+                    },
+
+                    gtk::Button {
+                        set_label: "Clear Stored Credentials",
+                        add_css_class: "destructive-action",
+                        connect_clicked => SettingsFormMsg::ClearCredentials,
+                    },
                 },
             }
         }
@@ -255,6 +268,20 @@ impl Component for SettingsForm {
             }
             SettingsFormMsg::S3SecretKeyChanged(secret_key) => {
                 self.s3_secret_access_key = secret_key;
+            }
+            SettingsFormMsg::ClearCredentials => {
+                // Clear the form fields
+                self.s3_access_key_id.clear();
+                self.s3_secret_access_key.clear();
+                
+                // Delete from keyring
+                let settings_service = Arc::clone(&self.settings_service);
+                sender.oneshot_command(async move {
+                    if let Err(e) = settings_service.delete_credentials().await {
+                        eprintln!("Error deleting credentials: {}", e);
+                    }
+                    SettingsFormCommandMsg::SettingsSaved(Ok(()))
+                });
             }
             SettingsFormMsg::Submit => {
                 let settings_service = Arc::clone(&self.settings_service);

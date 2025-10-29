@@ -33,19 +33,14 @@ impl SettingsService {
     /// Save S3 settings to the database and optionally store credentials in the keyring.
     ///
     /// This method handles both database settings and secure credential storage:
-    /// - Database settings (endpoint, region, bucket, sync enabled) are saved to the database
+    /// - Database settings (endpoint, region, bucket, sync enabled) are always saved to the database
     /// - If credentials are provided (both access_key_id and secret_access_key are non-empty),
     ///   they are stored securely in the system keyring
-    /// - If both credential fields are empty, any existing credentials are deleted from the keyring
+    /// - If credentials are empty, they are left unchanged in the keyring (use `delete_credentials()` to remove them)
     ///
     /// # Arguments
     ///
-    /// * `endpoint` - S3 endpoint URL (e.g., "s3.eu-central-003.backblazeb2.com")
-    /// * `region` - S3 region (e.g., "eu-central-003")
-    /// * `bucket` - S3 bucket name
-    /// * `sync_enabled` - Whether S3 sync is enabled
-    /// * `access_key_id` - Optional S3 access key ID (empty string to delete credentials)
-    /// * `secret_access_key` - Optional S3 secret access key (empty string to delete credentials)
+    /// * `settings` - Settings to save (includes both database settings and optional credentials)
     ///
     /// # Errors
     ///
@@ -74,24 +69,28 @@ impl SettingsService {
             .await
             .map_err(|e| Error::DbError(format!("Failed to save settings: {}", e)))?;
 
-        // Handle credentials storage
+        // Store credentials only if both are provided and non-empty
         if !settings.access_key_id.is_empty() && !settings.secret_access_key.is_empty() {
-            // Store credentials if both are provided
+            eprintln!("DEBUG: Storing credentials to keyring...");
             let creds = CloudCredentials {
-                access_key_id: settings.access_key_id,
-                secret_access_key: settings.secret_access_key,
+                access_key_id: settings.access_key_id.clone(),
+                secret_access_key: settings.secret_access_key.clone(),
             };
 
-            if let Err(e) = credentials_storage::store_credentials(&creds) {
-                // Log error but don't fail - credentials can be provided via env vars
-                eprintln!("Warning: Failed to store credentials in keyring: {}", e);
+            match credentials_storage::store_credentials(&creds) {
+                Ok(_) => eprintln!("DEBUG: ✓ Credentials stored successfully"),
+                Err(e) => {
+                    // Log error but don't fail - credentials can be provided via env vars
+                    eprintln!("Warning: Failed to store credentials in keyring: {}", e);
+                }
             }
-        } else if settings.access_key_id.is_empty() && settings.secret_access_key.is_empty() {
-            // Delete credentials if both are empty
-            if let Err(e) = credentials_storage::delete_credentials() {
-                eprintln!("Warning: Failed to delete credentials from keyring: {}", e);
-            }
+        } else {
+            eprintln!("DEBUG: Credentials fields are empty, not storing (access_key_id: '{}', secret_key: '{}')", 
+                if settings.access_key_id.is_empty() { "EMPTY" } else { "HAS_VALUE" },
+                if settings.secret_access_key.is_empty() { "EMPTY" } else { "HAS_VALUE" });
         }
+        // If credentials are empty, we leave existing keyring credentials unchanged
+        // Use delete_credentials() to explicitly remove them
 
         Ok(())
     }
@@ -143,13 +142,23 @@ impl SettingsService {
     /// }
     /// ```
     pub async fn load_credentials(&self) -> Result<Option<CloudCredentials>, Error> {
+        eprintln!("DEBUG: Attempting to load credentials from keyring...");
         match credentials_storage::load_credentials_with_fallback() {
-            Ok(creds) => Ok(Some(creds)),
-            Err(CredentialsError::NoCredentials) => Ok(None),
-            Err(e) => Err(Error::SettingsError(format!(
-                "Failed to load credentials: {}",
-                e
-            ))),
+            Ok(creds) => {
+                eprintln!("DEBUG: ✓ Credentials loaded successfully (access_key_id: {})", creds.access_key_id);
+                Ok(Some(creds))
+            }
+            Err(CredentialsError::NoCredentials) => {
+                eprintln!("DEBUG: No credentials found in keyring or environment");
+                Ok(None)
+            }
+            Err(e) => {
+                eprintln!("DEBUG: Error loading credentials: {}", e);
+                Err(Error::SettingsError(format!(
+                    "Failed to load credentials: {}",
+                    e
+                )))
+            }
         }
     }
 
@@ -162,6 +171,20 @@ impl SettingsService {
     /// Returns `true` if credentials are available, `false` otherwise.
     pub async fn has_credentials(&self) -> bool {
         self.load_credentials().await.unwrap_or(None).is_some()
+    }
+
+    /// Delete credentials from the system keyring.
+    ///
+    /// This removes any stored credentials from the keyring. After calling this,
+    /// credentials will only be available via environment variables.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the keyring is not accessible. Does not error if
+    /// credentials don't exist (operation is idempotent).
+    pub async fn delete_credentials(&self) -> Result<(), Error> {
+        credentials_storage::delete_credentials()
+            .map_err(|e| Error::SettingsError(format!("Failed to delete credentials: {}", e)))
     }
 }
 

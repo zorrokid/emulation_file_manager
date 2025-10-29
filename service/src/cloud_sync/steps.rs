@@ -99,13 +99,32 @@ impl SyncStep<SyncContext> for PrepareFilesForDeletionStep {
             Ok(count) => {
                 context.files_prepared_for_deletion = count;
                 println!("Files prepared for deletion: {}", count);
-                StepAction::Continue
             }
             Err(e) => {
                 eprintln!("Error counting files for deletion: {}", e);
-                StepAction::Abort(Error::DbError(e.to_string()))
+                return StepAction::Abort(Error::DbError(e.to_string()));
             }
         }
+
+        let files_pending_upload_res = context
+            .repository_manager
+            .get_file_sync_log_repository()
+            .count_logs_by_latest_status(FileSyncStatus::UploadPending)
+            .await;
+        match files_pending_upload_res {
+            Ok(count) => {
+                context.files_prepared_for_upload = count;
+                println!("Files prepared for upload: {}", count);
+            }
+            Err(e) => {
+                eprintln!("Error counting files for upload: {}", e);
+                return StepAction::Abort(Error::DbError(e.to_string()));
+            }
+        }
+
+        // TODO: add failed uploads/deletions?
+
+        StepAction::Continue
     }
 }
 

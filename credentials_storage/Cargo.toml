@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-keyring = { version="3.6.3", default-features = false }
+keyring = { version = "3.6.3", features = ["sync-secret-service"] }  # Use synchronous Secret Service backend
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "2.0"
