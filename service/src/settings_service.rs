@@ -181,17 +181,17 @@ mod tests {
         let repo_manager = Arc::new(RepositoryManager::new(pool));
         let service = SettingsService::new(repo_manager);
 
+        let save_model = SettingsSaveModel {
+            endpoint: "s3.example.com".to_string(),
+            region: "us-east-1".to_string(),
+            bucket: "my-bucket".to_string(),
+            sync_enabled: true,
+            access_key_id: "test-access-key".to_string(),
+            secret_access_key: "test-secret-key".to_string(),
+        };
+
         // Save settings
-        let result = service
-            .save_settings(
-                "s3.example.com".to_string(),
-                "us-east-1".to_string(),
-                "my-bucket".to_string(),
-                true,
-                String::new(), // Empty credentials to avoid keyring in tests
-                String::new(),
-            )
-            .await;
+        let result = service.save_settings(save_model).await;
 
         assert!(result.is_ok());
 

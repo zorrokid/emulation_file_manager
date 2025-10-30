@@ -611,7 +611,7 @@ mod tests {
             steps::{
                 PrepareFilesForDeletionStep, PrepareFilesForUploadStep, UploadPendingFilesStep,
             },
-        }, pipeline::{StepAction, SyncStep}, view_models::Settings
+        }, pipeline::{StepAction, SyncStep}, settings_service::SettingsService, view_models::Settings
     };
 
     #[async_std::test]
@@ -818,6 +818,8 @@ mod tests {
             collection_root_dir: PathBuf::from("/"),
             ..Default::default()
         });
+
+        let settings_service = Arc::new(SettingsService::new(repo_manager.clone())); 
         let cloud_ops = Arc::new(MockCloudStorage::new());
 
         let (tx, _rx) = async_std::channel::unbounded();
@@ -831,6 +833,7 @@ mod tests {
             files_prepared_for_deletion: 0,
             upload_results: HashMap::new(),
             deletion_results: HashMap::new(),
+            settings_service,
         }
     }
 
@@ -845,6 +848,7 @@ mod tests {
          let cloud_ops = Arc::new(MockCloudStorage::new());
          
          let (tx, rx) = async_std::channel::unbounded();
+        let settings_service = Arc::new(SettingsService::new(repo_manager.clone())); 
          
          let mut context = SyncContext {
              settings,
@@ -855,6 +859,7 @@ mod tests {
              files_prepared_for_deletion: 0,
              upload_results: HashMap::new(),
              deletion_results: HashMap::new(),
+                settings_service,
          };
      
          let file_info_id = context
