@@ -108,12 +108,11 @@ impl FileSyncLogRepository {
         Ok(entries)
     }
 
-    pub async fn count_logs_by_latest_status(
+    pub async fn count_logs_by_latest_statuses(
         &self,
-        status: FileSyncStatus,
+        statuses: &[FileSyncStatus],
     ) -> Result<i64, sqlx::Error> {
-        let status_int = status.to_db_int();
-        let row = sqlx::query!(
+        let mut query_builder = sqlx::QueryBuilder::<Sqlite>::new(
             "SELECT COUNT(*) as count FROM (
                 -- Get the latest log entry for each file_info_id
                 SELECT file_info_id, MAX(id) AS max_id
@@ -123,12 +122,17 @@ impl FileSyncLogRepository {
              -- Join with the file_sync_log table to get the status of the latest entries
              INNER JOIN file_sync_log log ON latest.file_info_id = log.file_info_id AND latest.max_id = log.id
              -- And finally filter by the desired status
-             WHERE log.status = ?",
-            status_int
-        )
-        .fetch_one(&*self.pool)
-        .await?;
-        Ok(row.count)
+             WHERE log.status IN (");
+        let mut separated = query_builder.separated(", ");
+        for status in statuses {
+            separated.push_bind(status.to_db_int());
+        }
+        separated.push_unseparated(")");
+
+        let query = query_builder.build();
+        let row = query.fetch_one(&*self.pool).await?;
+        let count: i64 = row.try_get("count")?;
+        Ok(count)
     }
 
     pub async fn add_log_entry(
@@ -225,7 +229,7 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn test_count_logs_by_latest_status() {
+    async fn test_count_logs_by_latest_statuses() {
         let pool = Arc::new(setup_test_db().await);
         let repository = FileSyncLogRepository::new(Arc::clone(&pool));
         let file_info_id = insert_file_info(&pool).await;
@@ -239,13 +243,13 @@ mod tests {
             .unwrap();
 
         let count = repository
-            .count_logs_by_latest_status(FileSyncStatus::UploadFailed)
+            .count_logs_by_latest_statuses(&[FileSyncStatus::UploadFailed])
             .await
             .unwrap();
         assert_eq!(count, 1);
 
         let count = repository
-            .count_logs_by_latest_status(FileSyncStatus::UploadPending)
+            .count_logs_by_latest_statuses(&[FileSyncStatus::UploadPending])
             .await
             .unwrap();
         assert_eq!(count, 0);
@@ -261,7 +265,7 @@ mod tests {
             .await
             .unwrap();
         let count = repository
-            .count_logs_by_latest_status(FileSyncStatus::UploadFailed)
+            .count_logs_by_latest_statuses(&[FileSyncStatus::UploadFailed])
             .await
             .unwrap();
         assert_eq!(count, 2);
@@ -273,7 +277,7 @@ mod tests {
             .unwrap();
 
         let count = repository
-            .count_logs_by_latest_status(FileSyncStatus::UploadFailed)
+            .count_logs_by_latest_statuses(&[FileSyncStatus::UploadFailed])
             .await
             .unwrap();
         assert_eq!(count, 1);

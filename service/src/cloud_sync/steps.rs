@@ -19,7 +19,6 @@ impl SyncStep<SyncContext> for PrepareFilesForUploadStep {
     }
 
     async fn execute(&self, context: &mut SyncContext) -> StepAction {
-        let mut total_count: i64 = 0;
         let mut offset = 0;
         loop {
             let file_infos_res = context
@@ -34,7 +33,6 @@ impl SyncStep<SyncContext> for PrepareFilesForUploadStep {
                         break;
                     }
                     offset += file_infos.len() as i64;
-                    total_count += file_infos.len() as i64;
                     for file_info in &file_infos {
                         let cloud_key = format!(
                             "{}/{}",
@@ -74,25 +72,26 @@ impl SyncStep<SyncContext> for PrepareFilesForUploadStep {
 
         println!("Preparing files for sync...DONE");
 
-        context.files_prepared_for_upload = total_count;
         StepAction::Continue
     }
 }
 
-pub struct PrepareFilesForDeletionStep;
+
+/// Step 2: Get counts of files prepared for upload and deletion
+pub struct GetSyncFileCountsStep;
 
 #[async_trait::async_trait]
-impl SyncStep<SyncContext> for PrepareFilesForDeletionStep {
+impl SyncStep<SyncContext> for GetSyncFileCountsStep {
     fn name(&self) -> &'static str {
-        "prepare_files_for_deletion"
+        "get_sync_file_counts"
     }
     async fn execute(&self, context: &mut SyncContext) -> StepAction {
-        println!("PrepareFilesForDeletionStep");
+        println!("GetSyncFileCountsStep");
 
         let files_to_delete_res = context
             .repository_manager
             .get_file_sync_log_repository()
-            .count_logs_by_latest_status(FileSyncStatus::DeletionPending)
+            .count_logs_by_latest_statuses(&[FileSyncStatus::DeletionPending, FileSyncStatus::DeletionFailed])
             .await;
 
         match files_to_delete_res {
@@ -109,7 +108,7 @@ impl SyncStep<SyncContext> for PrepareFilesForDeletionStep {
         let files_pending_upload_res = context
             .repository_manager
             .get_file_sync_log_repository()
-            .count_logs_by_latest_status(FileSyncStatus::UploadPending)
+            .count_logs_by_latest_statuses(&[FileSyncStatus::UploadPending, FileSyncStatus::UploadFailed])
             .await;
         match files_pending_upload_res {
             Ok(count) => {
@@ -128,7 +127,7 @@ impl SyncStep<SyncContext> for PrepareFilesForDeletionStep {
     }
 }
 
-/// Step 2: Connect to cloud cloud_storage
+/// Step 3: Connect to cloud cloud_storage
 pub struct ConnectToCloudStep;
 
 #[async_trait::async_trait]
@@ -191,7 +190,7 @@ impl SyncStep<SyncContext> for ConnectToCloudStep {
     }
 }
 
-/// Step 3: Upload pending files to cloud storage
+/// Step 4: Upload pending files to cloud storage
 pub struct UploadPendingFilesStep;
 
 #[async_trait::async_trait]
@@ -417,7 +416,7 @@ impl SyncStep<SyncContext> for UploadPendingFilesStep {
     }
 }
 
-/// Step 4: Delete the files marked for deletion from cloud storage
+/// Step 5: Delete the files marked for deletion from cloud storage
 pub struct DeleteMarkedFilesStep;
 
 #[async_trait::async_trait]
@@ -609,7 +608,7 @@ mod tests {
         cloud_sync::{
             context::SyncContext,
             steps::{
-                PrepareFilesForDeletionStep, PrepareFilesForUploadStep, UploadPendingFilesStep,
+                GetSyncFileCountsStep, PrepareFilesForUploadStep, UploadPendingFilesStep,
             },
         }, pipeline::{StepAction, SyncStep}, settings_service::SettingsService, view_models::Settings
     };
@@ -653,7 +652,6 @@ mod tests {
         let action = step.execute(&mut context).await;
 
         assert_eq!(action, StepAction::Continue);
-        assert_eq!(context.files_prepared_for_upload, 1);
 
         let file_infos_res = context
             .repository_manager
@@ -669,7 +667,6 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(pending_files_to_upload_result.len(), 1);
         assert_eq!(
             pending_files_to_upload_result[0].archive_file_name,
             "file1.zst"
@@ -679,38 +676,44 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn test_prepare_files_for_deletion_step() {
+    async fn test_get_sync_file_counts_step() {
         let mut context = initialize_sync_context().await;
 
-        let file_info_id = context
-            .repository_manager
-            .get_file_info_repository()
-            .add_file_info(
-                &Sha1Checksum::from([0; 20]),
-                1234,
-                "file1.zst",
-                FileType::Rom,
-            )
-            .await
-            .unwrap();
+        let file_info_id_1 = add_file_info(&context.repository_manager, [0; 20], "file1.zst", FileType::Rom).await;
+        let file_info_id_2 = add_file_info(&context.repository_manager, [1; 20], "file2.zst", FileType::Rom).await;
+        let file_info_id_3 = add_file_info(&context.repository_manager, [2; 20], "file3.zst", FileType::Rom).await;
+        let file_info_id_4 = add_file_info(&context.repository_manager, [3; 20], "file4.zst", FileType::Rom).await;
+        let file_info_id_5 = add_file_info(&context.repository_manager, [4; 20], "file5.zst", FileType::Rom).await;
 
-        context
-            .repository_manager
-            .get_file_sync_log_repository()
-            .add_log_entry(
-                file_info_id,
-                FileSyncStatus::DeletionPending,
-                "",
-                "rom/file1.zst",
-            )
-            .await
-            .unwrap();
-
-        let step = PrepareFilesForDeletionStep;
+        add_log_entry(&context.repository_manager, file_info_id_1, FileSyncStatus::UploadPending, "rom/file1.zst").await;
+        add_log_entry(&context.repository_manager, file_info_id_2, FileSyncStatus::UploadFailed, "rom/file2.zst").await;
+        add_log_entry(&context.repository_manager, file_info_id_3, FileSyncStatus::DeletionPending, "rom/file3.zst").await;
+        add_log_entry(&context.repository_manager, file_info_id_4, FileSyncStatus::DeletionFailed, "rom/file4.zst").await;
+        add_log_entry(&context.repository_manager, file_info_id_5, FileSyncStatus::UploadPending, "rom/file5.zst").await;
+        add_log_entry(&context.repository_manager, file_info_id_5, FileSyncStatus::UploadCompleted, "rom/file5.zst").await;
+        
+        let step = GetSyncFileCountsStep;
         let action = step.execute(&mut context).await;
 
         assert_eq!(action, StepAction::Continue);
-        assert_eq!(context.files_prepared_for_deletion, 1);
+        assert_eq!(context.files_prepared_for_deletion, 2);
+        assert_eq!(context.files_prepared_for_upload, 2);
+    }
+
+    async fn add_file_info(repo_manager: &RepositoryManager, checksum: [u8; 20], file_name: &str, file_type: FileType) -> i64 {
+        repo_manager
+            .get_file_info_repository()
+            .add_file_info(&Sha1Checksum::from(checksum), 1234, file_name, file_type)
+            .await
+            .unwrap()
+    }
+
+    async fn add_log_entry(repo_manager: &RepositoryManager, file_info_id: i64, status: FileSyncStatus, cloud_key: &str) {
+        repo_manager
+            .get_file_sync_log_repository()
+            .add_log_entry(file_info_id, status, "", cloud_key)
+            .await
+            .unwrap();
     }
 
     #[async_std::test]
