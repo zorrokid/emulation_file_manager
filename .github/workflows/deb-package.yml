@@ -1,0 +1,66 @@
+name: Build Debian Package
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  DATABASE_URL: "sqlite::memory:?cache=shared"
+
+jobs:
+  build-deb:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update 
+        sudo apt-get install -y \
+          build-essential \
+          pkg-config \
+          libglib2.0-dev \
+          libgtk-4-dev \
+          libcairo2-dev \
+          libpango1.0-dev \
+          libgdk-pixbuf-2.0-dev \
+          libgraphene-1.0-dev \
+          libdbus-1-dev
+    
+    - name: Install Rust toolchain
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      
+    - name: Install cargo-deb
+      run: cargo install cargo-deb
+    
+    - name: Install sqlx-cli
+      run: cargo install sqlx-cli --no-default-features --features sqlite
+    
+    - name: Run database migrations
+      run: cd database && cargo sqlx migrate run
+    
+    - name: Build release binary
+      run: cargo build --release --verbose --target x86_64-unknown-linux-gnu
+    
+    - name: Build Debian package
+      run: cargo deb --package efm-relm4-ui --no-build --target x86_64-unknown-linux-gnu
+    
+    - name: Upload Debian package
+      uses: actions/upload-artifact@v4
+      with:
+        name: debian-package
+        path: target/debian/*.deb
+        
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: target/debian/*.deb
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

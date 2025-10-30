@@ -2,6 +2,7 @@
 name = "credentials_storage"
 version = "0.1.0"
 edition = "2024"
+license = "GPL-3.0-or-later"
 
 [dependencies]
 keyring = { version = "3.6.3", features = ["sync-secret-service"] }  # Use synchronous Secret Service backend

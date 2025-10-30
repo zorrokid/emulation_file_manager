@@ -2,6 +2,7 @@
 name = "file_system"
 version = "0.1.0"
 edition = "2021"
+license = "GPL-3.0-or-later"
 
 [dependencies]
 directories-next = "2.0.0"
