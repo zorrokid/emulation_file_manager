@@ -29,7 +29,8 @@ jobs:
           libcairo2-dev \
           libpango1.0-dev \
           libgdk-pixbuf-2.0-dev \
-          libgraphene-1.0-dev
+          libgraphene-1.0-dev \
+          libdbus-1-dev
 
     - name: Install sqlx-cli
       run: cargo install sqlx-cli --no-default-features --features sqlite
