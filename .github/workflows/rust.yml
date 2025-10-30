@@ -36,7 +36,7 @@ jobs:
       run: cargo install sqlx-cli --no-default-features --features sqlite
 
     - name: Run database migrations
-      run: cd database && cargo sqlx migrate run
+      run: cd database && sqlx database create && cargo sqlx migrate run
 
     - name: Build
       run: cargo build --verbose
