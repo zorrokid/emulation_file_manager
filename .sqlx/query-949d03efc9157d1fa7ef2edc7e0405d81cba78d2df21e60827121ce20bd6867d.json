@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO file_info (\n                sha1_checksum,\n                file_size,\n                archive_file_name,\n                file_type\n            ) VALUES (?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "949d03efc9157d1fa7ef2edc7e0405d81cba78d2df21e60827121ce20bd6867d"
+}
