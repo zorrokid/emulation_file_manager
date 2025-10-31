@@ -35,11 +35,10 @@ SQLx verifies SQL queries at compile time by connecting to a database. In CI, we
 Whenever you modify SQL queries (add/change/remove `sqlx::query!` or `sqlx::query_as!` calls), you must regenerate the offline query data:
 
 ```bash
-# From the workspace root
-cargo sqlx prepare
+# From the workspace root (includes test queries)
+cargo sqlx prepare --workspace -- --all-targets
 
-# Or from the database crate directory
-cd database
+# Or without test queries (not recommended for CI)
 cargo sqlx prepare --workspace
 ```
 
