@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id \n                 FROM file_info \n                 WHERE sha1_checksum = ? and file_type = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "631a2d5ed334d49dc91352e7191f8f11a94a45d7ede698c564cce3fbd2344fe4"
+}

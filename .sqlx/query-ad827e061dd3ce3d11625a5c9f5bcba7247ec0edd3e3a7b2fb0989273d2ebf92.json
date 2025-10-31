@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO emulator (\n                name, \n                executable, \n                extract_files, \n                arguments,\n                system_id\n            ) VALUES (?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "ad827e061dd3ce3d11625a5c9f5bcba7247ec0edd3e3a7b2fb0989273d2ebf92"
+}

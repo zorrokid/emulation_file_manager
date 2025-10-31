@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT s.id, s.name \n             FROM system s\n             INNER JOIN release_system rs ON s.id = rs.system_id\n             WHERE rs.release_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "bc0c90b18de42398c41e497457994dba7adce910ba3da4702cc2cb027c430c14"
+}

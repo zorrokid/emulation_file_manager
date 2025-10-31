@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO file_sync_log (file_info_id, sync_time, status, message, cloud_key)\n             VALUES (?, datetime('now'), ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "424b34059323ddb8eb9f7e07285fa3980748614cfa6ecf88278424cb9cd57f2a"
+}

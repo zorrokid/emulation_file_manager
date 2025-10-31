@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM release_software_title WHERE release_id = ? AND software_title_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "e8e8e7083d724bc89f6e25226520f15da52497e09a927ecdac6ba165e184cbe9"
+}

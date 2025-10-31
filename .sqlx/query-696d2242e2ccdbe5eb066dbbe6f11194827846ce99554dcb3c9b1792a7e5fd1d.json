@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT software_title_id FROM release_software_title WHERE release_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "software_title_id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "696d2242e2ccdbe5eb066dbbe6f11194827846ce99554dcb3c9b1792a7e5fd1d"
+}

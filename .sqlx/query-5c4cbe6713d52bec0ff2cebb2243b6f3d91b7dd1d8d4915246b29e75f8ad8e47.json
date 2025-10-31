@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM emulator WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "5c4cbe6713d52bec0ff2cebb2243b6f3d91b7dd1d8d4915246b29e75f8ad8e47"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM software_title WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "bbc6398679ba5bc0b98bfdeb1ce019a5652ba4a8fd76a0e1b36728f9083949aa"
+}

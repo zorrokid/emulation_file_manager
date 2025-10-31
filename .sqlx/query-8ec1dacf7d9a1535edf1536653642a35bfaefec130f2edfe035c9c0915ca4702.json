@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT system_id FROM release_system WHERE release_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "system_id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "8ec1dacf7d9a1535edf1536653642a35bfaefec130f2edfe035c9c0915ca4702"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO release_software_title (release_id, software_title_id) VALUES (?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "c40c973daa7a257c73a3a7985c6c14eee74bd2f4bbdcf8508865566dca7a9ce9"
+}

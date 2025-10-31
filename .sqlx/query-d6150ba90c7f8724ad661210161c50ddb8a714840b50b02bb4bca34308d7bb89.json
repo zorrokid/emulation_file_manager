@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT file_set_id FROM release_file_set WHERE release_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "file_set_id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d6150ba90c7f8724ad661210161c50ddb8a714840b50b02bb4bca34308d7bb89"
+}

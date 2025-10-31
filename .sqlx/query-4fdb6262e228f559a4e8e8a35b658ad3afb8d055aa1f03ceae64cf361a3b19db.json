@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT r.id as id, r.name as name \n             FROM release r\n             INNER JOIN release_software_title rst \n             ON r.id = rst.release_id\n             WHERE rst.software_title_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "4fdb6262e228f559a4e8e8a35b658ad3afb8d055aa1f03ceae64cf361a3b19db"
+}

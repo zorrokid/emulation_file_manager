@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE emulator SET\n             name = ?, \n             executable = ?, \n             extract_files = ?,\n             arguments = ?,\n             system_id = ?\n             WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "0eda164b6c72981ac23b9d2aa94dd75236d23c7792628bd40e8be78fd430a5a4"
+}

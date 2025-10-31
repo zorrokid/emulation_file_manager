@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT DISTINCT s.id, s.name\n             FROM file_set fs\n                INNER JOIN file_set_file_info fsfi ON fs.id = fsfi.file_set_id\n                INNER JOIN file_info_system fis ON fsfi.file_info_id = fis.file_info_id\n                INNER JOIN system s ON fis.system_id = s.id\n             WHERE fs.id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "2458ca8c65e2a03b39487c519d65c961169ef5df64ec206e7e98c6b432b562e7"
+}

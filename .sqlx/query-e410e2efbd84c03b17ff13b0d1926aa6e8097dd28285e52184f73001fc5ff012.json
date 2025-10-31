@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO document_viewer (\n                name, \n                executable, \n                arguments,\n                document_type\n            ) VALUES (?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "e410e2efbd84c03b17ff13b0d1926aa6e8097dd28285e52184f73001fc5ff012"
+}

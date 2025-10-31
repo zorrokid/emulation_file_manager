@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM release_system WHERE release_id = ? AND system_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "d9859296700fc9f3216d786275e16fe694295d0aee803a17d10c862755c4f661"
+}

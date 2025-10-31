@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT system_id FROM file_info_system \n                 WHERE file_info_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "system_id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f279dbab383fb6fc5f6495b3ed86ed4961134afb509c708b3c605df16686bbe5"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE software_title SET name = ?, franchise_id = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "09712390df155aed85b15fb4cf1de8cbe531181d0e803f4f6568009ce041e167"
+}

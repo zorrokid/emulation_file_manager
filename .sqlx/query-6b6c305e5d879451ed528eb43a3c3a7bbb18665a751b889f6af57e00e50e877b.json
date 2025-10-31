@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM file_set_file_info WHERE file_set_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "6b6c305e5d879451ed528eb43a3c3a7bbb18665a751b889f6af57e00e50e877b"
+}
