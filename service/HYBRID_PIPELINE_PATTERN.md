@@ -19,8 +19,11 @@ service/src/file_set_deletion/
 ├── pipeline.rs   - Pipeline configuration (defines step sequence)
 └── steps.rs      - All pipeline step implementations
 
-service/src/
-└── pipeline.rs   - Generic Pipeline<T> implementation with execute() logic
+service/src/pipeline/
+├── mod.rs                - Module exports
+├── generic_pipeline.rs   - Generic Pipeline<T> implementation with execute() logic
+├── pipeline_step.rs      - PipelineStep trait and StepAction enum
+└── cloud_connection.rs   - CloudConnectionContext trait and generic ConnectToCloudStep<T>
 ```
 
 ## Key Components
@@ -123,7 +126,7 @@ The deletion process has 6 clear steps:
 
 ### Pipeline Construction and Execution
 
-The generic `Pipeline<T>` struct is defined in `service/src/pipeline.rs` with a shared `execute()` implementation. Each specific pipeline (like deletion) just configures the steps:
+The generic `Pipeline<T>` struct is defined in `service/src/pipeline/generic_pipeline.rs` with a shared `execute()` implementation. Each specific pipeline (like deletion) just configures the steps:
 
 ```rust
 // service/src/file_set_deletion/pipeline.rs
@@ -245,7 +248,7 @@ The pipeline pattern makes it easy to add:
 The base `Pipeline<T>::execute()` method can be enhanced to add metrics:
 
 ```rust
-// In service/src/pipeline.rs
+// In service/src/pipeline/generic_pipeline.rs
 pub async fn execute(&self, context: &mut T) -> Result<(), Error> {
     for step in &self.steps {
         let start = Instant::now();
@@ -317,7 +320,7 @@ impl Pipeline<SyncContext> {
         Self::with_steps(vec![
             Box::new(PrepareFilesForUploadStep),
             Box::new(GetSyncFileCountsStep),
-            Box::new(ConnectToCloudStep),
+            Box::new(ConnectToCloudStep::<SyncContext>::new()),
             Box::new(UploadPendingFilesStep),
             Box::new(DeleteMarkedFilesStep),
         ])
@@ -331,9 +334,10 @@ impl Pipeline<SyncContext> {
 impl Pipeline<DownloadContext> {
     pub fn new() -> Self {
         Self::with_steps(vec![
-            Box::new(FetchFileInfoStep),
+            Box::new(FetchFileSetStep),
+            Box::new(FetchFileSetFileInfoStep),
             Box::new(PrepareFileForDownloadStep),
-            Box::new(ConnectToCloudStep),
+            Box::new(ConnectToCloudStep::<DownloadContext>::new()),
             Box::new(DownloadFilesStep),
             Box::new(ExportFilesStep),
         ])
@@ -341,8 +345,24 @@ impl Pipeline<DownloadContext> {
 }
 ```
 
+### Generic Cloud Connection Step
+
+A special note about `ConnectToCloudStep<T>`: This is a generic step defined in `service/src/pipeline/cloud_connection.rs` that can be used by any pipeline needing cloud connectivity. It works with any context that implements the `CloudConnectionContext` trait:
+
+```rust
+pub trait CloudConnectionContext {
+    fn settings(&self) -> &Arc<Settings>;
+    fn settings_service(&self) -> &Arc<SettingsService>;
+    fn cloud_ops_mut(&mut self) -> &mut Option<Arc<dyn CloudStorageOps>>;
+    fn should_connect(&self) -> bool { true }
+}
+```
+
+Both `SyncContext` and `DownloadContext` implement this trait, allowing them to share the same cloud connection logic without code duplication.
+
 Each pipeline:
 1. Defines its own context type (e.g., `SyncContext`, `DownloadContext`, `DeletionContext<F>`)
 2. Implements steps via `PipelineStep<ContextType>` trait
 3. Configures step sequence in `Pipeline<ContextType>::new()`
 4. Uses the shared `Pipeline<T>::execute()` for execution logic
+5. Can optionally implement `CloudConnectionContext` to use the generic `ConnectToCloudStep<T>`
