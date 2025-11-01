@@ -1,8 +1,9 @@
 use crate::{
+    cloud_connection::ConnectToCloudStep,
     cloud_sync::{
         context::SyncContext,
         steps::{
-            ConnectToCloudStep, DeleteMarkedFilesStep, GetSyncFileCountsStep,
+            DeleteMarkedFilesStep, GetSyncFileCountsStep,
             PrepareFilesForUploadStep, UploadPendingFilesStep,
         },
     },
@@ -20,7 +21,7 @@ impl Pipeline<SyncContext> {
         Self::with_steps(vec![
             Box::new(PrepareFilesForUploadStep),
             Box::new(GetSyncFileCountsStep),
-            Box::new(ConnectToCloudStep),
+            Box::new(ConnectToCloudStep::<SyncContext>::new()),
             Box::new(UploadPendingFilesStep),
             Box::new(DeleteMarkedFilesStep),
         ])

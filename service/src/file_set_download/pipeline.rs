@@ -1,9 +1,10 @@
 use crate::{
+    cloud_connection::ConnectToCloudStep,
     file_set_download::{
         context::DownloadContext,
         steps::{
-            ConnectToCloudStep, DownloadFilesStep, ExportFilesStep, FetchFileInfoStep,
-            PrepareFileForDownloadStep,
+            DownloadFilesStep, ExportFilesStep, FetchFileSetStep,
+            PrepareFileForDownloadStep, FetchFileSetFileInfoStep,
         },
     },
     pipeline::Pipeline,
@@ -12,9 +13,10 @@ use crate::{
 impl Pipeline<DownloadContext> {
     pub fn new() -> Self {
         Self::with_steps(vec![
-            Box::new(FetchFileInfoStep),
+            Box::new(FetchFileSetStep),
+            Box::new(FetchFileSetFileInfoStep),
             Box::new(PrepareFileForDownloadStep),
-            Box::new(ConnectToCloudStep),
+            Box::new(ConnectToCloudStep::<DownloadContext>::new()),
             Box::new(DownloadFilesStep),
             Box::new(ExportFilesStep),
         ])

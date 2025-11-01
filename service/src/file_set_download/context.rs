@@ -2,9 +2,13 @@ use std::sync::Arc;
 
 use async_std::channel::Sender;
 use cloud_storage::{CloudStorageOps, SyncEvent};
-use database::{models::FileInfo, repository_manager::RepositoryManager};
+use database::{
+    models::{FileInfo, FileSet, FileSetFileInfo},
+    repository_manager::RepositoryManager,
+};
 
 use crate::{
+    cloud_connection::CloudConnectionContext,
     file_set_download::service::DownloadEvent, settings_service::SettingsService,
     view_models::Settings,
 };
@@ -23,7 +27,8 @@ pub struct DownloadContext {
 
     pub file_set_id: i64,
     pub extract_files: bool,
-    pub files_in_set: Vec<FileInfo>,
+    pub file_set: Option<FileSet>,
+    pub files_in_set: Vec<FileSetFileInfo>,
     pub files_to_download: Vec<FileInfo>,
     pub file_download_results: Vec<FileDownloadResult>,
 }
@@ -57,6 +62,7 @@ impl DownloadContext {
             cloud_ops: None,
             file_set_id,
             extract_files,
+            file_set: None,
             files_in_set: vec![],
             files_to_download: vec![],
             file_download_results: vec![],
@@ -75,5 +81,23 @@ impl DownloadContext {
             .iter()
             .filter(|result| !result.cloud_operation_success || !result.file_write_success)
             .count()
+    }
+}
+
+impl CloudConnectionContext for DownloadContext {
+    fn settings(&self) -> &Arc<Settings> {
+        &self.settings
+    }
+
+    fn settings_service(&self) -> &Arc<SettingsService> {
+        &self.settings_service
+    }
+
+    fn cloud_ops_mut(&mut self) -> &mut Option<Arc<dyn CloudStorageOps>> {
+        &mut self.cloud_ops
+    }
+
+    fn should_connect(&self) -> bool {
+        !self.files_to_download.is_empty()
     }
 }

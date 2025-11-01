@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use cloud_storage::{S3CloudStorage, SyncEvent};
+use cloud_storage::SyncEvent;
 use core_types::FileSyncStatus;
 
 use crate::{
@@ -124,73 +124,6 @@ impl PipelineStep<SyncContext> for GetSyncFileCountsStep {
         // TODO: add failed uploads/deletions?
 
         StepAction::Continue
-    }
-}
-
-/// Step 3: Connect to cloud cloud_storage
-pub struct ConnectToCloudStep;
-
-
-// TODO: make this generic so it can be used for other cloud pipelines 
-// the context type should be generic and implement a trait that provides access to store cloud
-// operations and settings 
-#[async_trait::async_trait]
-impl PipelineStep<SyncContext> for ConnectToCloudStep {
-    fn name(&self) -> &'static str {
-        "connect_to_cloud"
-    }
-
-    fn should_execute(&self, context: &SyncContext) -> bool {
-        context.cloud_ops.is_none()
-            && (context.files_prepared_for_upload > 0 || context.files_prepared_for_deletion > 0)
-    }
-
-    async fn execute(&self, context: &mut SyncContext) -> StepAction {
-        let s3_settings = match context.settings.s3_settings.clone() {
-            Some(settings) => settings,
-            None => {
-                eprintln!("S3 settings are not configured.");
-                return StepAction::Abort(Error::SettingsError("S3 settings missing".to_string()));
-            }
-        };
-        let credentials = match context.settings_service.load_credentials().await {
-            Ok(Some(creds)) => creds,
-            Ok(None) => {
-                eprintln!("No S3 credentials found in keyring or environment.");
-                return StepAction::Abort(Error::SettingsError(
-                    "S3 credentials not found".to_string(),
-                ));
-            }
-            Err(e) => {
-                eprintln!("Error retrieving S3 credentials: {}", e);
-                return StepAction::Abort(Error::SettingsError(format!(
-                    "Failed to get S3 credentials: {}",
-                    e
-                )));
-            }
-        };
-        let cloud_ops_res = S3CloudStorage::connect(
-            s3_settings.endpoint.as_str(),
-            s3_settings.region.as_str(),
-            s3_settings.bucket.as_str(),
-            credentials.access_key_id.as_str(),
-            credentials.secret_access_key.as_str(),
-        )
-        .await;
-
-        match cloud_ops_res {
-            Ok(cloud_ops) => {
-                context.cloud_ops = Some(Arc::new(cloud_ops));
-                StepAction::Continue
-            }
-            Err(e) => {
-                eprintln!("Error connecting to S3: {}", e);
-                StepAction::Abort(Error::CloudSyncError(format!(
-                    "Failed to connect to S3: {}",
-                    e
-                )))
-            }
-        }
     }
 }
 

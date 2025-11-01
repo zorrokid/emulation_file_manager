@@ -377,8 +377,6 @@ impl FileSetRepository {
         Ok(id)
     }
 
-    // TODO: there is also get_file_infos_by_file_set in FIleSetRepository, maybe we can combine
-    // these?
     pub async fn get_file_set_file_info(
         &self,
         file_set_id: i64,
