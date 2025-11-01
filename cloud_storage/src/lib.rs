@@ -246,4 +246,12 @@ impl CloudStorageOps for S3CloudStorage {
             Err(e) => Err(CloudStorageError::S3(e)),
         }
     }
+
+    async fn download_file(
+        &self,
+        cloud_key: &str,
+        destination_path: &Path,
+    ) -> Result<(), CloudStorageError> {
+        download_file(&self.bucket, destination_path, cloud_key).await
+    }
 }

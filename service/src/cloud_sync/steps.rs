@@ -5,7 +5,7 @@ use core_types::FileSyncStatus;
 
 use crate::{
     cloud_sync::context::{FileSyncResult, SyncContext},
-    error::Error, pipeline::{StepAction, SyncStep},
+    error::Error, pipeline::{StepAction, PipelineStep},
 };
 
 /// Step 1: Prepare files for upload. This involves marking files as pending upload in the
@@ -13,7 +13,7 @@ use crate::{
 pub struct PrepareFilesForUploadStep;
 
 #[async_trait::async_trait]
-impl SyncStep<SyncContext> for PrepareFilesForUploadStep {
+impl PipelineStep<SyncContext> for PrepareFilesForUploadStep {
     fn name(&self) -> &'static str {
         "prepare_files"
     }
@@ -81,7 +81,7 @@ impl SyncStep<SyncContext> for PrepareFilesForUploadStep {
 pub struct GetSyncFileCountsStep;
 
 #[async_trait::async_trait]
-impl SyncStep<SyncContext> for GetSyncFileCountsStep {
+impl PipelineStep<SyncContext> for GetSyncFileCountsStep {
     fn name(&self) -> &'static str {
         "get_sync_file_counts"
     }
@@ -130,8 +130,12 @@ impl SyncStep<SyncContext> for GetSyncFileCountsStep {
 /// Step 3: Connect to cloud cloud_storage
 pub struct ConnectToCloudStep;
 
+
+// TODO: make this generic so it can be used for other cloud pipelines 
+// the context type should be generic and implement a trait that provides access to store cloud
+// operations and settings 
 #[async_trait::async_trait]
-impl SyncStep<SyncContext> for ConnectToCloudStep {
+impl PipelineStep<SyncContext> for ConnectToCloudStep {
     fn name(&self) -> &'static str {
         "connect_to_cloud"
     }
@@ -194,7 +198,7 @@ impl SyncStep<SyncContext> for ConnectToCloudStep {
 pub struct UploadPendingFilesStep;
 
 #[async_trait::async_trait]
-impl SyncStep<SyncContext> for UploadPendingFilesStep {
+impl PipelineStep<SyncContext> for UploadPendingFilesStep {
     fn name(&self) -> &'static str {
         "upload_pending_files"
     }
@@ -420,7 +424,7 @@ impl SyncStep<SyncContext> for UploadPendingFilesStep {
 pub struct DeleteMarkedFilesStep;
 
 #[async_trait::async_trait]
-impl SyncStep<SyncContext> for DeleteMarkedFilesStep {
+impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
     fn name(&self) -> &'static str {
         "delete_marked_files"
     }
@@ -610,7 +614,7 @@ mod tests {
             steps::{
                 GetSyncFileCountsStep, PrepareFilesForUploadStep, UploadPendingFilesStep,
             },
-        }, pipeline::{StepAction, SyncStep}, settings_service::SettingsService, view_models::Settings
+        }, pipeline::{StepAction, PipelineStep}, settings_service::SettingsService, view_models::Settings
     };
 
     #[async_std::test]

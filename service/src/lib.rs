@@ -1,7 +1,9 @@
 pub mod cloud_sync;
 pub mod error;
 pub mod export_service;
+pub mod file_service;
 pub mod file_set_deletion;
+pub mod file_set_download;
 pub mod file_system_ops;
 pub mod pipeline;
 pub mod settings_service;

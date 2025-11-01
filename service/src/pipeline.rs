@@ -40,7 +40,7 @@ use crate::error::Error;
 /// pipeline.execute(&mut context).await?;
 /// ```
 pub struct Pipeline<T> {
-    pub steps: Vec<Box<dyn SyncStep<T>>>,
+    pub steps: Vec<Box<dyn PipelineStep<T>>>,
 }
 
 /// The action to take after a step completes.
@@ -94,7 +94,7 @@ pub enum StepAction {
 /// }
 /// ```
 #[async_trait::async_trait]
-pub trait SyncStep<T>: Send + Sync {
+pub trait PipelineStep<T>: Send + Sync {
     /// Returns the name of this step for logging and debugging.
     fn name(&self) -> &'static str;
 

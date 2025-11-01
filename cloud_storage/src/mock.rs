@@ -212,6 +212,22 @@ impl CloudStorageOps for MockCloudStorage {
 
         Ok(is_uploaded && !is_deleted)
     }
+
+    async fn download_file(
+        &self,
+        cloud_key: &str,
+        _destination_path: &Path,
+    ) -> Result<(), CloudStorageError> {
+        let uploaded_files = self.uploaded_files.lock().unwrap();
+        if uploaded_files.contains_key(cloud_key) {
+            Ok(())
+        } else {
+            Err(CloudStorageError::Other(format!(
+                "Mock download failed, key not found: {}",
+                cloud_key
+            )))
+        }
+    }
 }
 
 #[cfg(test)]
