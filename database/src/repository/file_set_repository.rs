@@ -377,18 +377,12 @@ impl FileSetRepository {
         Ok(id)
     }
 
+    // TODO: there is also get_file_infos_by_file_set in FIleSetRepository, maybe we can combine
+    // these?
     pub async fn get_file_set_file_info(
         &self,
         file_set_id: i64,
     ) -> Result<Vec<FileSetFileInfo>, DatabaseError> {
-        let test = sqlx::query!(
-            "SELECT * 
-             FROM file_set_file_info 
-             WHERE file_set_id = ?",
-            file_set_id
-        );
-        let test = test.fetch_all(&*self.pool).await;
-        println!("Query result: {:?}", test);
         let file_infos = sqlx::query_as!(
             FileSetFileInfo,
             "SELECT 
@@ -405,10 +399,6 @@ impl FileSetRepository {
         )
         .fetch_all(&*self.pool)
         .await?;
-        println!(
-            "Retrieved {:?} file infos for file set ID {}",
-            file_infos, file_set_id
-        );
         Ok(file_infos)
     }
 }
