@@ -43,6 +43,58 @@ pub struct Pipeline<T> {
     pub steps: Vec<Box<dyn PipelineStep<T>>>,
 }
 
+impl<T> Pipeline<T> {
+    /// Create a pipeline with the given steps.
+    pub fn with_steps(steps: Vec<Box<dyn PipelineStep<T>>>) -> Self {
+        Self { steps }
+    }
+
+    /// Execute all steps in the pipeline in sequence.
+    ///
+    /// Steps are executed in order, with each step's `should_execute()` check
+    /// determining if it runs. The pipeline continues until all steps complete,
+    /// a step returns `Skip`, or a step returns `Abort`.
+    ///
+    /// # Arguments
+    ///
+    /// * `context` - Mutable reference to the context that will be passed to all steps
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if all steps complete successfully or a step returns `Skip`,
+    /// `Err(error)` if a step returns `Abort(error)`
+    pub async fn execute(&self, context: &mut T) -> Result<(), Error> {
+        for step in &self.steps {
+            // Check if step should execute
+            if !step.should_execute(context) {
+                eprintln!("Skipping step: {}", step.name());
+                continue;
+            }
+
+            eprintln!("Executing step: {}", step.name());
+
+            match step.execute(context).await {
+                StepAction::Continue => {
+                    // Proceed to next step
+                    continue;
+                }
+                StepAction::Skip => {
+                    // Early successful exit
+                    eprintln!("Step {} requested skip - stopping pipeline", step.name());
+                    return Ok(());
+                }
+                StepAction::Abort(error) => {
+                    // Error exit
+                    eprintln!("Step {} requested abort - stopping pipeline", step.name());
+                    return Err(error);
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
 /// The action to take after a step completes.
 ///
 /// Steps return this enum to control pipeline flow:
