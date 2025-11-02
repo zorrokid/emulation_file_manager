@@ -5,7 +5,7 @@ use database::repository_manager::RepositoryManager;
 use crate::{
     error::Error,
     file_system_ops::{FileSystemOps, StdFileSystemOps},
-    pipeline::Pipeline,
+    pipeline::generic_pipeline::Pipeline,
     view_models::Settings,
 };
 

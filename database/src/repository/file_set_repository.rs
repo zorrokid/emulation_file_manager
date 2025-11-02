@@ -33,6 +33,23 @@ impl FromRow<'_, SqliteRow> for FileSet {
     }
 }
 
+impl FromRow<'_, SqliteRow> for FileSetFileInfo {
+    fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
+        let file_type_int: u8 = row.try_get("file_type")?;
+        let file_type: FileType =
+            FileType::from_db_int(file_type_int).expect("Invalid file type in DB");
+        Ok(Self {
+            file_set_id: row.try_get("file_set_id")?,
+            file_info_id: row.try_get("file_info_id")?,
+            file_name: row.try_get("file_name")?,
+            file_type,
+            sha1_checksum: row.try_get("sha1_checksum")?,
+            file_size: row.try_get("file_size")?,
+            archive_file_name: row.try_get("archive_file_name")?,
+        })
+    }
+}
+
 impl FileSetRepository {
     pub async fn get_file_sets_for_release(
         &self,
@@ -381,23 +398,23 @@ impl FileSetRepository {
         &self,
         file_set_id: i64,
     ) -> Result<Vec<FileSetFileInfo>, DatabaseError> {
-        let file_infos = sqlx::query_as!(
-            FileSetFileInfo,
+        let query = sqlx::query_as::<_, FileSetFileInfo>(
             "SELECT 
                 fsfi.file_set_id, 
                 fsfi.file_info_id, 
                 fsfi.file_name, 
                 fi.sha1_checksum, 
                 fi.file_size, 
-                fi.archive_file_name
+                fi.archive_file_name,
+                fi.file_type
              FROM file_set_file_info fsfi
              JOIN file_info fi ON fsfi.file_info_id = fi.id
              WHERE fsfi.file_set_id = ?",
-            file_set_id
         )
-        .fetch_all(&*self.pool)
-        .await?;
-        Ok(file_infos)
+        .bind(file_set_id);
+
+        let file_set_file_infos = query.fetch_all(&*self.pool).await?;
+        Ok(file_set_file_infos)
     }
 }
 

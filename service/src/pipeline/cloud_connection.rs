@@ -2,25 +2,30 @@ use std::sync::Arc;
 
 use cloud_storage::{CloudStorageOps, S3CloudStorage};
 
-use crate::{error::Error, pipeline::{PipelineStep, StepAction}, settings_service::SettingsService, view_models::Settings};
+use crate::{
+    error::Error,
+    pipeline::pipeline_step::{PipelineStep, StepAction},
+    settings_service::SettingsService,
+    view_models::Settings,
+};
 
 /// A trait for contexts that support cloud connection.
-/// 
+///
 /// This trait should be implemented by any pipeline context that needs to
 /// connect to cloud storage. It provides access to the settings, credentials
 /// service, and a place to store the cloud operations instance.
 pub trait CloudConnectionContext {
     /// Get the settings containing S3 configuration
     fn settings(&self) -> &Arc<Settings>;
-    
+
     /// Get the settings service for loading credentials
     fn settings_service(&self) -> &Arc<SettingsService>;
-    
+
     /// Get a mutable reference to the cloud_ops field
     fn cloud_ops_mut(&mut self) -> &mut Option<Arc<dyn CloudStorageOps>>;
-    
+
     /// Check if cloud connection should be established
-    /// 
+    ///
     /// Override this method to provide context-specific logic for when
     /// to establish the cloud connection.
     fn should_connect(&self) -> bool {
@@ -29,16 +34,16 @@ pub trait CloudConnectionContext {
 }
 
 /// A generic step for connecting to cloud storage.
-/// 
+///
 /// This step can be used in any pipeline where the context implements
 /// `CloudConnectionContext`. It handles:
 /// - Loading S3 settings from the context
 /// - Loading credentials from the settings service
 /// - Establishing the connection
 /// - Storing the cloud operations instance in the context
-/// 
+///
 /// # Type Parameters
-/// 
+///
 /// * `T` - The context type that implements `CloudConnectionContext`
 pub struct ConnectToCloudStep<T: CloudConnectionContext> {
     _phantom: std::marker::PhantomData<T>,
@@ -76,7 +81,7 @@ impl<T: CloudConnectionContext + Send + Sync> PipelineStep<T> for ConnectToCloud
                 return StepAction::Abort(Error::SettingsError("S3 settings missing".to_string()));
             }
         };
-        
+
         let credentials = match context.settings_service().load_credentials().await {
             Ok(Some(creds)) => creds,
             Ok(None) => {
@@ -93,7 +98,7 @@ impl<T: CloudConnectionContext + Send + Sync> PipelineStep<T> for ConnectToCloud
                 )));
             }
         };
-        
+
         let cloud_ops_res = S3CloudStorage::connect(
             s3_settings.endpoint.as_str(),
             s3_settings.region.as_str(),

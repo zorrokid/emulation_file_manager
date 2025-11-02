@@ -3,7 +3,7 @@ use std::path::Path;
 use async_std::channel::Sender;
 use async_trait::async_trait;
 
-use crate::{CloudStorageError, SyncEvent};
+use crate::{CloudStorageError, SyncEvent, events::DownloadEvent};
 
 /// Trait for cloud storage operations to enable testing
 #[async_trait]
@@ -30,5 +30,6 @@ pub trait CloudStorageOps: Send + Sync {
         &self,
         cloud_key: &str,
         destination_path: &Path,
+        progress_tx: Option<&Sender<DownloadEvent>>,
     ) -> Result<(), CloudStorageError>;
 }

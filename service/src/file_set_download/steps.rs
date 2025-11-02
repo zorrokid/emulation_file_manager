@@ -1,9 +1,8 @@
-use std::sync::Arc;
+use cloud_storage::events::DownloadEvent;
 
 use crate::{
-    error::Error,
     file_set_download::context::DownloadContext,
-    pipeline::{PipelineStep, StepAction},
+    pipeline::pipeline_step::{PipelineStep, StepAction},
 };
 
 pub struct FetchFileSetStep;
@@ -107,10 +106,86 @@ impl PipelineStep<DownloadContext> for DownloadFilesStep {
     fn should_execute(&self, context: &DownloadContext) -> bool {
         // only execute if there are files to download
         !context.files_to_download.is_empty()
+            && context.cloud_ops.is_some()
+            && context.file_set.is_some()
     }
 
     async fn execute(&self, context: &mut DownloadContext) -> StepAction {
-        // download missing files from cloud storage
+        for file_info in context.files_to_download.iter() {
+            let cloud_key = &file_info.generate_cloud_key();
+            context
+                .progress_tx
+                .send(DownloadEvent::FileDownloadStarted {
+                    key: cloud_key.clone(),
+                })
+                .await
+                .ok();
+
+            let target_path = context.settings.get_file_path(
+                &context
+                    .file_set
+                    .as_ref()
+                    .expect("This step should only execute if file_set is Some")
+                    .file_type,
+                &file_info.archive_file_name,
+            );
+            let download_res = context
+                .cloud_ops
+                .as_ref()
+                .expect("This step should only execute if cloud_ops is Some")
+                .download_file(
+                    &cloud_key,
+                    target_path.as_path(),
+                    Some(&context.progress_tx),
+                )
+                .await;
+            match download_res {
+                Ok(_) => {
+                    context
+                        .progress_tx
+                        .send(DownloadEvent::FileDownloadCompleted {
+                            key: cloud_key.clone(),
+                        })
+                        .await
+                        .ok();
+                    context.file_download_results.push(
+                        crate::file_set_download::context::FileDownloadResult {
+                            file_info_id: file_info.id,
+                            cloud_key: file_info.archive_file_name.clone(),
+                            cloud_operation_success: true,
+                            file_write_success: true,
+                            cloud_error: None,
+                            file_io_error: None,
+                        },
+                    );
+                }
+                Err(e) => {
+                    context
+                        .progress_tx
+                        .send(DownloadEvent::FileDownloadFailed {
+                            key: cloud_key.clone(),
+                            error: format!("{}", e),
+                        })
+                        .await
+                        .ok();
+
+                    eprintln!(
+                        "Error downloading file {}: {}",
+                        file_info.archive_file_name, e
+                    );
+                    context.file_download_results.push(
+                        crate::file_set_download::context::FileDownloadResult {
+                            file_info_id: file_info.id,
+                            cloud_key: file_info.archive_file_name.clone(),
+                            cloud_operation_success: false,
+                            file_write_success: false,
+                            cloud_error: Some(format!("{}", e)),
+                            file_io_error: None,
+                        },
+                    );
+                }
+            }
+        }
 
         StepAction::Continue
     }

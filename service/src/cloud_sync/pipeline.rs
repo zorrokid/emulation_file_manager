@@ -1,13 +1,12 @@
 use crate::{
-    cloud_connection::ConnectToCloudStep,
     cloud_sync::{
         context::SyncContext,
         steps::{
-            DeleteMarkedFilesStep, GetSyncFileCountsStep,
-            PrepareFilesForUploadStep, UploadPendingFilesStep,
+            DeleteMarkedFilesStep, GetSyncFileCountsStep, PrepareFilesForUploadStep,
+            UploadPendingFilesStep,
         },
     },
-    pipeline::Pipeline,
+    pipeline::{cloud_connection::ConnectToCloudStep, generic_pipeline::Pipeline},
 };
 
 impl Default for Pipeline<SyncContext> {

@@ -4,7 +4,7 @@ use crate::{
     error::Error,
     file_set_deletion::context::{DeletionContext, FileDeletionResult},
     file_system_ops::FileSystemOps,
-    pipeline::{PipelineStep, StepAction},
+    pipeline::pipeline_step::{PipelineStep, StepAction},
 };
 
 /// Step 1: Validate that the file set is not in use by any releases

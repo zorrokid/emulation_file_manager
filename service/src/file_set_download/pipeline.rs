@@ -1,13 +1,12 @@
 use crate::{
-    cloud_connection::ConnectToCloudStep,
     file_set_download::{
         context::DownloadContext,
         steps::{
-            DownloadFilesStep, ExportFilesStep, FetchFileSetStep,
-            PrepareFileForDownloadStep, FetchFileSetFileInfoStep,
+            DownloadFilesStep, ExportFilesStep, FetchFileSetFileInfoStep, FetchFileSetStep,
+            PrepareFileForDownloadStep,
         },
     },
-    pipeline::Pipeline,
+    pipeline::{cloud_connection::ConnectToCloudStep, generic_pipeline::Pipeline},
 };
 
 impl Pipeline<DownloadContext> {

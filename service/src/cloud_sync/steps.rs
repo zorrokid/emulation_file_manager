@@ -1,11 +1,10 @@
-use std::sync::Arc;
 
-use cloud_storage::SyncEvent;
+use cloud_storage::events::SyncEvent;
 use core_types::FileSyncStatus;
 
 use crate::{
     cloud_sync::context::{FileSyncResult, SyncContext},
-    error::Error, pipeline::{StepAction, PipelineStep},
+    error::Error, pipeline::pipeline_step::{StepAction, PipelineStep},
 };
 
 /// Step 1: Prepare files for upload. This involves marking files as pending upload in the
@@ -34,11 +33,7 @@ impl PipelineStep<SyncContext> for PrepareFilesForUploadStep {
                     }
                     offset += file_infos.len() as i64;
                     for file_info in &file_infos {
-                        let cloud_key = format!(
-                            "{}/{}",
-                            file_info.file_type.to_string().to_lowercase(),
-                            file_info.archive_file_name
-                        );
+                        let cloud_key = file_info.generate_cloud_key();
                         println!(
                             "Preparing file for sync: id={}, cloud_key={}",
                             file_info.id, cloud_key
@@ -547,7 +542,7 @@ mod tests {
             steps::{
                 GetSyncFileCountsStep, PrepareFilesForUploadStep, UploadPendingFilesStep,
             },
-        }, pipeline::{StepAction, PipelineStep}, settings_service::SettingsService, view_models::Settings
+        }, pipeline::pipeline_step::{StepAction, PipelineStep}, settings_service::SettingsService, view_models::Settings
     };
 
     #[async_std::test]

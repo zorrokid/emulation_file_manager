@@ -7,7 +7,7 @@ use crate::{
         },
     },
     file_system_ops::FileSystemOps,
-    pipeline::Pipeline,
+    pipeline::generic_pipeline::Pipeline,
 };
 
 impl<F: FileSystemOps> Pipeline<DeletionContext<F>> {

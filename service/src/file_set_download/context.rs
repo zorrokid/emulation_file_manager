@@ -1,15 +1,14 @@
 use std::sync::Arc;
 
 use async_std::channel::Sender;
-use cloud_storage::{CloudStorageOps, SyncEvent};
+use cloud_storage::{CloudStorageOps, DownloadEvent};
 use database::{
     models::{FileInfo, FileSet, FileSetFileInfo},
     repository_manager::RepositoryManager,
 };
 
 use crate::{
-    cloud_connection::CloudConnectionContext,
-    file_set_download::service::DownloadEvent, settings_service::SettingsService,
+    pipeline::cloud_connection::CloudConnectionContext, settings_service::SettingsService,
     view_models::Settings,
 };
 

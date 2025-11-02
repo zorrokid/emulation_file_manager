@@ -4,7 +4,9 @@ use async_std::channel::Sender;
 use cloud_storage::SyncEvent;
 use database::repository_manager::RepositoryManager;
 
-use crate::{cloud_sync::context::SyncContext, pipeline::Pipeline, view_models::Settings};
+use crate::{
+    cloud_sync::context::SyncContext, pipeline::generic_pipeline::Pipeline, view_models::Settings,
+};
 
 #[derive(Debug)]
 pub struct CloudStorageSyncService {

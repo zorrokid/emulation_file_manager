@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
 use async_std::channel::Sender;
+use cloud_storage::events::DownloadEvent;
 use database::repository_manager::RepositoryManager;
 
 use crate::{
-    file_set_download::context::DownloadContext, pipeline::Pipeline,
+    file_set_download::context::DownloadContext, pipeline::generic_pipeline::Pipeline,
     settings_service::SettingsService, view_models::Settings,
 };
 
@@ -13,26 +14,6 @@ pub struct DownloadService {
     repository_manager: Arc<RepositoryManager>,
     settings: Arc<Settings>,
     settings_service: Arc<SettingsService>,
-}
-
-pub enum DownloadEvent {
-    DownloadStarted {
-        file_set_id: i64,
-        number_of_files: usize,
-    },
-    FileDownloadStarted {
-        file_info_id: i64,
-    },
-    FileDownloadProgress {
-        file_info_id: i64,
-        bytes_downloaded: u64,
-    },
-    FileDownloadCompleted {
-        file_info_id: i64,
-    },
-    DownloadCompleted {
-        file_set_id: i64,
-    },
 }
 
 impl DownloadService {

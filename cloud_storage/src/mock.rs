@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 use async_std::channel::Sender;
 use async_trait::async_trait;
 
+use crate::events::DownloadEvent;
 use crate::{CloudStorageError, SyncEvent, ops::CloudStorageOps};
 
 /// Mock implementation of CloudStorageOps for testing
@@ -213,10 +214,12 @@ impl CloudStorageOps for MockCloudStorage {
         Ok(is_uploaded && !is_deleted)
     }
 
+    // TODO: simulate download progress events
     async fn download_file(
         &self,
         cloud_key: &str,
         _destination_path: &Path,
+        _progress_tx: Option<&Sender<DownloadEvent>>,
     ) -> Result<(), CloudStorageError> {
         let uploaded_files = self.uploaded_files.lock().unwrap();
         if uploaded_files.contains_key(cloud_key) {

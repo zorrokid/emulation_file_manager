@@ -4,7 +4,10 @@ use async_std::channel::Sender;
 use cloud_storage::{CloudStorageOps, SyncEvent};
 use database::repository_manager::RepositoryManager;
 
-use crate::{cloud_connection::CloudConnectionContext, settings_service::SettingsService, view_models::Settings};
+use crate::{
+    pipeline::cloud_connection::CloudConnectionContext, settings_service::SettingsService,
+    view_models::Settings,
+};
 
 pub struct SyncContext {
     pub repository_manager: Arc<RepositoryManager>,
