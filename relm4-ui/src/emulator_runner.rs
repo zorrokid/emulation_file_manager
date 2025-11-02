@@ -429,6 +429,7 @@ impl EmulatorRunnerModel {
             self.file_set.clone(),
         ) {
             let temp_dir = std::env::temp_dir();
+            // TODO: use downlaod_service instead!
             let export_model = prepare_fileset_for_export(
                 &file_set,
                 &self.settings.collection_root_dir,

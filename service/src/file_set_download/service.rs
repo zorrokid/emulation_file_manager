@@ -39,6 +39,7 @@ impl DownloadService {
             progress_tx,
             file_set_id,
             extract_files,
+            None, // this will be initialized in the pipeline
         );
         let pipeline = Pipeline::<DownloadContext>::new();
         pipeline.execute(&mut context).await?;

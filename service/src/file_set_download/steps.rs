@@ -1,4 +1,8 @@
+use std::collections::HashMap;
+
 use cloud_storage::events::DownloadEvent;
+use core_types::Sha1Checksum;
+use file_export::{export_files_zipped_or_non_zipped, FileSetExportModel, OutputFile};
 
 use crate::{
     file_set_download::context::DownloadContext,
@@ -133,11 +137,7 @@ impl PipelineStep<DownloadContext> for DownloadFilesStep {
                 .cloud_ops
                 .as_ref()
                 .expect("This step should only execute if cloud_ops is Some")
-                .download_file(
-                    &cloud_key,
-                    target_path.as_path(),
-                    Some(&context.progress_tx),
-                )
+                .download_file(cloud_key, target_path.as_path(), Some(&context.progress_tx))
                 .await;
             match download_res {
                 Ok(_) => {
@@ -187,7 +187,14 @@ impl PipelineStep<DownloadContext> for DownloadFilesStep {
             }
         }
 
-        StepAction::Continue
+        if context.failed_downloads() > 0 {
+            StepAction::Abort(crate::error::Error::DownloadError(format!(
+                "{} files failed to download",
+                context.failed_downloads(),
+            )))
+        } else {
+            StepAction::Continue
+        }
     }
 }
 
@@ -197,13 +204,108 @@ impl PipelineStep<DownloadContext> for ExportFilesStep {
     fn name(&self) -> &'static str {
         "export_files"
     }
-    fn should_execute(&self, context: &DownloadContext) -> bool {
-        // only execute if there are files to download
-        !context.files_in_set.is_empty()
-    }
-    async fn execute(&self, context: &mut DownloadContext) -> StepAction {
-        // export files to temp directory
 
-        StepAction::Continue
+    fn should_execute(&self, context: &DownloadContext) -> bool {
+        !context.files_in_set.is_empty() && context.file_set.is_some()
+    }
+
+    async fn execute(&self, context: &mut DownloadContext) -> StepAction {
+        let file_set = context
+            .file_set
+            .as_ref()
+            .expect("This step should only execute if file_set is Some");
+
+        let source_file_path = context.settings.get_file_type_path(&file_set.file_type);
+
+        let output_mapping = context
+            .files_in_set
+            .iter()
+            .map(|f| {
+                let checksum: Sha1Checksum = f
+                    .sha1_checksum
+                    .clone()
+                    .try_into()
+                    .expect("Failed to convert to Sha1Checksum");
+                (
+                    f.archive_file_name.clone(),
+                    OutputFile {
+                        output_file_name: f.file_name.clone(),
+                        checksum,
+                    },
+                )
+            })
+            .collect::<HashMap<String, OutputFile>>();
+
+        let exported_zip_file_name = file_set.name.clone();
+
+        let export_model = FileSetExportModel {
+            output_mapping,
+            source_file_path,
+            output_dir: context.settings.temp_output_dir.clone(),
+            extract_files: context.extract_files,
+            exported_zip_file_name,
+        };
+
+        let res = export_files_zipped_or_non_zipped(&export_model);
+        match res {
+            Ok(_) => {
+                context.file_output_mapping = export_model.output_mapping;
+                StepAction::Continue
+            }
+            Err(e) => {
+                eprintln!("Error exporting files for file set {}: {}", file_set.id, e);
+                return StepAction::Abort(e.into());
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{path::PathBuf, sync::Arc};
+
+    use cloud_storage::mock::MockCloudStorage;
+    use database::{repository_manager::RepositoryManager, setup_test_db};
+
+    use crate::{
+        file_set_download::{context::DownloadContext, steps::FetchFileSetStep},
+        pipeline::pipeline_step::{PipelineStep, StepAction},
+        settings_service::SettingsService,
+        view_models::Settings,
+    };
+
+    #[async_std::test]
+    async fn test_fetch_file_set_step_file_set_not_found() {
+        let mut context = initialize_context(false).await;
+        let step = FetchFileSetStep;
+        let action = step.execute(&mut context).await;
+        assert!(matches!(action, StepAction::Abort(_)));
+    }
+
+    #[async_std::test]
+    async fn test_fetch_file_set_step_file_set_found() {}
+
+    async fn initialize_context(extract_files: bool) -> DownloadContext {
+        let pool = Arc::new(setup_test_db().await);
+        let repo_manager = Arc::new(RepositoryManager::new(pool));
+        let settings = Arc::new(Settings {
+            collection_root_dir: PathBuf::from("/"),
+            ..Default::default()
+        });
+
+        let settings_service = Arc::new(SettingsService::new(repo_manager.clone()));
+        let cloud_ops = Arc::new(MockCloudStorage::new());
+
+        let (tx, _rx) = async_std::channel::unbounded();
+
+        DownloadContext::new(
+            repo_manager,
+            settings,
+            settings_service,
+            tx,
+            1,
+            extract_files,
+            Some(cloud_ops),
+        )
     }
 }

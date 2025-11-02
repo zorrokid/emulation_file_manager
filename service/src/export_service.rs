@@ -15,6 +15,7 @@ use crate::{
 };
 
 /// Service responsible for exporting all the files from the collection to a specified destination.
+// TODO: refactor to use download service for exporting files
 #[derive(Debug)]
 pub struct ExportService {
     repository_manager: Arc<RepositoryManager>,
@@ -51,6 +52,8 @@ impl ExportService {
         path
     }
 
+    // TODO: use download service to export all files
+    #[deprecated]
     pub async fn export_all_files(&self, destination: &Path) -> Result<(), Error> {
         println!("Exporting all files to {}", destination.display());
 
@@ -114,6 +117,8 @@ pub fn resolve_file_type_path(root_path: &Path, file_type: &core_types::FileType
     path
 }
 
+// TODO: this will be replaced by dowload service
+#[deprecated]
 pub fn prepare_fileset_for_export(
     file_set: &FileSetViewModel,
     collection_root_dir: &Path,

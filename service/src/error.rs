@@ -1,5 +1,7 @@
 use std::fmt::{Display, Formatter, Result};
 
+use file_export::FileExportError;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Error {
     DbError(String),
@@ -8,6 +10,7 @@ pub enum Error {
     IoError(String),
     CloudSyncError(String),
     SettingsError(String),
+    DownloadError(String),
 }
 
 impl Display for Error {
@@ -19,6 +22,7 @@ impl Display for Error {
             Error::IoError(message) => write!(f, "IO error: {}", message),
             Error::CloudSyncError(message) => write!(f, "Cloud sync error: {}", message),
             Error::SettingsError(message) => write!(f, "Settings error: {}", message),
+            Error::DownloadError(message) => write!(f, "Download error: {}", message),
         }
     }
 }
@@ -32,5 +36,11 @@ impl From<database::database_error::DatabaseError> for Error {
 impl From<cloud_storage::CloudStorageError> for Error {
     fn from(err: cloud_storage::CloudStorageError) -> Self {
         Error::CloudSyncError(err.to_string())
+    }
+}
+
+impl From<FileExportError> for Error {
+    fn from(err: FileExportError) -> Self {
+        Error::ExportError(err.to_string())
     }
 }
