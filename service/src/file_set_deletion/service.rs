@@ -4,6 +4,7 @@ use database::repository_manager::RepositoryManager;
 
 use crate::{
     error::Error,
+    file_set_deletion::context::DeletionContext,
     file_system_ops::{FileSystemOps, StdFileSystemOps},
     pipeline::generic_pipeline::Pipeline,
     view_models::Settings,
@@ -36,7 +37,7 @@ impl<F: FileSystemOps> FileSetDeletionService<F> {
     }
 
     pub async fn delete_file_set(&self, file_set_id: i64) -> Result<(), Error> {
-        let mut context = crate::file_set_deletion::context::DeletionContext {
+        let mut context = DeletionContext {
             file_set_id,
             repository_manager: self.repository_manager.clone(),
             settings: self.settings.clone(),
@@ -44,7 +45,7 @@ impl<F: FileSystemOps> FileSetDeletionService<F> {
             deletion_results: HashMap::new(),
         };
 
-        let pipeline = Pipeline::<crate::file_set_deletion::context::DeletionContext<F>>::new();
+        let pipeline = Pipeline::<DeletionContext<F>>::new();
         pipeline.execute(&mut context).await?;
 
         let successful_deletions = context

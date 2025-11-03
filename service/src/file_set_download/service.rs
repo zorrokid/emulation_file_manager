@@ -5,24 +5,48 @@ use cloud_storage::events::DownloadEvent;
 use database::repository_manager::RepositoryManager;
 
 use crate::{
-    file_set_download::context::DownloadContext, pipeline::generic_pipeline::Pipeline,
-    settings_service::SettingsService, view_models::Settings,
+    file_set_download::context::DownloadContext,
+    file_system_ops::{FileSystemOps, StdFileSystemOps},
+    pipeline::generic_pipeline::Pipeline,
+    settings_service::SettingsService,
+    view_models::Settings,
 };
 
 #[derive(Debug)]
-pub struct DownloadService {
+pub struct DownloadService<F: FileSystemOps = StdFileSystemOps> {
     repository_manager: Arc<RepositoryManager>,
     settings: Arc<Settings>,
     settings_service: Arc<SettingsService>,
+    fs_ops: Arc<F>,
 }
 
-impl DownloadService {
-    pub fn new(repository_manager: Arc<RepositoryManager>, settings: Arc<Settings>) -> Self {
-        let settings_service = Arc::new(SettingsService::new(repository_manager.clone()));
+impl DownloadService<StdFileSystemOps> {
+    pub fn new(
+        repository_manager: Arc<RepositoryManager>,
+        settings: Arc<Settings>,
+        settings_service: Arc<SettingsService>,
+    ) -> Self {
+        Self::new_with_fs_ops(
+            repository_manager,
+            settings,
+            settings_service,
+            Arc::new(StdFileSystemOps),
+        )
+    }
+}
+
+impl<F: FileSystemOps + 'static> DownloadService<F> {
+    pub fn new_with_fs_ops(
+        repository_manager: Arc<RepositoryManager>,
+        settings: Arc<Settings>,
+        settings_service: Arc<SettingsService>,
+        fs_ops: Arc<F>,
+    ) -> Self {
         Self {
             repository_manager,
             settings,
             settings_service,
+            fs_ops,
         }
     }
 
@@ -40,8 +64,9 @@ impl DownloadService {
             file_set_id,
             extract_files,
             None, // this will be initialized in the pipeline
+            self.fs_ops.clone(),
         );
-        let pipeline = Pipeline::<DownloadContext>::new();
+        let pipeline = Pipeline::<DownloadContext<F>>::new();
         pipeline.execute(&mut context).await?;
         let successful_downloads = context.successful_downloads();
         let failed_downloads = context.failed_downloads();

@@ -9,15 +9,17 @@ use database::{
 use file_export::OutputFile;
 
 use crate::{
-    pipeline::cloud_connection::CloudConnectionContext, settings_service::SettingsService,
-    view_models::Settings,
+    file_system_ops::FileSystemOps, pipeline::cloud_connection::CloudConnectionContext,
+    settings_service::SettingsService, view_models::Settings,
 };
 
-pub struct DownloadContext {
+pub struct DownloadContext<F: FileSystemOps> {
     pub repository_manager: Arc<RepositoryManager>,
     pub settings: Arc<Settings>,
     pub settings_service: Arc<SettingsService>,
     pub progress_tx: Sender<DownloadEvent>,
+
+    pub fs_ops: Arc<F>,
 
     // Lazy initialized by ConnectToCloudStep
     // Need to use dyn because CloudStorageOps is a trait
@@ -46,7 +48,7 @@ pub struct FileDownloadResult {
     pub file_io_error: Option<String>,
 }
 
-impl DownloadContext {
+impl<F: FileSystemOps> DownloadContext<F> {
     pub fn new(
         repository_manager: Arc<RepositoryManager>,
         settings: Arc<Settings>,
@@ -55,6 +57,7 @@ impl DownloadContext {
         file_set_id: i64,
         extract_files: bool,
         cloud_ops: Option<Arc<dyn CloudStorageOps>>,
+        fs_ops: Arc<F>,
     ) -> Self {
         Self {
             repository_manager,
@@ -69,6 +72,7 @@ impl DownloadContext {
             files_to_download: vec![],
             file_download_results: vec![],
             file_output_mapping: HashMap::new(),
+            fs_ops,
         }
     }
 
@@ -87,7 +91,7 @@ impl DownloadContext {
     }
 }
 
-impl CloudConnectionContext for DownloadContext {
+impl<F: FileSystemOps> CloudConnectionContext for DownloadContext<F> {
     fn settings(&self) -> &Arc<Settings> {
         &self.settings
     }
