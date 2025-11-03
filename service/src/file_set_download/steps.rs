@@ -267,7 +267,7 @@ mod tests {
         file_set_download::{
             context::DownloadContext,
             steps::{
-                DownloadFilesStep, FetchFileSetFileInfoStep, FetchFileSetStep,
+                DownloadFilesStep, ExportFilesStep, FetchFileSetFileInfoStep, FetchFileSetStep,
                 PrepareFileForDownloadStep,
             },
         },
@@ -317,6 +317,8 @@ mod tests {
 
         context.file_set_id = file_set_id;
         let step = FetchFileSetFileInfoStep;
+        let should_execute = step.should_execute(&context);
+        assert!(should_execute);
         let action = step.execute(&mut context).await;
         assert!(matches!(action, StepAction::Continue));
         assert_eq!(context.files_in_set.len(), 1);
@@ -341,7 +343,24 @@ mod tests {
             .fs_ops
             .add_file(file_path.to_string_lossy().as_ref());
 
+        context.file_set = Some(
+            context
+                .repository_manager
+                .get_file_set_repository()
+                .get_file_set(context.file_set_id)
+                .await
+                .unwrap(),
+        );
+        context.files_in_set = context
+            .repository_manager
+            .get_file_set_repository()
+            .get_file_set_file_info(context.file_set_id)
+            .await
+            .unwrap();
+
         let step = PrepareFileForDownloadStep;
+        let should_execute = step.should_execute(&context);
+        assert!(should_execute);
         let action = step.execute(&mut context).await;
         assert!(matches!(action, StepAction::Continue));
         assert_eq!(context.files_to_download.len(), 0);
@@ -374,6 +393,8 @@ mod tests {
             .unwrap();
 
         let step = PrepareFileForDownloadStep;
+        let should_execute = step.should_execute(&context);
+        assert!(should_execute);
         let action = step.execute(&mut context).await;
         assert!(matches!(action, StepAction::Continue));
         assert_eq!(context.files_to_download.len(), 1);
@@ -424,6 +445,8 @@ mod tests {
             .unwrap();
 
         let step = DownloadFilesStep;
+        let should_execute = step.should_execute(&context);
+        assert!(should_execute);
         let action = step.execute(&mut context).await;
         assert!(matches!(action, StepAction::Continue));
         assert_eq!(context.successful_downloads(), 1);
@@ -464,6 +487,8 @@ mod tests {
         let key = context.files_to_download[0].generate_cloud_key();
 
         let step = DownloadFilesStep;
+        let should_execute = step.should_execute(&context);
+        assert!(should_execute);
         let action = step.execute(&mut context).await;
         assert!(matches!(action, StepAction::Abort(_)));
         assert_eq!(context.successful_downloads(), 0);
@@ -472,6 +497,41 @@ mod tests {
         assert_eq!(download_result.cloud_key, key);
         assert!(!download_result.cloud_operation_success);
         assert!(!download_result.file_write_success);
+    }
+
+    #[async_std::test]
+    async fn test_export_files_step() {
+        let mut context = initialize_context(false).await;
+
+        let archive_file_name = "some_cryptic_filename";
+        let file_type = FileType::Rom;
+
+        let _file_set_id =
+            prepare_file_set_with_files(&context.repository_manager, archive_file_name, &file_type)
+                .await;
+
+        let file_set = context
+            .repository_manager
+            .get_file_set_repository()
+            .get_file_set(context.file_set_id)
+            .await
+            .unwrap();
+
+        context.file_set = Some(file_set);
+        context.files_in_set = context
+            .repository_manager
+            .get_file_set_repository()
+            .get_file_set_file_info(context.file_set_id)
+            .await
+            .unwrap();
+
+        let step = ExportFilesStep;
+        let should_execute = step.should_execute(&context);
+        assert!(should_execute);
+
+        //let action = step.execute(&mut context).await;
+        // TODO: export_files_zipped_or_non_zipped should use file system ops from context to allow
+        // mocking file operations in tests.
     }
 
     async fn initialize_context(extract_files: bool) -> DownloadContext<MockFileSystemOps> {
