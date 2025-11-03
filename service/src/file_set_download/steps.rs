@@ -5,7 +5,7 @@ use core_types::Sha1Checksum;
 use file_export::{export_files_zipped_or_non_zipped, FileSetExportModel, OutputFile};
 
 use crate::{
-    file_set_download::context::DownloadContext,
+    file_set_download::context::{DownloadContext, FileDownloadResult},
     file_system_ops::FileSystemOps,
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
@@ -83,8 +83,6 @@ impl<F: FileSystemOps> PipelineStep<DownloadContext<F>> for PrepareFileForDownlo
     }
 
     async fn execute(&self, context: &mut DownloadContext<F>) -> StepAction {
-        let mut files_to_download = vec![];
-
         if let Some(file_set) = &context.file_set {
             for file in context.files_in_set.iter() {
                 let file_path = context
@@ -92,7 +90,7 @@ impl<F: FileSystemOps> PipelineStep<DownloadContext<F>> for PrepareFileForDownlo
                     .get_file_path(&file_set.file_type, &file.archive_file_name);
 
                 if !context.fs_ops.exists(&file_path) {
-                    files_to_download.push(file.clone());
+                    context.files_to_download.push(file.into());
                 }
             }
         }
@@ -149,16 +147,14 @@ impl<F: FileSystemOps> PipelineStep<DownloadContext<F>> for DownloadFilesStep {
                         })
                         .await
                         .ok();
-                    context.file_download_results.push(
-                        crate::file_set_download::context::FileDownloadResult {
-                            file_info_id: file_info.id,
-                            cloud_key: file_info.archive_file_name.clone(),
-                            cloud_operation_success: true,
-                            file_write_success: true,
-                            cloud_error: None,
-                            file_io_error: None,
-                        },
-                    );
+                    context.file_download_results.push(FileDownloadResult {
+                        file_info_id: file_info.id,
+                        cloud_key: cloud_key.clone(),
+                        cloud_operation_success: true,
+                        file_write_success: true,
+                        cloud_error: None,
+                        file_io_error: None,
+                    });
                 }
                 Err(e) => {
                     context
@@ -174,16 +170,14 @@ impl<F: FileSystemOps> PipelineStep<DownloadContext<F>> for DownloadFilesStep {
                         "Error downloading file {}: {}",
                         file_info.archive_file_name, e
                     );
-                    context.file_download_results.push(
-                        crate::file_set_download::context::FileDownloadResult {
-                            file_info_id: file_info.id,
-                            cloud_key: file_info.archive_file_name.clone(),
-                            cloud_operation_success: false,
-                            file_write_success: false,
-                            cloud_error: Some(format!("{}", e)),
-                            file_io_error: None,
-                        },
-                    );
+                    context.file_download_results.push(FileDownloadResult {
+                        file_info_id: file_info.id,
+                        cloud_key: file_info.archive_file_name.clone(),
+                        cloud_operation_success: false,
+                        file_write_success: false,
+                        cloud_error: Some(format!("{}", e)),
+                        file_io_error: None,
+                    });
                 }
             }
         }
@@ -272,7 +266,10 @@ mod tests {
     use crate::{
         file_set_download::{
             context::DownloadContext,
-            steps::{FetchFileSetFileInfoStep, FetchFileSetStep, PrepareFileForDownloadStep},
+            steps::{
+                DownloadFilesStep, FetchFileSetFileInfoStep, FetchFileSetStep,
+                PrepareFileForDownloadStep,
+            },
         },
         file_system_ops::mock::MockFileSystemOps,
         pipeline::pipeline_step::{PipelineStep, StepAction},
@@ -348,6 +345,93 @@ mod tests {
         let action = step.execute(&mut context).await;
         assert!(matches!(action, StepAction::Continue));
         assert_eq!(context.files_to_download.len(), 0);
+    }
+
+    #[async_std::test]
+    async fn test_prepare_file_for_download_step_file_does_not_exist_locally() {
+        let mut context = initialize_context(false).await;
+
+        let archive_file_name = "some_cryptic_filename";
+        let file_type = FileType::Rom;
+
+        let _file_set_id =
+            prepare_file_set_with_files(&context.repository_manager, archive_file_name, &file_type)
+                .await;
+
+        let file_set = context
+            .repository_manager
+            .get_file_set_repository()
+            .get_file_set(context.file_set_id)
+            .await
+            .unwrap();
+
+        context.file_set = Some(file_set);
+        context.files_in_set = context
+            .repository_manager
+            .get_file_set_repository()
+            .get_file_set_file_info(context.file_set_id)
+            .await
+            .unwrap();
+
+        let step = PrepareFileForDownloadStep;
+        let action = step.execute(&mut context).await;
+        assert!(matches!(action, StepAction::Continue));
+        assert_eq!(context.files_to_download.len(), 1);
+        assert_eq!(
+            context.files_to_download[0].archive_file_name,
+            archive_file_name
+        );
+    }
+
+    #[async_std::test]
+    async fn test_download_files_step() {
+        let mut context = initialize_context(false).await;
+
+        let archive_file_name = "some_cryptic_filename";
+        let file_type = FileType::Rom;
+
+        let _file_set_id =
+            prepare_file_set_with_files(&context.repository_manager, archive_file_name, &file_type)
+                .await;
+
+        let file_set = context
+            .repository_manager
+            .get_file_set_repository()
+            .get_file_set(context.file_set_id)
+            .await
+            .unwrap();
+
+        context.file_set = Some(file_set);
+        context.files_in_set = context
+            .repository_manager
+            .get_file_set_repository()
+            .get_file_set_file_info(context.file_set_id)
+            .await
+            .unwrap();
+        context.files_to_download = context.files_in_set.iter().map(|f| f.into()).collect();
+
+        let file_path = context
+            .settings
+            .get_file_path(&file_type, archive_file_name);
+        let key = context.files_to_download[0].generate_cloud_key();
+
+        context
+            .cloud_ops
+            .clone()
+            .unwrap()
+            .upload_file(&file_path, &key, None)
+            .await
+            .unwrap();
+
+        let step = DownloadFilesStep;
+        let action = step.execute(&mut context).await;
+        assert!(matches!(action, StepAction::Continue));
+        assert_eq!(context.successful_downloads(), 1);
+        assert_eq!(context.failed_downloads(), 0);
+        assert_eq!(
+            context.file_download_results.first().unwrap().cloud_key,
+            key
+        );
     }
 
     async fn initialize_context(extract_files: bool) -> DownloadContext<MockFileSystemOps> {
