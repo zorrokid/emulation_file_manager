@@ -172,7 +172,7 @@ impl<F: FileSystemOps> PipelineStep<DownloadContext<F>> for DownloadFilesStep {
                     );
                     context.file_download_results.push(FileDownloadResult {
                         file_info_id: file_info.id,
-                        cloud_key: file_info.archive_file_name.clone(),
+                        cloud_key: cloud_key.clone(),
                         cloud_operation_success: false,
                         file_write_success: false,
                         cloud_error: Some(format!("{}", e)),
@@ -384,7 +384,7 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn test_download_files_step() {
+    async fn test_download_files_step_with_successful_download() {
         let mut context = initialize_context(false).await;
 
         let archive_file_name = "some_cryptic_filename";
@@ -432,6 +432,46 @@ mod tests {
             context.file_download_results.first().unwrap().cloud_key,
             key
         );
+    }
+
+    #[async_std::test]
+    async fn test_download_files_step_with_failed_download() {
+        let mut context = initialize_context(false).await;
+
+        let archive_file_name = "some_cryptic_filename";
+        let file_type = FileType::Rom;
+
+        let _file_set_id =
+            prepare_file_set_with_files(&context.repository_manager, archive_file_name, &file_type)
+                .await;
+
+        let file_set = context
+            .repository_manager
+            .get_file_set_repository()
+            .get_file_set(context.file_set_id)
+            .await
+            .unwrap();
+
+        context.file_set = Some(file_set);
+        context.files_in_set = context
+            .repository_manager
+            .get_file_set_repository()
+            .get_file_set_file_info(context.file_set_id)
+            .await
+            .unwrap();
+        context.files_to_download = context.files_in_set.iter().map(|f| f.into()).collect();
+
+        let key = context.files_to_download[0].generate_cloud_key();
+
+        let step = DownloadFilesStep;
+        let action = step.execute(&mut context).await;
+        assert!(matches!(action, StepAction::Abort(_)));
+        assert_eq!(context.successful_downloads(), 0);
+        assert_eq!(context.failed_downloads(), 1);
+        let download_result = context.file_download_results.first().unwrap();
+        assert_eq!(download_result.cloud_key, key);
+        assert!(!download_result.cloud_operation_success);
+        assert!(!download_result.file_write_success);
     }
 
     async fn initialize_context(extract_files: bool) -> DownloadContext<MockFileSystemOps> {
