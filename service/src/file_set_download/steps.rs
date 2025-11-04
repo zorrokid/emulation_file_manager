@@ -530,8 +530,8 @@ mod tests {
         assert!(should_execute);
 
         //let action = step.execute(&mut context).await;
-        // TODO: export_files_zipped_or_non_zipped should use file system ops from context to allow
-        // mocking file operations in tests.
+        // TODO: mock export_files_zipped_or_non_zipped  and finish the test for this step
+        // - the function needs to be wrapped in a trait so it can be mocked
     }
 
     async fn initialize_context(extract_files: bool) -> DownloadContext<MockFileSystemOps> {

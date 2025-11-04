@@ -1,3 +1,4 @@
+pub mod file_export_ops;
 use std::{
     collections::HashMap,
     fs::File,
