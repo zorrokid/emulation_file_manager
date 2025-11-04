@@ -284,7 +284,7 @@ mod tests {
 
     #[async_std::test]
     async fn test_fetch_file_set_step_file_set_not_found() {
-        let mut context = initialize_context(false).await;
+        let (mut context, _) = initialize_context(false).await;
         let step = FetchFileSetStep;
         let action = step.execute(&mut context).await;
         assert!(matches!(action, StepAction::Abort(_)));
@@ -292,7 +292,7 @@ mod tests {
 
     #[async_std::test]
     async fn test_fetch_file_set_step_file_set_found() {
-        let mut context = initialize_context(false).await;
+        let (mut context, _) = initialize_context(false).await;
 
         let file_set_id = prepare_file_set_with_files(
             &context.repository_manager,
@@ -311,7 +311,7 @@ mod tests {
 
     #[async_std::test]
     async fn test_fetch_file_set_file_info_step() {
-        let mut context = initialize_context(false).await;
+        let (mut context, _) = initialize_context(false).await;
 
         let file_set_id = prepare_file_set_with_files(
             &context.repository_manager,
@@ -331,7 +331,7 @@ mod tests {
 
     #[async_std::test]
     async fn test_prepare_file_for_download_step_file_exists_locally() {
-        let mut context = initialize_context(false).await;
+        let (mut context, _) = initialize_context(false).await;
 
         let archive_file_name = "some_cryptic_filename";
         let file_type = FileType::Rom;
@@ -373,7 +373,7 @@ mod tests {
 
     #[async_std::test]
     async fn test_prepare_file_for_download_step_file_does_not_exist_locally() {
-        let mut context = initialize_context(false).await;
+        let (mut context, _) = initialize_context(false).await;
 
         let archive_file_name = "some_cryptic_filename";
         let file_type = FileType::Rom;
@@ -411,7 +411,7 @@ mod tests {
 
     #[async_std::test]
     async fn test_download_files_step_with_successful_download() {
-        let mut context = initialize_context(false).await;
+        let (mut context, _) = initialize_context(false).await;
 
         let archive_file_name = "some_cryptic_filename";
         let file_type = FileType::Rom;
@@ -464,7 +464,7 @@ mod tests {
 
     #[async_std::test]
     async fn test_download_files_step_with_failed_download() {
-        let mut context = initialize_context(false).await;
+        let (mut context, _) = initialize_context(false).await;
 
         let archive_file_name = "some_cryptic_filename";
         let file_type = FileType::Rom;
@@ -506,7 +506,7 @@ mod tests {
 
     #[async_std::test]
     async fn test_export_files_step_success() {
-        let mut context = initialize_context(false).await;
+        let (mut context, mock_export_state) = initialize_context(false).await;
 
         let archive_file_name = "some_cryptic_filename";
         let file_type = FileType::Rom;
@@ -537,24 +537,18 @@ mod tests {
         let action = step.execute(&mut context).await;
         assert!(matches!(action, StepAction::Continue));
         
-        // Verify export was called
-        let export_ops = Arc::clone(&context.export_ops);
-        let export_ops = export_ops
-            .as_any()
-            .downcast_ref::<file_export::file_export_ops::MockFileExportOps>()
-            .expect("Expected MockFileExportOps");
+        // Verify export was called via shared state
+        assert_eq!(mock_export_state.total_calls(), 1);
+        assert_eq!(mock_export_state.export_zipped_calls().len(), 1);
         
-        assert_eq!(export_ops.total_calls(), 1);
-        assert_eq!(export_ops.export_zipped_calls().len(), 1);
-        
-        let call = &export_ops.export_zipped_calls()[0];
+        let call = &mock_export_state.export_zipped_calls()[0];
         assert_eq!(call.output_file_names.len(), 1);
         assert!(!call.extract_files);
     }
 
     #[async_std::test]
     async fn test_export_files_step_with_extraction() {
-        let mut context = initialize_context(true).await;
+        let (mut context, mock_export_state) = initialize_context(true).await;
 
         let archive_file_name = "some_cryptic_filename";
         let file_type = FileType::Rom;
@@ -582,21 +576,20 @@ mod tests {
         let action = step.execute(&mut context).await;
         assert!(matches!(action, StepAction::Continue));
         
-        // Verify export (not export_zipped) was called
-        let export_ops = Arc::clone(&context.export_ops);
-        let export_ops = export_ops
-            .as_any()
-            .downcast_ref::<file_export::file_export_ops::MockFileExportOps>()
-            .expect("Expected MockFileExportOps");
+        // Verify export (not export_zipped) was called via shared state
+        assert_eq!(mock_export_state.total_calls(), 1);
+        assert_eq!(mock_export_state.export_calls().len(), 1);
         
-        assert_eq!(export_ops.total_calls(), 1);
-        assert_eq!(export_ops.export_calls().len(), 1);
-        
-        let call = &export_ops.export_calls()[0];
+        let call = &mock_export_state.export_calls()[0];
         assert!(call.extract_files);
     }
 
-    async fn initialize_context(extract_files: bool) -> DownloadContext<MockFileSystemOps> {
+    async fn initialize_context(
+        extract_files: bool,
+    ) -> (
+        DownloadContext<MockFileSystemOps>,
+        Arc<file_export::file_export_ops::MockState>,
+    ) {
         let pool = Arc::new(setup_test_db().await);
         let repo_manager = Arc::new(RepositoryManager::new(pool));
         let settings = Arc::new(Settings {
@@ -609,9 +602,13 @@ mod tests {
 
         let (tx, _rx) = async_std::channel::unbounded();
         let fs_ops = Arc::new(MockFileSystemOps::new());
-        let export_ops = Arc::new(file_export::file_export_ops::MockFileExportOps::new());
+        
+        let mock_export_state = Arc::new(file_export::file_export_ops::MockState::new());
+        let export_ops = Arc::new(
+            file_export::file_export_ops::MockFileExportOps::new_with_state(mock_export_state.clone())
+        );
 
-        DownloadContext::new(
+        let context = DownloadContext::new(
             repo_manager,
             settings,
             settings_service,
@@ -621,7 +618,9 @@ mod tests {
             Some(cloud_ops),
             fs_ops,
             export_ops,
-        )
+        );
+        
+        (context, mock_export_state)
     }
 
     async fn prepare_file_set_with_files(
