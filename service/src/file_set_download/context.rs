@@ -6,7 +6,7 @@ use database::{
     models::{FileInfo, FileSet, FileSetFileInfo},
     repository_manager::RepositoryManager,
 };
-use file_export::OutputFile;
+use file_export::{file_export_ops::FileExportOps, OutputFile};
 
 use crate::{
     file_system_ops::FileSystemOps, pipeline::cloud_connection::CloudConnectionContext,
@@ -20,6 +20,7 @@ pub struct DownloadContext<F: FileSystemOps> {
     pub progress_tx: Sender<DownloadEvent>,
 
     pub fs_ops: Arc<F>,
+    pub export_ops: Arc<dyn FileExportOps>,
 
     // Lazy initialized by ConnectToCloudStep
     // Need to use dyn because CloudStorageOps is a trait
@@ -58,6 +59,7 @@ impl<F: FileSystemOps> DownloadContext<F> {
         extract_files: bool,
         cloud_ops: Option<Arc<dyn CloudStorageOps>>,
         fs_ops: Arc<F>,
+        export_ops: Arc<dyn FileExportOps>,
     ) -> Self {
         Self {
             repository_manager,
@@ -73,6 +75,7 @@ impl<F: FileSystemOps> DownloadContext<F> {
             file_download_results: vec![],
             file_output_mapping: HashMap::new(),
             fs_ops,
+            export_ops,
         }
     }
 

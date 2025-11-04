@@ -3,6 +3,7 @@ use std::sync::Arc;
 use async_std::channel::Sender;
 use cloud_storage::events::DownloadEvent;
 use database::repository_manager::RepositoryManager;
+use file_export::file_export_ops::DefaultFileExportOps;
 
 use crate::{
     file_set_download::context::DownloadContext,
@@ -65,6 +66,7 @@ impl<F: FileSystemOps + 'static> DownloadService<F> {
             extract_files,
             None, // this will be initialized in the pipeline
             self.fs_ops.clone(),
+            Arc::new(DefaultFileExportOps),
         );
         let pipeline = Pipeline::<DownloadContext<F>>::new();
         pipeline.execute(&mut context).await?;

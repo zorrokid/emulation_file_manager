@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 ///
 /// This trait abstracts file export functionality to allow for different implementations,
 /// including mocks for testing purposes.
-pub trait FileExportOps {
+pub trait FileExportOps: Send + Sync {
     /// Exports files from zstd archive to individual decompressed files.
     ///
     /// # Arguments
@@ -25,6 +25,9 @@ pub trait FileExportOps {
     /// * `Ok(())` on successful export
     /// * `Err(FileExportError)` if export fails
     fn export_zipped(&self, export_model: &FileSetExportModel) -> Result<(), FileExportError>;
+    
+    /// Helper method for downcasting to concrete type in tests
+    fn as_any(&self) -> &dyn std::any::Any;
 }
 
 /// Default implementation that performs actual file export operations.
@@ -37,6 +40,10 @@ impl FileExportOps for DefaultFileExportOps {
 
     fn export_zipped(&self, export_model: &FileSetExportModel) -> Result<(), FileExportError> {
         export_files_zipped(export_model)
+    }
+    
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 
@@ -204,5 +211,93 @@ impl FileExportOps for MockFileExportOps {
             ));
         }
         Ok(())
+    }
+    
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{collections::HashMap, path::PathBuf};
+
+    use core_types::Sha1Checksum;
+
+    use crate::{
+        file_export_ops::{FileExportOps, MockFileExportOps},
+        FileExportError, FileSetExportModel, OutputFile,
+    };
+
+    #[test]
+    fn test_mock_file_export_ops_success() {
+        let mock = MockFileExportOps::new();
+
+        let mut output_mapping = HashMap::new();
+        output_mapping.insert(
+            "archive_file".to_string(),
+            OutputFile {
+                output_file_name: "output_file.rom".to_string(),
+                checksum: Sha1Checksum::from([1; 20]),
+            },
+        );
+
+        let export_model = FileSetExportModel {
+            output_mapping,
+            source_file_path: PathBuf::from("/source"),
+            extract_files: false,
+            exported_zip_file_name: "test.zip".to_string(),
+            output_dir: PathBuf::from("/output"),
+        };
+
+        // Test successful export
+        let result = mock.export_zipped(&export_model);
+        assert!(result.is_ok());
+
+        // Verify the call was tracked
+        assert_eq!(mock.total_calls(), 1);
+        assert_eq!(mock.export_zipped_calls().len(), 1);
+
+        let call = &mock.export_zipped_calls()[0];
+        assert_eq!(call.output_file_names, vec!["output_file.rom"]);
+        assert_eq!(call.source_file_path, "/source");
+        assert!(!call.extract_files);
+    }
+
+    #[test]
+    fn test_mock_file_export_ops_failure() {
+        let mock = MockFileExportOps::with_failure("Simulated disk full error");
+
+        let mut output_mapping = HashMap::new();
+        output_mapping.insert(
+            "archive_file".to_string(),
+            OutputFile {
+                output_file_name: "output_file.rom".to_string(),
+                checksum: Sha1Checksum::from([1; 20]),
+            },
+        );
+
+        let export_model = FileSetExportModel {
+            output_mapping,
+            source_file_path: PathBuf::from("/source"),
+            extract_files: true,
+            exported_zip_file_name: "test.zip".to_string(),
+            output_dir: PathBuf::from("/output"),
+        };
+
+        // Test failed export
+        let result = mock.export(&export_model);
+        assert!(result.is_err());
+
+        // Verify the call was tracked even though it failed
+        assert_eq!(mock.total_calls(), 1);
+        assert_eq!(mock.export_calls().len(), 1);
+
+        match result {
+            Err(FileExportError::FileIoError(msg)) => {
+                assert_eq!(msg, "Simulated disk full error");
+            }
+            _ => panic!("Expected FileIoError"),
+        }
     }
 }

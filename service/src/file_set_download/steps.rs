@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use cloud_storage::events::DownloadEvent;
 use core_types::Sha1Checksum;
-use file_export::{export_files_zipped_or_non_zipped, FileSetExportModel, OutputFile};
+use file_export::{FileSetExportModel, OutputFile};
 
 use crate::{
     file_set_download::context::{DownloadContext, FileDownloadResult},
@@ -241,7 +241,12 @@ impl<F: FileSystemOps> PipelineStep<DownloadContext<F>> for ExportFilesStep {
             exported_zip_file_name,
         };
 
-        let res = export_files_zipped_or_non_zipped(&export_model);
+        let res = if context.extract_files {
+            context.export_ops.export(&export_model)
+        } else {
+            context.export_ops.export_zipped(&export_model)
+        };
+        
         match res {
             Ok(_) => {
                 context.file_output_mapping = export_model.output_mapping;
@@ -500,7 +505,7 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn test_export_files_step() {
+    async fn test_export_files_step_success() {
         let mut context = initialize_context(false).await;
 
         let archive_file_name = "some_cryptic_filename";
@@ -529,91 +534,66 @@ mod tests {
         let should_execute = step.should_execute(&context);
         assert!(should_execute);
 
-        //let action = step.execute(&mut context).await;
-        // TODO: mock export_files_zipped_or_non_zipped  and finish the test for this step
-        // - the function needs to be wrapped in a trait so it can be mocked
-    }
-
-    // Example usage of MockFileExportOps with success scenario
-    #[async_std::test]
-    async fn test_mock_file_export_ops_success() {
-        use file_export::file_export_ops::{FileExportOps, MockFileExportOps};
-        use file_export::{FileSetExportModel, OutputFile};
-        use std::collections::HashMap;
-
-        let mock = MockFileExportOps::new();
+        let action = step.execute(&mut context).await;
+        assert!(matches!(action, StepAction::Continue));
         
-        let mut output_mapping = HashMap::new();
-        output_mapping.insert(
-            "archive_file".to_string(),
-            OutputFile {
-                output_file_name: "output_file.rom".to_string(),
-                checksum: Sha1Checksum::from([1; 20]),
-            },
-        );
-
-        let export_model = FileSetExportModel {
-            output_mapping,
-            source_file_path: PathBuf::from("/source"),
-            extract_files: false,
-            exported_zip_file_name: "test.zip".to_string(),
-            output_dir: PathBuf::from("/output"),
-        };
-
-        // Test successful export
-        let result = mock.export_zipped(&export_model);
-        assert!(result.is_ok());
-
-        // Verify the call was tracked
-        assert_eq!(mock.total_calls(), 1);
-        assert_eq!(mock.export_zipped_calls().len(), 1);
+        // Verify export was called
+        let export_ops = Arc::clone(&context.export_ops);
+        let export_ops = export_ops
+            .as_any()
+            .downcast_ref::<file_export::file_export_ops::MockFileExportOps>()
+            .expect("Expected MockFileExportOps");
         
-        let call = &mock.export_zipped_calls()[0];
-        assert_eq!(call.output_file_names, vec!["output_file.rom"]);
-        assert_eq!(call.source_file_path, "/source");
+        assert_eq!(export_ops.total_calls(), 1);
+        assert_eq!(export_ops.export_zipped_calls().len(), 1);
+        
+        let call = &export_ops.export_zipped_calls()[0];
+        assert_eq!(call.output_file_names.len(), 1);
         assert!(!call.extract_files);
     }
 
-    // Example usage of MockFileExportOps with failure scenario
     #[async_std::test]
-    async fn test_mock_file_export_ops_failure() {
-        use file_export::file_export_ops::{FileExportOps, MockFileExportOps};
-        use file_export::{FileSetExportModel, OutputFile};
-        use std::collections::HashMap;
+    async fn test_export_files_step_with_extraction() {
+        let mut context = initialize_context(true).await;
 
-        let mock = MockFileExportOps::with_failure("Simulated disk full error");
-        
-        let mut output_mapping = HashMap::new();
-        output_mapping.insert(
-            "archive_file".to_string(),
-            OutputFile {
-                output_file_name: "output_file.rom".to_string(),
-                checksum: Sha1Checksum::from([1; 20]),
-            },
-        );
+        let archive_file_name = "some_cryptic_filename";
+        let file_type = FileType::Rom;
 
-        let export_model = FileSetExportModel {
-            output_mapping,
-            source_file_path: PathBuf::from("/source"),
-            extract_files: true,
-            exported_zip_file_name: "test.zip".to_string(),
-            output_dir: PathBuf::from("/output"),
-        };
+        let _file_set_id =
+            prepare_file_set_with_files(&context.repository_manager, archive_file_name, &file_type)
+                .await;
 
-        // Test failed export
-        let result = mock.export(&export_model);
-        assert!(result.is_err());
+        let file_set = context
+            .repository_manager
+            .get_file_set_repository()
+            .get_file_set(context.file_set_id)
+            .await
+            .unwrap();
+
+        context.file_set = Some(file_set);
+        context.files_in_set = context
+            .repository_manager
+            .get_file_set_repository()
+            .get_file_set_file_info(context.file_set_id)
+            .await
+            .unwrap();
+
+        let step = ExportFilesStep;
+        let action = step.execute(&mut context).await;
+        assert!(matches!(action, StepAction::Continue));
         
-        // Verify the call was tracked even though it failed
-        assert_eq!(mock.total_calls(), 1);
-        assert_eq!(mock.export_calls().len(), 1);
+        // Verify export (not export_zipped) was called
+        let export_ops = Arc::clone(&context.export_ops);
+        let export_ops = export_ops
+            .as_any()
+            .downcast_ref::<file_export::file_export_ops::MockFileExportOps>()
+            .expect("Expected MockFileExportOps");
         
-        match result {
-            Err(file_export::FileExportError::FileIoError(msg)) => {
-                assert_eq!(msg, "Simulated disk full error");
-            }
-            _ => panic!("Expected FileIoError"),
-        }
+        assert_eq!(export_ops.total_calls(), 1);
+        assert_eq!(export_ops.export_calls().len(), 1);
+        
+        let call = &export_ops.export_calls()[0];
+        assert!(call.extract_files);
     }
 
     async fn initialize_context(extract_files: bool) -> DownloadContext<MockFileSystemOps> {
@@ -629,6 +609,7 @@ mod tests {
 
         let (tx, _rx) = async_std::channel::unbounded();
         let fs_ops = Arc::new(MockFileSystemOps::new());
+        let export_ops = Arc::new(file_export::file_export_ops::MockFileExportOps::new());
 
         DownloadContext::new(
             repo_manager,
@@ -639,6 +620,7 @@ mod tests {
             extract_files,
             Some(cloud_ops),
             fs_ops,
+            export_ops,
         )
     }
 
