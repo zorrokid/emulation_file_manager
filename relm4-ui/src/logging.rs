@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 
@@ -6,7 +5,7 @@ use tracing_appender::rolling::{RollingFileAppender, Rotation};
 ///
 /// Sets up two logging outputs:
 /// - Console: Human-readable format for development/terminal use
-/// - File: JSON format in `~/.local/share/efm-relm4-ui/logs/` for bug reports
+/// - File: JSON format in `~/.local/share/efm/logs/` for bug reports
 ///
 /// Log files are rotated daily to prevent unbounded growth.
 ///
@@ -17,21 +16,9 @@ use tracing_appender::rolling::{RollingFileAppender, Rotation};
 /// Returns a guard that must be kept alive for the duration of the program.
 /// Dropping this guard will cause file logging to stop.
 pub fn init_logging() -> tracing_appender::non_blocking::WorkerGuard {
-    // Store logs in XDG-compliant location
-    // Using "efm" to match the database and collection root folder location
-    // Linux: ~/.local/share/efm/logs/
-    // macOS: ~/Library/Application Support/efm/logs/
-    // Windows: C:\Users\<User>\AppData\Local\efm\logs\
-    let log_dir = dirs::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("efm")
-        .join("logs");
-    
-    // Create directory if it doesn't exist
-    if let Err(e) = std::fs::create_dir_all(&log_dir) {
-        eprintln!("Warning: Failed to create log directory at {}: {}", log_dir.display(), e);
-        eprintln!("Logs will only be written to console.");
-    }
+    // Use centralized directory helper to ensure consistency
+    // with database and files location (directory is auto-created)
+    let log_dir = file_system::get_logs_dir();
 
     // Console output (human-readable, for when running from terminal)
     let console_layer = tracing_subscriber::fmt::layer()
