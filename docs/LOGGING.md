@@ -4,9 +4,9 @@
 
 Application logs are stored in platform-specific locations:
 
-- **Linux**: `~/.local/share/efm-relm4-ui/logs/`
-- **macOS**: `~/Library/Application Support/efm-relm4-ui/logs/`
-- **Windows**: `C:\Users\<User>\AppData\Local\efm-relm4-ui\logs\`
+- **Linux**: `~/.local/share/efm/logs/`
+- **macOS**: `~/Library/Application Support/efm/logs/`
+- **Windows**: `C:\Users\<User>\AppData\Local\efm\logs\`
 
 Logs are rotated daily with the naming pattern `app.log.YYYY-MM-DD`.
 
@@ -49,7 +49,7 @@ The default log level is `info` with `debug` enabled for the service layer. This
 
 When reporting bugs, please include:
 
-1. **Log files** from `~/.local/share/efm-relm4-ui/logs/`
+1. **Log files** from `~/.local/share/efm/logs/`
 2. **Steps to reproduce** the issue
 3. **Expected behavior** vs actual behavior
 4. **System information** (OS, version, etc.)
@@ -60,7 +60,7 @@ Look for recent log files with errors:
 
 ```bash
 # On Linux/macOS
-cd ~/.local/share/efm-relm4-ui/logs/
+cd ~/.local/share/efm/logs/
 grep -r "\"level\":\"ERROR\"" *.log
 
 # View today's log

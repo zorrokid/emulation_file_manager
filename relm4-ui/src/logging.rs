@@ -18,12 +18,13 @@ use tracing_appender::rolling::{RollingFileAppender, Rotation};
 /// Dropping this guard will cause file logging to stop.
 pub fn init_logging() -> tracing_appender::non_blocking::WorkerGuard {
     // Store logs in XDG-compliant location
-    // Linux: ~/.local/share/efm-relm4-ui/logs/
-    // macOS: ~/Library/Application Support/efm-relm4-ui/logs/
-    // Windows: C:\Users\<User>\AppData\Local\efm-relm4-ui\logs\
+    // Using "efm" to match the database and collection root folder location
+    // Linux: ~/.local/share/efm/logs/
+    // macOS: ~/Library/Application Support/efm/logs/
+    // Windows: C:\Users\<User>\AppData\Local\efm\logs\
     let log_dir = dirs::data_local_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("efm-relm4-ui")
+        .join("efm")
         .join("logs");
     
     // Create directory if it doesn't exist
