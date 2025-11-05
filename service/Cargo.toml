@@ -14,3 +14,4 @@ async-trait = "0.1.89"
 core_types = { path = "../core_types" }
 cloud_storage = { path = "../cloud_storage" }
 serde_json = "1.0.142"
+tracing = "0.1"

@@ -51,12 +51,15 @@ impl<F: FileSystemOps + 'static> DownloadService<F> {
         }
     }
 
+    #[tracing::instrument(skip(self, progress_tx), fields(file_set_id, extract_files))]
     pub async fn download_file_set(
         &self,
         file_set_id: i64,
         extract_files: bool,
         progress_tx: Sender<DownloadEvent>,
     ) -> Result<DownloadResult, crate::error::Error> {
+        tracing::info!("Starting file set download");
+        
         let settings = DownloadContextSettings {
             repository_manager: self.repository_manager.clone(),
             settings: self.settings.clone(),
@@ -69,14 +72,31 @@ impl<F: FileSystemOps + 'static> DownloadService<F> {
             export_ops: Arc::new(DefaultFileExportOps),
         };
         let mut context = DownloadContext::new(settings);
+        
+        tracing::debug!("Created download context");
+        
         let pipeline = Pipeline::<DownloadContext<F>>::new();
-        pipeline.execute(&mut context).await?;
-        let successful_downloads = context.successful_downloads();
-        let failed_downloads = context.failed_downloads();
-        Ok(DownloadResult {
-            successful_downloads,
-            failed_downloads,
-        })
+        match pipeline.execute(&mut context).await {
+            Ok(_) => {
+                let successful_downloads = context.successful_downloads();
+                let failed_downloads = context.failed_downloads();
+                
+                tracing::info!(
+                    successful = successful_downloads,
+                    failed = failed_downloads,
+                    "Download completed"
+                );
+                
+                Ok(DownloadResult {
+                    successful_downloads,
+                    failed_downloads,
+                })
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "Pipeline execution failed");
+                Err(e)
+            }
+        }
     }
 }
 

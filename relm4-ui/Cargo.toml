@@ -23,6 +23,10 @@ strum_macros = "0.27"
 tracker = "0.2.2"
 async-std = { version = "1.13.2", features = ["attributes"] }
 cloud_storage = { path = "../cloud_storage" }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "time"] }
+tracing-appender = "0.2"
+dirs = "5.0"
 
 
 [package.metadata.deb]
