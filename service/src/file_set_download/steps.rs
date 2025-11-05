@@ -246,7 +246,7 @@ impl<F: FileSystemOps> PipelineStep<DownloadContext<F>> for ExportFilesStep {
         } else {
             context.export_ops.export_zipped(&export_model)
         };
-        
+
         match res {
             Ok(_) => {
                 context.file_output_mapping = export_model.output_mapping;
@@ -270,7 +270,7 @@ mod tests {
 
     use crate::{
         file_set_download::{
-            context::DownloadContext,
+            context::{DownloadContext, DownloadContextSettings},
             steps::{
                 DownloadFilesStep, ExportFilesStep, FetchFileSetFileInfoStep, FetchFileSetStep,
                 PrepareFileForDownloadStep,
@@ -536,11 +536,11 @@ mod tests {
 
         let action = step.execute(&mut context).await;
         assert!(matches!(action, StepAction::Continue));
-        
+
         // Verify export was called via shared state
         assert_eq!(mock_export_state.total_calls(), 1);
         assert_eq!(mock_export_state.export_zipped_calls().len(), 1);
-        
+
         let call = &mock_export_state.export_zipped_calls()[0];
         assert_eq!(call.output_file_names.len(), 1);
         assert!(!call.extract_files);
@@ -575,13 +575,55 @@ mod tests {
         let step = ExportFilesStep;
         let action = step.execute(&mut context).await;
         assert!(matches!(action, StepAction::Continue));
-        
+
         // Verify export (not export_zipped) was called via shared state
         assert_eq!(mock_export_state.total_calls(), 1);
         assert_eq!(mock_export_state.export_calls().len(), 1);
-        
+
         let call = &mock_export_state.export_calls()[0];
         assert!(call.extract_files);
+    }
+
+    #[async_std::test]
+    async fn test_export_files_step_failure() {
+        let (mut context, mock_export_state) = initialize_context(false).await;
+
+        let archive_file_name = "some_cryptic_filename";
+        let file_type = FileType::Rom;
+
+        let _file_set_id =
+            prepare_file_set_with_files(&context.repository_manager, archive_file_name, &file_type)
+                .await;
+
+        let file_set = context
+            .repository_manager
+            .get_file_set_repository()
+            .get_file_set(context.file_set_id)
+            .await
+            .unwrap();
+
+        context.file_set = Some(file_set);
+        context.files_in_set = context
+            .repository_manager
+            .get_file_set_repository()
+            .get_file_set_file_info(context.file_set_id)
+            .await
+            .unwrap();
+
+        let step = ExportFilesStep;
+        let should_execute = step.should_execute(&context);
+        assert!(should_execute);
+
+        let action = step.execute(&mut context).await;
+        assert!(matches!(action, StepAction::Continue));
+
+        // Verify export was called via shared state
+        assert_eq!(mock_export_state.total_calls(), 1);
+        assert_eq!(mock_export_state.export_zipped_calls().len(), 1);
+
+        let call = &mock_export_state.export_zipped_calls()[0];
+        assert_eq!(call.output_file_names.len(), 1);
+        assert!(!call.extract_files);
     }
 
     async fn initialize_context(
@@ -602,24 +644,28 @@ mod tests {
 
         let (tx, _rx) = async_std::channel::unbounded();
         let fs_ops = Arc::new(MockFileSystemOps::new());
-        
+
         let mock_export_state = Arc::new(file_export::file_export_ops::MockState::new());
         let export_ops = Arc::new(
-            file_export::file_export_ops::MockFileExportOps::new_with_state(mock_export_state.clone())
+            file_export::file_export_ops::MockFileExportOps::new_with_state(
+                mock_export_state.clone(),
+            ),
         );
 
-        let context = DownloadContext::new(
-            repo_manager,
-            settings,
-            settings_service,
-            tx,
-            1,
+        let settings = DownloadContextSettings {
+            repository_manager: repo_manager.clone(),
+            settings: settings.clone(),
+            settings_service: settings_service.clone(),
+            progress_tx: tx.clone(),
+            file_set_id: 1,
             extract_files,
-            Some(cloud_ops),
-            fs_ops,
-            export_ops,
-        );
-        
+            cloud_ops: Some(cloud_ops.clone()),
+            fs_ops: fs_ops.clone(),
+            export_ops: export_ops.clone(),
+        };
+
+        let context = DownloadContext::new(settings);
+
         (context, mock_export_state)
     }
 

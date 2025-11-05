@@ -6,7 +6,7 @@ use database::repository_manager::RepositoryManager;
 use file_export::file_export_ops::DefaultFileExportOps;
 
 use crate::{
-    file_set_download::context::DownloadContext,
+    file_set_download::context::{DownloadContext, DownloadContextSettings},
     file_system_ops::{FileSystemOps, StdFileSystemOps},
     pipeline::generic_pipeline::Pipeline,
     settings_service::SettingsService,
@@ -57,17 +57,18 @@ impl<F: FileSystemOps + 'static> DownloadService<F> {
         extract_files: bool,
         progress_tx: Sender<DownloadEvent>,
     ) -> Result<DownloadResult, crate::error::Error> {
-        let mut context = DownloadContext::new(
-            self.repository_manager.clone(),
-            self.settings.clone(),
-            self.settings_service.clone(),
-            progress_tx,
+        let settings = DownloadContextSettings {
+            repository_manager: self.repository_manager.clone(),
+            settings: self.settings.clone(),
+            settings_service: self.settings_service.clone(),
+            progress_tx: progress_tx.clone(),
             file_set_id,
             extract_files,
-            None, // this will be initialized in the pipeline
-            self.fs_ops.clone(),
-            Arc::new(DefaultFileExportOps),
-        );
+            cloud_ops: None,
+            fs_ops: self.fs_ops.clone(),
+            export_ops: Arc::new(DefaultFileExportOps),
+        };
+        let mut context = DownloadContext::new(settings);
         let pipeline = Pipeline::<DownloadContext<F>>::new();
         pipeline.execute(&mut context).await?;
         let successful_downloads = context.successful_downloads();

@@ -49,33 +49,35 @@ pub struct FileDownloadResult {
     pub file_io_error: Option<String>,
 }
 
+pub struct DownloadContextSettings<F: FileSystemOps> {
+    pub repository_manager: Arc<RepositoryManager>,
+    pub settings: Arc<Settings>,
+    pub settings_service: Arc<SettingsService>,
+    pub progress_tx: Sender<DownloadEvent>,
+    pub file_set_id: i64,
+    pub extract_files: bool,
+    pub cloud_ops: Option<Arc<dyn CloudStorageOps>>,
+    pub fs_ops: Arc<F>,
+    pub export_ops: Arc<dyn FileExportOps>,
+}
+
 impl<F: FileSystemOps> DownloadContext<F> {
-    pub fn new(
-        repository_manager: Arc<RepositoryManager>,
-        settings: Arc<Settings>,
-        settings_service: Arc<SettingsService>,
-        progress_tx: Sender<DownloadEvent>,
-        file_set_id: i64,
-        extract_files: bool,
-        cloud_ops: Option<Arc<dyn CloudStorageOps>>,
-        fs_ops: Arc<F>,
-        export_ops: Arc<dyn FileExportOps>,
-    ) -> Self {
+    pub fn new(settings: DownloadContextSettings<F>) -> Self {
         Self {
-            repository_manager,
-            settings,
-            settings_service,
-            progress_tx,
-            cloud_ops,
-            file_set_id,
-            extract_files,
+            repository_manager: settings.repository_manager,
+            settings: settings.settings,
+            settings_service: settings.settings_service,
+            progress_tx: settings.progress_tx,
+            cloud_ops: settings.cloud_ops,
+            file_set_id: settings.file_set_id,
+            extract_files: settings.extract_files,
             file_set: None,
             files_in_set: vec![],
             files_to_download: vec![],
             file_download_results: vec![],
             file_output_mapping: HashMap::new(),
-            fs_ops,
-            export_ops,
+            fs_ops: settings.fs_ops,
+            export_ops: settings.export_ops,
         }
     }
 
