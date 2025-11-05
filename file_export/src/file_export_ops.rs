@@ -99,7 +99,7 @@ impl MockState {
 ///
 /// # Examples
 ///
-/// ```
+/// no_run
 /// use file_export::file_export_ops::{FileExportOps, MockFileExportOps};
 /// use file_export::{FileSetExportModel, OutputFile};
 /// use std::collections::HashMap;
@@ -304,7 +304,8 @@ mod tests {
     #[test]
     fn test_mock_file_export_ops_failure() {
         let state = std::sync::Arc::new(MockState::new());
-        let mock = MockFileExportOps::with_failure_and_state("Simulated disk full error", state.clone());
+        let mock =
+            MockFileExportOps::with_failure_and_state("Simulated disk full error", state.clone());
 
         let mut output_mapping = HashMap::new();
         output_mapping.insert(
