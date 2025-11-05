@@ -4,7 +4,10 @@ use async_std::channel::Sender;
 use cloud_storage::{CloudStorageOps, SyncEvent};
 use database::repository_manager::RepositoryManager;
 
-use crate::{settings_service::SettingsService, view_models::Settings};
+use crate::{
+    pipeline::cloud_connection::CloudConnectionContext, settings_service::SettingsService,
+    view_models::Settings,
+};
 
 pub struct SyncContext {
     pub repository_manager: Arc<RepositoryManager>,
@@ -129,5 +132,24 @@ impl SyncContext {
             .values()
             .filter(|r| !r.cloud_operation_success)
             .count()
+    }
+}
+
+impl CloudConnectionContext for SyncContext {
+    fn settings(&self) -> &Arc<Settings> {
+        &self.settings
+    }
+
+    fn settings_service(&self) -> &Arc<SettingsService> {
+        &self.settings_service
+    }
+
+    fn cloud_ops_mut(&mut self) -> &mut Option<Arc<dyn CloudStorageOps>> {
+        &mut self.cloud_ops
+    }
+
+    fn should_connect(&self) -> bool {
+        self.cloud_ops.is_none()
+            && (self.files_prepared_for_upload > 0 || self.files_prepared_for_deletion > 0)
     }
 }

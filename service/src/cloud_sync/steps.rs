@@ -1,11 +1,10 @@
-use std::sync::Arc;
 
-use cloud_storage::{S3CloudStorage, SyncEvent};
+use cloud_storage::events::SyncEvent;
 use core_types::FileSyncStatus;
 
 use crate::{
     cloud_sync::context::{FileSyncResult, SyncContext},
-    error::Error, pipeline::{StepAction, SyncStep},
+    error::Error, pipeline::pipeline_step::{StepAction, PipelineStep},
 };
 
 /// Step 1: Prepare files for upload. This involves marking files as pending upload in the
@@ -13,7 +12,7 @@ use crate::{
 pub struct PrepareFilesForUploadStep;
 
 #[async_trait::async_trait]
-impl SyncStep<SyncContext> for PrepareFilesForUploadStep {
+impl PipelineStep<SyncContext> for PrepareFilesForUploadStep {
     fn name(&self) -> &'static str {
         "prepare_files"
     }
@@ -34,11 +33,7 @@ impl SyncStep<SyncContext> for PrepareFilesForUploadStep {
                     }
                     offset += file_infos.len() as i64;
                     for file_info in &file_infos {
-                        let cloud_key = format!(
-                            "{}/{}",
-                            file_info.file_type.to_string().to_lowercase(),
-                            file_info.archive_file_name
-                        );
+                        let cloud_key = file_info.generate_cloud_key();
                         println!(
                             "Preparing file for sync: id={}, cloud_key={}",
                             file_info.id, cloud_key
@@ -81,7 +76,7 @@ impl SyncStep<SyncContext> for PrepareFilesForUploadStep {
 pub struct GetSyncFileCountsStep;
 
 #[async_trait::async_trait]
-impl SyncStep<SyncContext> for GetSyncFileCountsStep {
+impl PipelineStep<SyncContext> for GetSyncFileCountsStep {
     fn name(&self) -> &'static str {
         "get_sync_file_counts"
     }
@@ -127,74 +122,11 @@ impl SyncStep<SyncContext> for GetSyncFileCountsStep {
     }
 }
 
-/// Step 3: Connect to cloud cloud_storage
-pub struct ConnectToCloudStep;
-
-#[async_trait::async_trait]
-impl SyncStep<SyncContext> for ConnectToCloudStep {
-    fn name(&self) -> &'static str {
-        "connect_to_cloud"
-    }
-
-    fn should_execute(&self, context: &SyncContext) -> bool {
-        context.cloud_ops.is_none()
-            && (context.files_prepared_for_upload > 0 || context.files_prepared_for_deletion > 0)
-    }
-
-    async fn execute(&self, context: &mut SyncContext) -> StepAction {
-        let s3_settings = match context.settings.s3_settings.clone() {
-            Some(settings) => settings,
-            None => {
-                eprintln!("S3 settings are not configured.");
-                return StepAction::Abort(Error::SettingsError("S3 settings missing".to_string()));
-            }
-        };
-        let credentials = match context.settings_service.load_credentials().await {
-            Ok(Some(creds)) => creds,
-            Ok(None) => {
-                eprintln!("No S3 credentials found in keyring or environment.");
-                return StepAction::Abort(Error::SettingsError(
-                    "S3 credentials not found".to_string(),
-                ));
-            }
-            Err(e) => {
-                eprintln!("Error retrieving S3 credentials: {}", e);
-                return StepAction::Abort(Error::SettingsError(format!(
-                    "Failed to get S3 credentials: {}",
-                    e
-                )));
-            }
-        };
-        let cloud_ops_res = S3CloudStorage::connect(
-            s3_settings.endpoint.as_str(),
-            s3_settings.region.as_str(),
-            s3_settings.bucket.as_str(),
-            credentials.access_key_id.as_str(),
-            credentials.secret_access_key.as_str(),
-        )
-        .await;
-
-        match cloud_ops_res {
-            Ok(cloud_ops) => {
-                context.cloud_ops = Some(Arc::new(cloud_ops));
-                StepAction::Continue
-            }
-            Err(e) => {
-                eprintln!("Error connecting to S3: {}", e);
-                StepAction::Abort(Error::CloudSyncError(format!(
-                    "Failed to connect to S3: {}",
-                    e
-                )))
-            }
-        }
-    }
-}
-
 /// Step 4: Upload pending files to cloud storage
 pub struct UploadPendingFilesStep;
 
 #[async_trait::async_trait]
-impl SyncStep<SyncContext> for UploadPendingFilesStep {
+impl PipelineStep<SyncContext> for UploadPendingFilesStep {
     fn name(&self) -> &'static str {
         "upload_pending_files"
     }
@@ -420,7 +352,7 @@ impl SyncStep<SyncContext> for UploadPendingFilesStep {
 pub struct DeleteMarkedFilesStep;
 
 #[async_trait::async_trait]
-impl SyncStep<SyncContext> for DeleteMarkedFilesStep {
+impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
     fn name(&self) -> &'static str {
         "delete_marked_files"
     }
@@ -610,7 +542,7 @@ mod tests {
             steps::{
                 GetSyncFileCountsStep, PrepareFilesForUploadStep, UploadPendingFilesStep,
             },
-        }, pipeline::{StepAction, SyncStep}, settings_service::SettingsService, view_models::Settings
+        }, pipeline::pipeline_step::{StepAction, PipelineStep}, settings_service::SettingsService, view_models::Settings
     };
 
     #[async_std::test]

@@ -4,14 +4,14 @@ use crate::{
     error::Error,
     file_set_deletion::context::{DeletionContext, FileDeletionResult},
     file_system_ops::FileSystemOps,
-    pipeline::{StepAction, SyncStep},
+    pipeline::pipeline_step::{PipelineStep, StepAction},
 };
 
 /// Step 1: Validate that the file set is not in use by any releases
 pub struct ValidateNotInUseStep;
 
 #[async_trait::async_trait]
-impl<F: FileSystemOps> SyncStep<DeletionContext<F>> for ValidateNotInUseStep {
+impl<F: FileSystemOps> PipelineStep<DeletionContext<F>> for ValidateNotInUseStep {
     fn name(&self) -> &'static str {
         "validate_not_in_use"
     }
@@ -44,7 +44,7 @@ impl<F: FileSystemOps> SyncStep<DeletionContext<F>> for ValidateNotInUseStep {
 pub struct FetchFileInfosStep;
 
 #[async_trait::async_trait]
-impl<F: FileSystemOps> SyncStep<DeletionContext<F>> for FetchFileInfosStep {
+impl<F: FileSystemOps> PipelineStep<DeletionContext<F>> for FetchFileInfosStep {
     fn name(&self) -> &'static str {
         "fetch_file_infos"
     }
@@ -90,7 +90,7 @@ impl<F: FileSystemOps> SyncStep<DeletionContext<F>> for FetchFileInfosStep {
 pub struct DeleteFileSetStep;
 
 #[async_trait::async_trait]
-impl<F: FileSystemOps> SyncStep<DeletionContext<F>> for DeleteFileSetStep {
+impl<F: FileSystemOps> PipelineStep<DeletionContext<F>> for DeleteFileSetStep {
     fn name(&self) -> &'static str {
         "delete_file_set"
     }
@@ -124,7 +124,7 @@ impl<F: FileSystemOps> SyncStep<DeletionContext<F>> for DeleteFileSetStep {
 pub struct FilterDeletableFilesStep;
 
 #[async_trait::async_trait]
-impl<F: FileSystemOps> SyncStep<DeletionContext<F>> for FilterDeletableFilesStep {
+impl<F: FileSystemOps> PipelineStep<DeletionContext<F>> for FilterDeletableFilesStep {
     fn name(&self) -> &'static str {
         "filter_deletable_files"
     }
@@ -168,7 +168,7 @@ impl<F: FileSystemOps> SyncStep<DeletionContext<F>> for FilterDeletableFilesStep
 pub struct MarkForCloudDeletionStep;
 
 #[async_trait::async_trait]
-impl<F: FileSystemOps> SyncStep<DeletionContext<F>> for MarkForCloudDeletionStep {
+impl<F: FileSystemOps> PipelineStep<DeletionContext<F>> for MarkForCloudDeletionStep {
     fn name(&self) -> &'static str {
         "mark_for_cloud_deletion"
     }
@@ -231,7 +231,7 @@ impl<F: FileSystemOps> SyncStep<DeletionContext<F>> for MarkForCloudDeletionStep
 pub struct DeleteLocalFilesStep;
 
 #[async_trait::async_trait]
-impl<F: FileSystemOps> SyncStep<DeletionContext<F>> for DeleteLocalFilesStep {
+impl<F: FileSystemOps> PipelineStep<DeletionContext<F>> for DeleteLocalFilesStep {
     fn name(&self) -> &'static str {
         "delete_local_files"
     }
@@ -278,7 +278,7 @@ impl<F: FileSystemOps> SyncStep<DeletionContext<F>> for DeleteLocalFilesStep {
 pub struct DeleteFileInfosStep;
 
 #[async_trait::async_trait]
-impl<F: FileSystemOps> SyncStep<DeletionContext<F>> for DeleteFileInfosStep {
+impl<F: FileSystemOps> PipelineStep<DeletionContext<F>> for DeleteFileInfosStep {
     fn name(&self) -> &'static str {
         "delete_file_info_entries"
     }

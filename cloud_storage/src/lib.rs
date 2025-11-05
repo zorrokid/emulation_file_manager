@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use async_std::channel::Sender;
-use async_std::io::{ReadExt, WriteExt};
+use async_std::io::WriteExt;
 use async_std::stream::StreamExt;
 use async_trait::async_trait;
 pub use s3::bucket::Bucket;
@@ -16,57 +16,9 @@ pub use s3::bucket::Bucket as S3Bucket;
 mod ops;
 pub use ops::CloudStorageOps;
 
-//#[cfg(test)]
+pub mod events;
+pub use events::{DownloadEvent, SyncEvent};
 pub mod mock;
-
-#[derive(Debug, Clone)]
-pub enum SyncEvent {
-    // TODO: use same events for upload and deletion, add process type field
-    SyncStarted {
-        total_files_count: i64,
-    },
-    FileUploadStarted {
-        key: String,
-        file_number: i64,
-        total_files: i64,
-    },
-    PartUploaded {
-        key: String,
-        part: u32,
-    },
-    PartUploadFailed {
-        key: String,
-        error: String,
-    },
-    FileUploadCompleted {
-        key: String,
-        file_number: i64,
-        total_files: i64,
-    },
-    FileUploadFailed {
-        key: String,
-        error: String,
-        file_number: i64,
-        total_files: i64,
-    },
-    SyncCompleted {},
-    FileDeletionStarted {
-        key: String,
-        file_number: i64,
-        total_files: i64,
-    },
-    FileDeletionCompleted {
-        key: String,
-        file_number: i64,
-        total_files: i64,
-    },
-    FileDeletionFailed {
-        key: String,
-        error: String,
-        file_number: i64,
-        total_files: i64,
-    },
-}
 
 #[derive(Debug, thiserror::Error)]
 pub enum CloudStorageError {
@@ -93,7 +45,7 @@ pub async fn connect_bucket(
     };
 
     let credentials = Credentials::new(Some(key_id), Some(secret_key), None, None, None)
-        .map_err(|e| CloudStorageError::Other("Credentials error".to_string()))?;
+        .map_err(|_| CloudStorageError::Other("Credentials error".to_string()))?;
 
     let bucket = Bucket::new(bucket, region, credentials)?.with_path_style();
 
@@ -110,19 +62,38 @@ async fn upload_file(
     Ok(())
 }
 
+/// Download a file from the bucket to the specified local path.
+/// If a progress_tx channel is provided, send progress events during the download.
+/// Doesn't send progress events from failed download or write operation but instead returns an
+/// error immediately. The caller can handle the error and send any necessary events.
+/// Also it's caller's responsibility to send start and completion events.
+///
+/// # Arguments
+/// - `bucket`: Reference to the S3 bucket
+/// - `local_path`: Path to save the downloaded file
+/// - `key`: Key of the file in the bucket
+/// - `progress_tx`: Optional channel sender for progress events
+/// Returns `Ok(())` on success or `CloudStorageError` on failure.
 async fn download_file(
     bucket: &Bucket,
     local_path: &Path,
     key: &str,
+    progress_tx: Option<&Sender<DownloadEvent>>,
 ) -> Result<(), CloudStorageError> {
-    let response_stream = bucket.get_object_stream(key).await?;
+    let mut response_stream = bucket.get_object_stream(key).await?;
     let mut file = async_std::fs::File::create(local_path).await?;
 
-    let mut bytes_stream = response_stream.bytes();
-
-    while let Some(chunk) = bytes_stream.next().await {
-        let data = chunk?;
-        file.write_all(&[data]).await?;
+    while let Some(chunk_res) = response_stream.bytes.next().await {
+        let chunk = chunk_res?;
+        file.write_all(&chunk).await?;
+        if let Some(tx) = progress_tx {
+            tx.send(DownloadEvent::FileDownloadProgress {
+                key: key.to_string(),
+                bytes_downloaded: chunk.len() as u64,
+            })
+            .await
+            .ok();
+        }
     }
 
     Ok(())
@@ -245,5 +216,14 @@ impl CloudStorageOps for S3CloudStorage {
             Err(S3Error::HttpFailWithBody(404, _)) => Ok(false),
             Err(e) => Err(CloudStorageError::S3(e)),
         }
+    }
+
+    async fn download_file(
+        &self,
+        cloud_key: &str,
+        destination_path: &Path,
+        progress_tx: Option<&Sender<DownloadEvent>>,
+    ) -> Result<(), CloudStorageError> {
+        download_file(&self.bucket, destination_path, cloud_key, progress_tx).await
     }
 }

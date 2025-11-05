@@ -1,48 +1,5 @@
 use crate::error::Error;
 
-/// A generic pipeline that executes a series of steps in sequence.
-///
-/// The pipeline pattern provides a structured way to organize complex operations
-/// into discrete, testable steps. Each step can decide whether to continue, skip
-/// remaining steps, or abort the entire pipeline.
-///
-/// # Type Parameters
-///
-/// * `T` - The context type that will be passed through all steps. The context
-///   typically contains shared state, dependencies, and results that steps need
-///   to read or modify.
-///
-/// # Example
-///
-/// ```ignore
-/// // Define your context
-/// struct MyContext {
-///     data: String,
-///     results: Vec<String>,
-/// }
-///
-/// // Implement steps
-/// struct Step1;
-/// #[async_trait::async_trait]
-/// impl SyncStep<MyContext> for Step1 {
-///     fn name(&self) -> &'static str { "step_1" }
-///     async fn execute(&self, context: &mut MyContext) -> StepAction {
-///         context.results.push("step1".to_string());
-///         StepAction::Continue
-///     }
-/// }
-///
-/// // Create and execute pipeline
-/// let pipeline = Pipeline::<MyContext> {
-///     steps: vec![Box::new(Step1)],
-/// };
-/// let mut context = MyContext { data: String::new(), results: Vec::new() };
-/// pipeline.execute(&mut context).await?;
-/// ```
-pub struct Pipeline<T> {
-    pub steps: Vec<Box<dyn SyncStep<T>>>,
-}
-
 /// The action to take after a step completes.
 ///
 /// Steps return this enum to control pipeline flow:
@@ -94,7 +51,7 @@ pub enum StepAction {
 /// }
 /// ```
 #[async_trait::async_trait]
-pub trait SyncStep<T>: Send + Sync {
+pub trait PipelineStep<T>: Send + Sync {
     /// Returns the name of this step for logging and debugging.
     fn name(&self) -> &'static str;
 

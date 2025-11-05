@@ -14,6 +14,8 @@ use crate::{
     view_models::{FileSetViewModel, Settings},
 };
 
+/// Service responsible for exporting all the files from the collection to a specified destination.
+// TODO: refactor to use download service for exporting files
 #[derive(Debug)]
 pub struct ExportService {
     repository_manager: Arc<RepositoryManager>,
@@ -50,6 +52,8 @@ impl ExportService {
         path
     }
 
+    // TODO: use download service to export all files
+    #[deprecated]
     pub async fn export_all_files(&self, destination: &Path) -> Result<(), Error> {
         println!("Exporting all files to {}", destination.display());
 
@@ -105,19 +109,23 @@ impl ExportService {
     }
 }
 
+// TODO use get_file_type_path from Settings, this is deprecated
+#[deprecated]
 pub fn resolve_file_type_path(root_path: &Path, file_type: &core_types::FileType) -> PathBuf {
     let mut path = PathBuf::from(root_path);
     path.push(file_type.dir_name());
     path
 }
 
+// TODO: this will be replaced by dowload service
+#[deprecated]
 pub fn prepare_fileset_for_export(
     file_set: &FileSetViewModel,
     collection_root_dir: &Path,
     output_dir: &Path, // TODO: remove? this is not necessary here
     extract_files: bool,
 ) -> FileSetExportModel {
-    let source_file_path = resolve_file_type_path(collection_root_dir, &file_set.file_type.into());
+    let source_file_path = resolve_file_type_path(collection_root_dir, &file_set.file_type);
 
     let output_mapping = file_set
         .files

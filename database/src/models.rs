@@ -14,6 +14,28 @@ pub struct FileInfo {
     pub file_type: FileType,
 }
 
+impl From<&FileSetFileInfo> for FileInfo {
+    fn from(file_set_file_info: &FileSetFileInfo) -> Self {
+        Self {
+            id: file_set_file_info.file_info_id,
+            sha1_checksum: file_set_file_info.sha1_checksum.clone(),
+            file_size: file_set_file_info.file_size as u64,
+            archive_file_name: file_set_file_info.archive_file_name.clone(),
+            file_type: file_set_file_info.file_type,
+        }
+    }
+}
+
+impl FileInfo {
+    pub fn generate_cloud_key(&self) -> String {
+        format!(
+            "{}/{}",
+            self.file_type.to_string().to_lowercase(),
+            self.archive_file_name
+        )
+    }
+}
+
 /// FileSet is a container of files related to a single software title release.
 /// For example a rom set, set of disk images, set of scanned
 /// documents or screen shots.
@@ -41,6 +63,7 @@ pub struct FileSetFileInfo {
     pub sha1_checksum: Vec<u8>,
     pub file_size: i64,
     pub archive_file_name: String,
+    pub file_type: FileType,
 }
 
 impl Display for FileSetFileInfo {

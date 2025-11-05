@@ -4,7 +4,6 @@ use std::{
     fs::{self, File},
 };
 
-use core_types::Sha1Checksum;
 use file_export::{export_files, export_files_zipped, FileSetExportModel, OutputFile};
 use tempfile::tempdir;
 use utils::test_utils::get_sha1_and_size;
