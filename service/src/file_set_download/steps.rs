@@ -267,6 +267,7 @@ mod tests {
     use cloud_storage::mock::MockCloudStorage;
     use core_types::{FileType, ImportedFile, Sha1Checksum};
     use database::{repository_manager::RepositoryManager, setup_test_db};
+    use file_export::file_export_ops::MockFileExportOps;
 
     use crate::{
         file_set_download::{
@@ -586,7 +587,9 @@ mod tests {
 
     #[async_std::test]
     async fn test_export_files_step_failure() {
-        let (mut context, mock_export_state) = initialize_context(false).await;
+        let (mut context, _) = initialize_context(false).await;
+
+        context.export_ops = Arc::new(MockFileExportOps::with_failure("Disk full"));
 
         let archive_file_name = "some_cryptic_filename";
         let file_type = FileType::Rom;
@@ -615,15 +618,8 @@ mod tests {
         assert!(should_execute);
 
         let action = step.execute(&mut context).await;
-        assert!(matches!(action, StepAction::Continue));
-
-        // Verify export was called via shared state
-        assert_eq!(mock_export_state.total_calls(), 1);
-        assert_eq!(mock_export_state.export_zipped_calls().len(), 1);
-
-        let call = &mock_export_state.export_zipped_calls()[0];
-        assert_eq!(call.output_file_names.len(), 1);
-        assert!(!call.extract_files);
+        assert!(matches!(action, StepAction::Abort(_)));
+        assert!(context.file_output_mapping.is_empty());
     }
 
     async fn initialize_context(
@@ -646,11 +642,7 @@ mod tests {
         let fs_ops = Arc::new(MockFileSystemOps::new());
 
         let mock_export_state = Arc::new(file_export::file_export_ops::MockState::new());
-        let export_ops = Arc::new(
-            file_export::file_export_ops::MockFileExportOps::new_with_state(
-                mock_export_state.clone(),
-            ),
-        );
+        let export_ops = Arc::new(MockFileExportOps::new_with_state(mock_export_state.clone()));
 
         let settings = DownloadContextSettings {
             repository_manager: repo_manager.clone(),

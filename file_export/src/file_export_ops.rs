@@ -80,15 +80,30 @@ impl MockState {
 
     /// Returns the total number of export calls made.
     pub fn total_calls(&self) -> usize {
+        println!(
+            "Calculating total calls: export_calls = {}, export_zipped_calls = {}",
+            self.export_calls.lock().unwrap().len(),
+            self.export_zipped_calls.lock().unwrap().len()
+        );
         self.export_calls.lock().unwrap().len() + self.export_zipped_calls.lock().unwrap().len()
     }
 
     fn record_export(&self, call: ExportCall) {
+        println!("Recording export call: {:?}", call);
         self.export_calls.lock().unwrap().push(call);
+        println!(
+            "Total export calls recorded: {}",
+            self.export_calls.lock().unwrap().len()
+        );
     }
 
     fn record_export_zipped(&self, call: ExportCall) {
+        println!("Recording export_zipped call: {:?}", call);
         self.export_zipped_calls.lock().unwrap().push(call);
+        println!(
+            "Total export_zipped calls recorded: {}",
+            self.export_zipped_calls.lock().unwrap().len()
+        );
     }
 }
 
@@ -210,6 +225,7 @@ impl Default for MockFileExportOps {
 
 impl FileExportOps for MockFileExportOps {
     fn export(&self, export_model: &FileSetExportModel) -> Result<(), FileExportError> {
+        println!("Mock export called with model: {:?}", export_model);
         let call = ExportCall {
             output_file_names: export_model
                 .output_mapping
@@ -219,9 +235,11 @@ impl FileExportOps for MockFileExportOps {
             source_file_path: export_model.source_file_path.to_string_lossy().to_string(),
             extract_files: export_model.extract_files,
         };
+        println!("Recording export call: {:?}", call);
         self.state.record_export(call);
 
         if self.should_fail {
+            println!("Mock export is set to fail");
             return Err(FileExportError::FileIoError(
                 self.error_message
                     .clone()
@@ -232,6 +250,7 @@ impl FileExportOps for MockFileExportOps {
     }
 
     fn export_zipped(&self, export_model: &FileSetExportModel) -> Result<(), FileExportError> {
+        println!("Mock export_zipped called with model: {:?}", export_model);
         let call = ExportCall {
             output_file_names: export_model
                 .output_mapping
@@ -241,9 +260,11 @@ impl FileExportOps for MockFileExportOps {
             source_file_path: export_model.source_file_path.to_string_lossy().to_string(),
             extract_files: export_model.extract_files,
         };
+        println!("Recording export_zipped call: {:?}", call);
         self.state.record_export_zipped(call);
 
         if self.should_fail {
+            println!("Mock export_zipped is set to fail");
             return Err(FileExportError::ZipError(
                 self.error_message
                     .clone()
