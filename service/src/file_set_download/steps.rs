@@ -20,7 +20,7 @@ impl<F: FileSystemOps> PipelineStep<DownloadContext<F>> for FetchFileSetStep {
 
     async fn execute(&self, context: &mut DownloadContext<F>) -> StepAction {
         tracing::debug!(file_set_id = context.file_set_id, "Fetching file set");
-        
+
         let file_set_res = context
             .repository_manager
             .get_file_set_repository()
@@ -129,23 +129,23 @@ impl<F: FileSystemOps> PipelineStep<DownloadContext<F>> for DownloadFilesStep {
             file_count = context.files_to_download.len(),
             "Starting file downloads"
         );
-        
+
         for file_info in context.files_to_download.iter() {
             let cloud_key = &file_info.generate_cloud_key();
-            
+
             tracing::debug!(
                 cloud_key = %cloud_key,
                 archive_file_name = %file_info.archive_file_name,
                 "Downloading file"
             );
-            
-            context
-                .progress_tx
-                .send(DownloadEvent::FileDownloadStarted {
+
+            if let Some(tx) = &context.progress_tx {
+                tx.send(DownloadEvent::FileDownloadStarted {
                     key: cloud_key.clone(),
                 })
                 .await
                 .ok();
+            }
 
             let target_path = context.settings.get_file_path(
                 &context
@@ -159,7 +159,11 @@ impl<F: FileSystemOps> PipelineStep<DownloadContext<F>> for DownloadFilesStep {
                 .cloud_ops
                 .as_ref()
                 .expect("This step should only execute if cloud_ops is Some")
-                .download_file(cloud_key, target_path.as_path(), Some(&context.progress_tx))
+                .download_file(
+                    cloud_key,
+                    target_path.as_path(),
+                    context.progress_tx.as_ref(),
+                )
                 .await;
             match download_res {
                 Ok(_) => {
@@ -167,14 +171,15 @@ impl<F: FileSystemOps> PipelineStep<DownloadContext<F>> for DownloadFilesStep {
                         cloud_key = %cloud_key,
                         "File downloaded successfully"
                     );
-                    
-                    context
-                        .progress_tx
-                        .send(DownloadEvent::FileDownloadCompleted {
+
+                    if let Some(tx) = &context.progress_tx {
+                        tx.send(DownloadEvent::FileDownloadCompleted {
                             key: cloud_key.clone(),
                         })
                         .await
                         .ok();
+                    }
+
                     context.file_download_results.push(FileDownloadResult {
                         file_info_id: file_info.id,
                         cloud_key: cloud_key.clone(),
@@ -191,15 +196,15 @@ impl<F: FileSystemOps> PipelineStep<DownloadContext<F>> for DownloadFilesStep {
                         archive_file_name = %file_info.archive_file_name,
                         "File download failed"
                     );
-                    
-                    context
-                        .progress_tx
-                        .send(DownloadEvent::FileDownloadFailed {
+
+                    if let Some(tx) = &context.progress_tx {
+                        tx.send(DownloadEvent::FileDownloadFailed {
                             key: cloud_key.clone(),
                             error: format!("{}", e),
                         })
                         .await
                         .ok();
+                    }
 
                     context.file_download_results.push(FileDownloadResult {
                         file_info_id: file_info.id,
@@ -215,22 +220,15 @@ impl<F: FileSystemOps> PipelineStep<DownloadContext<F>> for DownloadFilesStep {
 
         let failed = context.failed_downloads();
         let successful = context.successful_downloads();
-        
+
         if failed > 0 {
-            tracing::warn!(
-                successful,
-                failed,
-                "Some downloads failed"
-            );
+            tracing::warn!(successful, failed, "Some downloads failed");
             StepAction::Abort(crate::error::Error::DownloadError(format!(
                 "{} files failed to download",
                 failed,
             )))
         } else {
-            tracing::info!(
-                successful,
-                "All downloads completed successfully"
-            );
+            tracing::info!(successful, "All downloads completed successfully");
             StepAction::Continue
         }
     }
@@ -302,10 +300,7 @@ impl<F: FileSystemOps> PipelineStep<DownloadContext<F>> for ExportFilesStep {
 
         match res {
             Ok(_) => {
-                tracing::info!(
-                    file_set_id = file_set.id,
-                    "Files exported successfully"
-                );
+                tracing::info!(file_set_id = file_set.id, "Files exported successfully");
                 context.file_output_mapping = export_model.output_mapping;
                 StepAction::Continue
             }

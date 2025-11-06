@@ -241,12 +241,10 @@ impl Component for ImageFilesetViewer {
     ) {
         match message {
             ImageFileSetViewerCommandMsg::ExportedImageFileSet(Ok(()), export_model) => {
-                // Handle successful export, e.g., show a success message
                 println!("Fileset exported successfully: {:?}", export_model);
                 let collection_root_dir = self.settings.collection_root_dir.clone();
                 sender.spawn_command(move |sender| {
                     let res = prepare_thumbnails(&export_model, &collection_root_dir);
-                    // You can emit a message to update the UI or notify the user
                     match res {
                         Ok(thumbnails_mapping) => {
                             println!("Thumbnails prepared successfully: {:?}", thumbnails_mapping);
@@ -261,11 +259,9 @@ impl Component for ImageFilesetViewer {
                 });
             }
             ImageFileSetViewerCommandMsg::ExportedImageFileSet(Err(e), _) => {
-                // Handle export error, e.g., show an error message
                 eprintln!("Failed to export fileset: {}", e);
             }
             ImageFileSetViewerCommandMsg::ThumbnailsPrepared(thumbnails_mapping) => {
-                // Handle thumbnails prepared, e.g., update the UI to show thumbnails
                 println!("Thumbnails prepared successfully.");
 
                 let grid_items = thumbnails_mapping

@@ -57,7 +57,7 @@ impl<F: FileSystemOps + 'static> DownloadService<F> {
         &self,
         file_set_id: i64,
         extract_files: bool,
-        progress_tx: Sender<DownloadEvent>,
+        progress_tx: Option<Sender<DownloadEvent>>,
     ) -> Result<DownloadResult, Error> {
         tracing::info!("Starting file set download");
 
