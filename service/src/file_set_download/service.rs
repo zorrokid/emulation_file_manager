@@ -23,11 +23,8 @@ pub struct DownloadService<F: FileSystemOps = StdFileSystemOps> {
 }
 
 impl DownloadService<StdFileSystemOps> {
-    pub fn new(
-        repository_manager: Arc<RepositoryManager>,
-        settings: Arc<Settings>,
-        settings_service: Arc<SettingsService>,
-    ) -> Self {
+    pub fn new(repository_manager: Arc<RepositoryManager>, settings: Arc<Settings>) -> Self {
+        let settings_service = Arc::new(SettingsService::new(repository_manager.clone()));
         Self::new_with_fs_ops(
             repository_manager,
             settings,
@@ -57,7 +54,7 @@ impl<F: FileSystemOps + 'static> DownloadService<F> {
         &self,
         file_set_id: i64,
         extract_files: bool,
-        progress_tx: Sender<DownloadEvent>,
+        progress_tx: Option<Sender<DownloadEvent>>,
     ) -> Result<DownloadResult, Error> {
         tracing::info!("Starting file set download");
 

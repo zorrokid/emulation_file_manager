@@ -10,7 +10,6 @@ use database::{
     repository_manager::RepositoryManager,
 };
 use emulator_runner::{error::EmulatorRunnerError, run_with_emulator};
-use file_export::export_files_zipped_or_non_zipped;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
@@ -22,7 +21,7 @@ use relm4::{
 };
 use service::{
     error::Error as ServiceError,
-    export_service::prepare_fileset_for_export,
+    file_set_download::service::{DownloadResult, DownloadService},
     view_model_service::ViewModelService,
     view_models::{EmulatorListModel, EmulatorViewModel, FileSetViewModel, Settings},
 };
@@ -57,7 +56,7 @@ pub enum EmulatorRunnerMsg {
     AddEmulator(EmulatorListModel),
     UpdateEmulator(EmulatorListModel),
 
-    RunEmulator,
+    PrepareFilesForEmulator,
 
     Show {
         file_set: FileSetViewModel,
@@ -65,6 +64,7 @@ pub enum EmulatorRunnerMsg {
     },
     Hide,
     Ignore,
+    StartEmulator,
 }
 
 #[derive(Debug)]
@@ -72,6 +72,7 @@ pub enum EmulatorRunnerCommandMsg {
     EmulatorsFetched(Result<Vec<EmulatorViewModel>, ServiceError>),
     FinishedRunningEmulator(Result<(), EmulatorRunnerError>),
     EmulatorDeleted(Result<i64, Error>),
+    FilePreparationDone(Result<DownloadResult, ServiceError>),
 }
 
 pub struct EmulatorRunnerInit {
@@ -85,6 +86,7 @@ pub struct EmulatorRunnerModel {
     // services
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
+    file_download_service: Arc<DownloadService>,
 
     // list views
     file_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
@@ -154,7 +156,7 @@ impl Component for EmulatorRunnerModel {
 
                 gtk::Button {
                     set_label: "Run Emulator",
-                    connect_clicked => EmulatorRunnerMsg::RunEmulator,
+                    connect_clicked => EmulatorRunnerMsg::PrepareFilesForEmulator,
                     #[watch]
                     set_sensitive: model.selected_emulator.is_some() && model.selected_file.is_some(),
                 },
@@ -199,9 +201,15 @@ impl Component for EmulatorRunnerModel {
                 ConfirmDialogOutputMsg::Canceled => EmulatorRunnerMsg::Ignore,
             });
 
+        let file_download_service = Arc::new(DownloadService::new(
+            Arc::clone(&init.repository_manager),
+            Arc::clone(&init.settings),
+        ));
+
         let model = EmulatorRunnerModel {
             view_model_service: init.view_model_service,
             repository_manager: init.repository_manager,
+            file_download_service,
 
             systems: Vec::new(),
             emulators: Vec::new(),
@@ -267,7 +275,9 @@ impl Component for EmulatorRunnerModel {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         match msg {
-            EmulatorRunnerMsg::RunEmulator => self.run_emulator(&sender),
+            EmulatorRunnerMsg::PrepareFilesForEmulator => {
+                self.prepare_files_for_emulalator(&sender)
+            }
             EmulatorRunnerMsg::FileSelected { index } => {
                 self.handle_file_selection(index);
             }
@@ -340,6 +350,9 @@ impl Component for EmulatorRunnerModel {
                     });
                 }
             }
+            EmulatorRunnerMsg::StartEmulator => {
+                self.start_emulator(&sender);
+            }
             _ => {}
         }
     }
@@ -388,6 +401,21 @@ impl Component for EmulatorRunnerModel {
             EmulatorRunnerCommandMsg::EmulatorDeleted(Err(error)) => {
                 eprintln!("Error deleting emulator: {:?}", error);
             }
+            EmulatorRunnerCommandMsg::FilePreparationDone(Ok(download_result)) => {
+                if download_result.failed_downloads > 0 {
+                    eprintln!(
+                        "{} files failed to download, cannot start emulator.",
+                        download_result.failed_downloads
+                    );
+                } else {
+                    println!("All files downloaded successfully, starting emulator...");
+                    sender.input(EmulatorRunnerMsg::StartEmulator);
+                }
+            }
+
+            EmulatorRunnerCommandMsg::FilePreparationDone(Err(error)) => {
+                eprintln!("Error preparing files: {:?}", error);
+            }
         }
     }
 }
@@ -422,67 +450,56 @@ impl EmulatorRunnerModel {
             }
         }
     }
-    pub fn run_emulator(&self, sender: &ComponentSender<Self>) {
-        if let (Some(emulator), Some(selected_file), Some(file_set)) = (
-            self.selected_emulator.clone(),
-            self.selected_file.clone(),
-            self.file_set.clone(),
-        ) {
-            let temp_dir = std::env::temp_dir();
-            // TODO: use downlaod_service instead!
-            let export_model = prepare_fileset_for_export(
-                &file_set,
-                &self.settings.collection_root_dir,
-                temp_dir.as_path(),
-                emulator.extract_files,
-            );
 
-            println!("Export model prepared: {:?}", export_model);
+    pub fn prepare_files_for_emulalator(&self, sender: &ComponentSender<Self>) {
+        if let (Some(emulator), Some(file_set)) = (&self.selected_emulator, &self.file_set) {
+            let download_service = Arc::clone(&self.file_download_service);
+            let file_set_id = file_set.id;
+            let extract_files = emulator.extract_files;
 
+            sender.oneshot_command(async move {
+                let res = download_service
+                    .download_file_set(file_set_id, extract_files, None)
+                    .await;
+                EmulatorRunnerCommandMsg::FilePreparationDone(res)
+            });
+        }
+    }
+
+    pub fn start_emulator(&self, sender: &ComponentSender<Self>) {
+        if let (Some(emulator), Some(selected_file), Some(file_set)) =
+            (&self.selected_emulator, &self.selected_file, &self.file_set)
+        {
+            let executable = emulator.executable.clone();
+            let arguments = emulator.arguments.clone();
             let files_in_fileset = file_set
                 .files
                 .iter()
                 .map(|f| f.file_name.clone())
                 .collect::<Vec<_>>();
 
-            let extract_files = emulator.extract_files;
-            println!(
-                "Extract files: {}, Files in fileset: {:?}",
-                extract_files, files_in_fileset
-            );
-            let starting_file = if extract_files {
+            let starting_file = if emulator.extract_files {
                 selected_file.file_name.clone()
             } else {
-                export_model.exported_zip_file_name.clone()
+                file_set.file_set_name.clone()
             };
 
-            let executable = emulator.executable.clone();
-            let arguments = emulator.arguments.clone();
+            let temp_dir = self.settings.temp_output_dir.clone();
 
             sender.oneshot_command(async move {
-                let res = match export_files_zipped_or_non_zipped(&export_model) {
-                    Ok(()) => {
-                        run_with_emulator(
-                            executable,
-                            &arguments,
-                            &files_in_fileset,
-                            starting_file,
-                            temp_dir,
-                        )
-                        .await
-                    }
-                    Err(e) => Err(EmulatorRunnerError::IoError(format!(
-                        "Failed to export files: {}",
-                        e
-                    ))),
-                };
+                let res = run_with_emulator(
+                    executable,
+                    &arguments,
+                    &files_in_fileset,
+                    starting_file,
+                    temp_dir,
+                )
+                .await;
                 EmulatorRunnerCommandMsg::FinishedRunningEmulator(res)
             });
-        } else {
-            // Handle the case where no emulator or file is selected
-            eprintln!("No emulator or file selected");
         }
     }
+
     pub fn init_with_new_data(
         &mut self,
         file_set: FileSetViewModel,

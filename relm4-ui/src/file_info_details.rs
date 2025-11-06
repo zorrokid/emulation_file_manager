@@ -56,6 +56,8 @@ impl relm4::Component for FileInfoDetails {
                 #[local_ref]
                 file_sets_list -> gtk::ListView {}
             },
+
+            // show preview of the file if thumbnail is available
         }
     }
 

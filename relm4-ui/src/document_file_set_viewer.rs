@@ -11,7 +11,6 @@ use database::{
     database_error::DatabaseError, models::FileSetFileInfo, repository_manager::RepositoryManager,
 };
 use emulator_runner::{error::EmulatorRunnerError, run_with_emulator};
-use file_export::export_files;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
@@ -23,7 +22,7 @@ use relm4::{
 };
 use service::{
     error::Error as ServiceError,
-    export_service::prepare_fileset_for_export,
+    file_set_download::service::{DownloadResult, DownloadService},
     view_model_service::ViewModelService,
     view_models::{DocumentViewerListModel, DocumentViewerViewModel, FileSetViewModel, Settings},
 };
@@ -43,6 +42,7 @@ pub enum DocumentViewerMsg {
     AddViewer(DocumentViewerListModel),
     UpdateViewer(DocumentViewerListModel),
 
+    PrepareFilesForViewer,
     StartViewer,
     StartEdit,
     ConfirmDelete,
@@ -59,6 +59,7 @@ pub enum DocumentViewerCommandMsg {
     ViewersFetched(Result<Vec<DocumentViewerViewModel>, ServiceError>),
     FinishedRunningViewer(Result<(), EmulatorRunnerError>),
     Deleted(Result<i64, DatabaseError>),
+    FilePreparationDone(Result<DownloadResult, ServiceError>),
 }
 
 pub struct DocumentViewerInit {
@@ -72,6 +73,7 @@ pub struct DocumentViewer {
     // services
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
+    file_download_service: Arc<DownloadService>,
 
     // list views
     file_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
@@ -138,7 +140,7 @@ impl Component for DocumentViewer {
 
                 gtk::Button {
                     set_label: "Start",
-                    connect_clicked => DocumentViewerMsg::StartViewer,
+                    connect_clicked => DocumentViewerMsg::PrepareFilesForViewer,
                     #[watch]
                     set_sensitive: model.selected_viewer.is_some() && model.selected_file.is_some(),
                 },
@@ -181,9 +183,15 @@ impl Component for DocumentViewer {
                 ConfirmDialogOutputMsg::Canceled => DocumentViewerMsg::Ignore,
             });
 
+        let file_download_service = Arc::new(DownloadService::new(
+            Arc::clone(&init.repository_manager),
+            Arc::clone(&init.settings),
+        ));
+
         let model = DocumentViewer {
             view_model_service: init.view_model_service,
             repository_manager: init.repository_manager,
+            file_download_service,
 
             viewers: Vec::new(),
             settings: init.settings,
@@ -233,23 +241,27 @@ impl Component for DocumentViewer {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         match msg {
+            DocumentViewerMsg::PrepareFilesForViewer => {
+                if let Some(file_set) = &self.file_set {
+                    let download_service = Arc::clone(&self.file_download_service);
+                    let file_set_id = file_set.id;
+
+                    sender.oneshot_command(async move {
+                        let res = download_service
+                            .download_file_set(file_set_id, true, None)
+                            .await;
+                        DocumentViewerCommandMsg::FilePreparationDone(res)
+                    });
+                }
+            }
             DocumentViewerMsg::StartViewer => {
-                println!("Starting viewer...");
-                if let (Some(viewer), Some(selected_file), Some(file_set)) = (
-                    self.selected_viewer.clone(),
-                    self.selected_file.clone(),
-                    self.file_set.clone(),
-                ) {
-                    let temp_dir = std::env::temp_dir();
-                    let export_model = prepare_fileset_for_export(
-                        &file_set,
-                        &self.settings.collection_root_dir,
-                        temp_dir.as_path(),
-                        true,
-                    );
-
-                    println!("Export model prepared: {:?}", export_model);
-
+                if let (Some(viewer), Some(selected_file), Some(file_set)) =
+                    (&self.selected_viewer, &self.selected_file, &self.file_set)
+                {
+                    let executable = viewer.executable.clone();
+                    // TODO: create a viewer view model that has processed arguments already to
+                    // correct format
+                    let arguments = Vec::new(); // TODO: viewer.arguments.clone();
                     let files_in_fileset = file_set
                         .files
                         .iter()
@@ -257,34 +269,19 @@ impl Component for DocumentViewer {
                         .collect::<Vec<_>>();
 
                     let starting_file = selected_file.file_name.clone();
-
-                    let executable = viewer.executable.clone();
-                    // TODO: create a viewer view model that has processed arguments already to
-                    // correct format
-                    let arguments = Vec::new(); // TODO: viewer.arguments.clone();
+                    let temp_dir = self.settings.temp_output_dir.clone();
 
                     sender.oneshot_command(async move {
-                        let res = match export_files(&export_model) {
-                            Ok(()) => {
-                                run_with_emulator(
-                                    executable,
-                                    &arguments,
-                                    &files_in_fileset,
-                                    starting_file,
-                                    temp_dir,
-                                )
-                                .await
-                            }
-                            Err(e) => Err(EmulatorRunnerError::IoError(format!(
-                                "Failed to export files: {}",
-                                e
-                            ))),
-                        };
+                        let res = run_with_emulator(
+                            executable,
+                            &arguments,
+                            &files_in_fileset,
+                            starting_file,
+                            temp_dir,
+                        )
+                        .await;
                         DocumentViewerCommandMsg::FinishedRunningViewer(res)
                     });
-                } else {
-                    // Handle the case where no viewer or file is selected
-                    eprintln!("No viewer or file selected");
                 }
             }
             DocumentViewerMsg::FileSelected { index } => {
@@ -406,13 +403,20 @@ impl Component for DocumentViewer {
             DocumentViewerCommandMsg::FinishedRunningViewer(Err(error)) => {
                 eprintln!("Error running viewer: {:?}", error);
             }
-            DocumentViewerCommandMsg::Deleted(Ok((_))) => {
+            DocumentViewerCommandMsg::Deleted(Ok(_)) => {
                 println!("Viewer deleted successfully");
                 // TODO: delete directly from the list?
                 sender.input(DocumentViewerMsg::FetchViewers);
             }
             DocumentViewerCommandMsg::Deleted(Err(error)) => {
                 eprintln!("Error deleting viewer: {:?}", error);
+            }
+            DocumentViewerCommandMsg::FilePreparationDone(Ok(_download_result)) => {
+                println!("Files prepared successfully for viewer");
+                sender.input(DocumentViewerMsg::StartViewer);
+            }
+            DocumentViewerCommandMsg::FilePreparationDone(Err(error)) => {
+                eprintln!("Error preparing files for viewer: {:?}", error);
             }
         }
     }

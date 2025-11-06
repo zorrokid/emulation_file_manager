@@ -17,7 +17,7 @@ pub struct DownloadContext<F: FileSystemOps> {
     pub repository_manager: Arc<RepositoryManager>,
     pub settings: Arc<Settings>,
     pub settings_service: Arc<SettingsService>,
-    pub progress_tx: Sender<DownloadEvent>,
+    pub progress_tx: Option<Sender<DownloadEvent>>,
 
     pub fs_ops: Arc<F>,
     pub export_ops: Arc<dyn FileExportOps>,
@@ -53,7 +53,7 @@ pub struct DownloadContextSettings<F: FileSystemOps> {
     pub repository_manager: Arc<RepositoryManager>,
     pub settings: Arc<Settings>,
     pub settings_service: Arc<SettingsService>,
-    pub progress_tx: Sender<DownloadEvent>,
+    pub progress_tx: Option<Sender<DownloadEvent>>,
     pub file_set_id: i64,
     pub extract_files: bool,
     pub cloud_ops: Option<Arc<dyn CloudStorageOps>>,
