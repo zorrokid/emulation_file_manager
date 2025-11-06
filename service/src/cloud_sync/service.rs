@@ -5,7 +5,8 @@ use cloud_storage::SyncEvent;
 use database::repository_manager::RepositoryManager;
 
 use crate::{
-    cloud_sync::context::SyncContext, pipeline::generic_pipeline::Pipeline, view_models::Settings,
+    cloud_sync::context::SyncContext, error::Error, pipeline::generic_pipeline::Pipeline,
+    view_models::Settings,
 };
 
 #[derive(Debug)]
@@ -22,10 +23,9 @@ impl CloudStorageSyncService {
         }
     }
 
-    pub async fn sync_to_cloud(
-        &self,
-        progress_tx: Sender<SyncEvent>,
-    ) -> Result<SyncResult, crate::error::Error> {
+    #[tracing::instrument(skip_all, err)]
+    pub async fn sync_to_cloud(&self, progress_tx: Sender<SyncEvent>) -> Result<SyncResult, Error> {
+        tracing::info!("Starting cloud sync operation");
         let mut context = SyncContext::new(
             self.repository_manager.clone(),
             self.settings.clone(),
@@ -39,9 +39,12 @@ impl CloudStorageSyncService {
         let successful_deletions = context.successful_deletions();
         let failed_deletions = context.failed_deletions();
 
-        eprintln!(
-            "Cloud sync completed: {} successful uploads, {} failed uploads, {} successful deletions, {} failed deletions",
-            successful_uploads, failed_uploads, successful_deletions, failed_deletions
+        tracing::info!(
+            successful_uploads,
+            failed_uploads,
+            successful_deletions,
+            failed_deletions,
+            "Cloud sync summary"
         );
 
         Ok(SyncResult {
