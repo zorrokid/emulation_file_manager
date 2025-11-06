@@ -18,6 +18,7 @@ impl PipelineStep<SyncContext> for PrepareFilesForUploadStep {
     }
 
     async fn execute(&self, context: &mut SyncContext) -> StepAction {
+        tracing::debug!("Preparing files for upload");
         let mut offset = 0;
         loop {
             let file_infos_res = context
@@ -34,11 +35,12 @@ impl PipelineStep<SyncContext> for PrepareFilesForUploadStep {
                     offset += file_infos.len() as i64;
                     for file_info in &file_infos {
                         let cloud_key = file_info.generate_cloud_key();
-                        println!(
-                            "Preparing file for sync: id={}, cloud_key={}",
-                            file_info.id, cloud_key
+                        tracing::debug!(
+                            file_info_id = file_info.id,
+                            cloud_key = %cloud_key,
+                            "Preparing file for sync"
                         );
-                        let update_res = context
+                       let update_res = context
                             .repository_manager
                             .get_file_sync_log_repository()
                             .add_log_entry(
@@ -49,24 +51,24 @@ impl PipelineStep<SyncContext> for PrepareFilesForUploadStep {
                             )
                             .await;
                         if let Err(e) = update_res {
-                            eprintln!(
-                                "Error updating sync log for file_info id {}: {}",
-                                file_info.id, e
+                            tracing::error!(
+                                file_info_id = file_info.id,
+                                error = %e,
+                                "Error updating sync log for file"
                             );
-
                             return StepAction::Abort(Error::DbError(e.to_string()));
                         }
                     }
                 }
                 Err(e) => {
-                    eprintln!("Error fetching file infos: {}", e);
+                    tracing::error!(error = %e, 
+                        "Error fetching file infos");
                     return StepAction::Abort(Error::DbError(e.to_string()));
                 }
             }
         }
 
-        println!("Preparing files for sync...DONE");
-
+        tracing::debug!("File preparation completed");
         StepAction::Continue
     }
 }
@@ -81,7 +83,7 @@ impl PipelineStep<SyncContext> for GetSyncFileCountsStep {
         "get_sync_file_counts"
     }
     async fn execute(&self, context: &mut SyncContext) -> StepAction {
-        println!("GetSyncFileCountsStep");
+        tracing::debug!("Getting sync file counts");
 
         let files_to_delete_res = context
             .repository_manager
@@ -92,10 +94,12 @@ impl PipelineStep<SyncContext> for GetSyncFileCountsStep {
         match files_to_delete_res {
             Ok(count) => {
                 context.files_prepared_for_deletion = count;
-                println!("Files prepared for deletion: {}", count);
+                tracing::debug!(count, 
+                    "Files prepared for deletion");
             }
             Err(e) => {
-                eprintln!("Error counting files for deletion: {}", e);
+                tracing::error!(error = %e, 
+                    "Error counting files for deletion");
                 return StepAction::Abort(Error::DbError(e.to_string()));
             }
         }
@@ -108,16 +112,17 @@ impl PipelineStep<SyncContext> for GetSyncFileCountsStep {
         match files_pending_upload_res {
             Ok(count) => {
                 context.files_prepared_for_upload = count;
-                println!("Files prepared for upload: {}", count);
+                tracing::debug!(count, 
+                    "Files prepared for upload");
             }
             Err(e) => {
-                eprintln!("Error counting files for upload: {}", e);
+                tracing::error!(error = %e, 
+                    "Error counting files for upload");
                 return StepAction::Abort(Error::DbError(e.to_string()));
             }
         }
 
-        // TODO: add failed uploads/deletions?
-
+        tracing::debug!("File counts retrieval completed");
         StepAction::Continue
     }
 }
@@ -136,7 +141,7 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
     }
 
     async fn execute(&self, context: &mut SyncContext) -> StepAction {
-        println!("UploadPendingFilesStep");
+        tracing::debug!("Uploading pending files to cloud storage");
         let mut file_count = 0;
 
         context
@@ -162,23 +167,28 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
 
             match pending_files_to_upload_result {
                 Err(e) => {
-                    eprintln!("Error fetching pending files for upload: {}", e);
+                    tracing::error!(error = %e, 
+                        "Error fetching pending files for upload");
                     return StepAction::Abort(Error::DbError(e.to_string()));
                 }
                 Ok(pending_files) => {
-                    println!(
-                        "Found {} pending files for upload (offset {})",
-                        pending_files.len(),
-                        offset
+                    tracing::debug!(
+                        pending_file_count = pending_files.len(),
+                        offset,
+                        "Found pending files for upload"
                     );
-                    if pending_files.is_empty() {
+                   if pending_files.is_empty() {
                         break;
                     }
 
                     offset += pending_files.len() as u32;
 
                     for file in pending_files {
-                        println!("Uploading file: id={}, key={}", file.file_info_id, file.cloud_key);
+                        tracing::debug!(
+                            file_info_id = file.file_info_id,
+                            cloud_key = %file.cloud_key,
+                            "Uploading file"
+                        );
                         file_count += 1;
 
                         // TODO: maybe trigger only these events for progress tracking
@@ -213,9 +223,10 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                             .await;
 
                         if let Err(e) = update_res {
-                            eprintln!(
-                                "Error updating sync log for file_info id {}: {}",
-                                file.file_info_id, e
+                            tracing::error!(
+                                file_info_id = file.file_info_id,
+                                error = %e,
+                                "Error updating sync log for file"
                             );
                             file_sync_result.db_error = Some(format!("{}", e));
                             context
@@ -241,6 +252,12 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                             .settings
                             .get_file_path(&file.file_type, &file.archive_file_name);
 
+                        tracing::debug!(
+                            file_info_id = file.file_info_id,
+                            local_path = %local_path.display(),
+                            "Uploading file to cloud"
+                        );
+
                         let upload_res = context
                             .cloud_ops
                             .as_ref()
@@ -254,11 +271,12 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
 
                         match upload_res {
                             Ok(_) => {
-                                println!(
-                                    "Upload succeeded for file: id={}, key={}",
-                                    file.file_info_id, file.cloud_key
+                                tracing::info!(
+                                    file_info_id = file.file_info_id,
+                                    cloud_key = %file.cloud_key,
+                                    "Upload succeeded"
                                 );
-                                file_sync_result.cloud_operation_success = true;
+                               file_sync_result.cloud_operation_success = true;
 
                                 let update_res = context
                                     .repository_manager
@@ -276,6 +294,11 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                                         file_sync_result.db_update_success = true;
                                     }
                                     Err(e) => {
+                                        tracing::error!(
+                                            file_info_id = file.file_info_id,
+                                            error = %e,
+                                            "Error updating sync log after upload"
+                                        );
                                         file_sync_result.db_update_success = false;
                                         file_sync_result.db_error = Some(format!("{}", e));
                                     }
@@ -292,9 +315,10 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                                     .ok();
                             }
                             Err(e) => {
-                                eprintln!(
-                                    "Upload failed for file: id={}, key={}, error={}",
-                                    file.file_info_id, file.cloud_key, e
+                                tracing::error!(
+                                    file_info_id = file.file_info_id,
+                                    error = %e,
+                                    "Upload failed"
                                 );
                                 file_sync_result.cloud_operation_success = false;
                                 file_sync_result.cloud_error = Some(format!("{}", e));
@@ -315,6 +339,11 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                                         file_sync_result.db_update_success = true;
                                     }
                                     Err(e) => {
+                                        tracing::error!(
+                                            file_info_id = file.file_info_id,
+                                            error = %e,
+                                            "Error updating sync log after failed upload"
+                                        );
                                         file_sync_result.db_update_success = false;
                                         file_sync_result.db_error = Some(format!("{}", e));
                                     }
@@ -344,6 +373,7 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
             .send(SyncEvent::SyncCompleted {})
             .await
             .ok();
+        tracing::debug!("Pending file uploads completed");
         StepAction::Continue
     }
 }
@@ -357,6 +387,7 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
         "delete_marked_files"
     }
     async fn execute(&self, context: &mut SyncContext) -> StepAction {
+        tracing::debug!("Deleting marked files from cloud storage");
         let mut file_count = 0;
         let mut offset = 0;
 
@@ -376,12 +407,20 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
 
             match pending_files_res {
                 Err(e) => {
+                    tracing::error!(error = %e, 
+                        "Error fetching pending files for deletion");
                     return StepAction::Abort(Error::DbError(e.to_string()));
                 }
                 Ok(pending_files) => {
                     if pending_files.is_empty() {
                         break;
                     }
+
+                    tracing::debug!(
+                        pending_file_count = pending_files.len(),
+                        offset,
+                        "Found pending files for deletion"
+                    );
 
                     offset += pending_files.len() as u32;
 
@@ -418,6 +457,11 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
                             .map_err(|e| Error::DbError(e.to_string()));
 
                         if let Err(e) = update_res {
+                            tracing::error!(
+                                file_info_id = file.id,
+                                error = %e,
+                                "Error updating sync log for file deletion"
+                            );
                             file_deletion_result.db_error = Some(format!("{}", e));
                             context
                                 .deletion_results
@@ -465,6 +509,11 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
                                         file_deletion_result.db_update_success = true;
                                     }
                                     Err(e) => {
+                                        tracing::error!(
+                                            file_info_id = file.id,
+                                            error = %e,
+                                            "Error updating sync log after deletion"
+                                        );
                                         file_deletion_result.db_update_success = false;
                                         file_deletion_result.db_error = Some(format!("{}", e));
                                     }
@@ -481,6 +530,11 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
                                     .ok();
                             }
                             Err(e) => {
+                                tracing::error!(
+                                    file_info_id = file.id,
+                                    error = %e,
+                                    "File deletion failed"
+                                );
                                 file_deletion_result.cloud_operation_success = false;
                                 file_deletion_result.cloud_error = Some(format!("{}", e));
                                 let update_res = context
@@ -524,6 +578,7 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
             }
         }
 
+        tracing::debug!("Marked file deletions completed");
         StepAction::Continue
     }
 }

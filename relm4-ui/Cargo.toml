@@ -13,6 +13,7 @@ database = { path = "../database" }
 service = { path = "../service" }
 file_export = { path = "../file_export" }
 file_import = { path = "../file_import" }
+file_system = { path = "../file_system" }
 core_types = { path = "../core_types" }
 emulator_runner = { path = "../emulator_runner" }
 thumbnails = { path = "../thumbnails" }
@@ -23,6 +24,9 @@ strum_macros = "0.27"
 tracker = "0.2.2"
 async-std = { version = "1.13.2", features = ["attributes"] }
 cloud_storage = { path = "../cloud_storage" }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "time"] }
+tracing-appender = "0.2"
 
 
 [package.metadata.deb]

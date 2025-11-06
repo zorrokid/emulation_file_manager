@@ -12,6 +12,11 @@ pub fn get_files_root_dir() -> PathBuf {
     get_default_data_dir().join("files")
 }
 
+/// Returns path to logs directory located in default data dir for application.
+pub fn get_logs_dir() -> PathBuf {
+    get_default_data_dir().join("logs")
+}
+
 fn get_default_data_dir() -> std::path::PathBuf {
     let project_dirs = get_project_dirs();
     let data_dir = project_dirs.data_local_dir();
