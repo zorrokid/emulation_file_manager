@@ -3,8 +3,9 @@
 ## Technologies
 
 - [Rust](https://www.rust-lang.org/): The primary programming language used for development.
-- [relm4](https://relm4.org/): Used for building GTK4 GUI 
-- [SQLx](https://github.com/launchbadge/sqlx): Used for SQLite database management, providing an asynchronous interface to SQLite database. 
+- [relm4](https://relm4.org/): GTK4 UI 
+- [SQLx](https://github.com/launchbadge/sqlx): Used for SQLite database management, providing an asynchronous interface to SQLite database.
+- [rust-s3](https://github.com/durch/rust-s3): S3 compatible cloud storage
 
 ## Crates
 
