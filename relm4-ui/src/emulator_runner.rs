@@ -10,7 +10,6 @@ use database::{
     repository_manager::RepositoryManager,
 };
 use emulator_runner::{error::EmulatorRunnerError, run_with_emulator};
-use file_export::export_files_zipped_or_non_zipped;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
@@ -22,7 +21,6 @@ use relm4::{
 };
 use service::{
     error::Error as ServiceError,
-    export_service::prepare_fileset_for_export,
     file_set_download::service::{DownloadResult, DownloadService},
     settings_service::SettingsService,
     view_model_service::ViewModelService,
@@ -460,14 +458,14 @@ impl EmulatorRunnerModel {
     }
 
     pub fn prepare_files_for_emulalator(&self, sender: &ComponentSender<Self>) {
-        if let (Some(emulator), Some(file_set)) =
-            (self.selected_emulator.clone(), self.file_set.clone())
-        {
+        if let (Some(emulator), Some(file_set)) = (&self.selected_emulator, &self.file_set) {
             let download_service = Arc::clone(&self.file_download_service);
+            let file_set_id = file_set.id;
+            let extract_files = emulator.extract_files;
 
             sender.oneshot_command(async move {
                 let res = download_service
-                    .download_file_set(file_set.id, emulator.extract_files, None)
+                    .download_file_set(file_set_id, extract_files, None)
                     .await;
                 EmulatorRunnerCommandMsg::FilePreparationDone(res)
             });
@@ -475,11 +473,9 @@ impl EmulatorRunnerModel {
     }
 
     pub fn start_emulator(&self, sender: &ComponentSender<Self>) {
-        if let (Some(emulator), Some(selected_file), Some(file_set)) = (
-            self.selected_emulator.clone(),
-            self.selected_file.clone(),
-            self.file_set.clone(),
-        ) {
+        if let (Some(emulator), Some(selected_file), Some(file_set)) =
+            (&self.selected_emulator, &self.selected_file, &self.file_set)
+        {
             let executable = emulator.executable.clone();
             let arguments = emulator.arguments.clone();
             let files_in_fileset = file_set

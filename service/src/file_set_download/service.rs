@@ -26,6 +26,8 @@ impl DownloadService<StdFileSystemOps> {
     pub fn new(
         repository_manager: Arc<RepositoryManager>,
         settings: Arc<Settings>,
+        // TODO: settings service is not required, we can instantiate it internally since we
+        // repository_manager
         settings_service: Arc<SettingsService>,
     ) -> Self {
         Self::new_with_fs_ops(
