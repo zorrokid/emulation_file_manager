@@ -22,7 +22,6 @@ use relm4::{
 use service::{
     error::Error as ServiceError,
     file_set_download::service::{DownloadResult, DownloadService},
-    settings_service::SettingsService,
     view_model_service::ViewModelService,
     view_models::{EmulatorListModel, EmulatorViewModel, FileSetViewModel, Settings},
 };

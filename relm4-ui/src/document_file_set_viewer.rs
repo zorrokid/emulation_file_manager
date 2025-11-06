@@ -11,7 +11,6 @@ use database::{
     database_error::DatabaseError, models::FileSetFileInfo, repository_manager::RepositoryManager,
 };
 use emulator_runner::{error::EmulatorRunnerError, run_with_emulator};
-use file_export::export_files;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
@@ -23,9 +22,7 @@ use relm4::{
 };
 use service::{
     error::Error as ServiceError,
-    export_service::prepare_fileset_for_export,
     file_set_download::service::{DownloadResult, DownloadService},
-    settings_service::SettingsService,
     view_model_service::ViewModelService,
     view_models::{DocumentViewerListModel, DocumentViewerViewModel, FileSetViewModel, Settings},
 };
