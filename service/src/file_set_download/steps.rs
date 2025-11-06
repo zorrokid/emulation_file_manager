@@ -704,7 +704,7 @@ mod tests {
             repository_manager: repo_manager.clone(),
             settings: settings.clone(),
             settings_service: settings_service.clone(),
-            progress_tx: tx.clone(),
+            progress_tx: Some(tx.clone()),
             file_set_id: 1,
             extract_files,
             cloud_ops: Some(cloud_ops.clone()),

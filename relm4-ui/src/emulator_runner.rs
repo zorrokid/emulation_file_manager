@@ -88,7 +88,6 @@ pub struct EmulatorRunnerModel {
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
     file_download_service: Arc<DownloadService>,
-    settings_service: Arc<SettingsService>,
 
     // list views
     file_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
@@ -203,17 +202,15 @@ impl Component for EmulatorRunnerModel {
                 ConfirmDialogOutputMsg::Canceled => EmulatorRunnerMsg::Ignore,
             });
 
-        let settings_service = Arc::new(SettingsService::new(Arc::clone(&init.repository_manager)));
-
         let file_download_service = Arc::new(DownloadService::new(
             Arc::clone(&init.repository_manager),
             Arc::clone(&init.settings),
-            Arc::clone(&settings_service),
         ));
 
         let model = EmulatorRunnerModel {
             view_model_service: init.view_model_service,
             repository_manager: init.repository_manager,
+            file_download_service,
 
             systems: Vec::new(),
             emulators: Vec::new(),
@@ -229,8 +226,6 @@ impl Component for EmulatorRunnerModel {
             emulator_form,
             confirm_dialog_controller,
             selected_system: None,
-            file_download_service,
-            settings_service,
         };
 
         let file_list_view = &model.file_list_view_wrapper.view;

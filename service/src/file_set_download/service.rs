@@ -23,13 +23,8 @@ pub struct DownloadService<F: FileSystemOps = StdFileSystemOps> {
 }
 
 impl DownloadService<StdFileSystemOps> {
-    pub fn new(
-        repository_manager: Arc<RepositoryManager>,
-        settings: Arc<Settings>,
-        // TODO: settings service is not required, we can instantiate it internally since we
-        // repository_manager
-        settings_service: Arc<SettingsService>,
-    ) -> Self {
+    pub fn new(repository_manager: Arc<RepositoryManager>, settings: Arc<Settings>) -> Self {
+        let settings_service = Arc::new(SettingsService::new(repository_manager.clone()));
         Self::new_with_fs_ops(
             repository_manager,
             settings,

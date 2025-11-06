@@ -77,7 +77,6 @@ pub struct DocumentViewer {
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
     file_download_service: Arc<DownloadService>,
-    settings_service: Arc<SettingsService>,
 
     // list views
     file_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
@@ -186,19 +185,16 @@ impl Component for DocumentViewer {
                 ConfirmDialogOutputMsg::Confirmed => DocumentViewerMsg::DeleteConfirmed,
                 ConfirmDialogOutputMsg::Canceled => DocumentViewerMsg::Ignore,
             });
-        let settings_service = Arc::new(SettingsService::new(Arc::clone(&init.repository_manager)));
 
         let file_download_service = Arc::new(DownloadService::new(
             Arc::clone(&init.repository_manager),
             Arc::clone(&init.settings),
-            Arc::clone(&settings_service),
         ));
 
         let model = DocumentViewer {
             view_model_service: init.view_model_service,
             repository_manager: init.repository_manager,
             file_download_service,
-            settings_service,
 
             viewers: Vec::new(),
             settings: init.settings,
