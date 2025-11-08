@@ -146,25 +146,25 @@ impl Component for ImageViewer {
                 });
             }
             ImageViewerMsg::ShowNext => {
-                if let (Some(index), Some(file_set)) = (self.current_file_index, &self.file_set) {
-                    if index + 1 < file_set.files.len() {
-                        let new_index = index + 1;
-                        self.current_file_index = Some(new_index);
-                        let next_image = file_set.files[new_index].file_name.clone();
-                        let file_path = self.settings.temp_output_dir.join(&next_image);
-                        self.selected_image = file_path;
-                    }
+                if let (Some(index), Some(file_set)) = (self.current_file_index, &self.file_set)
+                    && index + 1 < file_set.files.len()
+                {
+                    let new_index = index + 1;
+                    self.current_file_index = Some(new_index);
+                    let next_image = file_set.files[new_index].file_name.clone();
+                    let file_path = self.settings.temp_output_dir.join(&next_image);
+                    self.selected_image = file_path;
                 }
             }
             ImageViewerMsg::ShowPrevious => {
-                if let (Some(index), Some(file_set)) = (self.current_file_index, &self.file_set) {
-                    if index > 0 {
-                        let new_index = index - 1;
-                        self.current_file_index = Some(new_index);
-                        let previous_image = file_set.files[new_index].file_name.clone();
-                        let file_path = self.settings.temp_output_dir.join(&previous_image);
-                        self.selected_image = file_path;
-                    }
+                if let (Some(index), Some(file_set)) = (self.current_file_index, &self.file_set)
+                    && index > 0
+                {
+                    let new_index = index - 1;
+                    self.current_file_index = Some(new_index);
+                    let previous_image = file_set.files[new_index].file_name.clone();
+                    let file_path = self.settings.temp_output_dir.join(&previous_image);
+                    self.selected_image = file_path;
                 }
             }
             ImageViewerMsg::Clear => {
