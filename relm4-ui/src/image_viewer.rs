@@ -1,6 +1,5 @@
 use std::{path::PathBuf, sync::Arc};
 
-use file_export::{FileExportError, FileSetExportModel, export_files};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
@@ -9,8 +8,8 @@ use relm4::{
     },
 };
 use service::{
-    export_service::prepare_fileset_for_export,
-    file_set_download::service::DownloadService,
+    error::Error as ServiceError,
+    file_set_download::service::{DownloadResult, DownloadService},
     view_models::{FileSetViewModel, Settings},
 };
 
@@ -29,7 +28,7 @@ pub enum ImageViewerMsg {
 
 #[derive(Debug)]
 pub enum ImageViewerCommandMsg {
-    ExportedImageFileSet(Result<(), FileExportError>, FileSetExportModel),
+    HandleDownloadResult(Result<DownloadResult, ServiceError>),
 }
 
 #[derive(Debug, Clone)]
@@ -46,6 +45,7 @@ pub struct ImageViewer {
     settings: Arc<Settings>,
     selected_image: PathBuf,
     image_file_set_viewer: Controller<ImageFilesetViewer>,
+    download_service: Arc<DownloadService>,
 }
 
 #[relm4::component(pub)]
@@ -112,6 +112,7 @@ impl Component for ImageViewer {
             selected_image: PathBuf::new(),
             current_file_index: None,
             image_file_set_viewer,
+            download_service: init.download_service,
         };
         if let Some(file_set) = init.file_set {
             sender.input(ImageViewerMsg::SetFileSet { file_set });
@@ -129,20 +130,16 @@ impl Component for ImageViewer {
                 } else {
                     None
                 };
-                let export_model = prepare_fileset_for_export(
-                    &file_set,
-                    &self.settings.collection_root_dir,
-                    &self.settings.temp_output_dir,
-                    true,
-                );
+                let file_set_id = file_set.id;
                 self.file_set = Some(file_set);
 
-                sender.spawn_command(move |sender| {
-                    let res = export_files(&export_model);
-                    sender.emit(ImageViewerCommandMsg::ExportedImageFileSet(
-                        res,
-                        export_model,
-                    ));
+                let download_service = Arc::clone(&self.download_service);
+                sender.oneshot_command(async move {
+                    let res = download_service
+                        .download_file_set(file_set_id, true, None)
+                        .await;
+
+                    ImageViewerCommandMsg::HandleDownloadResult(res)
                 });
             }
             ImageViewerMsg::ShowNext => {
@@ -190,9 +187,7 @@ impl Component for ImageViewer {
         _root: &Self::Root,
     ) {
         match message {
-            ImageViewerCommandMsg::ExportedImageFileSet(Ok(()), export_model) => {
-                println!("Fileset exported successfully: {:?}", export_model);
-
+            ImageViewerCommandMsg::HandleDownloadResult(Ok(_)) => {
                 if let Some(file_set) = &self.file_set {
                     let selected_image_name = self
                         .current_file_index
@@ -206,7 +201,8 @@ impl Component for ImageViewer {
                         .find(|f| f.file_name == selected_image_name)
                     {
                         println!("Selected file: {:?}", selected_file);
-                        let image_path = export_model.output_dir.join(&selected_file.file_name);
+                        let temp_output_dir = &self.settings.temp_output_dir;
+                        let image_path = temp_output_dir.join(&selected_file.file_name);
 
                         self.selected_image = image_path;
                     } else {
@@ -214,9 +210,8 @@ impl Component for ImageViewer {
                     }
                 }
             }
-            ImageViewerCommandMsg::ExportedImageFileSet(Err(e), _) => {
-                // Handle export error, e.g., show an error message
-                eprintln!("Failed to export fileset: {}", e);
+            ImageViewerCommandMsg::HandleDownloadResult(Err(e)) => {
+                eprintln!("Failed to download fileset: {}", e);
             }
         }
     }
