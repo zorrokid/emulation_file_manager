@@ -99,7 +99,6 @@ impl Component for ImageViewer {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let init_model = ImageFileSetViewerInit {
-            settings: Arc::clone(&init.settings),
             download_service: Arc::clone(&init.download_service),
         };
         let image_file_set_viewer = ImageFilesetViewer::builder()

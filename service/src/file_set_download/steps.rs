@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use cloud_storage::events::DownloadEvent;
 use core_types::{IMAGE_FILE_TYPES, Sha1Checksum};
 use file_export::{FileSetExportModel, OutputFile};
-use thumbnails::prepare_thumbnails_from_output_dir;
 
 use crate::{
     file_set_download::context::{DownloadContext, FileDownloadResult},
@@ -328,21 +327,26 @@ impl<F: FileSystemOps> PipelineStep<DownloadContext<F>> for PrepareThumbnailsSte
     fn should_execute(&self, context: &DownloadContext<F>) -> bool {
         if let Some(file_set) = &context.file_set
             && IMAGE_FILE_TYPES.contains(&file_set.file_type)
-            && !context.extract_files
+            && context.extract_files
             && !context.file_output_mapping.is_empty()
         {
             true
         } else {
+            tracing::info!("Skipping thumbnail preparation step");
             false
         }
     }
 
     async fn execute(&self, context: &mut DownloadContext<F>) -> StepAction {
-        println!("Preparing thumbnails for downloaded files");
+        tracing::info!("Preparing thumbnails for image file set");
         let thumnail_dir = context.settings.get_thumbnails_path();
         let output_dir = &context.settings.temp_output_dir;
         let output_mapping = &context.file_output_mapping;
-        println!("Thumbnail directory: {}", thumnail_dir.to_string_lossy());
+        tracing::debug!(
+            thumbnail_dir = %thumnail_dir.to_string_lossy(),
+            output_dir = %output_dir.to_string_lossy(),
+            "Thumbnail preparation paths"
+        );
         let res = context.thumbnail_generator.prepare_thumbnails(
             &thumnail_dir,
             output_dir,
@@ -350,11 +354,13 @@ impl<F: FileSystemOps> PipelineStep<DownloadContext<F>> for PrepareThumbnailsSte
         );
         match res {
             Ok(thumbnail_map) => {
-                println!("Thumbnails prepared successfully");
+                tracing::info!(
+                    thumbnail_count = thumbnail_map.len(),
+                    "Thumbnails prepared successfully"
+                );
                 context.thumbnail_path_map = thumbnail_map;
             }
             Err(e) => {
-                println!("Failed to prepare thumbnails: {}", e);
                 tracing::error!(
                     error = %e,
                     "Failed to prepare thumbnails"
@@ -729,6 +735,31 @@ mod tests {
     }
 
     #[async_std::test]
+    async fn test_prepare_thumbnails_step_skipped_when_extract_files_is_false() {
+        let file_set = FileSet {
+            id: 1,
+            name: "Test File Set".to_string(),
+            file_type: FileType::Screenshot,
+            file_name: "test_file.zst".to_string(),
+            source: "".to_string(),
+        };
+
+        let (mut context, _file_export_ops) = initialize_context(false).await;
+        context.file_set = Some(file_set);
+        context.file_output_mapping = HashMap::from([(
+            "archive_file_name".to_string(),
+            OutputFile {
+                output_file_name: "file_name".to_string(),
+                checksum: Sha1Checksum::from([1; 20]),
+            },
+        )]);
+
+        let step = PrepareThumbnailsStep;
+        let should_execute = step.should_execute(&context);
+        assert!(!should_execute);
+    }
+
+    #[async_std::test]
     async fn test_prepare_thumbnails_step_skipped_for_non_image_file_type() {
         let file_set = FileSet {
             id: 1,
@@ -738,7 +769,7 @@ mod tests {
             source: "".to_string(),
         };
 
-        let (mut context, _file_export_ops) = initialize_context(false).await;
+        let (mut context, _file_export_ops) = initialize_context(true).await;
         context.file_set = Some(file_set);
         context.file_output_mapping = HashMap::from([(
             "archive_file_name".to_string(),
@@ -763,7 +794,7 @@ mod tests {
             source: "".to_string(),
         };
 
-        let (mut context, _file_export_ops) = initialize_context(false).await;
+        let (mut context, _file_export_ops) = initialize_context(true).await;
         context.file_set = Some(file_set);
         context.file_output_mapping = HashMap::from([(
             "archive_file_name".to_string(),

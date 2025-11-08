@@ -4,7 +4,7 @@ use async_std::channel::Sender;
 use cloud_storage::events::DownloadEvent;
 use database::repository_manager::RepositoryManager;
 use file_export::file_export_ops::DefaultFileExportOps;
-use thumbnails::ThumbnailGenerator;
+use thumbnails::{ThumbnailGenerator, ThumbnailPathMap};
 
 use crate::{
     error::Error,
@@ -88,6 +88,7 @@ impl<F: FileSystemOps + 'static> DownloadService<F> {
                 Ok(DownloadResult {
                     successful_downloads,
                     failed_downloads,
+                    thumbnail_path_map: context.thumbnail_path_map,
                 })
             }
             Err(e) => Err(e),
@@ -99,4 +100,5 @@ impl<F: FileSystemOps + 'static> DownloadService<F> {
 pub struct DownloadResult {
     pub successful_downloads: usize,
     pub failed_downloads: usize,
+    pub thumbnail_path_map: ThumbnailPathMap,
 }

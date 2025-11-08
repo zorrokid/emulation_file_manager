@@ -32,8 +32,6 @@ use crate::{
 #[derive(Debug)]
 pub struct ReleaseModel {
     view_model_service: Arc<ViewModelService>,
-    repository_manager: Arc<RepositoryManager>,
-    settings: Arc<Settings>,
 
     selected_release: Option<ReleaseViewModel>,
     selected_release_system_names: String,
@@ -270,7 +268,6 @@ impl Component for ReleaseModel {
             .detach();
 
         let image_file_set_viewer_init_model = ImageFileSetViewerInit {
-            settings: Arc::clone(&init_model.settings),
             download_service: Arc::clone(&download_service),
         };
         let image_file_set_viewer = ImageFilesetViewer::builder()
@@ -280,8 +277,6 @@ impl Component for ReleaseModel {
 
         let model = ReleaseModel {
             view_model_service: init_model.view_model_service,
-            repository_manager: init_model.repository_manager,
-            settings: init_model.settings,
 
             selected_release: None,
             selected_release_system_names: String::new(),
@@ -339,7 +334,7 @@ impl Component for ReleaseModel {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match msg {
             ReleaseMsg::ReleaseSelected { id } => {
                 sender.input(ReleaseMsg::FetchRelease { id });
