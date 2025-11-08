@@ -3,7 +3,7 @@ use crate::{
         context::DownloadContext,
         steps::{
             DownloadFilesStep, ExportFilesStep, FetchFileSetFileInfoStep, FetchFileSetStep,
-            PrepareFileForDownloadStep,
+            PrepareFileForDownloadStep, PrepareThumbnailsStep,
         },
     },
     file_system_ops::FileSystemOps,
@@ -19,6 +19,7 @@ impl<F: FileSystemOps + 'static> Pipeline<DownloadContext<F>> {
             Box::new(ConnectToCloudStep::<DownloadContext<F>>::new()),
             Box::new(DownloadFilesStep),
             Box::new(ExportFilesStep),
+            Box::new(PrepareThumbnailsStep),
         ])
     }
 }

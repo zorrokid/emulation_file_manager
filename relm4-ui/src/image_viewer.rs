@@ -10,6 +10,7 @@ use relm4::{
 };
 use service::{
     export_service::prepare_fileset_for_export,
+    file_set_download::service::DownloadService,
     view_models::{FileSetViewModel, Settings},
 };
 
@@ -35,6 +36,7 @@ pub enum ImageViewerCommandMsg {
 pub struct ImageViewerInit {
     pub settings: Arc<Settings>,
     pub file_set: Option<FileSetViewModel>,
+    pub download_service: Arc<DownloadService>,
 }
 
 #[derive(Debug)]
@@ -98,6 +100,7 @@ impl Component for ImageViewer {
     ) -> ComponentParts<Self> {
         let init_model = ImageFileSetViewerInit {
             settings: Arc::clone(&init.settings),
+            download_service: Arc::clone(&init.download_service),
         };
         let image_file_set_viewer = ImageFilesetViewer::builder()
             .transient_for(&root)

@@ -75,6 +75,10 @@ impl Settings {
             .join(archive_file_name)
             .with_extension("zst")
     }
+
+    pub fn get_thumbnails_path(&self) -> PathBuf {
+        self.collection_root_dir.join("thumbnails")
+    }
 }
 
 impl From<HashMap<String, String>> for Settings {

@@ -7,12 +7,13 @@ use relm4::{
     gtk::{
         self,
         glib::clone,
-        prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt},
+        prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt},
     },
     typed_view::list::TypedListView,
 };
 use service::{
     error::Error,
+    file_set_download::service::DownloadService,
     view_model_service::ViewModelService,
     view_models::{
         FileSetViewModel, ReleaseListModel, ReleaseViewModel, Settings, SoftwareTitleListModel,
@@ -210,8 +211,13 @@ impl Component for ReleaseModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let download_service = Arc::new(DownloadService::new(
+            Arc::clone(&init_model.repository_manager),
+            Arc::clone(&init_model.settings),
+        ));
         let tabbed_image_viewer_init = TabbedImageViewerInit {
             settings: Arc::clone(&init_model.settings),
+            download_service: Arc::clone(&download_service),
         };
         let tabbed_image_viewer = TabbedImageViewer::builder()
             .launch(tabbed_image_viewer_init)
@@ -265,6 +271,7 @@ impl Component for ReleaseModel {
 
         let image_file_set_viewer_init_model = ImageFileSetViewerInit {
             settings: Arc::clone(&init_model.settings),
+            download_service: Arc::clone(&download_service),
         };
         let image_file_set_viewer = ImageFilesetViewer::builder()
             .transient_for(&root)

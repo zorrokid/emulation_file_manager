@@ -1,6 +1,7 @@
 use std::{path::PathBuf, sync::Arc};
 
-use file_export::{FileExportError, FileSetExportModel, export_files};
+use database::database_error::Error;
+use file_export::{FileExportError, FileSetExportModel};
 use relm4::{
     Component, ComponentParts, ComponentSender, RelmWidgetExt,
     gtk::{
@@ -11,8 +12,10 @@ use relm4::{
     },
     typed_view::grid::{RelmGridItem, TypedGridView},
 };
+use service::error::Error as ServiceError;
 use service::{
     export_service::prepare_fileset_for_export,
+    file_set_download::service::{DownloadResult, DownloadService},
     view_models::{FileSetViewModel, Settings},
 };
 use thumbnails::{ThumbnailPathMap, get_image_size, prepare_thumbnails};
@@ -87,10 +90,12 @@ pub enum ImageFilesetViewerMsg {
 pub enum ImageFileSetViewerCommandMsg {
     ExportedImageFileSet(Result<(), FileExportError>, FileSetExportModel),
     ThumbnailsPrepared(ThumbnailPathMap),
+    HandleDownloadResult(Result<DownloadResult, ServiceError>),
 }
 
 pub struct ImageFileSetViewerInit {
     pub settings: Arc<Settings>,
+    pub download_service: Arc<DownloadService>,
 }
 
 #[derive(Debug)]
@@ -101,6 +106,7 @@ pub struct ImageFilesetViewer {
     grid_view_wrapper: TypedGridView<MyGridItem, gtk::SingleSelection>,
     selected_image: PathBuf,
     image_dimensions: (u32, u32),
+    file_download_service: Arc<DownloadService>,
 }
 
 #[relm4::component(pub)]
@@ -185,6 +191,7 @@ impl Component for ImageFilesetViewer {
             grid_view_wrapper,
             selected_image: PathBuf::new(),
             image_dimensions: (0, 0),
+            file_download_service: init.download_service,
         };
         let my_view = &model.grid_view_wrapper.view;
         let widgets = view_output!();
@@ -210,7 +217,7 @@ impl Component for ImageFilesetViewer {
             }
             ImageFilesetViewerMsg::ZoomIn => {}
             ImageFilesetViewerMsg::Show { file_set } => {
-                let export_model = prepare_fileset_for_export(
+                /*let export_model = prepare_fileset_for_export(
                     &file_set,
                     &self.settings.collection_root_dir,
                     &self.settings.temp_output_dir,
@@ -222,9 +229,20 @@ impl Component for ImageFilesetViewer {
                         res,
                         export_model,
                     ));
+                });*/
+
+                let file_set_id = file_set.id;
+                self.file_set = Some(file_set);
+
+                let download_service = self.file_download_service.clone();
+
+                sender.oneshot_command(async move {
+                    let download_result = download_service
+                        .download_file_set(file_set_id, true, None)
+                        .await;
+                    ImageFileSetViewerCommandMsg::HandleDownloadResult(download_result)
                 });
 
-                self.file_set = Some(file_set);
                 root.show();
             }
             ImageFilesetViewerMsg::Hide => {
@@ -241,6 +259,7 @@ impl Component for ImageFilesetViewer {
     ) {
         match message {
             ImageFileSetViewerCommandMsg::ExportedImageFileSet(Ok(()), export_model) => {
+                // TODO: add step to download service to prepare thumbnails after download
                 println!("Fileset exported successfully: {:?}", export_model);
                 let collection_root_dir = self.settings.collection_root_dir.clone();
                 sender.spawn_command(move |sender| {
@@ -257,6 +276,12 @@ impl Component for ImageFilesetViewer {
                         }
                     }
                 });
+            }
+            ImageFileSetViewerCommandMsg::HandleDownloadResult(Ok(download_result)) => {
+                // TODO
+            }
+            ImageFileSetViewerCommandMsg::HandleDownloadResult(Err(e)) => {
+                eprintln!("Failed to download fileset: {}", e);
             }
             ImageFileSetViewerCommandMsg::ExportedImageFileSet(Err(e), _) => {
                 eprintln!("Failed to export fileset: {}", e);

@@ -6,13 +6,15 @@ use database::{
     models::{FileInfo, FileSet, FileSetFileInfo},
     repository_manager::RepositoryManager,
 };
-use file_export::{file_export_ops::FileExportOps, OutputFile};
+use file_export::{OutputFile, file_export_ops::FileExportOps};
+use thumbnails::{ThumbnailOps, ThumbnailPathMap};
 
 use crate::{
     file_system_ops::FileSystemOps, pipeline::cloud_connection::CloudConnectionContext,
     settings_service::SettingsService, view_models::Settings,
 };
 
+// TODO: FileSystemOps generic parameter might not be needed here, use dyn instead?
 pub struct DownloadContext<F: FileSystemOps> {
     pub repository_manager: Arc<RepositoryManager>,
     pub settings: Arc<Settings>,
@@ -21,6 +23,7 @@ pub struct DownloadContext<F: FileSystemOps> {
 
     pub fs_ops: Arc<F>,
     pub export_ops: Arc<dyn FileExportOps>,
+    pub thumbnail_generator: Arc<dyn ThumbnailOps>,
 
     // Lazy initialized by ConnectToCloudStep
     // Need to use dyn because CloudStorageOps is a trait
@@ -35,6 +38,7 @@ pub struct DownloadContext<F: FileSystemOps> {
     pub files_to_download: Vec<FileInfo>,
     pub file_download_results: Vec<FileDownloadResult>,
     pub file_output_mapping: HashMap<String, OutputFile>,
+    pub thumbnail_path_map: ThumbnailPathMap,
 }
 
 #[derive(Debug, Clone)]
@@ -54,11 +58,14 @@ pub struct DownloadContextSettings<F: FileSystemOps> {
     pub settings: Arc<Settings>,
     pub settings_service: Arc<SettingsService>,
     pub progress_tx: Option<Sender<DownloadEvent>>,
+
     pub file_set_id: i64,
     pub extract_files: bool,
+
     pub cloud_ops: Option<Arc<dyn CloudStorageOps>>,
     pub fs_ops: Arc<F>,
     pub export_ops: Arc<dyn FileExportOps>,
+    pub thumbnail_generator: Arc<dyn ThumbnailOps>,
 }
 
 impl<F: FileSystemOps> DownloadContext<F> {
@@ -78,6 +85,8 @@ impl<F: FileSystemOps> DownloadContext<F> {
             file_output_mapping: HashMap::new(),
             fs_ops: settings.fs_ops,
             export_ops: settings.export_ops,
+            thumbnail_generator: settings.thumbnail_generator,
+            thumbnail_path_map: ThumbnailPathMap::new(),
         }
     }
 

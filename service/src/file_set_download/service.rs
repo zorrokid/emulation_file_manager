@@ -4,6 +4,7 @@ use async_std::channel::Sender;
 use cloud_storage::events::DownloadEvent;
 use database::repository_manager::RepositoryManager;
 use file_export::file_export_ops::DefaultFileExportOps;
+use thumbnails::ThumbnailGenerator;
 
 use crate::{
     error::Error,
@@ -68,6 +69,7 @@ impl<F: FileSystemOps + 'static> DownloadService<F> {
             cloud_ops: None,
             fs_ops: self.fs_ops.clone(),
             export_ops: Arc::new(DefaultFileExportOps),
+            thumbnail_generator: Arc::new(ThumbnailGenerator),
         };
         let mut context = DownloadContext::new(settings);
 
