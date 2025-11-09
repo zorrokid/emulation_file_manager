@@ -6,7 +6,6 @@ use file_export::{FileSetExportModel, OutputFile};
 
 use crate::{
     file_set_download::context::{DownloadContext, FileDownloadResult},
-    file_system_ops::FileSystemOps,
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
 

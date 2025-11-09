@@ -15,15 +15,25 @@ use crate::{
     view_models::Settings,
 };
 
-#[derive(Debug)]
-pub struct DownloadService<F: FileSystemOps = StdFileSystemOps> {
+pub struct DownloadService {
     repository_manager: Arc<RepositoryManager>,
     settings: Arc<Settings>,
     settings_service: Arc<SettingsService>,
-    fs_ops: Arc<F>,
+    fs_ops: Arc<dyn FileSystemOps>,
 }
 
-impl DownloadService<StdFileSystemOps> {
+impl std::fmt::Debug for DownloadService {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DownloadService")
+            .field("repository_manager", &"Arc<RepositoryManager>")
+            .field("settings", &self.settings)
+            .field("settings_service", &"Arc<SettingsService>")
+            .field("fs_ops", &"Arc<dyn FileSystemOps>")
+            .finish()
+    }
+}
+
+impl DownloadService {
     pub fn new(repository_manager: Arc<RepositoryManager>, settings: Arc<Settings>) -> Self {
         let settings_service = Arc::new(SettingsService::new(repository_manager.clone()));
         Self::new_with_fs_ops(
@@ -33,14 +43,12 @@ impl DownloadService<StdFileSystemOps> {
             Arc::new(StdFileSystemOps),
         )
     }
-}
 
-impl<F: FileSystemOps + 'static> DownloadService<F> {
     pub fn new_with_fs_ops(
         repository_manager: Arc<RepositoryManager>,
         settings: Arc<Settings>,
         settings_service: Arc<SettingsService>,
-        fs_ops: Arc<F>,
+        fs_ops: Arc<dyn FileSystemOps>,
     ) -> Self {
         Self {
             repository_manager,

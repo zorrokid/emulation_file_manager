@@ -10,24 +10,31 @@ use crate::{
     view_models::Settings,
 };
 
-#[derive(Debug)]
-pub struct FileSetDeletionService<F: FileSystemOps = StdFileSystemOps> {
+pub struct FileSetDeletionService {
     repository_manager: Arc<RepositoryManager>,
     settings: Arc<Settings>,
-    fs_ops: Arc<F>,
+    fs_ops: Arc<dyn FileSystemOps>,
 }
 
-impl FileSetDeletionService<StdFileSystemOps> {
-    pub fn new(repository_manager: Arc<RepositoryManager>, settings: Arc<Settings>) -> Self {
-        Self::new_with_fs_ops(repository_manager, settings, Arc::new(StdFileSystemOps))
+impl std::fmt::Debug for FileSetDeletionService {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FileSetDeletionService")
+            .field("repository_manager", &"Arc<RepositoryManager>")
+            .field("settings", &self.settings)
+            .field("fs_ops", &"Arc<dyn FileSystemOps>")
+            .finish()
     }
 }
 
-impl<F: FileSystemOps + 'static> FileSetDeletionService<F> {
+impl FileSetDeletionService {
+    pub fn new(repository_manager: Arc<RepositoryManager>, settings: Arc<Settings>) -> Self {
+        Self::new_with_fs_ops(repository_manager, settings, Arc::new(StdFileSystemOps))
+    }
+
     pub fn new_with_fs_ops(
         repository_manager: Arc<RepositoryManager>,
         settings: Arc<Settings>,
-        fs_ops: Arc<F>,
+        fs_ops: Arc<dyn FileSystemOps>,
     ) -> Self {
         Self {
             repository_manager,
