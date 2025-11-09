@@ -33,11 +33,11 @@ service/src/pipeline/
 A context object that flows through the pipeline, accumulating state:
 
 ```rust
-pub struct DeletionContext<F: FileSystemOps> {
+pub struct DeletionContext {
     pub file_set_id: i64,
     pub repository_manager: Arc<RepositoryManager>,
     pub settings: Arc<Settings>,
-    pub fs_ops: Arc<F>,
+    pub fs_ops: Arc<dyn FileSystemOps>,
     
     // Accumulated state (keyed by SHA1 checksum)
     pub deletion_results: HashMap<Vec<u8>, FileDeletionResult>,
@@ -83,13 +83,13 @@ pub trait PipelineStep<T>: Send + Sync {
 }
 ```
 
-For deletion steps, this becomes `PipelineStep<DeletionContext<F>>`:
+For deletion steps, this becomes `PipelineStep<DeletionContext>`:
 
 ```rust
-impl<F: FileSystemOps> PipelineStep<DeletionContext<F>> for ValidateNotInUseStep {
+impl PipelineStep<DeletionContext> for ValidateNotInUseStep {
     fn name(&self) -> &'static str { "validate_not_in_use" }
     
-    async fn execute(&self, context: &mut DeletionContext<F>) -> StepAction {
+    async fn execute(&self, context: &mut DeletionContext) -> StepAction {
         // Implementation
     }
 }
@@ -130,7 +130,7 @@ The generic `Pipeline<T>` struct is defined in `service/src/pipeline/generic_pip
 
 ```rust
 // service/src/file_set_deletion/pipeline.rs
-impl<F: FileSystemOps> Pipeline<DeletionContext<F>> {
+impl Pipeline<DeletionContext> {
     pub fn new() -> Self {
         Self::with_steps(vec![
             Box::new(ValidateNotInUseStep),
@@ -269,7 +269,7 @@ pub async fn execute(&self, context: &mut T) -> Result<(), Error> {
 
 ### Dry Run Mode
 ```rust
-pub struct DeletionContext<F: FileSystemOps> {
+pub struct DeletionContext {
     pub dry_run: bool,  // Add this field
     // ...
 }
@@ -284,10 +284,10 @@ if !context.dry_run {
 ```rust
 struct TransactionalDeletionStep;
 
-impl<F: FileSystemOps> PipelineStep<DeletionContext<F>> for TransactionalDeletionStep {
+impl PipelineStep<DeletionContext> for TransactionalDeletionStep {
     fn name(&self) -> &'static str { "transactional_deletion" }
     
-    async fn execute(&self, context: &mut DeletionContext<F>) -> StepAction {
+    async fn execute(&self, context: &mut DeletionContext) -> StepAction {
         // Begin transaction
         // Execute sub-steps
         // Commit or rollback
@@ -361,8 +361,30 @@ pub trait CloudConnectionContext {
 Both `SyncContext` and `DownloadContext` implement this trait, allowing them to share the same cloud connection logic without code duplication.
 
 Each pipeline:
-1. Defines its own context type (e.g., `SyncContext`, `DownloadContext`, `DeletionContext<F>`)
+1. Defines its own context type (e.g., `SyncContext`, `DownloadContext`, `DeletionContext`)
 2. Implements steps via `PipelineStep<ContextType>` trait
 3. Configures step sequence in `Pipeline<ContextType>::new()`
 4. Uses the shared `Pipeline<T>::execute()` for execution logic
 5. Can optionally implement `CloudConnectionContext` to use the generic `ConnectToCloudStep<T>`
+
+### Dependency Injection with Trait Objects
+
+All pipelines use trait objects (`dyn Trait`) for dependency injection instead of generics. This approach provides:
+- **Cleaner code**: No generic parameters propagating through the entire codebase
+- **Flexible testing**: Easy to swap between real implementations and mocks
+- **Runtime flexibility**: Different implementations can be injected at runtime
+
+```rust
+pub struct DownloadContext {
+    pub fs_ops: Arc<dyn FileSystemOps>,
+    pub export_ops: Arc<dyn FileExportOps>,
+    pub thumbnail_generator: Arc<dyn ThumbnailOps>,
+    pub cloud_ops: Option<Arc<dyn CloudStorageOps>>,
+    // ...
+}
+```
+
+While generics offer zero-cost abstraction, trait objects are preferred here because:
+- The virtual dispatch overhead is negligible compared to I/O operations
+- The code is significantly more maintainable and readable
+- Testing is straightforward with mock implementations
