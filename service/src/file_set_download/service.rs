@@ -73,7 +73,7 @@ impl<F: FileSystemOps + 'static> DownloadService<F> {
         };
         let mut context = DownloadContext::new(settings);
 
-        let pipeline = Pipeline::<DownloadContext<F>>::new();
+        let pipeline = Pipeline::<DownloadContext>::new();
         match pipeline.execute(&mut context).await {
             Ok(_) => {
                 let successful_downloads = context.successful_downloads();

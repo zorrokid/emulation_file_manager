@@ -15,13 +15,13 @@ use crate::{
 };
 
 // TODO: FileSystemOps generic parameter might not be needed here, use dyn instead?
-pub struct DownloadContext<F: FileSystemOps> {
+pub struct DownloadContext {
     pub repository_manager: Arc<RepositoryManager>,
     pub settings: Arc<Settings>,
     pub settings_service: Arc<SettingsService>,
     pub progress_tx: Option<Sender<DownloadEvent>>,
 
-    pub fs_ops: Arc<F>,
+    pub fs_ops: Arc<dyn FileSystemOps>,
     pub export_ops: Arc<dyn FileExportOps>,
     pub thumbnail_generator: Arc<dyn ThumbnailOps>,
 
@@ -53,7 +53,7 @@ pub struct FileDownloadResult {
     pub file_io_error: Option<String>,
 }
 
-pub struct DownloadContextSettings<F: FileSystemOps> {
+pub struct DownloadContextSettings {
     pub repository_manager: Arc<RepositoryManager>,
     pub settings: Arc<Settings>,
     pub settings_service: Arc<SettingsService>,
@@ -63,13 +63,13 @@ pub struct DownloadContextSettings<F: FileSystemOps> {
     pub extract_files: bool,
 
     pub cloud_ops: Option<Arc<dyn CloudStorageOps>>,
-    pub fs_ops: Arc<F>,
+    pub fs_ops: Arc<dyn FileSystemOps>,
     pub export_ops: Arc<dyn FileExportOps>,
     pub thumbnail_generator: Arc<dyn ThumbnailOps>,
 }
 
-impl<F: FileSystemOps> DownloadContext<F> {
-    pub fn new(settings: DownloadContextSettings<F>) -> Self {
+impl DownloadContext {
+    pub fn new(settings: DownloadContextSettings) -> Self {
         Self {
             repository_manager: settings.repository_manager,
             settings: settings.settings,
@@ -105,7 +105,7 @@ impl<F: FileSystemOps> DownloadContext<F> {
     }
 }
 
-impl<F: FileSystemOps> CloudConnectionContext for DownloadContext<F> {
+impl CloudConnectionContext for DownloadContext {
     fn settings(&self) -> &Arc<Settings> {
         &self.settings
     }

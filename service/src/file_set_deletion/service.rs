@@ -23,7 +23,7 @@ impl FileSetDeletionService<StdFileSystemOps> {
     }
 }
 
-impl<F: FileSystemOps> FileSetDeletionService<F> {
+impl<F: FileSystemOps + 'static> FileSetDeletionService<F> {
     pub fn new_with_fs_ops(
         repository_manager: Arc<RepositoryManager>,
         settings: Arc<Settings>,
@@ -45,7 +45,7 @@ impl<F: FileSystemOps> FileSetDeletionService<F> {
             deletion_results: HashMap::new(),
         };
 
-        let pipeline = Pipeline::<DeletionContext<F>>::new();
+        let pipeline = Pipeline::<DeletionContext>::new();
         pipeline.execute(&mut context).await?;
 
         let successful_deletions = context

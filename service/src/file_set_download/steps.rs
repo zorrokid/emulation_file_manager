@@ -13,12 +13,12 @@ use crate::{
 pub struct FetchFileSetStep;
 
 #[async_trait::async_trait]
-impl<F: FileSystemOps> PipelineStep<DownloadContext<F>> for FetchFileSetStep {
+impl PipelineStep<DownloadContext> for FetchFileSetStep {
     fn name(&self) -> &'static str {
         "fetch_file_set"
     }
 
-    async fn execute(&self, context: &mut DownloadContext<F>) -> StepAction {
+    async fn execute(&self, context: &mut DownloadContext) -> StepAction {
         tracing::debug!(file_set_id = context.file_set_id, "Fetching file set");
 
         let file_set_res = context
@@ -51,12 +51,12 @@ impl<F: FileSystemOps> PipelineStep<DownloadContext<F>> for FetchFileSetStep {
 pub struct FetchFileSetFileInfoStep;
 
 #[async_trait::async_trait]
-impl<F: FileSystemOps> PipelineStep<DownloadContext<F>> for FetchFileSetFileInfoStep {
+impl PipelineStep<DownloadContext> for FetchFileSetFileInfoStep {
     fn name(&self) -> &'static str {
         "fetch_file_set_file_info"
     }
 
-    async fn execute(&self, context: &mut DownloadContext<F>) -> StepAction {
+    async fn execute(&self, context: &mut DownloadContext) -> StepAction {
         let file_set_file_infos_res = context
             .repository_manager
             .get_file_set_repository()
@@ -84,16 +84,16 @@ impl<F: FileSystemOps> PipelineStep<DownloadContext<F>> for FetchFileSetFileInfo
 pub struct PrepareFileForDownloadStep;
 
 #[async_trait::async_trait]
-impl<F: FileSystemOps> PipelineStep<DownloadContext<F>> for PrepareFileForDownloadStep {
+impl PipelineStep<DownloadContext> for PrepareFileForDownloadStep {
     fn name(&self) -> &'static str {
         "prepare_file_for_download"
     }
 
-    fn should_execute(&self, context: &DownloadContext<F>) -> bool {
+    fn should_execute(&self, context: &DownloadContext) -> bool {
         !context.files_in_set.is_empty() && context.file_set.is_some()
     }
 
-    async fn execute(&self, context: &mut DownloadContext<F>) -> StepAction {
+    async fn execute(&self, context: &mut DownloadContext) -> StepAction {
         if let Some(file_set) = &context.file_set {
             for file in context.files_in_set.iter() {
                 let file_path = context
@@ -112,19 +112,19 @@ impl<F: FileSystemOps> PipelineStep<DownloadContext<F>> for PrepareFileForDownlo
 
 pub struct DownloadFilesStep;
 #[async_trait::async_trait]
-impl<F: FileSystemOps> PipelineStep<DownloadContext<F>> for DownloadFilesStep {
+impl PipelineStep<DownloadContext> for DownloadFilesStep {
     fn name(&self) -> &'static str {
         "download_files"
     }
 
-    fn should_execute(&self, context: &DownloadContext<F>) -> bool {
+    fn should_execute(&self, context: &DownloadContext) -> bool {
         // only execute if there are files to download
         !context.files_to_download.is_empty()
             && context.cloud_ops.is_some()
             && context.file_set.is_some()
     }
 
-    async fn execute(&self, context: &mut DownloadContext<F>) -> StepAction {
+    async fn execute(&self, context: &mut DownloadContext) -> StepAction {
         tracing::info!(
             file_count = context.files_to_download.len(),
             "Starting file downloads"
@@ -236,16 +236,16 @@ impl<F: FileSystemOps> PipelineStep<DownloadContext<F>> for DownloadFilesStep {
 
 pub struct ExportFilesStep;
 #[async_trait::async_trait]
-impl<F: FileSystemOps> PipelineStep<DownloadContext<F>> for ExportFilesStep {
+impl PipelineStep<DownloadContext> for ExportFilesStep {
     fn name(&self) -> &'static str {
         "export_files"
     }
 
-    fn should_execute(&self, context: &DownloadContext<F>) -> bool {
+    fn should_execute(&self, context: &DownloadContext) -> bool {
         !context.files_in_set.is_empty() && context.file_set.is_some()
     }
 
-    async fn execute(&self, context: &mut DownloadContext<F>) -> StepAction {
+    async fn execute(&self, context: &mut DownloadContext) -> StepAction {
         let file_set = context
             .file_set
             .as_ref()
@@ -319,12 +319,12 @@ impl<F: FileSystemOps> PipelineStep<DownloadContext<F>> for ExportFilesStep {
 pub struct PrepareThumbnailsStep;
 
 #[async_trait::async_trait]
-impl<F: FileSystemOps> PipelineStep<DownloadContext<F>> for PrepareThumbnailsStep {
+impl PipelineStep<DownloadContext> for PrepareThumbnailsStep {
     fn name(&self) -> &'static str {
         "prepare_thumbnails"
     }
 
-    fn should_execute(&self, context: &DownloadContext<F>) -> bool {
+    fn should_execute(&self, context: &DownloadContext) -> bool {
         if let Some(file_set) = &context.file_set
             && IMAGE_FILE_TYPES.contains(&file_set.file_type)
             && context.extract_files
@@ -337,7 +337,7 @@ impl<F: FileSystemOps> PipelineStep<DownloadContext<F>> for PrepareThumbnailsSte
         }
     }
 
-    async fn execute(&self, context: &mut DownloadContext<F>) -> StepAction {
+    async fn execute(&self, context: &mut DownloadContext) -> StepAction {
         tracing::info!("Preparing thumbnails for image file set");
         let thumnail_dir = context.settings.get_thumbnails_path();
         let output_dir = &context.settings.temp_output_dir;
@@ -457,9 +457,9 @@ mod tests {
             .settings
             .get_file_path(&file_type, archive_file_name);
 
-        context
-            .fs_ops
-            .add_file(file_path.to_string_lossy().as_ref());
+        let fs_ops = Arc::new(MockFileSystemOps::new());
+        fs_ops.add_file(file_path.to_string_lossy().as_ref());
+        context.fs_ops = fs_ops;
 
         context.file_set = Some(
             context
@@ -815,7 +815,7 @@ mod tests {
     async fn initialize_context(
         extract_files: bool,
     ) -> (
-        DownloadContext<MockFileSystemOps>,
+        DownloadContext,
         Arc<file_export::file_export_ops::MockState>,
     ) {
         let pool = Arc::new(setup_test_db().await);

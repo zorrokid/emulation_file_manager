@@ -3,7 +3,6 @@ use core_types::FileSyncStatus;
 use crate::{
     error::Error,
     file_set_deletion::context::{DeletionContext, FileDeletionResult},
-    file_system_ops::FileSystemOps,
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
 
@@ -11,12 +10,12 @@ use crate::{
 pub struct ValidateNotInUseStep;
 
 #[async_trait::async_trait]
-impl<F: FileSystemOps> PipelineStep<DeletionContext<F>> for ValidateNotInUseStep {
+impl PipelineStep<DeletionContext> for ValidateNotInUseStep {
     fn name(&self) -> &'static str {
         "validate_not_in_use"
     }
 
-    async fn execute(&self, context: &mut DeletionContext<F>) -> StepAction {
+    async fn execute(&self, context: &mut DeletionContext) -> StepAction {
         let is_in_use_res = context
             .repository_manager
             .get_file_set_repository()
@@ -44,12 +43,12 @@ impl<F: FileSystemOps> PipelineStep<DeletionContext<F>> for ValidateNotInUseStep
 pub struct FetchFileInfosStep;
 
 #[async_trait::async_trait]
-impl<F: FileSystemOps> PipelineStep<DeletionContext<F>> for FetchFileInfosStep {
+impl PipelineStep<DeletionContext> for FetchFileInfosStep {
     fn name(&self) -> &'static str {
         "fetch_file_infos"
     }
 
-    async fn execute(&self, context: &mut DeletionContext<F>) -> StepAction {
+    async fn execute(&self, context: &mut DeletionContext) -> StepAction {
         let file_infos_res = context
             .repository_manager
             .get_file_info_repository()
@@ -90,12 +89,12 @@ impl<F: FileSystemOps> PipelineStep<DeletionContext<F>> for FetchFileInfosStep {
 pub struct DeleteFileSetStep;
 
 #[async_trait::async_trait]
-impl<F: FileSystemOps> PipelineStep<DeletionContext<F>> for DeleteFileSetStep {
+impl PipelineStep<DeletionContext> for DeleteFileSetStep {
     fn name(&self) -> &'static str {
         "delete_file_set"
     }
 
-    async fn execute(&self, context: &mut DeletionContext<F>) -> StepAction {
+    async fn execute(&self, context: &mut DeletionContext) -> StepAction {
         println!("Deleting file set {}", context.file_set_id);
         let res = context
             .repository_manager
@@ -124,17 +123,17 @@ impl<F: FileSystemOps> PipelineStep<DeletionContext<F>> for DeleteFileSetStep {
 pub struct FilterDeletableFilesStep;
 
 #[async_trait::async_trait]
-impl<F: FileSystemOps> PipelineStep<DeletionContext<F>> for FilterDeletableFilesStep {
+impl PipelineStep<DeletionContext> for FilterDeletableFilesStep {
     fn name(&self) -> &'static str {
         "filter_deletable_files"
     }
 
-    fn should_execute(&self, context: &DeletionContext<F>) -> bool {
+    fn should_execute(&self, context: &DeletionContext) -> bool {
         // Only execute if there are files to process
         !context.deletion_results.is_empty()
     }
 
-    async fn execute(&self, context: &mut DeletionContext<F>) -> StepAction {
+    async fn execute(&self, context: &mut DeletionContext) -> StepAction {
         for deletion_result in context.deletion_results.values_mut() {
             let file_sets_res = context
                 .repository_manager
@@ -147,14 +146,14 @@ impl<F: FileSystemOps> PipelineStep<DeletionContext<F>> for FilterDeletableFiles
                     return StepAction::Abort(Error::DbError(format!(
                         "Failed to fetch file sets for file info {}: {}",
                         deletion_result.file_info.id, e
-                    )))
+                    )));
                 }
                 Ok(file_sets) => {
                     // Only delete if file is used in exactly this one file set
-                    if let [single_entry] = &file_sets[..] {
-                        if single_entry.id == context.file_set_id {
-                            deletion_result.is_deletable = true;
-                        }
+                    if let [single_entry] = &file_sets[..]
+                        && single_entry.id == context.file_set_id
+                    {
+                        deletion_result.is_deletable = true;
                     }
                 }
             }
@@ -168,17 +167,17 @@ impl<F: FileSystemOps> PipelineStep<DeletionContext<F>> for FilterDeletableFiles
 pub struct MarkForCloudDeletionStep;
 
 #[async_trait::async_trait]
-impl<F: FileSystemOps> PipelineStep<DeletionContext<F>> for MarkForCloudDeletionStep {
+impl PipelineStep<DeletionContext> for MarkForCloudDeletionStep {
     fn name(&self) -> &'static str {
         "mark_for_cloud_deletion"
     }
 
-    fn should_execute(&self, context: &DeletionContext<F>) -> bool {
+    fn should_execute(&self, context: &DeletionContext) -> bool {
         // Only execute if there are files to process
         context.deletion_results.values().any(|r| r.is_deletable)
     }
 
-    async fn execute(&self, context: &mut DeletionContext<F>) -> StepAction {
+    async fn execute(&self, context: &mut DeletionContext) -> StepAction {
         for deletion_result in context.deletion_results.values_mut() {
             let sync_logs_res = context
                 .repository_manager
@@ -196,7 +195,7 @@ impl<F: FileSystemOps> PipelineStep<DeletionContext<F>> for MarkForCloudDeletion
                     return StepAction::Abort(Error::DbError(format!(
                         "Failed to fetch sync logs for file info {}: {}",
                         deletion_result.file_info.id, e
-                    )))
+                    )));
                 }
                 Ok(sync_logs) => {
                     if let Some(entry) = sync_logs.last() {
@@ -231,16 +230,16 @@ impl<F: FileSystemOps> PipelineStep<DeletionContext<F>> for MarkForCloudDeletion
 pub struct DeleteLocalFilesStep;
 
 #[async_trait::async_trait]
-impl<F: FileSystemOps> PipelineStep<DeletionContext<F>> for DeleteLocalFilesStep {
+impl PipelineStep<DeletionContext> for DeleteLocalFilesStep {
     fn name(&self) -> &'static str {
         "delete_local_files"
     }
 
-    fn should_execute(&self, context: &DeletionContext<F>) -> bool {
+    fn should_execute(&self, context: &DeletionContext) -> bool {
         context.deletion_results.values().any(|v| v.is_deletable)
     }
 
-    async fn execute(&self, context: &mut DeletionContext<F>) -> StepAction {
+    async fn execute(&self, context: &mut DeletionContext) -> StepAction {
         for deletion_result in context.deletion_results.values_mut() {
             let file_path = context.settings.get_file_path(
                 &deletion_result.file_info.file_type,
@@ -278,19 +277,19 @@ impl<F: FileSystemOps> PipelineStep<DeletionContext<F>> for DeleteLocalFilesStep
 pub struct DeleteFileInfosStep;
 
 #[async_trait::async_trait]
-impl<F: FileSystemOps> PipelineStep<DeletionContext<F>> for DeleteFileInfosStep {
+impl PipelineStep<DeletionContext> for DeleteFileInfosStep {
     fn name(&self) -> &'static str {
         "delete_file_info_entries"
     }
 
-    fn should_execute(&self, context: &DeletionContext<F>) -> bool {
+    fn should_execute(&self, context: &DeletionContext) -> bool {
         context
             .deletion_results
             .values()
             .any(|v| v.is_deletable && v.file_deletion_success)
     }
 
-    async fn execute(&self, context: &mut DeletionContext<F>) -> StepAction {
+    async fn execute(&self, context: &mut DeletionContext) -> StepAction {
         for dr in context.deletion_results.values_mut() {
             println!(
                 "Deleting file_info {} from DB",
@@ -836,12 +835,14 @@ mod tests {
         };
         let step = DeleteLocalFilesStep;
         let res = step.execute(&mut context).await;
-        assert!(fs_ops.was_deleted(
-            settings
-                .get_file_path(&file_info.file_type, &file_info.archive_file_name)
-                .to_string_lossy()
-                .as_ref()
-        ));
+        assert!(
+            fs_ops.was_deleted(
+                settings
+                    .get_file_path(&file_info.file_type, &file_info.archive_file_name)
+                    .to_string_lossy()
+                    .as_ref()
+            )
+        );
 
         println!(
             "Deletion result: {:?}",

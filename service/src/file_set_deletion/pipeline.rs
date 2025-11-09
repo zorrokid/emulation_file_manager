@@ -6,11 +6,10 @@ use crate::{
             MarkForCloudDeletionStep, ValidateNotInUseStep,
         },
     },
-    file_system_ops::FileSystemOps,
     pipeline::generic_pipeline::Pipeline,
 };
 
-impl<F: FileSystemOps> Pipeline<DeletionContext<F>> {
+impl Pipeline<DeletionContext> {
     pub fn new() -> Self {
         Self::with_steps(vec![
             Box::new(ValidateNotInUseStep),
