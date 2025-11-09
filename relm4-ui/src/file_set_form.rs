@@ -23,10 +23,7 @@ use relm4::{
     },
     prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque},
 };
-use service::{
-    export_service::resolve_file_type_path,
-    view_models::{FileSetListModel, Settings},
-};
+use service::view_models::{FileSetListModel, Settings};
 use ui_components::{DropDownMsg, DropDownOutputMsg, FileTypeDropDown, FileTypeSelectedMsg};
 
 use crate::file_importer::FileImporter;
@@ -163,7 +160,6 @@ pub struct FileSetFormModel {
     settings: Arc<Settings>,
     file_importer: FileImporter,
     files: FactoryVecDeque<File>,
-    //selected_file_type: Option<FileType>,
     selected_system_ids: Vec<i64>,
     file_set_name: String,
     file_set_file_name: String,
@@ -328,33 +324,31 @@ impl Component for FileSetFormModel {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         match msg {
             FileSetFormMsg::OpenFileSelector => {
-                if let Some(file_type) = self.file_importer.get_selected_file_type() {
-                    println!("Open file selector button clicked");
-                    let dialog = FileChooserDialog::builder()
-                        .title("Select Files")
-                        .action(gtk::FileChooserAction::Open)
-                        .modal(true)
-                        .transient_for(root)
-                        .build();
+                println!("Open file selector button clicked");
+                let dialog = FileChooserDialog::builder()
+                    .title("Select Files")
+                    .action(gtk::FileChooserAction::Open)
+                    .modal(true)
+                    .transient_for(root)
+                    .build();
 
-                    dialog.add_button("Cancel", gtk::ResponseType::Cancel);
-                    dialog.add_button("Open", gtk::ResponseType::Accept);
+                dialog.add_button("Cancel", gtk::ResponseType::Cancel);
+                dialog.add_button("Open", gtk::ResponseType::Accept);
 
-                    dialog.connect_response(clone!(
-                        #[strong]
-                        sender,
-                        move |dialog, response| {
-                            if response == gtk::ResponseType::Accept {
-                                if let Some(path) = dialog.file().and_then(|f| f.path()) {
-                                    sender.input(FileSetFormMsg::FileSelected(path));
-                                }
-                            }
-                            dialog.close();
+                dialog.connect_response(clone!(
+                    #[strong]
+                    sender,
+                    move |dialog, response| {
+                        if response == gtk::ResponseType::Accept
+                            && let Some(path) = dialog.file().and_then(|f| f.path())
+                        {
+                            sender.input(FileSetFormMsg::FileSelected(path));
                         }
-                    ));
+                        dialog.close();
+                    }
+                ));
 
-                    dialog.present();
-                }
+                dialog.present();
             }
             FileSetFormMsg::FileSelected(path) => {
                 println!("File selected: {:?}", path);
@@ -395,8 +389,7 @@ impl Component for FileSetFormModel {
                     let file_type = self.file_importer.get_selected_file_type().expect(
                         "File type must be selected (should have been checked in beginning of process)",
                     );
-                    let target_path =
-                        resolve_file_type_path(&self.settings.collection_root_dir, &file_type);
+                    let target_path = self.settings.get_file_type_path(&file_type);
                     let new_files_file_name_filter = self
                         .file_importer
                         .get_selected_files_from_current_picked_files_that_are_new()

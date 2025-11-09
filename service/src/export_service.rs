@@ -6,7 +6,7 @@ use std::{
 
 use core_types::{FileType, Sha1Checksum};
 use database::{models::System, repository_manager::RepositoryManager};
-use file_export::{export_files_zipped, FileSetExportModel, OutputFile};
+use file_export::{FileSetExportModel, OutputFile, export_files_zipped};
 
 use crate::{
     error::Error,
@@ -109,17 +109,13 @@ impl ExportService {
     }
 }
 
-// TODO use get_file_type_path from Settings, this is deprecated
-#[deprecated]
-pub fn resolve_file_type_path(root_path: &Path, file_type: &core_types::FileType) -> PathBuf {
+fn resolve_file_type_path(root_path: &Path, file_type: &core_types::FileType) -> PathBuf {
     let mut path = PathBuf::from(root_path);
     path.push(file_type.dir_name());
     path
 }
 
-// TODO: this will be replaced by dowload service
-#[deprecated]
-pub fn prepare_fileset_for_export(
+fn prepare_fileset_for_export(
     file_set: &FileSetViewModel,
     collection_root_dir: &Path,
     output_dir: &Path, // TODO: remove? this is not necessary here
