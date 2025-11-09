@@ -3,22 +3,22 @@ use crate::{
         context::DownloadContext,
         steps::{
             DownloadFilesStep, ExportFilesStep, FetchFileSetFileInfoStep, FetchFileSetStep,
-            PrepareFileForDownloadStep,
+            PrepareFileForDownloadStep, PrepareThumbnailsStep,
         },
     },
-    file_system_ops::FileSystemOps,
     pipeline::{cloud_connection::ConnectToCloudStep, generic_pipeline::Pipeline},
 };
 
-impl<F: FileSystemOps + 'static> Pipeline<DownloadContext<F>> {
+impl Pipeline<DownloadContext> {
     pub fn new() -> Self {
         Self::with_steps(vec![
             Box::new(FetchFileSetStep),
             Box::new(FetchFileSetFileInfoStep),
             Box::new(PrepareFileForDownloadStep),
-            Box::new(ConnectToCloudStep::<DownloadContext<F>>::new()),
+            Box::new(ConnectToCloudStep::<DownloadContext>::new()),
             Box::new(DownloadFilesStep),
             Box::new(ExportFilesStep),
+            Box::new(PrepareThumbnailsStep),
         ])
     }
 }

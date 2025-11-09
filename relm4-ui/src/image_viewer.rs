@@ -1,6 +1,5 @@
 use std::{path::PathBuf, sync::Arc};
 
-use file_export::{FileExportError, FileSetExportModel, export_files};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
@@ -9,7 +8,8 @@ use relm4::{
     },
 };
 use service::{
-    export_service::prepare_fileset_for_export,
+    error::Error as ServiceError,
+    file_set_download::service::{DownloadResult, DownloadService},
     view_models::{FileSetViewModel, Settings},
 };
 
@@ -28,13 +28,14 @@ pub enum ImageViewerMsg {
 
 #[derive(Debug)]
 pub enum ImageViewerCommandMsg {
-    ExportedImageFileSet(Result<(), FileExportError>, FileSetExportModel),
+    HandleDownloadResult(Result<DownloadResult, ServiceError>),
 }
 
 #[derive(Debug, Clone)]
 pub struct ImageViewerInit {
     pub settings: Arc<Settings>,
     pub file_set: Option<FileSetViewModel>,
+    pub download_service: Arc<DownloadService>,
 }
 
 #[derive(Debug)]
@@ -44,6 +45,7 @@ pub struct ImageViewer {
     settings: Arc<Settings>,
     selected_image: PathBuf,
     image_file_set_viewer: Controller<ImageFilesetViewer>,
+    download_service: Arc<DownloadService>,
 }
 
 #[relm4::component(pub)]
@@ -97,7 +99,7 @@ impl Component for ImageViewer {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let init_model = ImageFileSetViewerInit {
-            settings: Arc::clone(&init.settings),
+            download_service: Arc::clone(&init.download_service),
         };
         let image_file_set_viewer = ImageFilesetViewer::builder()
             .transient_for(&root)
@@ -110,6 +112,7 @@ impl Component for ImageViewer {
             selected_image: PathBuf::new(),
             current_file_index: None,
             image_file_set_viewer,
+            download_service: init.download_service,
         };
         if let Some(file_set) = init.file_set {
             sender.input(ImageViewerMsg::SetFileSet { file_set });
@@ -127,42 +130,38 @@ impl Component for ImageViewer {
                 } else {
                     None
                 };
-                let export_model = prepare_fileset_for_export(
-                    &file_set,
-                    &self.settings.collection_root_dir,
-                    &self.settings.temp_output_dir,
-                    true,
-                );
+                let file_set_id = file_set.id;
                 self.file_set = Some(file_set);
 
-                sender.spawn_command(move |sender| {
-                    let res = export_files(&export_model);
-                    sender.emit(ImageViewerCommandMsg::ExportedImageFileSet(
-                        res,
-                        export_model,
-                    ));
+                let download_service = Arc::clone(&self.download_service);
+                sender.oneshot_command(async move {
+                    let res = download_service
+                        .download_file_set(file_set_id, true, None)
+                        .await;
+
+                    ImageViewerCommandMsg::HandleDownloadResult(res)
                 });
             }
             ImageViewerMsg::ShowNext => {
-                if let (Some(index), Some(file_set)) = (self.current_file_index, &self.file_set) {
-                    if index + 1 < file_set.files.len() {
-                        let new_index = index + 1;
-                        self.current_file_index = Some(new_index);
-                        let next_image = file_set.files[new_index].file_name.clone();
-                        let file_path = self.settings.temp_output_dir.join(&next_image);
-                        self.selected_image = file_path;
-                    }
+                if let (Some(index), Some(file_set)) = (self.current_file_index, &self.file_set)
+                    && index + 1 < file_set.files.len()
+                {
+                    let new_index = index + 1;
+                    self.current_file_index = Some(new_index);
+                    let next_image = file_set.files[new_index].file_name.clone();
+                    let file_path = self.settings.temp_output_dir.join(&next_image);
+                    self.selected_image = file_path;
                 }
             }
             ImageViewerMsg::ShowPrevious => {
-                if let (Some(index), Some(file_set)) = (self.current_file_index, &self.file_set) {
-                    if index > 0 {
-                        let new_index = index - 1;
-                        self.current_file_index = Some(new_index);
-                        let previous_image = file_set.files[new_index].file_name.clone();
-                        let file_path = self.settings.temp_output_dir.join(&previous_image);
-                        self.selected_image = file_path;
-                    }
+                if let (Some(index), Some(file_set)) = (self.current_file_index, &self.file_set)
+                    && index > 0
+                {
+                    let new_index = index - 1;
+                    self.current_file_index = Some(new_index);
+                    let previous_image = file_set.files[new_index].file_name.clone();
+                    let file_path = self.settings.temp_output_dir.join(&previous_image);
+                    self.selected_image = file_path;
                 }
             }
             ImageViewerMsg::Clear => {
@@ -188,9 +187,7 @@ impl Component for ImageViewer {
         _root: &Self::Root,
     ) {
         match message {
-            ImageViewerCommandMsg::ExportedImageFileSet(Ok(()), export_model) => {
-                println!("Fileset exported successfully: {:?}", export_model);
-
+            ImageViewerCommandMsg::HandleDownloadResult(Ok(_)) => {
                 if let Some(file_set) = &self.file_set {
                     let selected_image_name = self
                         .current_file_index
@@ -204,7 +201,8 @@ impl Component for ImageViewer {
                         .find(|f| f.file_name == selected_image_name)
                     {
                         println!("Selected file: {:?}", selected_file);
-                        let image_path = export_model.output_dir.join(&selected_file.file_name);
+                        let temp_output_dir = &self.settings.temp_output_dir;
+                        let image_path = temp_output_dir.join(&selected_file.file_name);
 
                         self.selected_image = image_path;
                     } else {
@@ -212,9 +210,8 @@ impl Component for ImageViewer {
                     }
                 }
             }
-            ImageViewerCommandMsg::ExportedImageFileSet(Err(e), _) => {
-                // Handle export error, e.g., show an error message
-                eprintln!("Failed to export fileset: {}", e);
+            ImageViewerCommandMsg::HandleDownloadResult(Err(e)) => {
+                eprintln!("Failed to download fileset: {}", e);
             }
         }
     }

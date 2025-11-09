@@ -5,11 +5,11 @@ use database::{models::FileInfo, repository_manager::RepositoryManager};
 use crate::{file_system_ops::FileSystemOps, view_models::Settings};
 
 /// Context object that flows through the pipeline, accumulating state
-pub struct DeletionContext<F: FileSystemOps> {
+pub struct DeletionContext {
     pub file_set_id: i64,
     pub repository_manager: Arc<RepositoryManager>,
     pub settings: Arc<Settings>,
-    pub fs_ops: Arc<F>,
+    pub fs_ops: Arc<dyn FileSystemOps>,
 
     // Accumulated state as pipeline progresses
     pub deletion_results: HashMap<Vec<u8>, FileDeletionResult>,

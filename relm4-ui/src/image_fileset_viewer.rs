@@ -1,6 +1,5 @@
 use std::{path::PathBuf, sync::Arc};
 
-use file_export::{FileExportError, FileSetExportModel, export_files};
 use relm4::{
     Component, ComponentParts, ComponentSender, RelmWidgetExt,
     gtk::{
@@ -11,11 +10,12 @@ use relm4::{
     },
     typed_view::grid::{RelmGridItem, TypedGridView},
 };
+use service::error::Error as ServiceError;
 use service::{
-    export_service::prepare_fileset_for_export,
-    view_models::{FileSetViewModel, Settings},
+    file_set_download::service::{DownloadResult, DownloadService},
+    view_models::FileSetViewModel,
 };
-use thumbnails::{ThumbnailPathMap, get_image_size, prepare_thumbnails};
+use thumbnails::{ThumbnailPathMap, get_image_size};
 
 // grid
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -68,8 +68,7 @@ impl RelmGridItem for MyGridItem {
     }
 
     fn bind(&mut self, widgets: &mut Self::Widgets, _root: &mut Self::Root) {
-        let Widgets { thumbnail, button } = widgets;
-        thumbnail.set_from_file(Some(&self.thumbnail_path));
+        widgets.thumbnail.set_from_file(Some(&self.thumbnail_path));
     }
 }
 
@@ -85,22 +84,21 @@ pub enum ImageFilesetViewerMsg {
 
 #[derive(Debug)]
 pub enum ImageFileSetViewerCommandMsg {
-    ExportedImageFileSet(Result<(), FileExportError>, FileSetExportModel),
-    ThumbnailsPrepared(ThumbnailPathMap),
+    HandleDownloadResult(Result<DownloadResult, ServiceError>),
 }
 
 pub struct ImageFileSetViewerInit {
-    pub settings: Arc<Settings>,
+    pub download_service: Arc<DownloadService>,
 }
 
 #[derive(Debug)]
 pub struct ImageFilesetViewer {
     file_set: Option<FileSetViewModel>,
-    settings: Arc<Settings>,
     thumbnails_mapping: ThumbnailPathMap,
     grid_view_wrapper: TypedGridView<MyGridItem, gtk::SingleSelection>,
     selected_image: PathBuf,
     image_dimensions: (u32, u32),
+    file_download_service: Arc<DownloadService>,
 }
 
 #[relm4::component(pub)]
@@ -180,11 +178,11 @@ impl Component for ImageFilesetViewer {
 
         let model = ImageFilesetViewer {
             file_set: None,
-            settings: init.settings,
             thumbnails_mapping: ThumbnailPathMap::new(),
             grid_view_wrapper,
             selected_image: PathBuf::new(),
             image_dimensions: (0, 0),
+            file_download_service: init.download_service,
         };
         let my_view = &model.grid_view_wrapper.view;
         let widgets = view_output!();
@@ -197,7 +195,6 @@ impl Component for ImageFilesetViewer {
                 if let Some(item) = self.grid_view_wrapper.get(index) {
                     // Handle the selected item, e.g., show the image in a larger view
                     let image_path = item.borrow().image_path.clone();
-                    println!("Selected file: {:?}", image_path);
                     let temp_dir = std::env::temp_dir();
                     let path = temp_dir.join(&image_path);
                     let image_size = get_image_size(&path).unwrap_or((0, 0));
@@ -210,21 +207,18 @@ impl Component for ImageFilesetViewer {
             }
             ImageFilesetViewerMsg::ZoomIn => {}
             ImageFilesetViewerMsg::Show { file_set } => {
-                let export_model = prepare_fileset_for_export(
-                    &file_set,
-                    &self.settings.collection_root_dir,
-                    &self.settings.temp_output_dir,
-                    true,
-                );
-                sender.spawn_command(move |sender| {
-                    let res = export_files(&export_model);
-                    sender.emit(ImageFileSetViewerCommandMsg::ExportedImageFileSet(
-                        res,
-                        export_model,
-                    ));
+                let file_set_id = file_set.id;
+                self.file_set = Some(file_set);
+
+                let download_service = self.file_download_service.clone();
+
+                sender.oneshot_command(async move {
+                    let download_result = download_service
+                        .download_file_set(file_set_id, true, None)
+                        .await;
+                    ImageFileSetViewerCommandMsg::HandleDownloadResult(download_result)
                 });
 
-                self.file_set = Some(file_set);
                 root.show();
             }
             ImageFilesetViewerMsg::Hide => {
@@ -236,34 +230,12 @@ impl Component for ImageFilesetViewer {
     fn update_cmd(
         &mut self,
         message: Self::CommandOutput,
-        sender: ComponentSender<Self>,
+        _sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
         match message {
-            ImageFileSetViewerCommandMsg::ExportedImageFileSet(Ok(()), export_model) => {
-                println!("Fileset exported successfully: {:?}", export_model);
-                let collection_root_dir = self.settings.collection_root_dir.clone();
-                sender.spawn_command(move |sender| {
-                    let res = prepare_thumbnails(&export_model, &collection_root_dir);
-                    match res {
-                        Ok(thumbnails_mapping) => {
-                            println!("Thumbnails prepared successfully: {:?}", thumbnails_mapping);
-                            sender.emit(ImageFileSetViewerCommandMsg::ThumbnailsPrepared(
-                                thumbnails_mapping,
-                            ));
-                        }
-                        Err(e) => {
-                            eprintln!("Failed to prepare thumbnails: {}", e);
-                        }
-                    }
-                });
-            }
-            ImageFileSetViewerCommandMsg::ExportedImageFileSet(Err(e), _) => {
-                eprintln!("Failed to export fileset: {}", e);
-            }
-            ImageFileSetViewerCommandMsg::ThumbnailsPrepared(thumbnails_mapping) => {
-                println!("Thumbnails prepared successfully.");
-
+            ImageFileSetViewerCommandMsg::HandleDownloadResult(Ok(download_result)) => {
+                let thumbnails_mapping = download_result.thumbnail_path_map;
                 let grid_items = thumbnails_mapping
                     .iter()
                     .map(|(file_name, thumbnail_path)| {
@@ -274,6 +246,9 @@ impl Component for ImageFilesetViewer {
                 self.grid_view_wrapper.extend_from_iter(grid_items);
 
                 self.thumbnails_mapping = thumbnails_mapping;
+            }
+            ImageFileSetViewerCommandMsg::HandleDownloadResult(Err(e)) => {
+                eprintln!("Failed to download fileset: {}", e);
             }
         }
     }

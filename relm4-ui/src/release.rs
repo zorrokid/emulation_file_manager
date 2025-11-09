@@ -7,12 +7,13 @@ use relm4::{
     gtk::{
         self,
         glib::clone,
-        prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt},
+        prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt},
     },
     typed_view::list::TypedListView,
 };
 use service::{
     error::Error,
+    file_set_download::service::DownloadService,
     view_model_service::ViewModelService,
     view_models::{
         FileSetViewModel, ReleaseListModel, ReleaseViewModel, Settings, SoftwareTitleListModel,
@@ -31,8 +32,6 @@ use crate::{
 #[derive(Debug)]
 pub struct ReleaseModel {
     view_model_service: Arc<ViewModelService>,
-    repository_manager: Arc<RepositoryManager>,
-    settings: Arc<Settings>,
 
     selected_release: Option<ReleaseViewModel>,
     selected_release_system_names: String,
@@ -210,8 +209,13 @@ impl Component for ReleaseModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let download_service = Arc::new(DownloadService::new(
+            Arc::clone(&init_model.repository_manager),
+            Arc::clone(&init_model.settings),
+        ));
         let tabbed_image_viewer_init = TabbedImageViewerInit {
             settings: Arc::clone(&init_model.settings),
+            download_service: Arc::clone(&download_service),
         };
         let tabbed_image_viewer = TabbedImageViewer::builder()
             .launch(tabbed_image_viewer_init)
@@ -264,7 +268,7 @@ impl Component for ReleaseModel {
             .detach();
 
         let image_file_set_viewer_init_model = ImageFileSetViewerInit {
-            settings: Arc::clone(&init_model.settings),
+            download_service: Arc::clone(&download_service),
         };
         let image_file_set_viewer = ImageFilesetViewer::builder()
             .transient_for(&root)
@@ -273,8 +277,6 @@ impl Component for ReleaseModel {
 
         let model = ReleaseModel {
             view_model_service: init_model.view_model_service,
-            repository_manager: init_model.repository_manager,
-            settings: init_model.settings,
 
             selected_release: None,
             selected_release_system_names: String::new(),
@@ -332,7 +334,7 @@ impl Component for ReleaseModel {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match msg {
             ReleaseMsg::ReleaseSelected { id } => {
                 sender.input(ReleaseMsg::FetchRelease { id });

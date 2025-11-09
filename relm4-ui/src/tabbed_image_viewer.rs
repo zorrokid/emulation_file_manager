@@ -1,11 +1,14 @@
 use std::sync::Arc;
 
-use core_types::{FileType, IMAGE_FILE_TYPES};
+use core_types::IMAGE_FILE_TYPES;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{self, prelude::*},
 };
-use service::view_models::{FileSetViewModel, Settings};
+use service::{
+    file_set_download::service::DownloadService,
+    view_models::{FileSetViewModel, Settings},
+};
 
 use crate::image_viewer::{ImageViewer, ImageViewerInit};
 
@@ -20,11 +23,13 @@ pub struct TabbedImageViewer {
     viewers: Vec<Controller<ImageViewer>>,
     settings: Arc<Settings>,
     page_numbers: Vec<u32>,
+    download_service: Arc<DownloadService>,
 }
 
 #[derive(Debug)]
 pub struct TabbedImageViewerInit {
     pub settings: Arc<Settings>,
+    pub download_service: Arc<DownloadService>,
 }
 
 #[derive(Debug)]
@@ -52,14 +57,15 @@ impl Component for TabbedImageViewer {
         ComponentParts {
             model: TabbedImageViewer {
                 viewers: vec![],
-                settings: Arc::clone(&init_model.settings),
+                settings: init_model.settings,
                 page_numbers: Vec::new(),
+                download_service: init_model.download_service,
             },
             widgets,
         }
     }
 
-    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
+    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>, root: &Self::Root) {
         match msg {
             TabbedImageViewerMsg::SetFileSets { file_sets } => {
                 self.viewers = Vec::new();
@@ -80,6 +86,7 @@ impl Component for TabbedImageViewer {
                         let image_viewer_init = ImageViewerInit {
                             settings: Arc::clone(&self.settings),
                             file_set: Some(file_set.clone()),
+                            download_service: Arc::clone(&self.download_service),
                         };
 
                         let box_scan_image_viewer =
