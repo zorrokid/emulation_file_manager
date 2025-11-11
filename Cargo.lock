@@ -3822,10 +3822,12 @@ dependencies = [
  "credentials_storage",
  "database",
  "file_export",
+ "file_import",
  "file_system",
  "serde_json",
  "thumbnails",
  "tracing",
+ "utils",
 ]
 
 [[package]]

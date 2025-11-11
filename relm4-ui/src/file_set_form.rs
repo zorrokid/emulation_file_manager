@@ -323,6 +323,7 @@ impl Component for FileSetFormModel {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         match msg {
+            // (step 1. select file with file chooser)
             FileSetFormMsg::OpenFileSelector => {
                 println!("Open file selector button clicked");
                 let dialog = FileChooserDialog::builder()
@@ -350,6 +351,12 @@ impl Component for FileSetFormModel {
 
                 dialog.present();
             }
+
+            // Step 2. handle selected file
+            // - file name
+            // - file set name
+            // - is zip file?
+            // - read contents with checkusums / checksum
             FileSetFormMsg::FileSelected(path) => {
                 println!("File selected: {:?}", path);
                 let file_set_name = self.file_importer.get_file_set_name(&path);
@@ -383,6 +390,7 @@ impl Component for FileSetFormModel {
                     self.file_importer.deselect_file(&sha1_checksum);
                 }
             }
+            // Prcess 2 Step 1: create file set from selected files
             FileSetFormMsg::CreateFileSetFromSelectedFiles => {
                 if self.file_importer.is_selected_files() && !self.processing {
                     self.processing = true;
@@ -460,6 +468,7 @@ impl Component for FileSetFormModel {
         root: &Self::Root,
     ) {
         match message {
+            // Step 3. handle read file contents, check which files already exist in database
             CommandMsg::FileContentsRead(path, Ok(content)) => {
                 println!("File contents read successfully: {:?}", &content);
                 let file_checksums = content.keys().cloned().collect::<Vec<Sha1Checksum>>();
@@ -483,6 +492,7 @@ impl Component for FileSetFormModel {
                 eprintln!("Error reading file contents: {:?}", e);
                 // TODO: show error to user
             }
+            // Step 4. handle existing files info, update file importer model
             CommandMsg::ExistingFilesRead {
                 path,
                 content,
@@ -506,6 +516,7 @@ impl Component for FileSetFormModel {
                     eprintln!("Error reading existing files: {:?}", e);
                 }
             },
+            // Process 2 Step 2. handle imported files, save to database
             CommandMsg::FilesImported(Ok(imported_files_map)) => {
                 self.processing = false;
                 println!("Files imported successfully: {:?}", imported_files_map);
@@ -544,6 +555,7 @@ impl Component for FileSetFormModel {
                 eprintln!("Error importing files: {:?}", e);
                 // TODO: show error to user
             }
+            // Process 2 Step 3. handle saved to database, send output message
             CommandMsg::FilesSavedToDatabase(Ok(id)) => {
                 println!("Files saved to database successfully with ID: {}", id);
                 let file_type = self.file_importer.get_selected_file_type().expect(

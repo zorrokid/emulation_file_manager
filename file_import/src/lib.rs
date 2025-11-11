@@ -281,10 +281,10 @@ pub fn read_zip_contents_with_checksums(
 pub fn read_file_checksum(
     file_path: &PathBuf,
 ) -> Result<HashMap<Sha1Checksum, ReadFile>, FileImportError> {
-    let sha1 = file_util::get_file_sha1(&file_path);
+    let sha1 = file_util::get_file_sha1(file_path);
     match sha1 {
         Ok(checksum) => {
-            let file_size = std::fs::metadata(&file_path)
+            let file_size = std::fs::metadata(file_path)
                 .map_err(|e| {
                     FileImportError::FileIoError(format!("Failed getting file size: {}", e))
                 })?

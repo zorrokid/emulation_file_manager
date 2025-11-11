@@ -143,11 +143,11 @@ impl FileImporter {
             .iter_mut()
             .find(|f| f.content.contains_key(sha1_checksum));
 
-        if let Some(file) = file {
-            if let Some(picked_content) = file.content.get_mut(sha1_checksum) {
-                picked_content.is_selected = false;
-                println!("Deselecting file: {}", picked_content.file_info.file_name);
-            }
+        if let Some(file) = file
+            && let Some(picked_content) = file.content.get_mut(sha1_checksum)
+        {
+            picked_content.is_selected = false;
+            println!("Deselecting file: {}", picked_content.file_info.file_name);
         }
     }
 
@@ -157,11 +157,11 @@ impl FileImporter {
             .iter_mut()
             .find(|f| f.content.contains_key(sha1_checksum));
 
-        if let Some(file) = file {
-            if let Some(picked_content) = file.content.get_mut(sha1_checksum) {
-                picked_content.is_selected = true;
-                println!("Selecting file: {}", picked_content.file_info.file_name);
-            }
+        if let Some(file) = file
+            && let Some(picked_content) = file.content.get_mut(sha1_checksum)
+        {
+            picked_content.is_selected = true;
+            println!("Selecting file: {}", picked_content.file_info.file_name);
         }
     }
 
