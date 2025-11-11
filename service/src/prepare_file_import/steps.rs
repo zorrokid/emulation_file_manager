@@ -1,5 +1,4 @@
 use core_types::Sha1Checksum;
-use utils::file_util;
 
 use crate::{
     error::Error,
@@ -16,7 +15,6 @@ impl PipelineStep<PrepareFileImportContext> for CollectFileMetadataStep {
     }
 
     async fn execute(&self, context: &mut PrepareFileImportContext) -> StepAction {
-        // Implementation for collecting file metadata goes here.
         let file_set_name = context
             .file_path
             .file_stem()
@@ -26,7 +24,7 @@ impl PipelineStep<PrepareFileImportContext> for CollectFileMetadataStep {
             .file_name()
             .map(|name| name.to_string_lossy().to_string());
 
-        let zip_file_result = file_util::is_zip_file(&context.file_path);
+        let zip_file_result = context.fs_ops.is_zip_archive(&context.file_path);
 
         match zip_file_result {
             Ok(is_zip_archive) => {
@@ -44,9 +42,10 @@ impl PipelineStep<PrepareFileImportContext> for CollectFileMetadataStep {
                     "Failed to check if file is zip archive"
                 );
 
-                StepAction::Abort(Error::IoError(
-                    "Failed to determine if file is zip archive".into(),
-                ))
+                StepAction::Abort(Error::IoError(format!(
+                    "Failed to determine if file is zip archive: {}",
+                    err
+                )))
             }
         }
     }

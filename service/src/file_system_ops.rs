@@ -37,6 +37,10 @@
 use std::io;
 use std::path::Path;
 
+use utils::file_util;
+
+use crate::error::Error;
+
 /// Trait for file system operations to enable testing
 pub trait FileSystemOps: Send + Sync {
     /// Check if a path exists
@@ -44,6 +48,8 @@ pub trait FileSystemOps: Send + Sync {
 
     /// Remove a file at the given path
     fn remove_file(&self, path: &Path) -> io::Result<()>;
+
+    fn is_zip_archive(&self, path: &Path) -> Result<bool, Error>;
 }
 
 /// Production implementation using std::fs
@@ -57,6 +63,11 @@ impl FileSystemOps for StdFileSystemOps {
 
     fn remove_file(&self, path: &Path) -> io::Result<()> {
         std::fs::remove_file(path)
+    }
+
+    fn is_zip_archive(&self, path: &Path) -> Result<bool, Error> {
+        let res = file_util::is_zip_file(path);
+        res.map_err(|e| Error::IoError(format!("Failed to check if file is zip archive: {}", e)))
     }
 }
 
@@ -127,6 +138,15 @@ pub mod mock {
             self.deleted_files.lock().unwrap().push(path_str.clone());
             self.existing_files.lock().unwrap().remove(&path_str);
             Ok(())
+        }
+
+        fn is_zip_archive(&self, path: &Path) -> Result<bool, Error> {
+            let path_str = path.to_string_lossy();
+            if path_str.ends_with(".zip") {
+                Ok(true)
+            } else {
+                Ok(false)
+            }
         }
     }
 }
