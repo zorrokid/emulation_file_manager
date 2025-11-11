@@ -136,3 +136,40 @@ impl PipelineStep<PrepareFileImportContext> for ProcessFileContentStep {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{path::Path, sync::Arc};
+
+    use core_types::FileType;
+    use database::{repository_manager::RepositoryManager, setup_test_db};
+
+    use crate::{
+        file_system_ops::mock::MockFileSystemOps, pipeline::pipeline_step::PipelineStep,
+        prepare_file_import::context::PrepareFileImportContext,
+    };
+
+    #[async_std::test]
+    async fn test_collect_file_metadata_step() {
+        let test_path = Path::new("/test/roms/game.zip");
+        let mut context = initialize_context(test_path).await;
+
+        let step = super::CollectFileMetadataStep;
+        let action = step.execute(&mut context).await;
+
+        assert!(matches!(action, super::StepAction::Continue));
+        assert!(context.import_metadata.is_some());
+        let metadata = context.import_metadata.unwrap();
+        assert_eq!(metadata.file_set_name.unwrap(), "game");
+        assert_eq!(metadata.file_set_file_name.unwrap(), "game.zip");
+        assert!(metadata.is_zip_archive);
+    }
+
+    async fn initialize_context(path: &Path) -> PrepareFileImportContext {
+        let pool = Arc::new(setup_test_db().await);
+        let repository_manager = Arc::new(RepositoryManager::new(pool));
+        let fs_ops = Arc::new(MockFileSystemOps::new());
+
+        PrepareFileImportContext::new(repository_manager, path, FileType::Rom, fs_ops)
+    }
+}
