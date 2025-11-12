@@ -2,6 +2,7 @@ use std::{path::Path, sync::Arc};
 
 use core_types::FileType;
 use database::repository_manager::RepositoryManager;
+use file_import::FileImportOps;
 
 use crate::{
     error::Error,
@@ -13,20 +14,27 @@ use crate::{
 pub struct PrepareFileImportService {
     repository_manager: Arc<RepositoryManager>,
     fs_ops: Arc<dyn FileSystemOps>,
+    file_import_ops: Arc<dyn FileImportOps>,
 }
 
 impl PrepareFileImportService {
     pub fn new(repository_manager: Arc<RepositoryManager>) -> Self {
-        Self::new_with_fs_ops(repository_manager, Arc::new(StdFileSystemOps))
+        Self::new_with_ops(
+            repository_manager,
+            Arc::new(StdFileSystemOps),
+            Arc::new(file_import::StdFileImportOps),
+        )
     }
 
-    pub fn new_with_fs_ops(
+    pub fn new_with_ops(
         repository_manager: Arc<RepositoryManager>,
         fs_ops: Arc<dyn FileSystemOps>,
+        file_import_ops: Arc<dyn FileImportOps>,
     ) -> Self {
         Self {
             repository_manager,
             fs_ops,
+            file_import_ops,
         }
     }
 
@@ -40,6 +48,7 @@ impl PrepareFileImportService {
             file_path,
             file_type,
             self.fs_ops.clone(),
+            self.file_import_ops.clone(),
         );
         let pipeline = Pipeline::<PrepareFileImportContext>::new();
         match pipeline.execute(&mut context).await {

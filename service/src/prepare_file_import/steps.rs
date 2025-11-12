@@ -66,8 +66,12 @@ impl PipelineStep<PrepareFileImportContext> for CollectFileContentStep {
     async fn execute(&self, context: &mut PrepareFileImportContext) -> StepAction {
         let is_zip = context.import_metadata.as_ref().unwrap().is_zip_archive;
         let file_contents_res = match is_zip {
-            true => file_import::read_zip_contents_with_checksums(&context.file_path),
-            false => file_import::read_file_checksum(&context.file_path),
+            true => context
+                .file_import_ops
+                .read_zip_contents_with_checksums(&context.file_path),
+            false => context
+                .file_import_ops
+                .read_file_checksum(&context.file_path),
         };
 
         match file_contents_res {
@@ -141,18 +145,22 @@ impl PipelineStep<PrepareFileImportContext> for ProcessFileContentStep {
 mod tests {
     use std::{path::Path, sync::Arc};
 
-    use core_types::FileType;
+    use core_types::{FileType, ReadFile, Sha1Checksum};
     use database::{repository_manager::RepositoryManager, setup_test_db};
+    use file_import::file_import_ops::mock::MockFileImportOps;
 
     use crate::{
-        file_system_ops::mock::MockFileSystemOps, pipeline::pipeline_step::PipelineStep,
-        prepare_file_import::context::PrepareFileImportContext,
+        file_system_ops::mock::MockFileSystemOps,
+        pipeline::pipeline_step::PipelineStep,
+        prepare_file_import::context::{FileImportMetadata, PrepareFileImportContext},
     };
 
     #[async_std::test]
     async fn test_collect_file_metadata_step() {
         let test_path = Path::new("/test/roms/game.zip");
-        let mut context = initialize_context(test_path).await;
+        let fs_ops = Arc::new(MockFileSystemOps::new());
+        let file_import_ops = Arc::new(MockFileImportOps::new());
+        let mut context = initialize_context(test_path, fs_ops, file_import_ops).await;
 
         let step = super::CollectFileMetadataStep;
         let action = step.execute(&mut context).await;
@@ -165,11 +173,49 @@ mod tests {
         assert!(metadata.is_zip_archive);
     }
 
-    async fn initialize_context(path: &Path) -> PrepareFileImportContext {
+    #[async_std::test]
+    async fn test_collect_file_content_step() {
+        let test_path = Path::new("/test/roms/game.zip");
+        let fs_ops = Arc::new(MockFileSystemOps::new());
+        let file_import_ops = Arc::new(MockFileImportOps::new());
+        let checksum: Sha1Checksum = [0u8; 20];
+        file_import_ops.add_zip_file(
+            checksum,
+            ReadFile {
+                file_name: "game.rom".into(),
+                sha1_checksum: checksum,
+                file_size: 1024,
+            },
+        );
+        let mut context = initialize_context(test_path, fs_ops, file_import_ops).await;
+
+        context.import_metadata = Some(FileImportMetadata {
+            file_set_name: Some("game".into()),
+            file_set_file_name: Some("game.zip".into()),
+            is_zip_archive: true,
+        });
+
+        let step = super::CollectFileContentStep;
+        let action = step.execute(&mut context).await;
+
+        assert!(matches!(action, super::StepAction::Continue));
+        assert!(context.file_info.contains_key(&checksum));
+    }
+
+    async fn initialize_context(
+        path: &Path,
+        fs_ops: Arc<MockFileSystemOps>,
+        file_import_ops: Arc<MockFileImportOps>,
+    ) -> PrepareFileImportContext {
         let pool = Arc::new(setup_test_db().await);
         let repository_manager = Arc::new(RepositoryManager::new(pool));
-        let fs_ops = Arc::new(MockFileSystemOps::new());
 
-        PrepareFileImportContext::new(repository_manager, path, FileType::Rom, fs_ops)
+        PrepareFileImportContext::new(
+            repository_manager,
+            path,
+            FileType::Rom,
+            fs_ops,
+            file_import_ops,
+        )
     }
 }

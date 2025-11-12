@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use std::string::ToString;
-use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumIter};
 
 pub type Sha1Checksum = [u8; 20];

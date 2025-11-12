@@ -1,5 +1,7 @@
+pub mod file_import_ops;
 pub mod file_outputter;
 use core_types::{FileSize, FileType, ImportedFile, ReadFile, Sha1Checksum};
+pub use file_import_ops::{FileImportOps, StdFileImportOps};
 use file_outputter::{output_zstd_compressed, CompressionLevel};
 use sha1::{
     digest::{consts::U20, generic_array::GenericArray},

@@ -6,6 +6,7 @@ use std::{
 
 use core_types::{FileType, ImportedFile, ReadFile, Sha1Checksum};
 use database::{models::FileInfo, repository_manager::RepositoryManager};
+use file_import::FileImportOps;
 
 use crate::file_system_ops::FileSystemOps;
 
@@ -17,6 +18,7 @@ pub struct PrepareFileImportContext {
     pub existing_files: Vec<FileInfo>,
     pub file_info: HashMap<Sha1Checksum, ReadFile>,
     pub fs_ops: Arc<dyn FileSystemOps>,
+    pub file_import_ops: Arc<dyn FileImportOps>,
 }
 
 pub struct FileImportMetadata {
@@ -42,6 +44,7 @@ impl PrepareFileImportContext {
         file_path: &Path,
         file_type: FileType,
         fs_ops: Arc<dyn FileSystemOps>,
+        file_import_ops: Arc<dyn FileImportOps>,
     ) -> Self {
         Self {
             repository_manager,
@@ -51,6 +54,7 @@ impl PrepareFileImportContext {
             existing_files: vec![],
             file_info: HashMap::new(),
             fs_ops,
+            file_import_ops,
         }
     }
 
