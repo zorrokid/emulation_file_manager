@@ -30,7 +30,7 @@ pub struct FileImportMetadata {
 pub struct ImportFileContent {
     pub file_info: ReadFile,
     pub is_new: bool,
-    pub imported_file: Option<ImportedFile>,
+    pub existing_file: Option<ImportedFile>,
 }
 
 pub struct ImportFile {
@@ -70,7 +70,7 @@ impl PrepareFileImportContext {
                 let picked = ImportFileContent {
                     file_info: file_info.clone(),
                     is_new: existing_file.is_none(),
-                    imported_file: existing_file.map(|f| ImportedFile {
+                    existing_file: existing_file.map(|f| ImportedFile {
                         original_file_name: file_info.file_name.clone(),
                         archive_file_name: f.archive_file_name.clone(),
                         sha1_checksum: *sha1,
