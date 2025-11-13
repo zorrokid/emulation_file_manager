@@ -24,12 +24,7 @@ pub struct DownloadService {
 
 impl std::fmt::Debug for DownloadService {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("DownloadService")
-            .field("repository_manager", &"Arc<RepositoryManager>")
-            .field("settings", &self.settings)
-            .field("settings_service", &"Arc<SettingsService>")
-            .field("fs_ops", &"Arc<dyn FileSystemOps>")
-            .finish()
+        f.debug_struct("DownloadService").finish_non_exhaustive()
     }
 }
 

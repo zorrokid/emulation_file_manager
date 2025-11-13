@@ -5,6 +5,7 @@ pub mod file_set_deletion;
 pub mod file_set_download;
 pub mod file_system_ops;
 pub mod pipeline;
+pub mod prepare_file_import;
 pub mod settings_service;
 pub mod view_model_service;
 pub mod view_models;

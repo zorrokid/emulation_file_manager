@@ -1,5 +1,7 @@
+pub mod file_import_ops;
 pub mod file_outputter;
 use core_types::{FileSize, FileType, ImportedFile, ReadFile, Sha1Checksum};
+pub use file_import_ops::{FileImportOps, StdFileImportOps};
 use file_outputter::{output_zstd_compressed, CompressionLevel};
 use sha1::{
     digest::{consts::U20, generic_array::GenericArray},
@@ -281,10 +283,10 @@ pub fn read_zip_contents_with_checksums(
 pub fn read_file_checksum(
     file_path: &PathBuf,
 ) -> Result<HashMap<Sha1Checksum, ReadFile>, FileImportError> {
-    let sha1 = file_util::get_file_sha1(&file_path);
+    let sha1 = file_util::get_file_sha1(file_path);
     match sha1 {
         Ok(checksum) => {
-            let file_size = std::fs::metadata(&file_path)
+            let file_size = std::fs::metadata(file_path)
                 .map_err(|e| {
                     FileImportError::FileIoError(format!("Failed getting file size: {}", e))
                 })?
