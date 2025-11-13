@@ -5,9 +5,7 @@ use std::{
 };
 
 use core_types::{FileType, ImportedFile, ReadFile, Sha1Checksum};
-use database::{
-    database_error::Error as DatabaseError, models::FileInfo, repository_manager::RepositoryManager,
-};
+use database::{database_error::Error as DatabaseError, repository_manager::RepositoryManager};
 use file_import::{FileImportError, FileImportModel};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, FactorySender,
@@ -23,10 +21,14 @@ use relm4::{
     },
     prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque},
 };
-use service::view_models::{FileSetListModel, Settings};
+use service::{
+    error::Error,
+    prepare_file_import::{model::ImportFile, service::PrepareFileImportService},
+    view_models::{FileSetListModel, Settings},
+};
 use ui_components::{DropDownMsg, DropDownOutputMsg, FileTypeDropDown, FileTypeSelectedMsg};
 
-use crate::file_importer::FileImporter;
+use crate::file_importer::{FileImporter, PickedFile, PickedFileContent};
 
 #[derive(Debug, Clone)]
 struct File {
@@ -136,17 +138,9 @@ pub enum FileSetFormOutputMsg {
 
 #[derive(Debug)]
 pub enum CommandMsg {
-    FileContentsRead(
-        PathBuf,
-        Result<HashMap<Sha1Checksum, ReadFile>, FileImportError>,
-    ),
-    ExistingFilesRead {
-        path: PathBuf,
-        content: HashMap<Sha1Checksum, ReadFile>,
-        result: Result<Vec<FileInfo>, DatabaseError>,
-    },
     FilesImported(Result<HashMap<Sha1Checksum, ImportedFile>, FileImportError>),
     FilesSavedToDatabase(Result<i64, DatabaseError>),
+    FileImportPrepared(Result<ImportFile, Error>),
 }
 
 pub struct FileSetFormInit {
@@ -166,6 +160,7 @@ pub struct FileSetFormModel {
     source: String,
     dropdown: Controller<FileTypeDropDown>,
     processing: bool,
+    prepare_file_import_service: Arc<PrepareFileImportService>,
 }
 
 impl FileSetFormModel {
@@ -301,6 +296,10 @@ impl Component for FileSetFormModel {
 
         let dropdown = Self::create_dropdown(None, &sender);
 
+        let prepare_file_import_service = Arc::new(PrepareFileImportService::new(Arc::clone(
+            &init_model.repository_manager,
+        )));
+
         let model = FileSetFormModel {
             repository_manager: init_model.repository_manager,
             settings: init_model.settings,
@@ -312,6 +311,7 @@ impl Component for FileSetFormModel {
             source: String::new(),
             dropdown,
             processing: false,
+            prepare_file_import_service,
         };
         let file_types_dropdown = model.dropdown.widget();
 
@@ -352,29 +352,19 @@ impl Component for FileSetFormModel {
                 dialog.present();
             }
 
-            // Step 2. handle selected file
-            // - file name
-            // - file set name
-            // - is zip file?
-            // - read contents with checkusums / checksum
+            // Step 2. handle selected file, prepare for import
             FileSetFormMsg::FileSelected(path) => {
-                println!("File selected: {:?}", path);
-                let file_set_name = self.file_importer.get_file_set_name(&path);
-                let file_set_file_name = self.file_importer.get_file_set_file_name(&path);
-                if self.file_set_name.is_empty() {
-                    self.file_set_name = file_set_name.clone().unwrap_or_default();
+                if let Some(file_type) = self.file_importer.get_selected_file_type() {
+                    let prepare_file_import_service = Arc::clone(&self.prepare_file_import_service);
+                    sender.oneshot_command(async move {
+                        let res = prepare_file_import_service
+                            .prepare_import(&path, file_type)
+                            .await;
+                        CommandMsg::FileImportPrepared(res)
+                    });
+                } else {
+                    eprintln!("File type not selected");
                 }
-                if self.file_set_file_name.is_empty() {
-                    self.file_set_file_name = file_set_file_name.unwrap_or_default();
-                }
-                let is_zip_file = self.file_importer.is_zip_file(&path);
-                sender.oneshot_command(async move {
-                    let res = match is_zip_file {
-                        true => file_import::read_zip_contents_with_checksums(&path),
-                        false => file_import::read_file_checksum(&path),
-                    };
-                    CommandMsg::FileContentsRead(path, res)
-                });
             }
             FileSetFormMsg::SetFileSelected {
                 sha1_checksum,
@@ -468,54 +458,41 @@ impl Component for FileSetFormModel {
         root: &Self::Root,
     ) {
         match message {
-            // Step 3. handle read file contents, check which files already exist in database
-            CommandMsg::FileContentsRead(path, Ok(content)) => {
-                println!("File contents read successfully: {:?}", &content);
-                let file_checksums = content.keys().cloned().collect::<Vec<Sha1Checksum>>();
-                let repository_manager = Arc::clone(&self.repository_manager);
-                let file_type = self.file_importer.get_selected_file_type().expect(
-                    "File type must be selected (should have been checked in beginning of process)",
-                );
-                sender.oneshot_command(async move {
-                    let existing_files_file_info = repository_manager
-                        .get_file_info_repository()
-                        .get_file_infos_by_sha1_checksums(file_checksums, file_type)
-                        .await;
-                    CommandMsg::ExistingFilesRead {
-                        path,
-                        content,
-                        result: existing_files_file_info,
-                    }
-                });
-            }
-            CommandMsg::FileContentsRead(_, Err(e)) => {
-                eprintln!("Error reading file contents: {:?}", e);
-                // TODO: show error to user
-            }
-            // Step 4. handle existing files info, update file importer model
-            CommandMsg::ExistingFilesRead {
-                path,
-                content,
-                result,
-            } => match result {
-                Ok(existing_files_file_info) => {
-                    println!(
-                        "Existing files read successfully: {:?}",
-                        existing_files_file_info
-                    );
-                    for file in content.values() {
-                        self.files.guard().push_back(file.clone());
-                    }
-                    self.file_importer.add_new_picked_file(
-                        &path,
-                        &content,
-                        &existing_files_file_info,
-                    );
+            CommandMsg::FileImportPrepared(Ok(import_file)) => {
+                println!("File import prepared successfully: {:?}", import_file);
+                for file in import_file.content.values() {
+                    self.files.guard().push_back(file.file_info.clone());
                 }
-                Err(e) => {
-                    eprintln!("Error reading existing files: {:?}", e);
+
+                // TODO: maps to type with same structure - use common type for this
+                let picked_file = PickedFile {
+                    path: import_file.path,
+                    content: import_file
+                        .content
+                        .into_iter()
+                        .map(|(k, v)| {
+                            (
+                                k,
+                                PickedFileContent {
+                                    file_info: v.file_info.clone(),
+                                    is_selected: true, // this is only difference!
+                                    is_new: v.is_new,
+                                    imported_file: v.existing_file.clone(), // this has different
+                                                                            // name
+                                },
+                            )
+                        })
+                        .collect(),
+                };
+                // TODO: test that adding multiple files to file set still works!
+                self.file_importer.add_to_current_picked_files(picked_file);
+                if self.file_set_name.is_empty() {
+                    self.file_set_name = import_file.file_set_name.clone();
                 }
-            },
+                if self.file_set_file_name.is_empty() {
+                    self.file_set_file_name = import_file.file_set_file_name.clone();
+                }
+            }
             // Process 2 Step 2. handle imported files, save to database
             CommandMsg::FilesImported(Ok(imported_files_map)) => {
                 self.processing = false;

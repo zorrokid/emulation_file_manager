@@ -8,7 +8,10 @@ use core_types::{FileType, ImportedFile, ReadFile, Sha1Checksum};
 use database::{models::FileInfo, repository_manager::RepositoryManager};
 use file_import::FileImportOps;
 
-use crate::file_system_ops::FileSystemOps;
+use crate::{
+    file_system_ops::FileSystemOps,
+    prepare_file_import::model::{ImportFile, ImportFileContent},
+};
 
 pub struct PrepareFileImportContext {
     pub repository_manager: Arc<RepositoryManager>,
@@ -25,17 +28,6 @@ pub struct FileImportMetadata {
     pub file_set_name: Option<String>,
     pub file_set_file_name: Option<String>,
     pub is_zip_archive: bool,
-}
-
-pub struct ImportFileContent {
-    pub file_info: ReadFile,
-    pub is_new: bool,
-    pub existing_file: Option<ImportedFile>,
-}
-
-pub struct ImportFile {
-    pub path: PathBuf,
-    pub content: HashMap<Sha1Checksum, ImportFileContent>,
 }
 
 impl PrepareFileImportContext {
@@ -85,6 +77,17 @@ impl PrepareFileImportContext {
         ImportFile {
             path: self.file_path.clone(),
             content: import_content,
+            // TODO: maybe have file_set_name and file_set_file_name mandatory in context
+            file_set_file_name: self
+                .import_metadata
+                .as_ref()
+                .and_then(|m| m.file_set_file_name.clone())
+                .unwrap_or_default(),
+            file_set_name: self
+                .import_metadata
+                .as_ref()
+                .and_then(|m| m.file_set_name.clone())
+                .unwrap_or_default(),
         }
     }
 }
