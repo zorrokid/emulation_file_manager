@@ -8,7 +8,7 @@ use crate::{
     error::Error,
     file_import::{
         import::context::FileImportContext,
-        model::{FileSetImportModel, ImportFile},
+        model::{FileImportModel, FileSetImportModel},
         prepare::context::PrepareFileImportContext,
     },
     file_system_ops::{FileSystemOps, StdFileSystemOps},
@@ -57,7 +57,7 @@ impl FileImportService {
         &self,
         file_path: &Path,
         file_type: FileType,
-    ) -> Result<ImportFile, Error> {
+    ) -> Result<FileImportModel, Error> {
         let mut context = PrepareFileImportContext::new(
             self.repository_manager.clone(),
             file_path,

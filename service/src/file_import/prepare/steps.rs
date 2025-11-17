@@ -150,9 +150,9 @@ mod tests {
     use file_import::file_import_ops::mock::MockFileImportOps;
 
     use crate::{
+        file_import::prepare::context::{FileImportMetadata, PrepareFileImportContext},
         file_system_ops::mock::MockFileSystemOps,
         pipeline::pipeline_step::PipelineStep,
-        prepare_file_import::context::{FileImportMetadata, PrepareFileImportContext},
     };
 
     #[async_std::test]
@@ -231,8 +231,8 @@ mod tests {
 
         let imported_file_infos = context.get_imported_file_info();
         let import_content = imported_file_infos.content.get(&checksum).unwrap();
-        assert!(import_content.is_new);
-        assert!(import_content.existing_file.is_none());
+        assert!(import_content.existing_file_info_id.is_none());
+        assert!(import_content.existing_archive_file_name.is_none());
     }
 
     #[async_std::test]
@@ -280,12 +280,9 @@ mod tests {
         let imported_file_infos = context.get_imported_file_info();
 
         let import_content = imported_file_infos.content.get(&checksum).unwrap();
-        assert!(!import_content.is_new);
-        let imported_file = import_content.existing_file.as_ref().unwrap();
-        assert_eq!(imported_file.original_file_name, "game.rom");
-        assert_eq!(imported_file.archive_file_name, existing_file_archive_name);
-        assert_eq!(imported_file.sha1_checksum, checksum);
-        assert_eq!(imported_file.file_size, 2048);
+        assert!(import_content.existing_file_info_id.is_some());
+        let existing_file = import_content.existing_archive_file_name.as_ref().unwrap();
+        assert_eq!(existing_file, existing_file_archive_name);
     }
 
     async fn initialize_context(

@@ -17,14 +17,14 @@ pub struct ImportFileContent {
 /// A file to be imported, containing its path and a mapping of its content by SHA1 checksum. When
 /// imported file is an archive, it may contain multiple files inside it. When it's a single file,
 /// the content will contain a single entry.
-#[derive(Debug)]
+/*#[derive(Debug)]
 pub struct ImportFile {
-    pub file_set_name: String,      // TODO: is this needed?
-    pub file_set_file_name: String, // TODO: is this needed?
-    pub file_type: FileType,        // TODO: is this needed?
+    //pub file_set_name: String,      // TODO: is this needed?
+    //pub file_set_file_name: String, // TODO: is this needed?
+    //pub file_type: FileType,        // TODO: is this needed?
     pub path: PathBuf,
     pub content: HashMap<Sha1Checksum, ImportFileContent>,
-}
+}*/
 
 #[derive(Debug)]
 pub struct FileImportModel {

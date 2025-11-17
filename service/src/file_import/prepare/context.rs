@@ -9,7 +9,7 @@ use database::{models::FileInfo, repository_manager::RepositoryManager};
 use file_import::FileImportOps;
 
 use crate::{
-    file_import::model::{ImportFile, ImportFileContent},
+    file_import::model::{FileImportModel, ImportFileContent},
     file_system_ops::FileSystemOps,
 };
 
@@ -50,7 +50,7 @@ impl PrepareFileImportContext {
         }
     }
 
-    pub fn get_imported_file_info(&self) -> ImportFile {
+    pub fn get_imported_file_info(&self) -> FileImportModel {
         let import_content = self
             .file_info
             .iter()
@@ -72,21 +72,9 @@ impl PrepareFileImportContext {
             })
             .collect::<HashMap<_, _>>();
 
-        ImportFile {
+        FileImportModel {
             path: self.file_path.clone(),
             content: import_content,
-            file_type: self.file_type,
-            // TODO: maybe have file_set_name and file_set_file_name mandatory in context
-            file_set_file_name: self
-                .import_metadata
-                .as_ref()
-                .and_then(|m| m.file_set_file_name.clone())
-                .unwrap_or_default(),
-            file_set_name: self
-                .import_metadata
-                .as_ref()
-                .and_then(|m| m.file_set_name.clone())
-                .unwrap_or_default(),
         }
     }
 }

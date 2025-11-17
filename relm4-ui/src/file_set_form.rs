@@ -1,6 +1,6 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
-use core_types::{FileSize, FileType, ImportedFile, ReadFile, Sha1Checksum};
+use core_types::{FileType, ImportedFile, ReadFile, Sha1Checksum};
 use database::{database_error::Error as DatabaseError, repository_manager::RepositoryManager};
 use file_import::FileImportError;
 use relm4::{
@@ -20,19 +20,21 @@ use relm4::{
 use service::{
     error::Error,
     file_import::{
-        model::{FileImportModel, FileSetImportModel, ImportFile, ImportFileContent},
+        model::{FileImportModel, FileSetImportModel, ImportFileContent},
         service::FileImportService,
     },
     view_models::{FileSetListModel, Settings},
 };
 use ui_components::{DropDownMsg, DropDownOutputMsg, FileTypeDropDown, FileTypeSelectedMsg};
 
+/*
 // TODO: move to prepare file import service?
 #[derive(Debug)]
 pub struct PickedFile {
     pub path: PathBuf,
     pub content: HashMap<Sha1Checksum, PickedFileContent>,
 }
+
 
 // TODO: move to prepare file import service?
 #[derive(Debug)]
@@ -42,7 +44,7 @@ pub struct PickedFileContent {
     pub file_size: FileSize,
     pub existing_archive_file_name: Option<String>,
     pub existing_file_info_id: Option<i64>,
-}
+}*/
 
 #[derive(Debug, Clone)]
 struct File {
@@ -154,7 +156,7 @@ pub enum FileSetFormOutputMsg {
 pub enum CommandMsg {
     FilesImported(Result<HashMap<Sha1Checksum, ImportedFile>, FileImportError>),
     FilesSavedToDatabase(Result<i64, DatabaseError>),
-    FileImportPrepared(Result<ImportFile, Error>),
+    FileImportPrepared(Result<FileImportModel, Error>),
     FileImportDone(Result<i64, Error>),
 }
 
@@ -177,7 +179,7 @@ pub struct FileSetFormModel {
     file_import_service: Arc<FileImportService>,
     selected_file_type: Option<FileType>,
     selected_files_in_picked_files: Vec<Sha1Checksum>,
-    picked_files: Vec<PickedFile>,
+    picked_files: Vec<FileImportModel>,
 }
 
 impl FileSetFormModel {
@@ -505,7 +507,7 @@ impl Component for FileSetFormModel {
                 // If PickedFile and PickedFileContent structures were in service crate,
                 // prepare_file_import service could return PickedFile directly.
                 // PickedFile /-Content could be renamed to ImportFile /-Content.
-                let picked_file = PickedFile {
+                /*let picked_file = PickedFile {
                     path: import_file.path,
                     content: import_file
                         .content
@@ -526,14 +528,16 @@ impl Component for FileSetFormModel {
                         })
                         .collect(),
                 };
-                self.picked_files.push(picked_file);
+                self.picked_files.push(picked_file);*/
 
-                if self.file_set_name.is_empty() {
+                // TODO: onko nämä tarpeen?
+                /*if self.file_set_name.is_empty() {
                     self.file_set_name = import_file.file_set_name.clone();
                 }
                 if self.file_set_file_name.is_empty() {
                     self.file_set_file_name = import_file.file_set_file_name.clone();
-                }
+                }*/
+                self.picked_files.push(import_file);
             }
             CommandMsg::FileImportDone(Ok(id)) => {
                 self.processing = false;
