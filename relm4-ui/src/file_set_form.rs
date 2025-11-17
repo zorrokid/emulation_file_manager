@@ -176,8 +176,8 @@ pub struct FileSetFormModel {
     processing: bool,
     file_import_service: Arc<FileImportService>,
     selected_file_type: Option<FileType>,
-    selected_files: Vec<Sha1Checksum>,
-    current_picked_files: Vec<PickedFile>,
+    selected_files_in_picked_files: Vec<Sha1Checksum>,
+    picked_files: Vec<PickedFile>,
 }
 
 impl FileSetFormModel {
@@ -234,7 +234,7 @@ impl Component for FileSetFormModel {
                 #[name = "selected_file_label"]
                 gtk::Label {
                     #[watch]
-                    set_label: &format!("Selected file: {}", model.current_picked_files
+                    set_label: &format!("Selected file: {}", model.picked_files
                     .iter()
                     .map(|f| f.path.to_string_lossy())
                     .collect::<Vec<_>>()
@@ -291,7 +291,7 @@ impl Component for FileSetFormModel {
                     set_label: "Create File Set",
                     connect_clicked => FileSetFormMsg::CreateFileSetFromSelectedFiles,
                     #[watch]
-                    set_sensitive: !model.selected_files.is_empty() && !model.processing,
+                    set_sensitive: !model.selected_files_in_picked_files.is_empty() && !model.processing,
                 },
             }
         }
@@ -334,8 +334,8 @@ impl Component for FileSetFormModel {
             processing: false,
             file_import_service,
             selected_file_type: None,
-            selected_files: Vec::new(),
-            current_picked_files: Vec::new(),
+            selected_files_in_picked_files: Vec::new(),
+            picked_files: Vec::new(),
         };
         let file_types_dropdown = model.dropdown.widget();
 
@@ -392,29 +392,23 @@ impl Component for FileSetFormModel {
                 sha1_checksum,
                 selected,
             } => {
-                println!(
-                    "File with checksum {:?} selected: {}",
-                    sha1_checksum, selected
-                );
-                if selected {
-                    if !self.selected_files.contains(&sha1_checksum) {
-                        self.selected_files.push(sha1_checksum);
-                    }
-                } else {
-                    if self.selected_files.contains(&sha1_checksum) {
-                        self.selected_files.retain(|s| *s != sha1_checksum);
-                    }
+                if selected && !self.selected_files_in_picked_files.contains(&sha1_checksum) {
+                    self.selected_files_in_picked_files.push(sha1_checksum);
+                } else if !selected && self.selected_files_in_picked_files.contains(&sha1_checksum)
+                {
+                    self.selected_files_in_picked_files
+                        .retain(|s| *s != sha1_checksum);
                 }
             }
             FileSetFormMsg::CreateFileSetFromSelectedFiles => {
-                if !self.selected_files.is_empty()
+                if !self.selected_files_in_picked_files.is_empty()
                     && !self.processing
                     && let Some(file_type) = self.selected_file_type
                 {
                     self.processing = true;
 
                     let import_files: Vec<FileImportModel> = self
-                        .current_picked_files
+                        .picked_files
                         .iter()
                         .map(|f| FileImportModel {
                             path: f.path.clone(),
@@ -446,7 +440,7 @@ impl Component for FileSetFormModel {
                         source: self.source.clone(),
                         file_type,
                         system_ids: self.selected_system_ids.clone(),
-                        selected_files: self.selected_files.clone(),
+                        selected_files: self.selected_files_in_picked_files.clone(),
                         import_files,
                     };
 
@@ -474,7 +468,7 @@ impl Component for FileSetFormModel {
                 selected_system_ids,
                 selected_file_type,
             } => {
-                self.current_picked_files.clear();
+                self.picked_files.clear();
                 self.selected_file_type = Some(selected_file_type);
                 self.selected_system_ids = selected_system_ids;
                 self.file_set_name.clear();
@@ -532,7 +526,7 @@ impl Component for FileSetFormModel {
                         })
                         .collect(),
                 };
-                self.current_picked_files.push(picked_file);
+                self.picked_files.push(picked_file);
 
                 if self.file_set_name.is_empty() {
                     self.file_set_name = import_file.file_set_name.clone();
