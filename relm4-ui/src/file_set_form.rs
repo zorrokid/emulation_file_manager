@@ -27,25 +27,6 @@ use service::{
 };
 use ui_components::{DropDownMsg, DropDownOutputMsg, FileTypeDropDown, FileTypeSelectedMsg};
 
-/*
-// TODO: move to prepare file import service?
-#[derive(Debug)]
-pub struct PickedFile {
-    pub path: PathBuf,
-    pub content: HashMap<Sha1Checksum, PickedFileContent>,
-}
-
-
-// TODO: move to prepare file import service?
-#[derive(Debug)]
-pub struct PickedFileContent {
-    pub file_name: String,
-    pub sha1_checksum: Sha1Checksum,
-    pub file_size: FileSize,
-    pub existing_archive_file_name: Option<String>,
-    pub existing_file_info_id: Option<i64>,
-}*/
-
 #[derive(Debug, Clone)]
 struct File {
     name: String,
@@ -167,8 +148,6 @@ pub struct FileSetFormInit {
 
 #[derive(Debug)]
 pub struct FileSetFormModel {
-    repository_manager: Arc<RepositoryManager>,
-    settings: Arc<Settings>,
     files: FactoryVecDeque<File>,
     selected_system_ids: Vec<i64>,
     file_set_name: String,
@@ -325,8 +304,6 @@ impl Component for FileSetFormModel {
         ));
 
         let model = FileSetFormModel {
-            repository_manager: init_model.repository_manager,
-            settings: init_model.settings,
             files,
             selected_system_ids: Vec::new(),
             file_set_name: String::new(),
@@ -503,32 +480,6 @@ impl Component for FileSetFormModel {
                         file_size: file.file_size,
                     });
                 }
-
-                // If PickedFile and PickedFileContent structures were in service crate,
-                // prepare_file_import service could return PickedFile directly.
-                // PickedFile /-Content could be renamed to ImportFile /-Content.
-                /*let picked_file = PickedFile {
-                    path: import_file.path,
-                    content: import_file
-                        .content
-                        .into_iter()
-                        .map(|(k, v)| {
-                            (
-                                k,
-                                PickedFileContent {
-                                    file_name: v.file_name.clone(),
-                                    sha1_checksum: k,
-                                    file_size: v.file_size,
-                                    existing_archive_file_name: v
-                                        .existing_archive_file_name
-                                        .clone(),
-                                    existing_file_info_id: v.existing_file_info_id,
-                                },
-                            )
-                        })
-                        .collect(),
-                };
-                self.picked_files.push(picked_file);*/
 
                 // TODO: onko nämä tarpeen?
                 /*if self.file_set_name.is_empty() {
