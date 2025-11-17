@@ -91,6 +91,7 @@ impl FileImportService {
             file_set_file_name: import_model.file_set_file_name,
             imported_files: std::collections::HashMap::new(),
             file_set_id: None,
+            file_import_ops: self.file_import_ops.clone(),
         };
         let pipeline = Pipeline::<FileImportContext>::new();
         let result = pipeline.execute(&mut context).await;
