@@ -14,7 +14,7 @@ use std::{
     io::Read,
     path::{Path, PathBuf},
 };
-use utils::file_util::{self, is_zip_file};
+use utils::file_util::{self};
 use zip::ZipArchive;
 
 use uuid::Uuid;

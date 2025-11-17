@@ -4,13 +4,13 @@ use std::{
     sync::Arc,
 };
 
-use core_types::{FileType, ImportedFile, ReadFile, Sha1Checksum};
+use core_types::{FileType, ReadFile, Sha1Checksum};
 use database::{models::FileInfo, repository_manager::RepositoryManager};
 use file_import::FileImportOps;
 
 use crate::{
+    file_import::model::{ImportFile, ImportFileContent},
     file_system_ops::FileSystemOps,
-    prepare_file_import::model::{ImportFile, ImportFileContent},
 };
 
 pub struct PrepareFileImportContext {
@@ -59,24 +59,23 @@ impl PrepareFileImportContext {
                     .existing_files
                     .iter()
                     .find(|f| f.sha1_checksum == *sha1);
-                let picked = ImportFileContent {
-                    file_info: file_info.clone(),
-                    is_new: existing_file.is_none(),
-                    existing_file: existing_file.map(|f| ImportedFile {
-                        original_file_name: file_info.file_name.clone(),
-                        archive_file_name: f.archive_file_name.clone(),
-                        sha1_checksum: *sha1,
-                        file_size: f.file_size,
-                    }),
+
+                let file = ImportFileContent {
+                    file_name: file_info.file_name.clone(),
+                    sha1_checksum: *sha1,
+                    file_size: file_info.file_size,
+                    existing_file_info_id: existing_file.map(|f| f.id),
+                    existing_archive_file_name: existing_file.map(|f| f.archive_file_name.clone()),
                 };
 
-                (*sha1, picked)
+                (*sha1, file)
             })
             .collect::<HashMap<_, _>>();
 
         ImportFile {
             path: self.file_path.clone(),
             content: import_content,
+            file_type: self.file_type,
             // TODO: maybe have file_set_name and file_set_file_name mandatory in context
             file_set_file_name: self
                 .import_metadata

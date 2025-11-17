@@ -2,8 +2,8 @@ use core_types::Sha1Checksum;
 
 use crate::{
     error::Error,
+    file_import::prepare::context::{FileImportMetadata, PrepareFileImportContext},
     pipeline::pipeline_step::{PipelineStep, StepAction},
-    prepare_file_import::context::{FileImportMetadata, PrepareFileImportContext},
 };
 
 pub struct CollectFileMetadataStep;

@@ -6,30 +6,36 @@ use file_import::FileImportOps;
 
 use crate::{
     error::Error,
+    file_import::{
+        import::context::FileImportContext,
+        model::{FileSetImportModel, ImportFile},
+        prepare::context::PrepareFileImportContext,
+    },
     file_system_ops::{FileSystemOps, StdFileSystemOps},
     pipeline::generic_pipeline::Pipeline,
-    prepare_file_import::{context::PrepareFileImportContext, model::ImportFile},
+    view_models::Settings,
 };
 
-pub struct PrepareFileImportService {
+pub struct FileImportService {
     repository_manager: Arc<RepositoryManager>,
     fs_ops: Arc<dyn FileSystemOps>,
     file_import_ops: Arc<dyn FileImportOps>,
+    settings: Arc<Settings>,
 }
 
-impl std::fmt::Debug for PrepareFileImportService {
+impl std::fmt::Debug for FileImportService {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("PrepareFileImportService")
-            .finish_non_exhaustive()
+        f.debug_struct("FileImportService").finish_non_exhaustive()
     }
 }
 
-impl PrepareFileImportService {
-    pub fn new(repository_manager: Arc<RepositoryManager>) -> Self {
+impl FileImportService {
+    pub fn new(repository_manager: Arc<RepositoryManager>, settings: Arc<Settings>) -> Self {
         Self::new_with_ops(
             repository_manager,
             Arc::new(StdFileSystemOps),
             Arc::new(file_import::StdFileImportOps),
+            settings,
         )
     }
 
@@ -37,11 +43,13 @@ impl PrepareFileImportService {
         repository_manager: Arc<RepositoryManager>,
         fs_ops: Arc<dyn FileSystemOps>,
         file_import_ops: Arc<dyn FileImportOps>,
+        settings: Arc<Settings>,
     ) -> Self {
         Self {
             repository_manager,
             fs_ops,
             file_import_ops,
+            settings,
         }
     }
 
@@ -67,6 +75,31 @@ impl PrepareFileImportService {
                 tracing::error!(error = %err, "Failed to prepare file import");
                 Err(err)
             }
+        }
+    }
+
+    pub async fn import(&self, import_model: FileSetImportModel) -> Result<i64, Error> {
+        let mut context = FileImportContext {
+            repository_manager: self.repository_manager.clone(),
+            settings: self.settings.clone(),
+            selected_files: import_model.selected_files,
+            file_type: import_model.file_type,
+            import_files: import_model.import_files,
+            system_ids: import_model.system_ids,
+            source: import_model.source,
+            file_set_name: import_model.file_set_name,
+            file_set_file_name: import_model.file_set_file_name,
+            imported_files: std::collections::HashMap::new(),
+            file_set_id: None,
+        };
+        let pipeline = Pipeline::<FileImportContext>::new();
+        let result = pipeline.execute(&mut context).await;
+        match (result, context.file_set_id) {
+            (Ok(_), Some(id)) => Ok(id),
+            (Err(err), _) => Err(err),
+            (_, None) => Err(Error::FileImportError(
+                "File set ID not set after import".to_string(),
+            )),
         }
     }
 }

@@ -1,9 +1,9 @@
 use crate::{
-    pipeline::generic_pipeline::Pipeline,
-    prepare_file_import::{
+    file_import::prepare::{
         context::PrepareFileImportContext,
         steps::{CollectFileContentStep, CollectFileMetadataStep, ProcessFileContentStep},
     },
+    pipeline::generic_pipeline::Pipeline,
 };
 
 impl Pipeline<PrepareFileImportContext> {
