@@ -1,7 +1,7 @@
-use core_types::{ReadFile, Sha1Checksum};
+use core_types::{ImportedFile, ReadFile, Sha1Checksum};
 use std::{collections::HashMap, path::Path};
 
-use crate::FileImportError;
+use crate::{FileImportError, FileImportModel};
 
 /// Trait for file import operations to enable testing
 ///
@@ -23,6 +23,15 @@ pub trait FileImportOps: Send + Sync {
         &self,
         file_path: &Path,
     ) -> Result<HashMap<Sha1Checksum, ReadFile>, FileImportError>;
+
+    /// Import files based on the provided model
+    ///
+    /// Reads files from disk, optionally extracts from ZIP, and writes them to the output directory.
+    /// Returns a map of SHA1 checksums to imported file information.
+    fn import(
+        &self,
+        file_import_model: &FileImportModel,
+    ) -> Result<HashMap<Sha1Checksum, ImportedFile>, FileImportError>;
 }
 
 /// Standard implementation using actual file system operations
@@ -43,6 +52,13 @@ impl FileImportOps for StdFileImportOps {
     ) -> Result<HashMap<Sha1Checksum, ReadFile>, FileImportError> {
         crate::read_file_checksum(&file_path.to_path_buf())
     }
+
+    fn import(
+        &self,
+        file_import_model: &FileImportModel,
+    ) -> Result<HashMap<Sha1Checksum, ImportedFile>, FileImportError> {
+        crate::import(file_import_model)
+    }
 }
 
 pub mod mock {
@@ -54,6 +70,7 @@ pub mod mock {
     pub struct MockFileImportOps {
         zip_contents: Arc<Mutex<HashMap<Sha1Checksum, ReadFile>>>,
         file_checksums: Arc<Mutex<HashMap<Sha1Checksum, ReadFile>>>,
+        imported_files: Arc<Mutex<HashMap<Sha1Checksum, ImportedFile>>>,
         should_fail: Arc<Mutex<bool>>,
     }
 
@@ -76,6 +93,14 @@ pub mod mock {
                 .lock()
                 .unwrap()
                 .insert(checksum, read_file);
+        }
+
+        /// Add an imported file to be returned by import
+        pub fn add_imported_file(&self, checksum: Sha1Checksum, imported_file: ImportedFile) {
+            self.imported_files
+                .lock()
+                .unwrap()
+                .insert(checksum, imported_file);
         }
 
         /// Make all operations fail with an error
@@ -103,6 +128,16 @@ pub mod mock {
                 return Err(FileImportError::FileIoError("Mock error".to_string()));
             }
             Ok(self.file_checksums.lock().unwrap().clone())
+        }
+
+        fn import(
+            &self,
+            _file_import_model: &FileImportModel,
+        ) -> Result<HashMap<Sha1Checksum, ImportedFile>, FileImportError> {
+            if *self.should_fail.lock().unwrap() {
+                return Err(FileImportError::FileIoError("Mock import error".to_string()));
+            }
+            Ok(self.imported_files.lock().unwrap().clone())
         }
     }
 }
