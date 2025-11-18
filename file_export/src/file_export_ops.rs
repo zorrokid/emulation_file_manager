@@ -53,45 +53,6 @@ pub struct ExportCall {
     pub extract_files: bool,
 }
 
-/// Shared state for tracking mock calls.
-///
-/// This allows tests to inspect what calls were made to the mock without
-/// needing to downcast the trait object.
-#[derive(Default)]
-pub struct MockState {
-    export_calls: Arc<Mutex<Vec<ExportCall>>>,
-    export_zipped_calls: Arc<Mutex<Vec<ExportCall>>>,
-}
-
-impl MockState {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Returns all calls made to the `export` method.
-    pub fn export_calls(&self) -> Vec<ExportCall> {
-        self.export_calls.lock().unwrap().clone()
-    }
-
-    /// Returns all calls made to the `export_zipped` method.
-    pub fn export_zipped_calls(&self) -> Vec<ExportCall> {
-        self.export_zipped_calls.lock().unwrap().clone()
-    }
-
-    /// Returns the total number of export calls made.
-    pub fn total_calls(&self) -> usize {
-        self.export_calls.lock().unwrap().len() + self.export_zipped_calls.lock().unwrap().len()
-    }
-
-    fn record_export(&self, call: ExportCall) {
-        self.export_calls.lock().unwrap().push(call);
-    }
-
-    fn record_export_zipped(&self, call: ExportCall) {
-        self.export_zipped_calls.lock().unwrap().push(call);
-    }
-}
-
 /// Mock implementation for testing file export operations.
 ///
 /// This mock tracks all export calls and can simulate failures, allowing comprehensive
@@ -99,7 +60,7 @@ impl MockState {
 ///
 /// # Examples
 ///
-/// no_run
+/// ```
 /// use file_export::file_export_ops::{FileExportOps, MockFileExportOps};
 /// use file_export::{FileSetExportModel, OutputFile};
 /// use std::collections::HashMap;
@@ -128,14 +89,16 @@ impl MockState {
 /// let result = mock.export_zipped(&export_model);
 /// assert!(result.is_ok());
 ///
-/// // Verify via shared state
-/// assert_eq!(state.total_calls(), 1);
-/// assert_eq!(state.export_zipped_calls().len(), 1);
+/// // Verify calls
+/// assert_eq!(mock.total_calls(), 1);
+/// assert_eq!(mock.export_zipped_calls().len(), 1);
 /// ```
+#[derive(Clone, Default)]
 pub struct MockFileExportOps {
     should_fail: bool,
     error_message: Option<String>,
-    state: Arc<MockState>,
+    export_calls: Arc<Mutex<Vec<ExportCall>>>,
+    export_zipped_calls: Arc<Mutex<Vec<ExportCall>>>,
 }
 
 impl MockFileExportOps {
@@ -143,34 +106,7 @@ impl MockFileExportOps {
     ///
     /// Use this for testing happy path scenarios where exports should succeed.
     pub fn new() -> Self {
-        Self::new_with_state(Arc::new(MockState::new()))
-    }
-
-    /// Creates a new mock with shared state for inspection.
-    ///
-    /// This allows tests to verify calls made to the mock.
-    ///
-    /// # Arguments
-    /// * `state` - Shared state for tracking calls
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use file_export::file_export_ops::{MockFileExportOps, MockState};
-    /// use std::sync::Arc;
-    ///
-    /// let state = Arc::new(MockState::new());
-    /// let mock = MockFileExportOps::new_with_state(state.clone());
-    /// // ... use mock in tests ...
-    /// // Verify via state
-    /// assert_eq!(state.total_calls(), 0);
-    /// ```
-    pub fn new_with_state(state: Arc<MockState>) -> Self {
-        Self {
-            should_fail: false,
-            error_message: None,
-            state,
-        }
+        Self::default()
     }
 
     /// Creates a new mock that fails on all export operations with the given error message.
@@ -189,22 +125,26 @@ impl MockFileExportOps {
     /// // All export operations will now fail with "Disk full" error
     /// ```
     pub fn with_failure(error_msg: impl Into<String>) -> Self {
-        Self::with_failure_and_state(error_msg, Arc::new(MockState::new()))
-    }
-
-    /// Creates a new mock with failure and shared state.
-    pub fn with_failure_and_state(error_msg: impl Into<String>, state: Arc<MockState>) -> Self {
         Self {
             should_fail: true,
             error_message: Some(error_msg.into()),
-            state,
+            ..Default::default()
         }
     }
-}
 
-impl Default for MockFileExportOps {
-    fn default() -> Self {
-        Self::new()
+    /// Returns all calls made to the `export` method.
+    pub fn export_calls(&self) -> Vec<ExportCall> {
+        self.export_calls.lock().unwrap().clone()
+    }
+
+    /// Returns all calls made to the `export_zipped` method.
+    pub fn export_zipped_calls(&self) -> Vec<ExportCall> {
+        self.export_zipped_calls.lock().unwrap().clone()
+    }
+
+    /// Returns the total number of export calls made.
+    pub fn total_calls(&self) -> usize {
+        self.export_calls.lock().unwrap().len() + self.export_zipped_calls.lock().unwrap().len()
     }
 }
 
@@ -219,7 +159,7 @@ impl FileExportOps for MockFileExportOps {
             source_file_path: export_model.source_file_path.to_string_lossy().to_string(),
             extract_files: export_model.extract_files,
         };
-        self.state.record_export(call);
+        self.export_calls.lock().unwrap().push(call);
 
         if self.should_fail {
             return Err(FileExportError::FileIoError(
@@ -241,7 +181,7 @@ impl FileExportOps for MockFileExportOps {
             source_file_path: export_model.source_file_path.to_string_lossy().to_string(),
             extract_files: export_model.extract_files,
         };
-        self.state.record_export_zipped(call);
+        self.export_zipped_calls.lock().unwrap().push(call);
 
         if self.should_fail {
             return Err(FileExportError::ZipError(
@@ -261,14 +201,13 @@ mod tests {
     use core_types::Sha1Checksum;
 
     use crate::{
-        file_export_ops::{FileExportOps, MockFileExportOps, MockState},
+        file_export_ops::{FileExportOps, MockFileExportOps},
         FileExportError, FileSetExportModel, OutputFile,
     };
 
     #[test]
     fn test_mock_file_export_ops_success() {
-        let state = std::sync::Arc::new(MockState::new());
-        let mock = MockFileExportOps::new_with_state(state.clone());
+        let mock = MockFileExportOps::new();
 
         let mut output_mapping = HashMap::new();
         output_mapping.insert(
@@ -291,11 +230,11 @@ mod tests {
         let result = mock.export_zipped(&export_model);
         assert!(result.is_ok());
 
-        // Verify the call was tracked via shared state
-        assert_eq!(state.total_calls(), 1);
-        assert_eq!(state.export_zipped_calls().len(), 1);
+        // Verify the call was tracked
+        assert_eq!(mock.total_calls(), 1);
+        assert_eq!(mock.export_zipped_calls().len(), 1);
 
-        let call = &state.export_zipped_calls()[0];
+        let call = &mock.export_zipped_calls()[0];
         assert_eq!(call.output_file_names, vec!["output_file.rom"]);
         assert_eq!(call.source_file_path, "/source");
         assert!(!call.extract_files);
@@ -303,9 +242,7 @@ mod tests {
 
     #[test]
     fn test_mock_file_export_ops_failure() {
-        let state = std::sync::Arc::new(MockState::new());
-        let mock =
-            MockFileExportOps::with_failure_and_state("Simulated disk full error", state.clone());
+        let mock = MockFileExportOps::with_failure("Simulated disk full error");
 
         let mut output_mapping = HashMap::new();
         output_mapping.insert(
@@ -329,8 +266,8 @@ mod tests {
         assert!(result.is_err());
 
         // Verify the call was tracked even though it failed
-        assert_eq!(state.total_calls(), 1);
-        assert_eq!(state.export_calls().len(), 1);
+        assert_eq!(mock.total_calls(), 1);
+        assert_eq!(mock.export_calls().len(), 1);
 
         match result {
             Err(FileExportError::FileIoError(msg)) => {
