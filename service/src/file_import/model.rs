@@ -16,7 +16,9 @@ pub struct ImportFileContent {
 
 #[derive(Debug)]
 pub struct FileImportModel {
+    /// Path to the file to be imported (e.g., zip archive)
     pub path: PathBuf,
+    /// Mapping of SHA1 checksum to file content info
     pub content: HashMap<Sha1Checksum, ImportFileContent>,
 }
 
