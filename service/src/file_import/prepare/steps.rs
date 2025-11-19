@@ -86,9 +86,10 @@ impl PipelineStep<PrepareFileImportContext> for CollectFileContentStep {
                     "Failed to read file contents and checksums"
                 );
 
-                return StepAction::Abort(Error::IoError(
-                    "Failed to read file contents and checksums".into(),
-                ));
+                return StepAction::Abort(Error::IoError(format!(
+                    "Failed to read file contents and checksums: {}",
+                    err,
+                )));
             }
         }
 
