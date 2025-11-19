@@ -1,4 +1,5 @@
 pub mod cloud_sync;
+pub mod download_service;
 pub mod error;
 pub mod export_service;
 pub mod file_import;

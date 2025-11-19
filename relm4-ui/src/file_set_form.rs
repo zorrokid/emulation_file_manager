@@ -17,6 +17,7 @@ use relm4::{
     prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque},
 };
 use service::{
+    download_service::DownloadService,
     error::Error,
     file_import::{
         model::{FileImportModel, FileImportPrepareResult, FileSetImportModel, ImportFileContent},
@@ -110,6 +111,8 @@ impl FactoryComponent for File {
 pub enum FileSetFormMsg {
     OpenFileSelector,
     FileSelected(PathBuf),
+    OpenDownloadDialog,
+    DownloadFromUrl(String),
     CreateFileSetFromSelectedFiles,
     SetFileSelected {
         sha1_checksum: Sha1Checksum,
@@ -152,6 +155,8 @@ pub struct FileSetFormModel {
     dropdown: Controller<FileTypeDropDown>,
     processing: bool,
     file_import_service: Arc<FileImportService>,
+    download_service: Arc<DownloadService>,
+    settings: Arc<Settings>,
     selected_file_type: Option<FileType>,
     selected_files_in_picked_files: Vec<Sha1Checksum>,
     picked_files: Vec<FileImportModel>,
@@ -204,6 +209,13 @@ impl Component for FileSetFormModel {
                 gtk::Button {
                     set_label: "Open file selector",
                     connect_clicked => FileSetFormMsg::OpenFileSelector,
+                    #[watch]
+                    set_sensitive: model.selected_file_type.is_some(),
+                },
+
+                gtk::Button {
+                    set_label: "Download from URL",
+                    connect_clicked => FileSetFormMsg::OpenDownloadDialog,
                     #[watch]
                     set_sensitive: model.selected_file_type.is_some(),
                 },
@@ -299,6 +311,11 @@ impl Component for FileSetFormModel {
             Arc::clone(&init_model.settings),
         ));
 
+        let download_service = Arc::new(DownloadService::new(
+            Arc::clone(&init_model.repository_manager),
+            Arc::clone(&init_model.settings),
+        ));
+
         let model = FileSetFormModel {
             files,
             selected_system_ids: Vec::new(),
@@ -308,6 +325,8 @@ impl Component for FileSetFormModel {
             dropdown,
             processing: false,
             file_import_service,
+            download_service,
+            settings: Arc::clone(&init_model.settings),
             selected_file_type: None,
             selected_files_in_picked_files: Vec::new(),
             picked_files: Vec::new(),
@@ -359,10 +378,64 @@ impl Component for FileSetFormModel {
                             .await;
                         CommandMsg::FileImportPrepared(res)
                     });
-                } else {
-                    eprintln!("File type not selected");
                 }
             }
+
+            FileSetFormMsg::OpenDownloadDialog => {
+                let dialog = gtk::Dialog::builder()
+                    .title("Download from URL")
+                    .modal(true)
+                    .transient_for(root)
+                    .default_width(500)
+                    .build();
+
+                dialog.add_button("Cancel", gtk::ResponseType::Cancel);
+                dialog.add_button("Download", gtk::ResponseType::Accept);
+
+                let content_area = dialog.content_area();
+                let entry = gtk::Entry::builder()
+                    .placeholder_text("Enter URL (e.g., https://example.com/file.zip)")
+                    .margin_start(10)
+                    .margin_end(10)
+                    .margin_top(10)
+                    .margin_bottom(10)
+                    .build();
+
+                content_area.append(&entry);
+
+                dialog.connect_response(clone!(
+                    #[strong]
+                    sender,
+                    #[strong]
+                    entry,
+                    move |dialog, response| {
+                        if response == gtk::ResponseType::Accept {
+                            let url = entry.text().to_string();
+                            if !url.is_empty() {
+                                sender.input(FileSetFormMsg::DownloadFromUrl(url));
+                            }
+                        }
+                        dialog.close();
+                    }
+                ));
+
+                dialog.present();
+            }
+
+            FileSetFormMsg::DownloadFromUrl(url) => {
+                if let Some(file_type) = self.selected_file_type {
+                    let download_service = Arc::clone(&self.download_service);
+                    let temp_dir = self.settings.temp_output_dir.clone();
+                    
+                    sender.oneshot_command(async move {
+                        let res = download_service
+                            .download_and_prepare_import(&url, file_type, &temp_dir)
+                            .await;
+                        CommandMsg::FileImportPrepared(res)
+                    });
+                }
+            }
+
             FileSetFormMsg::SetFileSelected {
                 sha1_checksum,
                 selected,

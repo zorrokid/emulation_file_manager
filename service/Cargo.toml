@@ -18,3 +18,4 @@ tracing = "0.1"
 thumbnails = { path = "../thumbnails" }
 utils = { path = "../utils" }
 file_import = { path = "../file_import" }
+http_downloader = { path = "../http_downloader" }
