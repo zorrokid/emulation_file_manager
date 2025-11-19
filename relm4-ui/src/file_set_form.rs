@@ -1,8 +1,7 @@
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc};
 
-use core_types::{FileType, ImportedFile, ReadFile, Sha1Checksum};
-use database::{database_error::Error as DatabaseError, repository_manager::RepositoryManager};
-use file_import::FileImportError;
+use core_types::{FileType, ReadFile, Sha1Checksum};
+use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, FactorySender,
     RelmWidgetExt,
@@ -20,7 +19,7 @@ use relm4::{
 use service::{
     error::Error,
     file_import::{
-        model::{FileImportModel, FileSetImportModel, ImportFileContent},
+        model::{FileImportModel, FileImportPrepareResult, FileSetImportModel, ImportFileContent},
         service::FileImportService,
     },
     view_models::{FileSetListModel, Settings},
@@ -130,14 +129,11 @@ pub enum FileSetFormMsg {
 #[derive(Debug)]
 pub enum FileSetFormOutputMsg {
     FileSetCreated(FileSetListModel),
-    FileSetUpdated(FileSetListModel),
 }
 
 #[derive(Debug)]
 pub enum CommandMsg {
-    FilesImported(Result<HashMap<Sha1Checksum, ImportedFile>, FileImportError>),
-    FilesSavedToDatabase(Result<i64, DatabaseError>),
-    FileImportPrepared(Result<FileImportModel, Error>),
+    FileImportPrepared(Result<FileImportPrepareResult, Error>),
     FileImportDone(Result<i64, Error>),
 }
 
@@ -271,7 +267,7 @@ impl Component for FileSetFormModel {
                gtk::Button {
                     set_label: "Create File Set",
                     connect_clicked => FileSetFormMsg::CreateFileSetFromSelectedFiles,
-                    #[watch]
+                    #[watch] // TODO: this stays disabled after processing
                     set_sensitive: !model.selected_files_in_picked_files.is_empty() && !model.processing,
                 },
             }
@@ -471,23 +467,25 @@ impl Component for FileSetFormModel {
         root: &Self::Root,
     ) {
         match message {
-            CommandMsg::FileImportPrepared(Ok(import_file)) => {
-                println!("File import prepared successfully: {:?}", import_file);
+            CommandMsg::FileImportPrepared(Ok(prepare_result)) => {
+                let import_file = prepare_result.import_model;
+                let import_metadata = prepare_result.import_metadata;
                 for file in import_file.content.values() {
                     self.files.guard().push_back(ReadFile {
                         file_name: file.file_name.clone(),
                         sha1_checksum: file.sha1_checksum,
                         file_size: file.file_size,
                     });
+                    // pre-select all files initially
+                    self.selected_files_in_picked_files.push(file.sha1_checksum);
                 }
 
-                // TODO: onko nämä tarpeen?
-                /*if self.file_set_name.is_empty() {
-                    self.file_set_name = import_file.file_set_name.clone();
+                if self.file_set_name.is_empty() {
+                    self.file_set_name = import_metadata.file_set_name.clone();
                 }
                 if self.file_set_file_name.is_empty() {
-                    self.file_set_file_name = import_file.file_set_file_name.clone();
-                }*/
+                    self.file_set_file_name = import_metadata.file_set_file_name.clone();
+                }
                 self.picked_files.push(import_file);
             }
             CommandMsg::FileImportDone(Ok(id)) => {

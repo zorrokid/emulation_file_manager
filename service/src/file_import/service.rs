@@ -8,7 +8,7 @@ use crate::{
     error::Error,
     file_import::{
         import::context::FileImportContext,
-        model::{FileImportModel, FileSetImportModel},
+        model::{FileImportModel, FileImportPrepareResult, FileSetImportModel},
         prepare::context::PrepareFileImportContext,
     },
     file_system_ops::{FileSystemOps, StdFileSystemOps},
@@ -57,7 +57,7 @@ impl FileImportService {
         &self,
         file_path: &Path,
         file_type: FileType,
-    ) -> Result<FileImportModel, Error> {
+    ) -> Result<FileImportPrepareResult, Error> {
         let mut context = PrepareFileImportContext::new(
             self.repository_manager.clone(),
             file_path,
@@ -68,8 +68,15 @@ impl FileImportService {
         let pipeline = Pipeline::<PrepareFileImportContext>::new();
         match pipeline.execute(&mut context).await {
             Ok(_) => {
-                let import_file_info = context.get_imported_file_info();
-                Ok(import_file_info)
+                let import_model = context.get_imported_file_info();
+                let import_metadata = context
+                    .import_metadata
+                    .expect("File meta data expected to be available")
+                    .clone();
+                Ok(FileImportPrepareResult {
+                    import_model,
+                    import_metadata,
+                })
             }
             Err(err) => {
                 tracing::error!(error = %err, "Failed to prepare file import");

@@ -2,7 +2,7 @@ use core_types::Sha1Checksum;
 
 use crate::{
     error::Error,
-    file_import::prepare::context::{FileImportMetadata, PrepareFileImportContext},
+    file_import::{model::FileImportMetadata, prepare::context::PrepareFileImportContext},
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
 
@@ -29,8 +29,9 @@ impl PipelineStep<PrepareFileImportContext> for CollectFileMetadataStep {
         match zip_file_result {
             Ok(is_zip_archive) => {
                 context.import_metadata = Some(FileImportMetadata {
-                    file_set_name,
-                    file_set_file_name,
+                    file_set_name: file_set_name.expect("File set name should be available"),
+                    file_set_file_name: file_set_file_name
+                        .expect("File set file name should be available"),
                     is_zip_archive,
                 });
                 StepAction::Continue
@@ -150,7 +151,7 @@ mod tests {
     use file_import::file_import_ops::mock::MockFileImportOps;
 
     use crate::{
-        file_import::prepare::context::{FileImportMetadata, PrepareFileImportContext},
+        file_import::{model::FileImportMetadata, prepare::context::PrepareFileImportContext},
         file_system_ops::mock::MockFileSystemOps,
         pipeline::pipeline_step::PipelineStep,
     };
@@ -168,8 +169,8 @@ mod tests {
         assert!(matches!(action, super::StepAction::Continue));
         assert!(context.import_metadata.is_some());
         let metadata = context.import_metadata.unwrap();
-        assert_eq!(metadata.file_set_name.unwrap(), "game");
-        assert_eq!(metadata.file_set_file_name.unwrap(), "game.zip");
+        assert_eq!(metadata.file_set_name, "game");
+        assert_eq!(metadata.file_set_file_name, "game.zip");
         assert!(metadata.is_zip_archive);
     }
 
@@ -190,8 +191,8 @@ mod tests {
         let mut context = initialize_context(test_path, fs_ops, file_import_ops).await;
 
         context.import_metadata = Some(FileImportMetadata {
-            file_set_name: Some("game".into()),
-            file_set_file_name: Some("game.zip".into()),
+            file_set_name: "game".into(),
+            file_set_file_name: "game.zip".into(),
             is_zip_archive: true,
         });
 
