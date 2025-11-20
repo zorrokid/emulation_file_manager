@@ -25,7 +25,7 @@ pub struct FileImportContext {
     pub import_files: Vec<ServiceFileImportModel>,
     pub system_ids: Vec<i64>,
     pub source: String,
-    // File set name and file name the will be created from the set of import files.
+    // File set name and file name that will be created from the set of import files.
     pub file_set_name: String,
     pub file_set_file_name: String,
     pub imported_files: HashMap<Sha1Checksum, ImportedFile>,
