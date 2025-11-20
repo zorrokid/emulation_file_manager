@@ -3,7 +3,6 @@ mod document_file_set_viewer;
 mod document_viewer_form;
 mod emulator_form;
 mod emulator_runner;
-mod file_importer;
 mod file_info_details;
 mod file_set_details_view;
 mod file_set_editor;

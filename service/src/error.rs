@@ -11,6 +11,7 @@ pub enum Error {
     CloudSyncError(String),
     SettingsError(String),
     DownloadError(String),
+    FileImportError(String),
 }
 
 impl Display for Error {
@@ -23,6 +24,7 @@ impl Display for Error {
             Error::CloudSyncError(message) => write!(f, "Cloud sync error: {}", message),
             Error::SettingsError(message) => write!(f, "Settings error: {}", message),
             Error::DownloadError(message) => write!(f, "Download error: {}", message),
+            Error::FileImportError(message) => write!(f, "File import error: {}", message),
         }
     }
 }

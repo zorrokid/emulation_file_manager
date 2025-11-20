@@ -27,6 +27,7 @@ pub enum Error {
     InUse,
     DbError(String),
     ParseError(String),
+    DecodeError(String),
 }
 
 impl Display for Error {
@@ -35,6 +36,7 @@ impl Display for Error {
             Error::InUse => write!(f, "Cannot delete because entity is in use"),
             Error::DbError(err) => write!(f, "Database error: {}", err),
             Error::ParseError(err) => write!(f, "Parse error: {}", err),
+            Error::DecodeError(err) => write!(f, "Decode error: {}", err),
         }
     }
 }

@@ -16,3 +16,6 @@ cloud_storage = { path = "../cloud_storage" }
 serde_json = "1.0.142"
 tracing = "0.1"
 thumbnails = { path = "../thumbnails" }
+utils = { path = "../utils" }
+file_import = { path = "../file_import" }
+http_downloader = { path = "../http_downloader" }

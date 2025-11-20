@@ -618,7 +618,7 @@ mod tests {
 
     #[async_std::test]
     async fn test_export_files_step_success() {
-        let (mut context, mock_export_state) = initialize_context(false).await;
+        let (mut context, mock_export_ops) = initialize_context(false).await;
 
         let archive_file_name = "some_cryptic_filename";
         let file_type = FileType::Rom;
@@ -650,17 +650,17 @@ mod tests {
         assert!(matches!(action, StepAction::Continue));
 
         // Verify export was called via shared state
-        assert_eq!(mock_export_state.total_calls(), 1);
-        assert_eq!(mock_export_state.export_zipped_calls().len(), 1);
+        assert_eq!(mock_export_ops.total_calls(), 1);
+        assert_eq!(mock_export_ops.export_zipped_calls().len(), 1);
 
-        let call = &mock_export_state.export_zipped_calls()[0];
+        let call = &mock_export_ops.export_zipped_calls()[0];
         assert_eq!(call.output_file_names.len(), 1);
         assert!(!call.extract_files);
     }
 
     #[async_std::test]
     async fn test_export_files_step_with_extraction() {
-        let (mut context, mock_export_state) = initialize_context(true).await;
+        let (mut context, mock_export_ops) = initialize_context(true).await;
 
         let archive_file_name = "some_cryptic_filename";
         let file_type = FileType::Rom;
@@ -689,10 +689,10 @@ mod tests {
         assert!(matches!(action, StepAction::Continue));
 
         // Verify export (not export_zipped) was called via shared state
-        assert_eq!(mock_export_state.total_calls(), 1);
-        assert_eq!(mock_export_state.export_calls().len(), 1);
+        assert_eq!(mock_export_ops.total_calls(), 1);
+        assert_eq!(mock_export_ops.export_calls().len(), 1);
 
-        let call = &mock_export_state.export_calls()[0];
+        let call = &mock_export_ops.export_calls()[0];
         assert!(call.extract_files);
     }
 
@@ -815,7 +815,7 @@ mod tests {
         extract_files: bool,
     ) -> (
         DownloadContext,
-        Arc<file_export::file_export_ops::MockState>,
+        Arc<MockFileExportOps>,
     ) {
         let pool = Arc::new(setup_test_db().await);
         let repository_manager = Arc::new(RepositoryManager::new(pool));
@@ -830,8 +830,7 @@ mod tests {
         let (tx, _rx) = async_std::channel::unbounded();
         let fs_ops = Arc::new(MockFileSystemOps::new());
 
-        let mock_export_state = Arc::new(file_export::file_export_ops::MockState::new());
-        let export_ops = Arc::new(MockFileExportOps::new_with_state(mock_export_state.clone()));
+        let export_ops = Arc::new(MockFileExportOps::new());
         let thumbnail_generator = Arc::new(thumbnails::ThumbnailGeneratorMock);
 
         let settings = DownloadContextSettings {
@@ -843,13 +842,13 @@ mod tests {
             extract_files,
             cloud_ops: Some(cloud_ops),
             fs_ops,
-            export_ops,
+            export_ops: export_ops.clone(),
             thumbnail_generator,
         };
 
         let context = DownloadContext::new(settings);
 
-        (context, mock_export_state)
+        (context, export_ops)
     }
 
     async fn prepare_file_set_with_files(

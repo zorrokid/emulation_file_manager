@@ -66,13 +66,12 @@ impl<T> Pipeline<T> {
     /// `Err(error)` if a step returns `Abort(error)`
     pub async fn execute(&self, context: &mut T) -> Result<(), Error> {
         for step in &self.steps {
-            // Check if step should execute
             if !step.should_execute(context) {
-                eprintln!("Skipping step: {}", step.name());
+                tracing::info!("Step {} will be skipped based on context", step.name());
                 continue;
             }
 
-            eprintln!("Executing step: {}", step.name());
+            tracing::info!("Executing step: {}", step.name());
 
             match step.execute(context).await {
                 StepAction::Continue => {
@@ -80,13 +79,11 @@ impl<T> Pipeline<T> {
                     continue;
                 }
                 StepAction::Skip => {
-                    // Early successful exit
-                    eprintln!("Step {} requested skip - stopping pipeline", step.name());
+                    tracing::info!("Step {} requested skip - stopping pipeline", step.name());
                     return Ok(());
                 }
                 StepAction::Abort(error) => {
-                    // Error exit
-                    eprintln!("Step {} requested abort - stopping pipeline", step.name());
+                    tracing::error!("Step {} aborted the pipeline: {}", step.name(), error);
                     return Err(error);
                 }
             }
