@@ -28,13 +28,24 @@ impl PipelineStep<PrepareFileImportContext> for CollectFileMetadataStep {
 
         match zip_file_result {
             Ok(is_zip_archive) => {
-                context.import_metadata = Some(FileImportMetadata {
-                    file_set_name: file_set_name.expect("File set name should be available"),
-                    file_set_file_name: file_set_file_name
-                        .expect("File set file name should be available"),
-                    is_zip_archive,
-                });
-                StepAction::Continue
+                if let (Some(file_set_name), Some(file_set_file_name)) =
+                    (file_set_name, file_set_file_name)
+                {
+                    context.import_metadata = Some(FileImportMetadata {
+                        file_set_name,
+                        file_set_file_name,
+                        is_zip_archive,
+                    });
+                    StepAction::Continue
+                } else {
+                    tracing::error!(
+                        file_path = %context.file_path.display(),
+                        "Failed to extract file set name or file name"
+                    );
+                    StepAction::Abort(Error::IoError(
+                        "Failed to extract file set name or file name".into(),
+                    ))
+                }
             }
             Err(err) => {
                 tracing::error!(
@@ -43,10 +54,7 @@ impl PipelineStep<PrepareFileImportContext> for CollectFileMetadataStep {
                     "Failed to check if file is zip archive"
                 );
 
-                StepAction::Abort(Error::IoError(format!(
-                    "Failed to determine if file is zip archive: {}",
-                    err
-                )))
+                StepAction::Abort(err)
             }
         }
     }
@@ -161,6 +169,7 @@ mod tests {
     async fn test_collect_file_metadata_step() {
         let test_path = Path::new("/test/roms/game.zip");
         let fs_ops = Arc::new(MockFileSystemOps::new());
+        fs_ops.add_file(test_path.to_string_lossy().to_string());
         let file_import_ops = Arc::new(MockFileImportOps::new());
         let mut context = initialize_context(test_path, fs_ops, file_import_ops).await;
 

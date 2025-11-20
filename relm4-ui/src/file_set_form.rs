@@ -279,7 +279,7 @@ impl Component for FileSetFormModel {
                gtk::Button {
                     set_label: "Create File Set",
                     connect_clicked => FileSetFormMsg::CreateFileSetFromSelectedFiles,
-                    #[watch] // TODO: this stays disabled after processing
+                    #[watch]
                     set_sensitive: !model.selected_files_in_picked_files.is_empty() && !model.processing,
                 },
             }
@@ -426,7 +426,7 @@ impl Component for FileSetFormModel {
                 if let Some(file_type) = self.selected_file_type {
                     let download_service = Arc::clone(&self.download_service);
                     let temp_dir = self.settings.temp_output_dir.clone();
-                    
+
                     sender.oneshot_command(async move {
                         let res = download_service
                             .download_and_prepare_import(&url, file_type, &temp_dir)
@@ -587,7 +587,10 @@ impl Component for FileSetFormModel {
                 self.processing = false;
                 eprintln!("Error importing file set: {:?}", e);
             }
-            _ => {}
+            CommandMsg::FileImportPrepared(Err(e)) => {
+                self.processing = false;
+                eprintln!("Error preparing file import: {:?}", e);
+            }
         }
     }
 }

@@ -15,15 +15,9 @@ pub struct DownloadService {
 }
 
 impl DownloadService {
-    pub fn new(
-        repository_manager: Arc<RepositoryManager>,
-        settings: Arc<Settings>,
-    ) -> Self {
-        let file_import_service = Arc::new(FileImportService::new(
-            repository_manager,
-            settings,
-        ));
-        
+    pub fn new(repository_manager: Arc<RepositoryManager>, settings: Arc<Settings>) -> Self {
+        let file_import_service = Arc::new(FileImportService::new(repository_manager, settings));
+
         Self {
             file_import_service,
         }
@@ -51,10 +45,18 @@ impl DownloadService {
             .await
             .map_err(|e| Error::DownloadError(e.to_string()))?;
 
-        let prepare_result = self.file_import_service
+        let prepare_result = self
+            .file_import_service
             .prepare_import(&download_result.file_path, file_type)
-            .await?;
+            .await;
 
-        Ok(prepare_result)
+        match prepare_result {
+            Ok(res) => Ok(res),
+            Err(e) => Err(Error::FileImportError(format!(
+                "Preparing import for downloaded file failed. Try to start file import manually from: {}, Error: {}",
+                temp_dir.to_string_lossy(),
+                e
+            ))),
+        }
     }
 }

@@ -127,7 +127,14 @@ pub mod mock {
             if *self.should_fail.lock().unwrap() {
                 return Err(FileImportError::FileIoError("Mock error".to_string()));
             }
-            Ok(self.file_checksums.lock().unwrap().clone())
+            // TODO: check if other mocks needs this kind of validation
+            let map = self.file_checksums.lock().unwrap();
+            if map.is_empty() {
+                return Err(FileImportError::FileIoError(
+                    "MockFileImportOps: no file checksums configured; call add_file_checksum() before use".to_string(),
+                ));
+            }
+            Ok(map.clone())
         }
 
         fn import(
@@ -135,7 +142,9 @@ pub mod mock {
             _file_import_model: &FileImportModel,
         ) -> Result<HashMap<Sha1Checksum, ImportedFile>, FileImportError> {
             if *self.should_fail.lock().unwrap() {
-                return Err(FileImportError::FileIoError("Mock import error".to_string()));
+                return Err(FileImportError::FileIoError(
+                    "Mock import error".to_string(),
+                ));
             }
             Ok(self.imported_files.lock().unwrap().clone())
         }

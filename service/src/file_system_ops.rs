@@ -142,10 +142,15 @@ pub mod mock {
 
         fn is_zip_archive(&self, path: &Path) -> Result<bool, Error> {
             let path_str = path.to_string_lossy();
-            if path_str.ends_with(".zip") {
-                Ok(true)
+            if !self
+                .existing_files
+                .lock()
+                .unwrap()
+                .contains(path_str.as_ref())
+            {
+                Err(Error::IoError(format!("File does not exist: {}", path_str)))
             } else {
-                Ok(false)
+                Ok(path_str.ends_with(".zip"))
             }
         }
     }

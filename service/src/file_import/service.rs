@@ -69,10 +69,9 @@ impl FileImportService {
         match pipeline.execute(&mut context).await {
             Ok(_) => {
                 let import_model = context.get_imported_file_info();
-                let import_metadata = context
-                    .import_metadata
-                    .expect("File meta data expected to be available")
-                    .clone();
+                let import_metadata = context.import_metadata.ok_or_else(|| {
+                    Error::FileImportError("Import metadata not set after preparation".to_string())
+                })?;
                 Ok(FileImportPrepareResult {
                     import_model,
                     import_metadata,
