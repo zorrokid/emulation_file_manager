@@ -93,6 +93,7 @@ pub struct ExportCall {
 /// assert_eq!(mock.total_calls(), 1);
 /// assert_eq!(mock.export_zipped_calls().len(), 1);
 /// ```
+///
 #[derive(Clone, Default)]
 pub struct MockFileExportOps {
     should_fail: bool,
