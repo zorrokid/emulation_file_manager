@@ -586,8 +586,8 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
 mod tests {
     use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
-    use cloud_storage::{mock::MockCloudStorage, SyncEvent};
-    use core_types::{FileSyncStatus, FileType, Sha1Checksum};
+    use cloud_storage::{mock::MockCloudStorage};
+    use core_types::{events::SyncEvent, FileSyncStatus, FileType, Sha1Checksum};
     use database::{repository_manager::RepositoryManager, setup_test_db};
 
     use crate::{
