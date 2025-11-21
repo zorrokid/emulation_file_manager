@@ -1,6 +1,7 @@
 use std::{path::PathBuf, sync::Arc};
 
-use core_types::{FileType, ReadFile, Sha1Checksum};
+use async_std::{channel::unbounded, task};
+use core_types::{FileType, ReadFile, Sha1Checksum, events::HttpDownloadEvent};
 use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, FactorySender,
@@ -127,6 +128,7 @@ pub enum FileSetFormMsg {
         selected_file_type: FileType,
     },
     Hide,
+    ProcessDownloadEvent(HttpDownloadEvent),
 }
 
 #[derive(Debug)]
@@ -426,10 +428,21 @@ impl Component for FileSetFormModel {
                 if let Some(file_type) = self.selected_file_type {
                     let download_service = Arc::clone(&self.download_service);
                     let temp_dir = self.settings.temp_output_dir.clone();
+                    self.source = url.clone();
+                    
+                    let (tx, rx) = unbounded::<HttpDownloadEvent>();
+
+                    // Spawn task to forward progress messages to UI
+                    let ui_sender = sender.input_sender().clone();
+                    task::spawn(async move {
+                        while let Ok(event) = rx.recv().await {
+                            ui_sender.send(FileSetFormMsg::ProcessDownloadEvent(event)).unwrap();
+                        }
+                    });
 
                     sender.oneshot_command(async move {
                         let res = download_service
-                            .download_and_prepare_import(&url, file_type, &temp_dir)
+                            .download_and_prepare_import(&url, file_type, &temp_dir, tx)
                             .await;
                         CommandMsg::FileImportPrepared(res)
                     });
@@ -529,6 +542,10 @@ impl Component for FileSetFormModel {
             }
             FileSetFormMsg::Hide => {
                 root.hide();
+            }
+            FileSetFormMsg::ProcessDownloadEvent(event) => {
+                // TODO: show progress in UI
+                println!("Download event: {:?}", event);
             }
         }
     }

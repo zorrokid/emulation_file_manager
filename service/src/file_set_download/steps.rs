@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
-use cloud_storage::events::DownloadEvent;
-use core_types::{IMAGE_FILE_TYPES, Sha1Checksum};
+use core_types::{IMAGE_FILE_TYPES, Sha1Checksum, events::DownloadEvent};
 use file_export::{FileSetExportModel, OutputFile};
 
 use crate::{
@@ -143,7 +142,7 @@ impl PipelineStep<DownloadContext> for DownloadFilesStep {
                     key: cloud_key.clone(),
                 })
                 .await
-                .ok();
+                .ok(); // TODO: Handle send error?
             }
 
             let target_path = context.settings.get_file_path(
@@ -176,7 +175,7 @@ impl PipelineStep<DownloadContext> for DownloadFilesStep {
                             key: cloud_key.clone(),
                         })
                         .await
-                        .ok();
+                        .ok(); // TODO: Handle send error?
                     }
 
                     context.file_download_results.push(FileDownloadResult {
@@ -202,7 +201,7 @@ impl PipelineStep<DownloadContext> for DownloadFilesStep {
                             error: format!("{}", e),
                         })
                         .await
-                        .ok();
+                        .ok(); // TODO: Handle send error?
                     }
 
                     context.file_download_results.push(FileDownloadResult {
@@ -811,12 +810,7 @@ mod tests {
         assert!(context.thumbnail_path_map.len() == 1);
     }
 
-    async fn initialize_context(
-        extract_files: bool,
-    ) -> (
-        DownloadContext,
-        Arc<MockFileExportOps>,
-    ) {
+    async fn initialize_context(extract_files: bool) -> (DownloadContext, Arc<MockFileExportOps>) {
         let pool = Arc::new(setup_test_db().await);
         let repository_manager = Arc::new(RepositoryManager::new(pool));
         let settings = Arc::new(Settings {

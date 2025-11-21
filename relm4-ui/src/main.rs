@@ -27,7 +27,7 @@ mod tabbed_image_viewer;
 use std::{path::PathBuf, sync::Arc};
 
 use async_std::{channel::unbounded, task};
-use cloud_storage::SyncEvent;
+use core_types::events::SyncEvent;
 use database::{get_db_pool, repository_manager::RepositoryManager};
 use release::{ReleaseInitModel, ReleaseModel, ReleaseMsg, ReleaseOutputMsg};
 use releases::{ReleasesInit, ReleasesModel, ReleasesMsg, ReleasesOutputMsg};

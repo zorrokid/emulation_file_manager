@@ -1,7 +1,9 @@
 use std::path::Path;
 use std::sync::Arc;
 
+use async_std::channel::Sender;
 use core_types::FileType;
+use core_types::events::HttpDownloadEvent;
 use database::repository_manager::RepositoryManager;
 
 use crate::error::Error;
@@ -40,23 +42,23 @@ impl DownloadService {
         url: &str,
         file_type: FileType,
         temp_dir: &Path,
+        progress_tx: Sender<HttpDownloadEvent>,
     ) -> Result<FileImportPrepareResult, Error> {
-        let download_result = http_downloader::download_file(url, temp_dir)
+        // Step 1: Download the file
+        let download_result = http_downloader::download_file(url, temp_dir, &progress_tx)
             .await
             .map_err(|e| Error::DownloadError(e.to_string()))?;
 
-        let prepare_result = self
-            .file_import_service
+        // Step 2: Prepare the file for import
+        self.file_import_service
             .prepare_import(&download_result.file_path, file_type)
-            .await;
-
-        match prepare_result {
-            Ok(res) => Ok(res),
-            Err(e) => Err(Error::FileImportError(format!(
-                "Preparing import for downloaded file failed. Try to start file import manually from: {}, Error: {}",
-                temp_dir.to_string_lossy(),
-                e
-            ))),
-        }
+            .await
+            .map_err(|e| {
+                Error::FileImportError(format!(
+                    "Preparing import for downloaded file failed. File saved at: {}, Error: {}",
+                    download_result.file_path.display(),
+                    e
+                ))
+            })
     }
 }

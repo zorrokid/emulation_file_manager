@@ -1,6 +1,6 @@
-use async_std::fs::File;
-use async_std::io::WriteExt;
-use futures::StreamExt;
+use async_std::io::{ReadExt, WriteExt};
+use async_std::{channel::Sender, fs::File};
+use core_types::events::HttpDownloadEvent;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
@@ -10,8 +10,8 @@ pub enum DownloadError {
     RequestFailed(String),
     #[error("File IO error: {0}")]
     FileIoError(String),
-    #[error("Invalid URL: {0}")]
-    InvalidUrl(String),
+    #[error("Async messaging error: {0}")]
+    AsyncMessagingError(String),
 }
 
 pub struct DownloadResult {
@@ -24,17 +24,32 @@ pub struct DownloadResult {
 ///
 /// * `url` - The URL to download from.
 /// * `target_dir` - The directory where the file will be saved.
+/// * `progress_tx` - A channel sender to report download progress events.
 ///
 /// # Returns
 ///
 /// A `Result` containing the `DownloadResult` with the path to the downloaded file,
 /// or a `DownloadError` if the operation fails.
-pub async fn download_file(url: &str, target_dir: &Path) -> Result<DownloadResult, DownloadError> {
-    let client = reqwest::Client::new();
-    
-    let response = client
+pub async fn download_file(
+    url: &str,
+    target_dir: &Path,
+    progress_tx: &Sender<HttpDownloadEvent>,
+) -> Result<DownloadResult, DownloadError> {
+    let url_string = url.to_string(); // Clone once for reuse
+
+    send_status_message(
+        progress_tx,
+        HttpDownloadEvent::Started {
+            url: url_string.clone(),
+        },
+    )
+    .await?;
+
+    // Create a client with default middleware (includes redirects)
+    let client = surf::client().with(surf::middleware::Redirect::default());
+
+    let mut response = client
         .get(url)
-        .send()
         .await
         .map_err(|e| DownloadError::RequestFailed(format!("Failed to send request: {}", e)))?;
 
@@ -48,51 +63,90 @@ pub async fn download_file(url: &str, target_dir: &Path) -> Result<DownloadResul
     let file_name = extract_filename_from_url(url)
         .or_else(|| extract_filename_from_headers(&response))
         .unwrap_or_else(|| "downloaded_file".to_string());
-    
+
     let file_path = target_dir.join(&file_name);
-    
+
     let mut file = File::create(&file_path)
         .await
         .map_err(|e| DownloadError::FileIoError(format!("Failed to create file: {}", e)))?;
 
-    let mut stream = response.bytes_stream();
-    
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| {
-            DownloadError::RequestFailed(format!("Failed to read chunk: {}", e))
-        })?;
-        file.write_all(&chunk)
+    // Take the body as an AsyncRead stream
+    let mut body = response.take_body();
+
+    // Stream the response body in chunks
+    let mut buffer = vec![0u8; 8192]; // 8KB buffer
+    let mut bytes_downloaded = 0u64;
+
+    loop {
+        let bytes_read = body
+            .read(&mut buffer)
+            .await
+            .map_err(|e| DownloadError::RequestFailed(format!("Failed to read chunk: {}", e)))?;
+
+        if bytes_read == 0 {
+            break; // EOF
+        }
+
+        file.write_all(&buffer[..bytes_read])
             .await
             .map_err(|e| DownloadError::FileIoError(format!("Failed to write chunk: {}", e)))?;
+
+        bytes_downloaded += bytes_read as u64;
+
+        send_status_message(
+            progress_tx,
+            HttpDownloadEvent::Progress {
+                url: url_string.clone(),
+                bytes_downloaded,
+            },
+        )
+        .await?;
     }
 
     file.flush()
         .await
         .map_err(|e| DownloadError::FileIoError(format!("Failed to flush file: {}", e)))?;
 
+    send_status_message(
+        progress_tx,
+        HttpDownloadEvent::Completed {
+            url: url_string,
+            file_path: file_path.clone(),
+        },
+    )
+    .await?;
+
     Ok(DownloadResult { file_path })
 }
 
 fn extract_filename_from_url(url: &str) -> Option<String> {
     url.split('/')
-        .last()
+        .next_back()
         .filter(|s| !s.is_empty() && s.contains('.'))
         .map(|s| s.split('?').next().unwrap_or(s))
         .map(String::from)
 }
 
-fn extract_filename_from_headers(response: &reqwest::Response) -> Option<String> {
+fn extract_filename_from_headers(response: &surf::Response) -> Option<String> {
     response
-        .headers()
-        .get(reqwest::header::CONTENT_DISPOSITION)?
-        .to_str()
-        .ok()?
+        .header("content-disposition")?
+        .as_str()
         .split("filename=")
         .nth(1)?
         .trim_matches(|c| c == '"' || c == '\'')
         .split(';')
         .next()
         .map(String::from)
+}
+
+async fn send_status_message(
+    progress_tx: &Sender<HttpDownloadEvent>,
+    event: HttpDownloadEvent,
+) -> Result<(), DownloadError> {
+    progress_tx.send(event).await.map_err(|e| {
+        DownloadError::AsyncMessagingError(format!("Failed to send completion event: {}", e))
+    })?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -113,9 +167,6 @@ mod tests {
             extract_filename_from_url("https://example.com/file.zip?query=param"),
             Some("file.zip".to_string())
         );
-        assert_eq!(
-            extract_filename_from_url("https://example.com/"),
-            None
-        );
+        assert_eq!(extract_filename_from_url("https://example.com/"), None);
     }
 }

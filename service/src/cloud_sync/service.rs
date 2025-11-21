@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use async_std::channel::Sender;
-use cloud_storage::SyncEvent;
+use core_types::events::SyncEvent;
 use database::repository_manager::RepositoryManager;
 
 use crate::{

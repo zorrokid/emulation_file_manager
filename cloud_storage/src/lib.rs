@@ -4,6 +4,7 @@ use async_std::channel::Sender;
 use async_std::io::WriteExt;
 use async_std::stream::StreamExt;
 use async_trait::async_trait;
+use core_types::events::{DownloadEvent, SyncEvent};
 pub use s3::bucket::Bucket;
 use s3::creds::Credentials;
 use s3::error::S3Error;
@@ -16,8 +17,6 @@ pub use s3::bucket::Bucket as S3Bucket;
 mod ops;
 pub use ops::CloudStorageOps;
 
-pub mod events;
-pub use events::{DownloadEvent, SyncEvent};
 pub mod mock;
 
 #[derive(Debug, thiserror::Error)]

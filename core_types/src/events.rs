@@ -1,3 +1,13 @@
+use std::path::PathBuf;
+
+#[derive(Debug, Clone)]
+pub enum HttpDownloadEvent {
+    Started { url: String },
+    Progress { url: String, bytes_downloaded: u64 },
+    Completed { url: String, file_path: PathBuf },
+    Failed { url: String, error: String },
+}
+
 #[derive(Debug, Clone)]
 pub enum SyncEvent {
     // TODO: use same events for upload and deletion, add process type field
