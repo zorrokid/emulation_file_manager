@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use async_std::channel::Sender;
+use async_std::channel::{Receiver, Sender};
 use core_types::FileType;
 use core_types::events::HttpDownloadEvent;
 use database::repository_manager::RepositoryManager;
@@ -32,6 +32,8 @@ impl DownloadService {
     /// * `url` - The URL to download from
     /// * `file_type` - The type of file being downloaded
     /// * `temp_dir` - Temporary directory to download the file to
+    /// * `progress_tx` - Channel to send progress events
+    /// * `cancel_rx` - Channel to receive cancellation signal
     ///
     /// # Returns
     ///
@@ -43,9 +45,10 @@ impl DownloadService {
         file_type: FileType,
         temp_dir: &Path,
         progress_tx: Sender<HttpDownloadEvent>,
+        cancel_rx: Receiver<()>,
     ) -> Result<FileImportPrepareResult, Error> {
         // Step 1: Download the file
-        let download_result = http_downloader::download_file(url, temp_dir, &progress_tx)
+        let download_result = http_downloader::download_file(url, temp_dir, &progress_tx, &cancel_rx)
             .await
             .map_err(|e| Error::DownloadError(e.to_string()))?;
 

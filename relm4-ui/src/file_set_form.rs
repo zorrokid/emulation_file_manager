@@ -131,6 +131,7 @@ pub enum FileSetFormMsg {
     },
     Hide,
     ProcessDownloadEvent(HttpDownloadEvent),
+    CancelDownload,
 }
 
 #[derive(Debug)]
@@ -169,6 +170,7 @@ pub struct FileSetFormModel {
     download_total_size: Option<u64>,
     download_bytes: u64,
     download_url: String,
+    download_cancel_tx: Option<async_std::channel::Sender<()>>,
 }
 
 impl FileSetFormModel {
@@ -251,15 +253,26 @@ impl Component for FileSetFormModel {
                         set_halign: gtk::Align::Start,
                     },
 
-                    gtk::ProgressBar {
-                        #[watch]
-                        set_fraction: if let Some(total) = model.download_total_size {
-                            model.download_bytes as f64 / total as f64
-                        } else {
-                            0.0
+                    gtk::Box {
+                        set_orientation: gtk::Orientation::Horizontal,
+                        set_spacing: 5,
+
+                        gtk::ProgressBar {
+                            set_hexpand: true,
+                            #[watch]
+                            set_fraction: if let Some(total) = model.download_total_size {
+                                model.download_bytes as f64 / total as f64
+                            } else {
+                                0.0
+                            },
+                            #[watch]
+                            set_pulse_step: if model.download_total_size.is_none() { 0.1 } else { 0.0 },
                         },
-                        #[watch]
-                        set_pulse_step: if model.download_total_size.is_none() { 0.1 } else { 0.0 },
+
+                        gtk::Button {
+                            set_label: "Cancel",
+                            connect_clicked => FileSetFormMsg::CancelDownload,
+                        },
                     },
                 },
 
@@ -377,6 +390,7 @@ impl Component for FileSetFormModel {
             download_total_size: None,
             download_bytes: 0,
             download_url: String::new(),
+            download_cancel_tx: None,
         };
         let file_types_dropdown = model.dropdown.widget();
 
@@ -478,12 +492,16 @@ impl Component for FileSetFormModel {
                     self.processing = true;
 
                     // unbounded channel for download progress events
-                    let (tx, rx) = unbounded::<HttpDownloadEvent>();
+                    let (progress_tx, progress_rx) = unbounded::<HttpDownloadEvent>();
+
+                    // Create cancellation channel
+                    let (cancel_tx, cancel_rx) = unbounded::<()>();
+                    self.download_cancel_tx = Some(cancel_tx);
 
                     // Spawn task to forward progress messages to UI
                     let ui_sender = sender.input_sender().clone();
                     task::spawn(async move {
-                        while let Ok(event) = rx.recv().await {
+                        while let Ok(event) = progress_rx.recv().await {
                             if let Err(e) =
                                 ui_sender.send(FileSetFormMsg::ProcessDownloadEvent(event))
                             {
@@ -498,7 +516,7 @@ impl Component for FileSetFormModel {
 
                     sender.oneshot_command(async move {
                         let res = download_service
-                            .download_and_prepare_import(&url, file_type, &temp_dir, tx)
+                            .download_and_prepare_import(&url, file_type, &temp_dir, progress_tx, cancel_rx)
                             .await;
                         CommandMsg::FileImportPrepared(res)
                     });
@@ -599,6 +617,16 @@ impl Component for FileSetFormModel {
             FileSetFormMsg::Hide => {
                 root.hide();
             }
+            FileSetFormMsg::CancelDownload => {
+                if let Some(cancel_tx) = self.download_cancel_tx.take() {
+                    // Send cancellation signal
+                    if let Err(e) = cancel_tx.try_send(()) {
+                        eprintln!("Failed to send cancel signal: {:?}", e);
+                    }
+                    // Clear the cancel sender
+                    self.download_cancel_tx = None;
+                }
+            }
             FileSetFormMsg::ProcessDownloadEvent(event) => match event {
                 HttpDownloadEvent::Started { url, total_size } => {
                     self.download_in_progress = true;
@@ -619,6 +647,7 @@ impl Component for FileSetFormModel {
                     self.download_bytes = 0;
                     self.download_total_size = None;
                     self.download_url.clear();
+                    self.download_cancel_tx = None;
                     println!("Download completed: {} -> {:?}", url, file_path);
                 }
                 HttpDownloadEvent::Failed { url, error } => {
@@ -626,6 +655,7 @@ impl Component for FileSetFormModel {
                     self.download_bytes = 0;
                     self.download_total_size = None;
                     self.download_url.clear();
+                    self.download_cancel_tx = None;
                     eprintln!("Download failed for {}: {}", url, error);
                 }
             },
