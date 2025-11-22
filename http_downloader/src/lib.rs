@@ -76,7 +76,7 @@ async fn download_file_internal(
 
     // Extract total size from Content-Length header
     let total_size = response
-        .header("content-length")
+        .header("Content-Length")
         .and_then(|h| h.as_str().parse::<u64>().ok());
 
     let file_name = extract_filename_from_url(url)
@@ -148,7 +148,7 @@ fn extract_filename_from_url(url: &str) -> Option<String> {
 
 fn extract_filename_from_headers(response: &surf::Response) -> Option<String> {
     response
-        .header("content-disposition")?
+        .header("Content-Disposition")?
         .as_str()
         .split("filename=")
         .nth(1)?
