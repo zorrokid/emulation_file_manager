@@ -554,7 +554,45 @@ impl Component for FileSetFormModel {
             }
             FileSetFormMsg::ProcessDownloadEvent(event) => {
                 // TODO: show progress in UI
-                println!("Download event: {:?}", event);
+                match event {
+                    HttpDownloadEvent::Started { url } => {
+                        println!("Download started: {}", url);
+                    }
+                    HttpDownloadEvent::Progress {
+                        url,
+                        bytes_downloaded,
+                    } => {
+                        println!("Downloading {} bytes: {}", url, bytes_downloaded);
+                    }
+                    HttpDownloadEvent::Completed { url, file_path } => {
+                        let dialog = gtk::MessageDialog::new(
+                            Some(root),
+                            gtk::DialogFlags::MODAL,
+                            gtk::MessageType::Info,
+                            gtk::ButtonsType::Ok,
+                            format!("Downloading {} completed", url),
+                        );
+                        dialog.connect_response(|dialog, _| {
+                            dialog.close();
+                        });
+                        dialog.show();
+                        println!("Downloading {} completed: {:?}", url, file_path);
+                    }
+                    HttpDownloadEvent::Failed { url, error } => {
+                        eprintln!("Downloading {} failed: {}", url, error);
+                        let dialog = gtk::MessageDialog::new(
+                            Some(root),
+                            gtk::DialogFlags::MODAL,
+                            gtk::MessageType::Error,
+                            gtk::ButtonsType::Ok,
+                            format!("Downloading {} failed: {:?}", url, error),
+                        );
+                        dialog.connect_response(|dialog, _| {
+                            dialog.close();
+                        });
+                        dialog.show();
+                    }
+                }
             }
         }
     }
@@ -614,7 +652,6 @@ impl Component for FileSetFormModel {
                 eprintln!("Error importing file set: {:?}", e);
             }
             CommandMsg::FileImportPrepared(Err(e)) => {
-                self.processing = false;
                 eprintln!("Error preparing file import: {:?}", e);
             }
         }

@@ -10,8 +10,6 @@ pub enum DownloadError {
     RequestFailed(String),
     #[error("File IO error: {0}")]
     FileIoError(String),
-    #[error("Async messaging error: {0}")]
-    AsyncMessagingError(String),
 }
 
 pub struct DownloadResult {
