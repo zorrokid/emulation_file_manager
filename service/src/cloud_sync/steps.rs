@@ -566,7 +566,7 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
                                         total_files: context.files_prepared_for_deletion,
                                     })
                                     .await
-                                    .ok(); // TODO: add error handling
+                                    .ok(); //  TODO: add error handling
                             }
                         }
                         context
