@@ -253,12 +253,10 @@ impl Component for FileSetFormModel {
                     gtk::ProgressBar {
                         #[watch]
                         set_fraction: if let Some(total) = model.download_total_size && total > 0 {
-                            model.download_bytes as f64 / total as f64
+                            (model.download_bytes as f64 / total as f64).min(1.0)
                         } else {
                             0.0
                         },
-                        #[watch]
-                        set_pulse_step: if model.download_total_size.is_none() { 0.1 } else { 0.0 },
                     },
                 },
 
