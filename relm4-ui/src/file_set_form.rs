@@ -28,6 +28,8 @@ use service::{
 };
 use ui_components::{DropDownMsg, DropDownOutputMsg, FileTypeDropDown, FileTypeSelectedMsg};
 
+use crate::utils::dialog_utils::show_message_dialog;
+
 #[derive(Debug, Clone)]
 struct File {
     name: String,
@@ -623,28 +625,12 @@ impl Component for FileSetFormModel {
             CommandMsg::FileImportPrepared(Err(e)) => {
                 self.processing = false;
                 eprintln!("Error preparing file import: {:?}", e);
-                FileSetFormModel::show_message_dialog(
+                show_message_dialog(
                     format!("Preparing file import failed: {:?}", e),
                     gtk::MessageType::Error,
                     root,
                 );
             }
         }
-    }
-}
-
-impl FileSetFormModel {
-    fn show_message_dialog(message: String, message_type: gtk::MessageType, root: &gtk::Window) {
-        let dialog = gtk::MessageDialog::new(
-            Some(root),
-            gtk::DialogFlags::MODAL,
-            message_type,
-            gtk::ButtonsType::Ok,
-            &message,
-        );
-        dialog.connect_response(|dialog, _| {
-            dialog.close();
-        });
-        dialog.show();
     }
 }
