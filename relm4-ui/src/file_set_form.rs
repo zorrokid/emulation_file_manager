@@ -565,32 +565,19 @@ impl Component for FileSetFormModel {
                         println!("Downloading {} bytes: {}", url, bytes_downloaded);
                     }
                     HttpDownloadEvent::Completed { url, file_path } => {
-                        let dialog = gtk::MessageDialog::new(
-                            Some(root),
-                            gtk::DialogFlags::MODAL,
+                        FileSetFormModel::show_message_dialog(
+                            format!("Downloading {} completed to {}", url, file_path.display()),
                             gtk::MessageType::Info,
-                            gtk::ButtonsType::Ok,
-                            format!("Downloading {} completed", url),
+                            root,
                         );
-                        dialog.connect_response(|dialog, _| {
-                            dialog.close();
-                        });
-                        dialog.show();
-                        println!("Downloading {} completed: {:?}", url, file_path);
                     }
                     HttpDownloadEvent::Failed { url, error } => {
                         eprintln!("Downloading {} failed: {}", url, error);
-                        let dialog = gtk::MessageDialog::new(
-                            Some(root),
-                            gtk::DialogFlags::MODAL,
+                        FileSetFormModel::show_message_dialog(
+                            format!("Downloading {} failed: {}", url, error),
                             gtk::MessageType::Error,
-                            gtk::ButtonsType::Ok,
-                            format!("Downloading {} failed: {:?}", url, error),
+                            root,
                         );
-                        dialog.connect_response(|dialog, _| {
-                            dialog.close();
-                        });
-                        dialog.show();
                     }
                 }
             }
@@ -653,7 +640,28 @@ impl Component for FileSetFormModel {
             }
             CommandMsg::FileImportPrepared(Err(e)) => {
                 eprintln!("Error preparing file import: {:?}", e);
+                FileSetFormModel::show_message_dialog(
+                    format!("Preparing file import failed: {:?}", e),
+                    gtk::MessageType::Error,
+                    root,
+                );
             }
         }
+    }
+}
+
+impl FileSetFormModel {
+    fn show_message_dialog(message: String, message_type: gtk::MessageType, root: &gtk::Window) {
+        let dialog = gtk::MessageDialog::new(
+            Some(root),
+            gtk::DialogFlags::MODAL,
+            message_type,
+            gtk::ButtonsType::Ok,
+            &message,
+        );
+        dialog.connect_response(|dialog, _| {
+            dialog.close();
+        });
+        dialog.show();
     }
 }
