@@ -4,9 +4,9 @@ use std::sync::{Arc, Mutex};
 
 use async_std::channel::Sender;
 use async_trait::async_trait;
-use core_types::events::DownloadEvent;
+use core_types::events::{DownloadEvent, SyncEvent};
 
-use crate::{CloudStorageError, SyncEvent, ops::CloudStorageOps};
+use crate::{CloudStorageError, ops::CloudStorageOps};
 
 /// Mock implementation of CloudStorageOps for testing
 ///
