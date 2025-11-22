@@ -27,7 +27,7 @@ mod tabbed_image_viewer;
 use std::{path::PathBuf, sync::Arc};
 
 use async_std::{channel::unbounded, task};
-use cloud_storage::SyncEvent;
+use core_types::events::SyncEvent;
 use database::{get_db_pool, repository_manager::RepositoryManager};
 use release::{ReleaseInitModel, ReleaseModel, ReleaseMsg, ReleaseOutputMsg};
 use releases::{ReleasesInit, ReleasesModel, ReleasesMsg, ReleasesOutputMsg};
@@ -295,9 +295,8 @@ impl Component for AppModel {
                 task::spawn(async move {
                     let (tx, rx) = unbounded::<SyncEvent>();
 
-                    // Spawn task to forward progress messages to UI
+                    // forward progress messages to UI
                     task::spawn(async move {
-                        let ui_sender = ui_sender.clone();
                         while let Ok(event) = rx.recv().await {
                             ui_sender.input(AppMsg::ProcessFileSyncEvent(event));
                         }

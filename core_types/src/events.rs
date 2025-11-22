@@ -1,4 +1,9 @@
 #[derive(Debug, Clone)]
+pub enum HttpDownloadEvent {
+    Progress { bytes_downloaded: u64 },
+}
+
+#[derive(Debug, Clone)]
 pub enum SyncEvent {
     // TODO: use same events for upload and deletion, add process type field
     SyncStarted {

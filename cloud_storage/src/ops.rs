@@ -2,8 +2,9 @@ use std::path::Path;
 
 use async_std::channel::Sender;
 use async_trait::async_trait;
+use core_types::events::{DownloadEvent, SyncEvent};
 
-use crate::{CloudStorageError, SyncEvent, events::DownloadEvent};
+use crate::CloudStorageError;
 
 /// Trait for cloud storage operations to enable testing
 #[async_trait]

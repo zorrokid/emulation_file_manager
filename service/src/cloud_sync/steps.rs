@@ -1,6 +1,5 @@
 
-use cloud_storage::events::SyncEvent;
-use core_types::FileSyncStatus;
+use core_types::{events::SyncEvent, FileSyncStatus};
 
 use crate::{
     cloud_sync::context::{FileSyncResult, SyncContext},
@@ -150,7 +149,7 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                 total_files_count: context.files_prepared_for_upload,
             })
             .await
-            .ok();
+            .ok(); // TODO: add error handling
 
         let mut offset = 0;
 
@@ -241,7 +240,7 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                                     total_files: context.files_prepared_for_upload,
                                 })
                                 .await
-                                .ok();
+                                .ok(); // TODO: add error handling
 
                             // Skip this file and continue with the next one, since status update
                             // failed this will be retried in the next sync run
@@ -312,7 +311,7 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                                         total_files: context.files_prepared_for_upload,
                                     })
                                     .await
-                                    .ok();
+                                    .ok(); // TODO: add error handling
                             }
                             Err(e) => {
                                 tracing::error!(
@@ -358,7 +357,7 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                                         total_files: context.files_prepared_for_upload,
                                     })
                                     .await
-                                    .ok();
+                                    .ok(); // TODO: add error handling
                             }
                         }
                         context
@@ -372,7 +371,7 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
             .progress_tx
             .send(SyncEvent::SyncCompleted {})
             .await
-            .ok();
+            .ok(); // TODO: add error handling
         tracing::debug!("Pending file uploads completed");
         StepAction::Continue
     }
@@ -433,7 +432,7 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
                                 total_files: context.files_prepared_for_deletion,
                             })
                             .await
-                            .ok();
+                            .ok(); // TODO: add error handling
 
                         let mut file_deletion_result = FileSyncResult {
                             file_info_id: file.id,
@@ -475,7 +474,7 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
                                     total_files: context.files_prepared_for_deletion,
                                 })
                                 .await
-                                .ok();
+                                .ok(); // TODO: add error handling
 
                             // Skip this file and continue with the next one, since status update
                             // failed this will be retried in the next sync run
@@ -527,7 +526,7 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
                                         total_files: context.files_prepared_for_deletion,
                                     })
                                     .await
-                                    .ok();
+                                    .ok(); // TODO: add error handling
                             }
                             Err(e) => {
                                 tracing::error!(
@@ -567,7 +566,7 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
                                         total_files: context.files_prepared_for_deletion,
                                     })
                                     .await
-                                    .ok();
+                                    .ok(); //  TODO: add error handling
                             }
                         }
                         context
@@ -587,8 +586,8 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
 mod tests {
     use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
-    use cloud_storage::{mock::MockCloudStorage, SyncEvent};
-    use core_types::{FileSyncStatus, FileType, Sha1Checksum};
+    use cloud_storage::{mock::MockCloudStorage};
+    use core_types::{events::SyncEvent, FileSyncStatus, FileType, Sha1Checksum};
     use database::{repository_manager::RepositoryManager, setup_test_db};
 
     use crate::{

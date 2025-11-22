@@ -1,6 +1,7 @@
 use std::{path::PathBuf, sync::Arc};
 
-use core_types::{FileType, ReadFile, Sha1Checksum};
+use async_std::{channel::unbounded, task};
+use core_types::{FileType, ReadFile, Sha1Checksum, events::HttpDownloadEvent};
 use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, FactorySender,
@@ -127,6 +128,7 @@ pub enum FileSetFormMsg {
         selected_file_type: FileType,
     },
     Hide,
+    ProcessDownloadEvent(HttpDownloadEvent),
 }
 
 #[derive(Debug)]
@@ -372,6 +374,7 @@ impl Component for FileSetFormModel {
             FileSetFormMsg::FileSelected(path) => {
                 if let Some(file_type) = self.selected_file_type {
                     let prepare_file_import_service = Arc::clone(&self.file_import_service);
+                    self.processing = true;
                     sender.oneshot_command(async move {
                         let res = prepare_file_import_service
                             .prepare_import(&path, file_type)
@@ -426,10 +429,31 @@ impl Component for FileSetFormModel {
                 if let Some(file_type) = self.selected_file_type {
                     let download_service = Arc::clone(&self.download_service);
                     let temp_dir = self.settings.temp_output_dir.clone();
+                    self.source = url.clone();
+                    self.processing = true;
+
+                    // unbounded channel for download progress events
+                    let (tx, rx) = unbounded::<HttpDownloadEvent>();
+
+                    // Spawn task to forward progress messages to UI
+                    let ui_sender = sender.input_sender().clone();
+                    task::spawn(async move {
+                        while let Ok(event) = rx.recv().await {
+                            if let Err(e) =
+                                ui_sender.send(FileSetFormMsg::ProcessDownloadEvent(event))
+                            {
+                                eprintln!(
+                                    "Error sending download event to UI, stopping handling events: {:?}",
+                                    e
+                                );
+                                break;
+                            }
+                        }
+                    });
 
                     sender.oneshot_command(async move {
                         let res = download_service
-                            .download_and_prepare_import(&url, file_type, &temp_dir)
+                            .download_and_prepare_import(&url, file_type, &temp_dir, tx)
                             .await;
                         CommandMsg::FileImportPrepared(res)
                     });
@@ -530,6 +554,14 @@ impl Component for FileSetFormModel {
             FileSetFormMsg::Hide => {
                 root.hide();
             }
+            FileSetFormMsg::ProcessDownloadEvent(event) => {
+                // TODO: show progress in UI
+                match event {
+                    HttpDownloadEvent::Progress { bytes_downloaded } => {
+                        println!("Downloading bytes: {}", bytes_downloaded);
+                    }
+                }
+            }
         }
     }
 
@@ -541,6 +573,7 @@ impl Component for FileSetFormModel {
     ) {
         match message {
             CommandMsg::FileImportPrepared(Ok(prepare_result)) => {
+                self.processing = false;
                 let import_file = prepare_result.import_model;
                 let import_metadata = prepare_result.import_metadata;
                 for file in import_file.content.values() {
@@ -590,7 +623,28 @@ impl Component for FileSetFormModel {
             CommandMsg::FileImportPrepared(Err(e)) => {
                 self.processing = false;
                 eprintln!("Error preparing file import: {:?}", e);
+                FileSetFormModel::show_message_dialog(
+                    format!("Preparing file import failed: {:?}", e),
+                    gtk::MessageType::Error,
+                    root,
+                );
             }
         }
+    }
+}
+
+impl FileSetFormModel {
+    fn show_message_dialog(message: String, message_type: gtk::MessageType, root: &gtk::Window) {
+        let dialog = gtk::MessageDialog::new(
+            Some(root),
+            gtk::DialogFlags::MODAL,
+            message_type,
+            gtk::ButtonsType::Ok,
+            &message,
+        );
+        dialog.connect_response(|dialog, _| {
+            dialog.close();
+        });
+        dialog.show();
     }
 }

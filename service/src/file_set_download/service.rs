@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use async_std::channel::Sender;
-use cloud_storage::events::DownloadEvent;
+use core_types::events::DownloadEvent;
 use database::repository_manager::RepositoryManager;
 use file_export::file_export_ops::DefaultFileExportOps;
 use thumbnails::{ThumbnailGenerator, ThumbnailPathMap};

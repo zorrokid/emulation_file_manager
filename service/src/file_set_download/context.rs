@@ -1,7 +1,8 @@
 use std::{collections::HashMap, sync::Arc};
 
 use async_std::channel::Sender;
-use cloud_storage::{CloudStorageOps, DownloadEvent};
+use cloud_storage::CloudStorageOps;
+use core_types::events::DownloadEvent;
 use database::{
     models::{FileInfo, FileSet, FileSetFileInfo},
     repository_manager::RepositoryManager,
