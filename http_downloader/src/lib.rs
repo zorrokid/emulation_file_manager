@@ -37,8 +37,6 @@ pub async fn download_file(
     progress_tx: &Sender<HttpDownloadEvent>,
     cancel_rx: &Receiver<()>,
 ) -> Result<DownloadResult, DownloadError> {
-    let url_string = url.to_string();
-    
     match download_file_internal(url, target_dir, progress_tx, cancel_rx).await {
         Ok(result) => Ok(result),
         Err(e) => {
@@ -46,7 +44,6 @@ pub async fn download_file(
             send_status_message(
                 progress_tx,
                 HttpDownloadEvent::Failed {
-                    url: url_string,
                     error: e.to_string(),
                 },
             )
@@ -62,7 +59,6 @@ async fn download_file_internal(
     progress_tx: &Sender<HttpDownloadEvent>,
     cancel_rx: &Receiver<()>,
 ) -> Result<DownloadResult, DownloadError> {
-    let url_string = url.to_string(); // Clone once for reuse
     let buffer_size = 8192; // 8KB buffer
     let mut bytes_downloaded = 0;
     let mut last_event_reported = 0;
@@ -85,17 +81,8 @@ async fn download_file_internal(
 
     // Extract total size from Content-Length header
     let total_size = response
-        .header("content-length")
+        .header("Content-Length")
         .and_then(|h| h.as_str().parse::<u64>().ok());
-
-    send_status_message(
-        progress_tx,
-        HttpDownloadEvent::Started {
-            url: url_string.clone(),
-            total_size,
-        },
-    )
-    .await;
 
     let file_name = extract_filename_from_url(url)
         .or_else(|| extract_filename_from_headers(&response))
@@ -106,6 +93,8 @@ async fn download_file_internal(
     let mut file = File::create(&file_path)
         .await
         .map_err(|e| DownloadError::FileIoError(format!("Failed to create file: {}", e)))?;
+
+    send_status_message(progress_tx, HttpDownloadEvent::Started { total_size }).await;
 
     // Take the body as an AsyncRead stream
     let mut body = response.take_body();
@@ -138,10 +127,7 @@ async fn download_file_internal(
             last_event_reported = bytes_downloaded;
             send_status_message(
                 progress_tx,
-                HttpDownloadEvent::Progress {
-                    url: url_string.clone(),
-                    bytes_downloaded,
-                },
+                HttpDownloadEvent::Progress { bytes_downloaded },
             )
             .await;
         }
@@ -154,7 +140,6 @@ async fn download_file_internal(
     send_status_message(
         progress_tx,
         HttpDownloadEvent::Completed {
-            url: url_string,
             file_path: file_path.clone(),
         },
     )
@@ -173,7 +158,7 @@ fn extract_filename_from_url(url: &str) -> Option<String> {
 
 fn extract_filename_from_headers(response: &surf::Response) -> Option<String> {
     response
-        .header("content-disposition")?
+        .header("Content-Disposition")?
         .as_str()
         .split("filename=")
         .nth(1)?

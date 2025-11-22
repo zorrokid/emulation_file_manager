@@ -240,7 +240,7 @@ impl Component for FileSetFormModel {
 
                     gtk::Label {
                         #[watch]
-                        set_label: &if let Some(total) = model.download_total_size {
+                        set_label: &if let Some(total) = model.download_total_size && total > 0 {
                             format!(
                                 "Downloading: {} / {} ({:.1}%)",
                                 format_bytes(model.download_bytes),
@@ -628,35 +628,30 @@ impl Component for FileSetFormModel {
                 }
             }
             FileSetFormMsg::ProcessDownloadEvent(event) => match event {
-                HttpDownloadEvent::Started { url, total_size } => {
+                HttpDownloadEvent::Started { total_size } => {
                     self.download_in_progress = true;
-                    self.download_url = url.clone();
                     self.download_total_size = total_size;
                     self.download_bytes = 0;
-                    println!("Download started: {} (size: {:?})", url, total_size);
+                    println!("Download started (size: {:?})", total_size);
                 }
-                HttpDownloadEvent::Progress {
-                    url,
-                    bytes_downloaded,
-                } => {
+                HttpDownloadEvent::Progress { bytes_downloaded } => {
                     self.download_bytes = bytes_downloaded;
-                    self.download_url = url;
                 }
-                HttpDownloadEvent::Completed { url, file_path } => {
+                HttpDownloadEvent::Completed { file_path } => {
                     self.download_in_progress = false;
                     self.download_bytes = 0;
                     self.download_total_size = None;
                     self.download_url.clear();
                     self.download_cancel_tx = None;
-                    println!("Download completed: {} -> {:?}", url, file_path);
+                    println!("Download completed: {:?}", file_path);
                 }
-                HttpDownloadEvent::Failed { url, error } => {
+                HttpDownloadEvent::Failed { error } => {
                     self.download_in_progress = false;
                     self.download_bytes = 0;
                     self.download_total_size = None;
                     self.download_url.clear();
                     self.download_cancel_tx = None;
-                    eprintln!("Download failed for {}: {}", url, error);
+                    eprintln!("Download failed: {}", error);
                 }
             },
         }
