@@ -33,8 +33,6 @@ pub async fn download_file(
     target_dir: &Path,
     progress_tx: &Sender<HttpDownloadEvent>,
 ) -> Result<DownloadResult, DownloadError> {
-    let url_string = url.to_string();
-    
     match download_file_internal(url, target_dir, progress_tx).await {
         Ok(result) => Ok(result),
         Err(e) => {
@@ -42,7 +40,6 @@ pub async fn download_file(
             send_status_message(
                 progress_tx,
                 HttpDownloadEvent::Failed {
-                    url: url_string,
                     error: e.to_string(),
                 },
             )
@@ -57,7 +54,6 @@ async fn download_file_internal(
     target_dir: &Path,
     progress_tx: &Sender<HttpDownloadEvent>,
 ) -> Result<DownloadResult, DownloadError> {
-    let url_string = url.to_string(); // Clone once for reuse
     let buffer_size = 8192; // 8KB buffer
     let mut bytes_downloaded = 0;
     let mut last_event_reported = 0;
@@ -83,15 +79,6 @@ async fn download_file_internal(
         .header("content-length")
         .and_then(|h| h.as_str().parse::<u64>().ok());
 
-    send_status_message(
-        progress_tx,
-        HttpDownloadEvent::Started {
-            url: url_string.clone(),
-            total_size,
-        },
-    )
-    .await;
-
     let file_name = extract_filename_from_url(url)
         .or_else(|| extract_filename_from_headers(&response))
         .unwrap_or_else(|| "downloaded_file".to_string());
@@ -101,6 +88,8 @@ async fn download_file_internal(
     let mut file = File::create(&file_path)
         .await
         .map_err(|e| DownloadError::FileIoError(format!("Failed to create file: {}", e)))?;
+
+    send_status_message(progress_tx, HttpDownloadEvent::Started { total_size }).await;
 
     // Take the body as an AsyncRead stream
     let mut body = response.take_body();
@@ -128,10 +117,7 @@ async fn download_file_internal(
             last_event_reported = bytes_downloaded;
             send_status_message(
                 progress_tx,
-                HttpDownloadEvent::Progress {
-                    url: url_string.clone(),
-                    bytes_downloaded,
-                },
+                HttpDownloadEvent::Progress { bytes_downloaded },
             )
             .await;
         }
@@ -144,7 +130,6 @@ async fn download_file_internal(
     send_status_message(
         progress_tx,
         HttpDownloadEvent::Completed {
-            url: url_string,
             file_path: file_path.clone(),
         },
     )

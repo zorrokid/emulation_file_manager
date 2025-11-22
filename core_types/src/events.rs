@@ -2,22 +2,10 @@ use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
 pub enum HttpDownloadEvent {
-    Started {
-        url: String,
-        total_size: Option<u64>,
-    },
-    Progress {
-        url: String,
-        bytes_downloaded: u64,
-    },
-    Completed {
-        url: String,
-        file_path: PathBuf,
-    },
-    Failed {
-        url: String,
-        error: String,
-    },
+    Started { total_size: Option<u64> },
+    Progress { bytes_downloaded: u64 },
+    Completed { file_path: PathBuf },
+    Failed { error: String },
 }
 
 #[derive(Debug, Clone)]

@@ -1,4 +1,9 @@
 /// Format bytes into human-readable string (e.g., "2.3 MB")
+/// # Arguments
+///
+/// * `bytes` - The number of bytes to format.
+/// # Returns
+/// A `String` representing the formatted byte size.
 pub fn format_bytes(bytes: u64) -> String {
     const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
 
