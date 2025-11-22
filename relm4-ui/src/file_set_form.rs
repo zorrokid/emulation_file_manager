@@ -374,6 +374,7 @@ impl Component for FileSetFormModel {
             FileSetFormMsg::FileSelected(path) => {
                 if let Some(file_type) = self.selected_file_type {
                     let prepare_file_import_service = Arc::clone(&self.file_import_service);
+                    self.processing = true;
                     sender.oneshot_command(async move {
                         let res = prepare_file_import_service
                             .prepare_import(&path, file_type)
@@ -429,6 +430,7 @@ impl Component for FileSetFormModel {
                     let download_service = Arc::clone(&self.download_service);
                     let temp_dir = self.settings.temp_output_dir.clone();
                     self.source = url.clone();
+                    self.processing = true;
 
                     // unbounded channel for download progress events
                     let (tx, rx) = unbounded::<HttpDownloadEvent>();
@@ -555,29 +557,8 @@ impl Component for FileSetFormModel {
             FileSetFormMsg::ProcessDownloadEvent(event) => {
                 // TODO: show progress in UI
                 match event {
-                    HttpDownloadEvent::Started { url } => {
-                        println!("Download started: {}", url);
-                    }
-                    HttpDownloadEvent::Progress {
-                        url,
-                        bytes_downloaded,
-                    } => {
-                        println!("Downloading {} bytes: {}", url, bytes_downloaded);
-                    }
-                    HttpDownloadEvent::Completed { url, file_path } => {
-                        FileSetFormModel::show_message_dialog(
-                            format!("Downloading {} completed to {}", url, file_path.display()),
-                            gtk::MessageType::Info,
-                            root,
-                        );
-                    }
-                    HttpDownloadEvent::Failed { url, error } => {
-                        eprintln!("Downloading {} failed: {}", url, error);
-                        FileSetFormModel::show_message_dialog(
-                            format!("Downloading {} failed: {}", url, error),
-                            gtk::MessageType::Error,
-                            root,
-                        );
+                    HttpDownloadEvent::Progress { bytes_downloaded } => {
+                        println!("Downloading bytes: {}", bytes_downloaded);
                     }
                 }
             }
@@ -592,6 +573,7 @@ impl Component for FileSetFormModel {
     ) {
         match message {
             CommandMsg::FileImportPrepared(Ok(prepare_result)) => {
+                self.processing = false;
                 let import_file = prepare_result.import_model;
                 let import_metadata = prepare_result.import_metadata;
                 for file in import_file.content.values() {
@@ -639,6 +621,7 @@ impl Component for FileSetFormModel {
                 eprintln!("Error importing file set: {:?}", e);
             }
             CommandMsg::FileImportPrepared(Err(e)) => {
+                self.processing = false;
                 eprintln!("Error preparing file import: {:?}", e);
                 FileSetFormModel::show_message_dialog(
                     format!("Preparing file import failed: {:?}", e),
