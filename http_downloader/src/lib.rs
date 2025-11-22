@@ -1,5 +1,8 @@
 use async_std::io::{ReadExt, WriteExt};
-use async_std::{channel::{Receiver, Sender}, fs::File};
+use async_std::{
+    channel::{Receiver, Sender},
+    fs::File,
+};
 use core_types::events::HttpDownloadEvent;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
@@ -105,6 +108,9 @@ async fn download_file_internal(
     loop {
         // Check for cancellation
         if cancel_rx.try_recv().is_ok() {
+            if let Err(e) = async_std::fs::remove_file(&file_path).await {
+                eprintln!("Failed to remove partial file on cancellation: {}", e);
+            }
             return Err(DownloadError::Cancelled);
         }
 

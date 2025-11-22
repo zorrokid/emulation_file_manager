@@ -169,7 +169,6 @@ pub struct FileSetFormModel {
     download_in_progress: bool,
     download_total_size: Option<u64>,
     download_bytes: u64,
-    download_url: String,
     download_cancel_tx: Option<async_std::channel::Sender<()>>,
 }
 
@@ -261,7 +260,7 @@ impl Component for FileSetFormModel {
                             set_hexpand: true,
                             #[watch]
                             set_fraction: if let Some(total) = model.download_total_size {
-                                model.download_bytes as f64 / total as f64
+                                (model.download_bytes as f64 / total as f64).min(1.0)
                             } else {
                                 0.0
                             },
@@ -389,7 +388,6 @@ impl Component for FileSetFormModel {
             download_in_progress: false,
             download_total_size: None,
             download_bytes: 0,
-            download_url: String::new(),
             download_cancel_tx: None,
         };
         let file_types_dropdown = model.dropdown.widget();
@@ -516,7 +514,13 @@ impl Component for FileSetFormModel {
 
                     sender.oneshot_command(async move {
                         let res = download_service
-                            .download_and_prepare_import(&url, file_type, &temp_dir, progress_tx, cancel_rx)
+                            .download_and_prepare_import(
+                                &url,
+                                file_type,
+                                &temp_dir,
+                                progress_tx,
+                                cancel_rx,
+                            )
                             .await;
                         CommandMsg::FileImportPrepared(res)
                     });
@@ -623,8 +627,6 @@ impl Component for FileSetFormModel {
                     if let Err(e) = cancel_tx.try_send(()) {
                         eprintln!("Failed to send cancel signal: {:?}", e);
                     }
-                    // Clear the cancel sender
-                    self.download_cancel_tx = None;
                 }
             }
             FileSetFormMsg::ProcessDownloadEvent(event) => match event {
@@ -641,7 +643,6 @@ impl Component for FileSetFormModel {
                     self.download_in_progress = false;
                     self.download_bytes = 0;
                     self.download_total_size = None;
-                    self.download_url.clear();
                     self.download_cancel_tx = None;
                     println!("Download completed: {:?}", file_path);
                 }
@@ -649,7 +650,6 @@ impl Component for FileSetFormModel {
                     self.download_in_progress = false;
                     self.download_bytes = 0;
                     self.download_total_size = None;
-                    self.download_url.clear();
                     self.download_cancel_tx = None;
                     eprintln!("Download failed: {}", error);
                 }
