@@ -28,6 +28,8 @@ use service::{
 };
 use ui_components::{DropDownMsg, DropDownOutputMsg, FileTypeDropDown, FileTypeSelectedMsg};
 
+use crate::utils::{dialog_utils::show_message_dialog, string_utils::format_bytes};
+
 #[derive(Debug, Clone)]
 struct File {
     name: String,
@@ -162,6 +164,10 @@ pub struct FileSetFormModel {
     selected_file_type: Option<FileType>,
     selected_files_in_picked_files: Vec<Sha1Checksum>,
     picked_files: Vec<FileImportModel>,
+    // Download progress tracking
+    download_in_progress: bool,
+    download_total_size: Option<u64>,
+    download_bytes: u64,
 }
 
 impl FileSetFormModel {
@@ -220,6 +226,38 @@ impl Component for FileSetFormModel {
                     connect_clicked => FileSetFormMsg::OpenDownloadDialog,
                     #[watch]
                     set_sensitive: model.selected_file_type.is_some(),
+                },
+
+                // Download progress bar
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Vertical,
+                    set_spacing: 5,
+                    #[watch]
+                    set_visible: model.download_in_progress,
+
+                    gtk::Label {
+                        #[watch]
+                        set_label: &if let Some(total) = model.download_total_size && total > 0 {
+                            format!(
+                                "Downloading: {} / {} ({:.1}%)",
+                                format_bytes(model.download_bytes),
+                                format_bytes(total),
+                                (model.download_bytes as f64 / total as f64) * 100.0
+                            )
+                        } else {
+                            format!("Downloading: {}", format_bytes(model.download_bytes))
+                        },
+                        set_halign: gtk::Align::Start,
+                    },
+
+                    gtk::ProgressBar {
+                        #[watch]
+                        set_fraction: if let Some(total) = model.download_total_size && total > 0 {
+                            (model.download_bytes as f64 / total as f64).min(1.0)
+                        } else {
+                            0.0
+                        },
+                    },
                 },
 
                 #[name = "selected_file_label"]
@@ -332,6 +370,9 @@ impl Component for FileSetFormModel {
             selected_file_type: None,
             selected_files_in_picked_files: Vec::new(),
             picked_files: Vec::new(),
+            download_in_progress: false,
+            download_total_size: None,
+            download_bytes: 0,
         };
         let file_types_dropdown = model.dropdown.widget();
 
@@ -554,14 +595,29 @@ impl Component for FileSetFormModel {
             FileSetFormMsg::Hide => {
                 root.hide();
             }
-            FileSetFormMsg::ProcessDownloadEvent(event) => {
-                // TODO: show progress in UI
-                match event {
-                    HttpDownloadEvent::Progress { bytes_downloaded } => {
-                        println!("Downloading bytes: {}", bytes_downloaded);
-                    }
+            FileSetFormMsg::ProcessDownloadEvent(event) => match event {
+                HttpDownloadEvent::Started { total_size } => {
+                    self.download_in_progress = true;
+                    self.download_total_size = total_size;
+                    self.download_bytes = 0;
+                    println!("Download started (size: {:?})", total_size);
                 }
-            }
+                HttpDownloadEvent::Progress { bytes_downloaded } => {
+                    self.download_bytes = bytes_downloaded;
+                }
+                HttpDownloadEvent::Completed { file_path } => {
+                    self.download_in_progress = false;
+                    self.download_bytes = 0;
+                    self.download_total_size = None;
+                    println!("Download completed: {:?}", file_path);
+                }
+                HttpDownloadEvent::Failed { error } => {
+                    self.download_in_progress = false;
+                    self.download_bytes = 0;
+                    self.download_total_size = None;
+                    eprintln!("Download failed for: {}", error);
+                }
+            },
         }
     }
 
@@ -623,28 +679,12 @@ impl Component for FileSetFormModel {
             CommandMsg::FileImportPrepared(Err(e)) => {
                 self.processing = false;
                 eprintln!("Error preparing file import: {:?}", e);
-                FileSetFormModel::show_message_dialog(
+                show_message_dialog(
                     format!("Preparing file import failed: {:?}", e),
                     gtk::MessageType::Error,
                     root,
                 );
             }
         }
-    }
-}
-
-impl FileSetFormModel {
-    fn show_message_dialog(message: String, message_type: gtk::MessageType, root: &gtk::Window) {
-        let dialog = gtk::MessageDialog::new(
-            Some(root),
-            gtk::DialogFlags::MODAL,
-            message_type,
-            gtk::ButtonsType::Ok,
-            &message,
-        );
-        dialog.connect_response(|dialog, _| {
-            dialog.close();
-        });
-        dialog.show();
     }
 }

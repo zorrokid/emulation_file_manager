@@ -23,6 +23,7 @@ mod status_bar;
 mod system_form;
 mod system_selector;
 mod tabbed_image_viewer;
+mod utils;
 
 use std::{path::PathBuf, sync::Arc};
 

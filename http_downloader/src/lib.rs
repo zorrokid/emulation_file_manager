@@ -33,7 +33,27 @@ pub async fn download_file(
     target_dir: &Path,
     progress_tx: &Sender<HttpDownloadEvent>,
 ) -> Result<DownloadResult, DownloadError> {
-    let url_string = url.to_string(); // Clone once for reuse
+    match download_file_internal(url, target_dir, progress_tx).await {
+        Ok(result) => Ok(result),
+        Err(e) => {
+            // Send Failed event before returning error
+            send_status_message(
+                progress_tx,
+                HttpDownloadEvent::Failed {
+                    error: e.to_string(),
+                },
+            )
+            .await;
+            Err(e)
+        }
+    }
+}
+
+async fn download_file_internal(
+    url: &str,
+    target_dir: &Path,
+    progress_tx: &Sender<HttpDownloadEvent>,
+) -> Result<DownloadResult, DownloadError> {
     let buffer_size = 8192; // 8KB buffer
     let mut bytes_downloaded = 0;
     let mut last_event_reported = 0;
@@ -54,6 +74,11 @@ pub async fn download_file(
         )));
     }
 
+    // Extract total size from Content-Length header
+    let total_size = response
+        .header("Content-Length")
+        .and_then(|h| h.as_str().parse::<u64>().ok());
+
     let file_name = extract_filename_from_url(url)
         .or_else(|| extract_filename_from_headers(&response))
         .unwrap_or_else(|| "downloaded_file".to_string());
@@ -63,6 +88,8 @@ pub async fn download_file(
     let mut file = File::create(&file_path)
         .await
         .map_err(|e| DownloadError::FileIoError(format!("Failed to create file: {}", e)))?;
+
+    send_status_message(progress_tx, HttpDownloadEvent::Started { total_size }).await;
 
     // Take the body as an AsyncRead stream
     let mut body = response.take_body();
@@ -100,6 +127,14 @@ pub async fn download_file(
         .await
         .map_err(|e| DownloadError::FileIoError(format!("Failed to flush file: {}", e)))?;
 
+    send_status_message(
+        progress_tx,
+        HttpDownloadEvent::Completed {
+            file_path: file_path.clone(),
+        },
+    )
+    .await;
+
     Ok(DownloadResult { file_path })
 }
 
@@ -113,7 +148,7 @@ fn extract_filename_from_url(url: &str) -> Option<String> {
 
 fn extract_filename_from_headers(response: &surf::Response) -> Option<String> {
     response
-        .header("content-disposition")?
+        .header("Content-Disposition")?
         .as_str()
         .split("filename=")
         .nth(1)?
