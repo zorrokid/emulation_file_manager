@@ -1,5 +1,8 @@
 use async_std::io::{ReadExt, WriteExt};
-use async_std::{channel::Sender, fs::File};
+use async_std::{
+    channel::{Receiver, Sender},
+    fs::File,
+};
 use core_types::events::HttpDownloadEvent;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
@@ -10,6 +13,8 @@ pub enum DownloadError {
     RequestFailed(String),
     #[error("File IO error: {0}")]
     FileIoError(String),
+    #[error("Download cancelled by user")]
+    Cancelled,
 }
 
 pub struct DownloadResult {
@@ -23,6 +28,7 @@ pub struct DownloadResult {
 /// * `url` - The URL to download from.
 /// * `target_dir` - The directory where the file will be saved.
 /// * `progress_tx` - A channel sender to report download progress events.
+/// * `cancel_rx` - A channel receiver to listen for cancellation signals.
 ///
 /// # Returns
 ///
@@ -32,8 +38,9 @@ pub async fn download_file(
     url: &str,
     target_dir: &Path,
     progress_tx: &Sender<HttpDownloadEvent>,
+    cancel_rx: &Receiver<()>,
 ) -> Result<DownloadResult, DownloadError> {
-    match download_file_internal(url, target_dir, progress_tx).await {
+    match download_file_internal(url, target_dir, progress_tx, cancel_rx).await {
         Ok(result) => Ok(result),
         Err(e) => {
             // Send Failed event before returning error
@@ -53,6 +60,7 @@ async fn download_file_internal(
     url: &str,
     target_dir: &Path,
     progress_tx: &Sender<HttpDownloadEvent>,
+    cancel_rx: &Receiver<()>,
 ) -> Result<DownloadResult, DownloadError> {
     let buffer_size = 8192; // 8KB buffer
     let mut bytes_downloaded = 0;
@@ -98,6 +106,14 @@ async fn download_file_internal(
     let mut buffer = vec![0u8; buffer_size];
 
     loop {
+        // Check for cancellation
+        if cancel_rx.try_recv().is_ok() {
+            if let Err(e) = async_std::fs::remove_file(&file_path).await {
+                eprintln!("Failed to remove partial file on cancellation: {}", e);
+            }
+            return Err(DownloadError::Cancelled);
+        }
+
         let bytes_read = body
             .read(&mut buffer)
             .await
