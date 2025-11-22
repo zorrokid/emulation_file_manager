@@ -33,6 +33,30 @@ pub async fn download_file(
     target_dir: &Path,
     progress_tx: &Sender<HttpDownloadEvent>,
 ) -> Result<DownloadResult, DownloadError> {
+    let url_string = url.to_string();
+    
+    match download_file_internal(url, target_dir, progress_tx).await {
+        Ok(result) => Ok(result),
+        Err(e) => {
+            // Send Failed event before returning error
+            send_status_message(
+                progress_tx,
+                HttpDownloadEvent::Failed {
+                    url: url_string,
+                    error: e.to_string(),
+                },
+            )
+            .await;
+            Err(e)
+        }
+    }
+}
+
+async fn download_file_internal(
+    url: &str,
+    target_dir: &Path,
+    progress_tx: &Sender<HttpDownloadEvent>,
+) -> Result<DownloadResult, DownloadError> {
     let url_string = url.to_string(); // Clone once for reuse
     let buffer_size = 8192; // 8KB buffer
     let mut bytes_downloaded = 0;
