@@ -28,6 +28,27 @@ use service::{
 };
 use ui_components::{DropDownMsg, DropDownOutputMsg, FileTypeDropDown, FileTypeSelectedMsg};
 
+/// Format bytes into human-readable string (e.g., "2.3 MB")
+fn format_bytes(bytes: u64) -> String {
+    const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
+    
+    if bytes == 0 {
+        return "0 B".to_string();
+    }
+    
+    let bytes_f = bytes as f64;
+    let i = (bytes_f.log10() / 3.0).floor() as usize;
+    let i = i.min(UNITS.len() - 1);
+    
+    let size = bytes_f / 1000_f64.powi(i as i32);
+    
+    if i == 0 {
+        format!("{} B", bytes)
+    } else {
+        format!("{:.1} {}", size, UNITS[i])
+    }
+}
+
 use crate::utils::dialog_utils::show_message_dialog;
 
 #[derive(Debug, Clone)]
@@ -164,6 +185,11 @@ pub struct FileSetFormModel {
     selected_file_type: Option<FileType>,
     selected_files_in_picked_files: Vec<Sha1Checksum>,
     picked_files: Vec<FileImportModel>,
+    // Download progress tracking
+    download_in_progress: bool,
+    download_total_size: Option<u64>,
+    download_bytes: u64,
+    download_url: String,
 }
 
 impl FileSetFormModel {
@@ -222,6 +248,40 @@ impl Component for FileSetFormModel {
                     connect_clicked => FileSetFormMsg::OpenDownloadDialog,
                     #[watch]
                     set_sensitive: model.selected_file_type.is_some(),
+                },
+
+                // Download progress bar
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Vertical,
+                    set_spacing: 5,
+                    #[watch]
+                    set_visible: model.download_in_progress,
+
+                    gtk::Label {
+                        #[watch]
+                        set_label: &if let Some(total) = model.download_total_size {
+                            format!(
+                                "Downloading: {} / {} ({:.1}%)",
+                                format_bytes(model.download_bytes),
+                                format_bytes(total),
+                                (model.download_bytes as f64 / total as f64) * 100.0
+                            )
+                        } else {
+                            format!("Downloading: {}", format_bytes(model.download_bytes))
+                        },
+                        set_halign: gtk::Align::Start,
+                    },
+
+                    gtk::ProgressBar {
+                        #[watch]
+                        set_fraction: if let Some(total) = model.download_total_size {
+                            model.download_bytes as f64 / total as f64
+                        } else {
+                            0.0
+                        },
+                        #[watch]
+                        set_pulse_step: if model.download_total_size.is_none() { 0.1 } else { 0.0 },
+                    },
                 },
 
                 #[name = "selected_file_label"]
@@ -334,6 +394,10 @@ impl Component for FileSetFormModel {
             selected_file_type: None,
             selected_files_in_picked_files: Vec::new(),
             picked_files: Vec::new(),
+            download_in_progress: false,
+            download_total_size: None,
+            download_bytes: 0,
+            download_url: String::new(),
         };
         let file_types_dropdown = model.dropdown.widget();
 
@@ -557,10 +621,34 @@ impl Component for FileSetFormModel {
                 root.hide();
             }
             FileSetFormMsg::ProcessDownloadEvent(event) => {
-                // TODO: show progress in UI
                 match event {
-                    HttpDownloadEvent::Progress { bytes_downloaded } => {
-                        println!("Downloading bytes: {}", bytes_downloaded);
+                    HttpDownloadEvent::Started { url, total_size } => {
+                        self.download_in_progress = true;
+                        self.download_url = url.clone();
+                        self.download_total_size = total_size;
+                        self.download_bytes = 0;
+                        println!("Download started: {} (size: {:?})", url, total_size);
+                    }
+                    HttpDownloadEvent::Progress {
+                        url,
+                        bytes_downloaded,
+                    } => {
+                        self.download_bytes = bytes_downloaded;
+                        self.download_url = url;
+                    }
+                    HttpDownloadEvent::Completed { url, file_path } => {
+                        self.download_in_progress = false;
+                        self.download_bytes = 0;
+                        self.download_total_size = None;
+                        self.download_url.clear();
+                        println!("Download completed: {} -> {:?}", url, file_path);
+                    }
+                    HttpDownloadEvent::Failed { url, error } => {
+                        self.download_in_progress = false;
+                        self.download_bytes = 0;
+                        self.download_total_size = None;
+                        self.download_url.clear();
+                        eprintln!("Download failed for {}: {}", url, error);
                     }
                 }
             }

@@ -1,6 +1,23 @@
+use std::path::PathBuf;
+
 #[derive(Debug, Clone)]
 pub enum HttpDownloadEvent {
-    Progress { bytes_downloaded: u64 },
+    Started {
+        url: String,
+        total_size: Option<u64>,
+    },
+    Progress {
+        url: String,
+        bytes_downloaded: u64,
+    },
+    Completed {
+        url: String,
+        file_path: PathBuf,
+    },
+    Failed {
+        url: String,
+        error: String,
+    },
 }
 
 #[derive(Debug, Clone)]

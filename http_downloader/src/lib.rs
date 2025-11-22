@@ -54,6 +54,20 @@ pub async fn download_file(
         )));
     }
 
+    // Extract total size from Content-Length header
+    let total_size = response
+        .header("content-length")
+        .and_then(|h| h.as_str().parse::<u64>().ok());
+
+    send_status_message(
+        progress_tx,
+        HttpDownloadEvent::Started {
+            url: url_string.clone(),
+            total_size,
+        },
+    )
+    .await;
+
     let file_name = extract_filename_from_url(url)
         .or_else(|| extract_filename_from_headers(&response))
         .unwrap_or_else(|| "downloaded_file".to_string());
@@ -90,7 +104,10 @@ pub async fn download_file(
             last_event_reported = bytes_downloaded;
             send_status_message(
                 progress_tx,
-                HttpDownloadEvent::Progress { bytes_downloaded },
+                HttpDownloadEvent::Progress {
+                    url: url_string.clone(),
+                    bytes_downloaded,
+                },
             )
             .await;
         }
@@ -99,6 +116,15 @@ pub async fn download_file(
     file.flush()
         .await
         .map_err(|e| DownloadError::FileIoError(format!("Failed to flush file: {}", e)))?;
+
+    send_status_message(
+        progress_tx,
+        HttpDownloadEvent::Completed {
+            url: url_string,
+            file_path: file_path.clone(),
+        },
+    )
+    .await;
 
     Ok(DownloadResult { file_path })
 }
