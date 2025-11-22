@@ -429,14 +429,23 @@ impl Component for FileSetFormModel {
                     let download_service = Arc::clone(&self.download_service);
                     let temp_dir = self.settings.temp_output_dir.clone();
                     self.source = url.clone();
-                    
+
+                    // unbounded channel for download progress events
                     let (tx, rx) = unbounded::<HttpDownloadEvent>();
 
                     // Spawn task to forward progress messages to UI
                     let ui_sender = sender.input_sender().clone();
                     task::spawn(async move {
                         while let Ok(event) = rx.recv().await {
-                            ui_sender.send(FileSetFormMsg::ProcessDownloadEvent(event)).unwrap();
+                            if let Err(e) =
+                                ui_sender.send(FileSetFormMsg::ProcessDownloadEvent(event))
+                            {
+                                eprintln!(
+                                    "Error sending download event to UI, stopping handling events: {:?}",
+                                    e
+                                );
+                                break;
+                            }
                         }
                     });
 

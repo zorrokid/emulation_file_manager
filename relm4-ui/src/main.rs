@@ -295,9 +295,8 @@ impl Component for AppModel {
                 task::spawn(async move {
                     let (tx, rx) = unbounded::<SyncEvent>();
 
-                    // Spawn task to forward progress messages to UI
+                    // forward progress messages to UI
                     task::spawn(async move {
-                        let ui_sender = ui_sender.clone();
                         while let Ok(event) = rx.recv().await {
                             ui_sender.input(AppMsg::ProcessFileSyncEvent(event));
                         }

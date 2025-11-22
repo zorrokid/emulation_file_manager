@@ -36,6 +36,10 @@ pub async fn download_file(
     progress_tx: &Sender<HttpDownloadEvent>,
 ) -> Result<DownloadResult, DownloadError> {
     let url_string = url.to_string(); // Clone once for reuse
+    let buffer_size = 8192; // 8KB buffer
+    let mut bytes_downloaded = 0;
+    let mut last_event_reported = 0;
+    let report_interval = 10 * buffer_size;
 
     send_status_message(
         progress_tx,
@@ -43,7 +47,7 @@ pub async fn download_file(
             url: url_string.clone(),
         },
     )
-    .await?;
+    .await;
 
     // Create a client with default middleware (includes redirects)
     let client = surf::client().with(surf::middleware::Redirect::default());
@@ -74,8 +78,7 @@ pub async fn download_file(
     let mut body = response.take_body();
 
     // Stream the response body in chunks
-    let mut buffer = vec![0u8; 8192]; // 8KB buffer
-    let mut bytes_downloaded = 0u64;
+    let mut buffer = vec![0u8; buffer_size];
 
     loop {
         let bytes_read = body
@@ -93,14 +96,17 @@ pub async fn download_file(
 
         bytes_downloaded += bytes_read as u64;
 
-        send_status_message(
-            progress_tx,
-            HttpDownloadEvent::Progress {
-                url: url_string.clone(),
-                bytes_downloaded,
-            },
-        )
-        .await?;
+        if bytes_downloaded - last_event_reported >= report_interval as u64 {
+            last_event_reported = bytes_downloaded;
+            send_status_message(
+                progress_tx,
+                HttpDownloadEvent::Progress {
+                    url: url_string.clone(),
+                    bytes_downloaded,
+                },
+            )
+            .await;
+        }
     }
 
     file.flush()
@@ -114,7 +120,7 @@ pub async fn download_file(
             file_path: file_path.clone(),
         },
     )
-    .await?;
+    .await;
 
     Ok(DownloadResult { file_path })
 }
@@ -139,14 +145,10 @@ fn extract_filename_from_headers(response: &surf::Response) -> Option<String> {
         .map(String::from)
 }
 
-async fn send_status_message(
-    progress_tx: &Sender<HttpDownloadEvent>,
-    event: HttpDownloadEvent,
-) -> Result<(), DownloadError> {
-    progress_tx.send(event).await.map_err(|e| {
-        DownloadError::AsyncMessagingError(format!("Failed to send completion event: {}", e))
-    })?;
-    Ok(())
+async fn send_status_message(progress_tx: &Sender<HttpDownloadEvent>, event: HttpDownloadEvent) {
+    if let Err(err) = progress_tx.send(event).await {
+        eprintln!("Failed to send download progress event: {}", err);
+    }
 }
 
 #[cfg(test)]
