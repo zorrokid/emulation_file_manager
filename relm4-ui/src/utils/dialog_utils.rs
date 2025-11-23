@@ -21,3 +21,11 @@ pub fn show_message_dialog(message: String, message_type: gtk::MessageType, root
     });
     dialog.show();
 }
+
+pub fn show_error_dialog(message: String, root: &gtk::Window) {
+    show_message_dialog(message, gtk::MessageType::Error, root);
+}
+
+pub fn show_info_dialog(message: String, root: &gtk::Window) {
+    show_message_dialog(message, gtk::MessageType::Info, root);
+}

@@ -37,13 +37,13 @@ use relm4::{
     gtk::{
         self, FileChooserDialog,
         gio::{self, prelude::*},
-        glib::clone,
+        glib::{ControlFlow, Propagation, clone},
         prelude::*,
     },
     once_cell::sync::OnceCell,
 };
 use service::{
-    cloud_sync::service::CloudStorageSyncService,
+    cloud_sync::service::{CloudStorageSyncService, SyncResult},
     view_model_service::ViewModelService,
     view_models::{Settings, SoftwareTitleListModel},
 };
@@ -52,6 +52,7 @@ use software_titles_list::{SoftwareTitleListInit, SoftwareTitlesList};
 use crate::{
     settings_form::{SettingsForm, SettingsFormMsg},
     status_bar::{StatusBarModel, StatusBarMsg},
+    utils::dialog_utils::{show_error_dialog, show_info_dialog},
 };
 
 #[derive(Debug)]
@@ -74,12 +75,14 @@ enum AppMsg {
     ProcessFileSyncEvent(SyncEvent),
     OpenSettings,
     UpdateSettings,
+    CloseRequested,
 }
 
 #[derive(Debug)]
 enum CommandMsg {
     InitializationDone(InitResult),
     ExportFinished(Result<(), service::error::Error>),
+    SyncToCloudCompleted(Result<SyncResult, service::error::Error>),
 }
 
 struct AppModel {
@@ -94,6 +97,7 @@ struct AppModel {
     release: OnceCell<Controller<ReleaseModel>>,
     settings_form: OnceCell<Controller<settings_form::SettingsForm>>,
     status_bar: Controller<StatusBarModel>,
+    cloud_sync_in_progress: bool,
 }
 
 struct AppWidgets {
@@ -121,6 +125,15 @@ impl Component for AppModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        root.connect_close_request(clone!(
+            #[strong]
+            sender,
+            move |_| {
+                sender.input(AppMsg::CloseRequested);
+                Propagation::Stop
+            }
+        ));
+
         let sync_button = Self::build_header_bar(&root, &sender);
 
         let main_container = gtk::Box::builder()
@@ -169,6 +182,7 @@ impl Component for AppModel {
             sync_service: OnceCell::new(),
             settings_form: OnceCell::new(),
             status_bar,
+            cloud_sync_in_progress: false,
         };
 
         sender.input(AppMsg::Initialize);
@@ -290,22 +304,22 @@ impl Component for AppModel {
                     .sync_service
                     .get()
                     .expect("Sync service not initialized");
-                let sync_service_clone = Arc::clone(sync_service);
+                let sync_service = Arc::clone(sync_service);
                 let ui_sender = sender.clone();
 
+                self.cloud_sync_in_progress = true;
+                let (tx, rx) = unbounded::<SyncEvent>();
+
+                // Spaen task to forward progress messages to UI
                 task::spawn(async move {
-                    let (tx, rx) = unbounded::<SyncEvent>();
-
-                    // forward progress messages to UI
-                    task::spawn(async move {
-                        while let Ok(event) = rx.recv().await {
-                            ui_sender.input(AppMsg::ProcessFileSyncEvent(event));
-                        }
-                    });
-
-                    if let Err(e) = sync_service_clone.sync_to_cloud(tx).await {
-                        eprintln!("Error during sync: {}", e);
+                    while let Ok(event) = rx.recv().await {
+                        ui_sender.input(AppMsg::ProcessFileSyncEvent(event));
                     }
+                });
+
+                sender.oneshot_command(async move {
+                    let res = sync_service.sync_to_cloud(tx).await;
+                    CommandMsg::SyncToCloudCompleted(res)
                 });
             }
             AppMsg::ProcessFileSyncEvent(event) => match event {
@@ -369,6 +383,20 @@ impl Component for AppModel {
             AppMsg::UpdateSettings => {
                 // TODO
             }
+            AppMsg::CloseRequested => {
+                if self.cloud_sync_in_progress {
+                    // TODO: add dialog to confirm cancellation
+                    // if user confirms, cancel the sync operation
+                    // for now, just show info dialog and let's wait until the sync is done
+                    show_info_dialog(
+                        "Cloud sync is in progress, cannot exit yet".to_string(),
+                        root,
+                    );
+                } else {
+                    println!("Close requested, exiting...");
+                    root.close();
+                }
+            }
         }
     }
 
@@ -376,7 +404,7 @@ impl Component for AppModel {
         &mut self,
         message: Self::CommandOutput,
         sender: ComponentSender<Self>,
-        _root: &Self::Root,
+        root: &Self::Root,
     ) {
         match message {
             CommandMsg::InitializationDone(init_result) => {
@@ -452,7 +480,6 @@ impl Component for AppModel {
                 self.sync_service
                     .set(sync_service)
                     .expect("Sync service already initialized");
-
                 self.release
                     .set(release_model)
                     .expect("ReleaseModel already initialized");
@@ -467,6 +494,24 @@ impl Component for AppModel {
                     eprintln!("Export failed: {}", e);
                 }
             },
+            CommandMsg::SyncToCloudCompleted(result) => {
+                self.cloud_sync_in_progress = false;
+                match result {
+                    Ok(sync_result) => {
+                        let message = format!(
+                            "Cloud sync completed.\n Successful uploads: {}\n, Failed uploads: {}\n, Successful deletions: {}\n, Failed deletions: {}",
+                            sync_result.successful_uploads,
+                            sync_result.failed_uploads,
+                            sync_result.successful_deletions,
+                            sync_result.failed_deletions
+                        );
+                        show_info_dialog(message, root);
+                    }
+                    Err(e) => {
+                        show_error_dialog(format!("Cloud sync failed: {}", e), root);
+                    }
+                }
+            }
         }
     }
 
