@@ -826,6 +826,7 @@ mod tests {
         let cloud_ops = Arc::new(MockCloudStorage::new());
 
         let (tx, _rx) = async_std::channel::unbounded();
+        let (_cancel_tx, cancel_rx) = async_std::channel::unbounded::<()>();
 
         SyncContext {
             settings,
@@ -837,6 +838,7 @@ mod tests {
             upload_results: HashMap::new(),
             deletion_results: HashMap::new(),
             settings_service,
+            cancel_rx,
         }
     }
 
@@ -851,7 +853,8 @@ mod tests {
          let cloud_ops = Arc::new(MockCloudStorage::new());
          
          let (tx, rx) = async_std::channel::unbounded();
-        let settings_service = Arc::new(SettingsService::new(repo_manager.clone())); 
+         let settings_service = Arc::new(SettingsService::new(repo_manager.clone())); 
+         let (_cancel_tx, cancel_rx) = async_std::channel::unbounded::<()>();
          
          let mut context = SyncContext {
              settings,
@@ -863,6 +866,7 @@ mod tests {
              upload_results: HashMap::new(),
              deletion_results: HashMap::new(),
                 settings_service,
+                cancel_rx,
          };
      
          let file_info_id = context

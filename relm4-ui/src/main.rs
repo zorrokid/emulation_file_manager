@@ -357,16 +357,11 @@ impl Component for AppModel {
                 let sync_service = Arc::clone(sync_service);
                 let ui_sender = sender.clone();
 
-<<<<<<< Updated upstream
-                let (tx, rx) = unbounded::<SyncEvent>();
-=======
-                flags.cloud_sync_in_progress = true;
                 let (progress_tx, progress_rx) = unbounded::<SyncEvent>();
 
                 // Create cancellation channel
                 let (cancel_tx, cancel_rx) = unbounded::<()>();
                 self.cloud_sync_cancel_tx = Some(cancel_tx);
->>>>>>> Stashed changes
 
                 // Spawn task to forward progress messages to UI
                 task::spawn(async move {
