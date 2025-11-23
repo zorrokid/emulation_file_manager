@@ -150,13 +150,13 @@ impl Component for AppModel {
                 // Check if app is already closing
                 let flags = &mut *flags.lock().unwrap();
 
-                if flags.app_closing && !flags.cloud_sync_in_progress {
-                    // Allow the close to proceed
-                    Propagation::Proceed
-                } else {
+                if flags.cloud_sync_in_progress && !flags.app_closing {
                     // Send message to handle close logic
                     sender.input(AppMsg::CloseRequested);
                     Propagation::Stop
+                } else {
+                    // Default case, allow close
+                    Propagation::Proceed
                 }
             }
         ));
@@ -471,6 +471,7 @@ impl Component for AppModel {
                     // No sync in progress, safe to close
                     tracing::info!("Application closing normally");
                     flags.app_closing = true;
+                    drop(flags); // Release lock before closing
                     root.close(); // Trigger close, flag is now set so it will proceed
                 }
             }
@@ -577,7 +578,7 @@ impl Component for AppModel {
                 match result {
                     Ok(sync_result) => {
                         let message = format!(
-                            "Cloud sync completed.\n Successful uploads: {}\nFailed uploads: {}\nSuccessful deletions: {}\nFailed deletions: {}",
+                            "Cloud sync completed.\nSuccessful uploads: {}\nFailed uploads: {}\nSuccessful deletions: {}\nFailed deletions: {}",
                             sync_result.successful_uploads,
                             sync_result.failed_uploads,
                             sync_result.successful_deletions,
