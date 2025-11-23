@@ -27,7 +27,7 @@ mod utils;
 
 use std::{path::PathBuf, sync::Arc};
 
-use async_std::{channel::unbounded, task};
+use async_std::{channel::unbounded, sync::RwLock, task};
 use core_types::events::SyncEvent;
 use database::{get_db_pool, repository_manager::RepositoryManager};
 use release::{ReleaseInitModel, ReleaseModel, ReleaseMsg, ReleaseOutputMsg};
@@ -98,6 +98,7 @@ struct AppModel {
     settings_form: OnceCell<Controller<settings_form::SettingsForm>>,
     status_bar: Controller<StatusBarModel>,
     cloud_sync_in_progress: bool,
+    app_closing: Arc<RwLock<bool>>, // Shared state for close handler
 }
 
 struct AppWidgets {
@@ -125,12 +126,28 @@ impl Component for AppModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let app_closing = Arc::new(RwLock::new(false));
+        
+        // Handle close request by checking the shared flag
         root.connect_close_request(clone!(
             #[strong]
             sender,
+            #[strong]
+            app_closing,
             move |_| {
-                sender.input(AppMsg::CloseRequested);
-                Propagation::Stop
+                // Check if app is already closing
+                let is_closing = async_std::task::block_on(async {
+                    *app_closing.read().await
+                });
+                
+                if is_closing {
+                    // Allow the close to proceed
+                    Propagation::Proceed
+                } else {
+                    // Send message to handle close logic
+                    sender.input(AppMsg::CloseRequested);
+                    Propagation::Stop
+                }
             }
         ));
 
@@ -183,6 +200,7 @@ impl Component for AppModel {
             settings_form: OnceCell::new(),
             status_bar,
             cloud_sync_in_progress: false,
+            app_closing,
         };
 
         sender.input(AppMsg::Initialize);
@@ -300,6 +318,22 @@ impl Component for AppModel {
                 }
             }
             AppMsg::SyncWithCloud => {
+                // Prevent starting sync if app is closing
+                let is_closing = async_std::task::block_on(async {
+                    *self.app_closing.read().await
+                });
+                
+                if is_closing {
+                    tracing::warn!("Sync requested but app is closing, ignoring");
+                    return;
+                }
+
+                // Prevent starting sync if one is already in progress
+                if self.cloud_sync_in_progress {
+                    tracing::warn!("Sync already in progress, ignoring new request");
+                    return;
+                }
+
                 let sync_service = self
                     .sync_service
                     .get()
@@ -310,7 +344,7 @@ impl Component for AppModel {
                 self.cloud_sync_in_progress = true;
                 let (tx, rx) = unbounded::<SyncEvent>();
 
-                // Spaen task to forward progress messages to UI
+                // Spawn task to forward progress messages to UI
                 task::spawn(async move {
                     while let Ok(event) = rx.recv().await {
                         ui_sender.input(AppMsg::ProcessFileSyncEvent(event));
@@ -384,17 +418,57 @@ impl Component for AppModel {
                 // TODO
             }
             AppMsg::CloseRequested => {
+                let is_closing = async_std::task::block_on(async {
+                    *self.app_closing.read().await
+                });
+                
+                if is_closing {
+                    // Already closing, shouldn't reach here but just in case
+                    return;
+                }
+
                 if self.cloud_sync_in_progress {
-                    // TODO: add dialog to confirm cancellation
-                    // if user confirms, cancel the sync operation
-                    // for now, just show info dialog and let's wait until the sync is done
-                    show_info_dialog(
-                        "Cloud sync is in progress, cannot exit yet".to_string(),
+                    // Show confirmation dialog
+                    let dialog = gtk::MessageDialog::builder()
+                        .transient_for(root)
+                        .modal(true)
+                        .message_type(gtk::MessageType::Warning)
+                        .buttons(gtk::ButtonsType::OkCancel)
+                        .text("Cloud sync in progress")
+                        .secondary_text(
+                            "A cloud sync operation is currently running. \
+                             Closing now will cancel the sync after the current file finishes uploading.\n\n\
+                             Do you want to cancel the sync and close the application?"
+                        )
+                        .build();
+
+                    let app_closing = Arc::clone(&self.app_closing);
+                    dialog.connect_response(clone!(
+                        #[strong]
                         root,
-                    );
+                        move |dialog, response| {
+                            if response == gtk::ResponseType::Ok {
+                                // User confirmed - set flag and trigger close
+                                // TODO: Send cancel signal to sync operation when implemented
+                                async_std::task::block_on(async {
+                                    *app_closing.write().await = true;
+                                });
+                                dialog.close();
+                                root.close(); // Trigger close again, now flag is set
+                            } else {
+                                dialog.close();
+                            }
+                        }
+                    ));
+
+                    dialog.present();
                 } else {
-                    println!("Close requested, exiting...");
-                    root.close();
+                    // No sync in progress, safe to close
+                    tracing::info!("Application closing normally");
+                    async_std::task::block_on(async {
+                        *self.app_closing.write().await = true;
+                    });
+                    root.close(); // Trigger close, flag is now set so it will proceed
                 }
             }
         }
