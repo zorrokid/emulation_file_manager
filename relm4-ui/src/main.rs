@@ -148,9 +148,9 @@ impl Component for AppModel {
             flags,
             move |_| {
                 // Check if app is already closing
-                let is_closing = flags.lock().unwrap().app_closing;
+                let flags = &mut *flags.lock().unwrap();
 
-                if is_closing {
+                if flags.app_closing && !flags.cloud_sync_in_progress {
                     // Allow the close to proceed
                     Propagation::Proceed
                 } else {
