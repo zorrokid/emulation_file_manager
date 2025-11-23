@@ -183,6 +183,13 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                     offset += pending_files.len() as u32;
 
                     for file in pending_files {
+
+                        // check for cancellation
+                        if context.cancel_rx.try_recv().is_ok() {
+                            tracing::info!("Upload cancelled by user");
+                            return StepAction::Abort(Error::OperationCancelled);
+                        }
+
                         tracing::debug!(
                             file_info_id = file.file_info_id,
                             cloud_key = %file.cloud_key,
@@ -256,6 +263,7 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                             local_path = %local_path.display(),
                             "Uploading file to cloud"
                         );
+
 
                         let upload_res = context
                             .cloud_ops
@@ -424,6 +432,12 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
                     offset += pending_files.len() as u32;
 
                     for file in pending_files {
+                        // check for cancellation
+                        if context.cancel_rx.try_recv().is_ok() {
+                            tracing::info!("Upload cancelled by user");
+                            return StepAction::Abort(Error::OperationCancelled);
+                        }
+
                         context
                             .progress_tx
                             .send(SyncEvent::FileDeletionStarted {

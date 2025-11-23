@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use async_std::channel::Sender;
+use async_std::channel::{Receiver, Sender};
 use cloud_storage::CloudStorageOps;
 use core_types::events::SyncEvent;
 use database::repository_manager::RepositoryManager;
@@ -15,6 +15,7 @@ pub struct SyncContext {
     pub settings_service: Arc<SettingsService>,
     pub settings: Arc<Settings>,
     pub progress_tx: Sender<SyncEvent>,
+    pub cancel_rx: Receiver<()>,
 
     // Lazy initialized by ConnectToCloudStep
     // Need to use dyn because CloudStorageOps is a trait
@@ -74,6 +75,7 @@ impl SyncContext {
         repository_manager: Arc<RepositoryManager>,
         settings: Arc<Settings>,
         progress_tx: Sender<SyncEvent>,
+        cancel_rx: Receiver<()>,
     ) -> Self {
         let settings_service = Arc::new(SettingsService::new(repository_manager.clone()));
         Self {
@@ -86,6 +88,7 @@ impl SyncContext {
             files_prepared_for_deletion: 0,
             deletion_results: HashMap::new(),
             settings_service,
+            cancel_rx,
         }
     }
 

@@ -105,8 +105,9 @@ struct AppModel {
     release: OnceCell<Controller<ReleaseModel>>,
     settings_form: OnceCell<Controller<settings_form::SettingsForm>>,
     status_bar: Controller<StatusBarModel>,
-    // wrapping the flags in single Mutex to prevent possible race conditions
+    // Wrapping the flags in a single Mutex to prevent possible race conditions.
     flags: Arc<Mutex<Flags>>,
+    cloud_sync_cancel_tx: Option<async_std::channel::Sender<()>>,
 }
 
 struct AppWidgets {
@@ -212,6 +213,7 @@ impl Component for AppModel {
             settings_form: OnceCell::new(),
             status_bar,
             flags,
+            cloud_sync_cancel_tx: None,
         };
 
         sender.input(AppMsg::Initialize);
@@ -355,17 +357,26 @@ impl Component for AppModel {
                 let sync_service = Arc::clone(sync_service);
                 let ui_sender = sender.clone();
 
+<<<<<<< Updated upstream
                 let (tx, rx) = unbounded::<SyncEvent>();
+=======
+                flags.cloud_sync_in_progress = true;
+                let (progress_tx, progress_rx) = unbounded::<SyncEvent>();
+
+                // Create cancellation channel
+                let (cancel_tx, cancel_rx) = unbounded::<()>();
+                self.cloud_sync_cancel_tx = Some(cancel_tx);
+>>>>>>> Stashed changes
 
                 // Spawn task to forward progress messages to UI
                 task::spawn(async move {
-                    while let Ok(event) = rx.recv().await {
+                    while let Ok(event) = progress_rx.recv().await {
                         ui_sender.input(AppMsg::ProcessFileSyncEvent(event));
                     }
                 });
 
                 sender.oneshot_command(async move {
-                    let res = sync_service.sync_to_cloud(tx).await;
+                    let res = sync_service.sync_to_cloud(progress_tx, cancel_rx).await;
                     CommandMsg::SyncToCloudCompleted(res)
                 });
             }
@@ -585,6 +596,11 @@ impl Component for AppModel {
             CommandMsg::SyncToCloudCompleted(result) => {
                 let mut flags = self.flags.lock().unwrap();
                 flags.cloud_sync_in_progress = false;
+                if flags.app_closing {
+                    // If app is closing, trigger close now
+                    drop(flags);
+                    return;
+                }
                 drop(flags); // Release lock before showing dialog
                 match result {
                     Ok(sync_result) => {

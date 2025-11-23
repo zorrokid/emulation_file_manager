@@ -12,6 +12,7 @@ pub enum Error {
     SettingsError(String),
     DownloadError(String),
     FileImportError(String),
+    OperationCancelled,
 }
 
 impl Display for Error {
@@ -25,6 +26,7 @@ impl Display for Error {
             Error::SettingsError(message) => write!(f, "Settings error: {}", message),
             Error::DownloadError(message) => write!(f, "Download error: {}", message),
             Error::FileImportError(message) => write!(f, "File import error: {}", message),
+            Error::OperationCancelled => write!(f, "Operation was cancelled"),
         }
     }
 }

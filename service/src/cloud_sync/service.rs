@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use async_std::channel::Sender;
+use async_std::channel::{Receiver, Sender};
 use core_types::events::SyncEvent;
 use database::repository_manager::RepositoryManager;
 
@@ -24,12 +24,17 @@ impl CloudStorageSyncService {
     }
 
     #[tracing::instrument(skip_all, err)]
-    pub async fn sync_to_cloud(&self, progress_tx: Sender<SyncEvent>) -> Result<SyncResult, Error> {
+    pub async fn sync_to_cloud(
+        &self,
+        progress_tx: Sender<SyncEvent>,
+        cancel_rx: Receiver<()>,
+    ) -> Result<SyncResult, Error> {
         tracing::info!("Starting cloud sync operation");
         let mut context = SyncContext::new(
             self.repository_manager.clone(),
             self.settings.clone(),
-            progress_tx.clone(),
+            progress_tx,
+            cancel_rx,
         );
 
         let pipeline = Pipeline::<SyncContext>::new();
