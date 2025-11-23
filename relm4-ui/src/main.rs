@@ -150,6 +150,8 @@ impl Component for AppModel {
                 // Check if app is already closing
                 let flags = &mut *flags.lock().unwrap();
 
+                // Allow closing if (1) no sync in progress or (2) user already confirmed closing
+                // (app_closing flag set)
                 if flags.cloud_sync_in_progress && !flags.app_closing {
                     // Send message to handle close logic
                     sender.input(AppMsg::CloseRequested);
@@ -327,17 +329,22 @@ impl Component for AppModel {
                 }
             }
             AppMsg::SyncWithCloud => {
-                let mut flags = self.flags.lock().unwrap();
+                let should_start_sync = {
+                    let mut flags = self.flags.lock().unwrap();
 
-                // Prevent starting sync if app is closing
-                if flags.app_closing {
-                    tracing::warn!("Sync requested but app is closing, ignoring");
-                    return;
-                }
+                    if flags.app_closing {
+                        tracing::warn!("Sync requested but app is closing, ignoring");
+                        false
+                    } else if flags.cloud_sync_in_progress {
+                        tracing::warn!("Sync already in progress, ignoring new request");
+                        false
+                    } else {
+                        flags.cloud_sync_in_progress = true;
+                        true
+                    }
+                };
 
-                // Prevent starting sync if one is already in progress
-                if flags.cloud_sync_in_progress {
-                    tracing::warn!("Sync already in progress, ignoring new request");
+                if !should_start_sync {
                     return;
                 }
 
@@ -348,7 +355,6 @@ impl Component for AppModel {
                 let sync_service = Arc::clone(sync_service);
                 let ui_sender = sender.clone();
 
-                flags.cloud_sync_in_progress = true;
                 let (tx, rx) = unbounded::<SyncEvent>();
 
                 // Spawn task to forward progress messages to UI
@@ -425,14 +431,17 @@ impl Component for AppModel {
                 // TODO
             }
             AppMsg::CloseRequested => {
-                let mut flags = self.flags.lock().unwrap();
+                let sync_in_progress = {
+                    let flags = self.flags.lock().unwrap();
 
-                if flags.app_closing {
-                    // Already closing, shouldn't reach here but just in case
-                    return;
-                }
+                    if flags.app_closing {
+                        // Already closing, shouldn't reach here but just in case
+                        return;
+                    }
+                    flags.cloud_sync_in_progress
+                };
 
-                if flags.cloud_sync_in_progress {
+                if sync_in_progress {
                     let dialog = gtk::MessageDialog::builder()
                         .transient_for(root)
                         .modal(true)
@@ -470,6 +479,7 @@ impl Component for AppModel {
                 } else {
                     // No sync in progress, safe to close
                     tracing::info!("Application closing normally");
+                    let mut flags = self.flags.lock().unwrap();
                     flags.app_closing = true;
                     drop(flags); // Release lock before closing
                     root.close(); // Trigger close, flag is now set so it will proceed
@@ -573,8 +583,9 @@ impl Component for AppModel {
                 }
             },
             CommandMsg::SyncToCloudCompleted(result) => {
-                let flags = &mut *self.flags.lock().unwrap();
+                let mut flags = self.flags.lock().unwrap();
                 flags.cloud_sync_in_progress = false;
+                drop(flags); // Release lock before showing dialog
                 match result {
                     Ok(sync_result) => {
                         let message = format!(
