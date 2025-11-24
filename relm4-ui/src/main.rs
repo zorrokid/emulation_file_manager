@@ -405,6 +405,9 @@ impl Component for AppModel {
                 SyncEvent::PartUploadFailed { .. } => {
                     // self.status_bar.emit(StatusBarMsg::Fail(error));
                 }
+                SyncEvent::SyncCancelled { .. } => {
+                    self.status_bar.emit(StatusBarMsg::Finish);
+                }
                 _ => { /* Handle other events as needed */ }
             },
             AppMsg::OpenSettings => {

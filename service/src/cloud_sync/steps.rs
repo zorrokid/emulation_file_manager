@@ -186,6 +186,10 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                         // check for cancellation
                         if context.cancel_rx.try_recv().is_ok() {
                             tracing::info!("Cloud sync cancelled by user");
+                            context.progress_tx
+                                .send(SyncEvent::SyncCancelled {})
+                                .await
+                                .ok(); // TODO: add error handling
                             return StepAction::Abort(Error::OperationCancelled);
                         }
 
@@ -433,6 +437,11 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
                         // check for cancellation
                         if context.cancel_rx.try_recv().is_ok() {
                             tracing::info!("Cloud sync cancelled by user");
+                            context.progress_tx
+                                .send(SyncEvent::SyncCancelled {})
+                                .await
+                                .ok(); // TODO: add error handling
+
                             return StepAction::Abort(Error::OperationCancelled);
                         }
 
