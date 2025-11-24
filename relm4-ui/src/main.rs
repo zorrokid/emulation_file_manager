@@ -649,9 +649,13 @@ impl Component for AppModel {
                         );
                         show_info_dialog(message, root);
                     }
-                    Err(e) => {
-                        show_error_dialog(format!("Cloud sync failed: {}", e), root);
-                    }
+                    Err(e) => match e {
+                        service::error::Error::OperationCancelled => show_info_dialog(
+                            "Cloud sync operation was cancelled.".to_string(),
+                            root,
+                        ),
+                        _ => show_error_dialog(format!("Cloud sync failed: {}", e), root),
+                    },
                 }
             }
         }
