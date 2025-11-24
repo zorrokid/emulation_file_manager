@@ -263,26 +263,20 @@ User clicks X
     ↓
 connect_close_request fires
     ↓
-app_closing = false → Propagation::Stop
+Check: !app_closing && sync_in_progress
     ↓
-CloseRequested message sent
+Result: !false && false = false
     ↓
-close_requested = true
-sync_in_progress = false
+should_show_dialog = false
     ↓
-No dialog needed
+Propagation::Proceed (immediate!)
     ↓
-app_closing = true
-root.close()
-    ↓
-connect_close_request fires again
-    ↓
-app_closing = true → Propagation::Proceed
-    ↓
-GTK closes window
+GTK closes window naturally
     ↓
 App exits
 ```
+
+**Note:** No `CloseRequested` message is sent. The close happens immediately because there's nothing to wait for.
 
 ### Close During Sync (User Confirms)
 

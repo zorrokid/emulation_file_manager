@@ -185,7 +185,7 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                     for file in pending_files {
                         // check for cancellation
                         if context.cancel_rx.try_recv().is_ok() {
-                            tracing::info!("Upload cancelled by user");
+                            tracing::info!("Cloud sync cancelled by user");
                             return StepAction::Abort(Error::OperationCancelled);
                         }
 
