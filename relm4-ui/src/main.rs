@@ -25,7 +25,10 @@ mod system_selector;
 mod tabbed_image_viewer;
 mod utils;
 
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
 use async_std::{channel::unbounded, task};
 use core_types::events::SyncEvent;
@@ -37,13 +40,13 @@ use relm4::{
     gtk::{
         self, FileChooserDialog,
         gio::{self, prelude::*},
-        glib::clone,
+        glib::{Propagation, clone},
         prelude::*,
     },
     once_cell::sync::OnceCell,
 };
 use service::{
-    cloud_sync::service::CloudStorageSyncService,
+    cloud_sync::service::{CloudStorageSyncService, SyncResult},
     view_model_service::ViewModelService,
     view_models::{Settings, SoftwareTitleListModel},
 };
@@ -52,6 +55,7 @@ use software_titles_list::{SoftwareTitleListInit, SoftwareTitlesList};
 use crate::{
     settings_form::{SettingsForm, SettingsFormMsg},
     status_bar::{StatusBarModel, StatusBarMsg},
+    utils::dialog_utils::{show_error_dialog, show_info_dialog},
 };
 
 #[derive(Debug)]
@@ -74,12 +78,20 @@ enum AppMsg {
     ProcessFileSyncEvent(SyncEvent),
     OpenSettings,
     UpdateSettings,
+    CloseRequested,
 }
 
 #[derive(Debug)]
 enum CommandMsg {
     InitializationDone(InitResult),
     ExportFinished(Result<(), service::error::Error>),
+    SyncToCloudCompleted(Result<SyncResult, service::error::Error>),
+}
+
+struct Flags {
+    app_closing: bool,
+    cloud_sync_in_progress: bool,
+    close_requested: bool, // Track if close was requested even if not yet closing
 }
 
 struct AppModel {
@@ -94,6 +106,9 @@ struct AppModel {
     release: OnceCell<Controller<ReleaseModel>>,
     settings_form: OnceCell<Controller<settings_form::SettingsForm>>,
     status_bar: Controller<StatusBarModel>,
+    // Wrapping the flags in a single Mutex to prevent possible race conditions.
+    flags: Arc<Mutex<Flags>>,
+    cloud_sync_cancel_tx: Option<async_std::channel::Sender<()>>,
 }
 
 struct AppWidgets {
@@ -121,6 +136,37 @@ impl Component for AppModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let flags = Arc::new(Mutex::new(Flags {
+            app_closing: false,
+            cloud_sync_in_progress: false,
+            close_requested: false,
+        }));
+
+        // Handle close request by checking the shared flag, we need to do this
+        // because of possible running async tasks that may prevent immediate closing.
+        root.connect_close_request(clone!(
+            #[strong]
+            sender,
+            #[strong]
+            flags,
+            move |_| {
+                // Allow closing if (1) no sync in progress or (2) user already confirmed closing
+                // (app_closing flag set)
+                let should_show_dialog = {
+                    let flags = flags.lock().unwrap();
+                    !flags.app_closing && flags.cloud_sync_in_progress
+                };
+                if should_show_dialog {
+                    // Send message to handle close logic
+                    sender.input(AppMsg::CloseRequested);
+                    Propagation::Stop
+                } else {
+                    // Default case, allow close
+                    Propagation::Proceed
+                }
+            }
+        ));
+
         let sync_button = Self::build_header_bar(&root, &sender);
 
         let main_container = gtk::Box::builder()
@@ -169,6 +215,8 @@ impl Component for AppModel {
             sync_service: OnceCell::new(),
             settings_form: OnceCell::new(),
             status_bar,
+            flags,
+            cloud_sync_cancel_tx: None,
         };
 
         sender.input(AppMsg::Initialize);
@@ -286,26 +334,48 @@ impl Component for AppModel {
                 }
             }
             AppMsg::SyncWithCloud => {
+                let should_start_sync = {
+                    let mut flags = self.flags.lock().unwrap();
+
+                    if flags.app_closing || flags.close_requested {
+                        tracing::warn!("Sync requested but app is closing, ignoring");
+                        false
+                    } else if flags.cloud_sync_in_progress {
+                        tracing::warn!("Sync already in progress, ignoring new request");
+                        false
+                    } else {
+                        flags.cloud_sync_in_progress = true;
+                        true
+                    }
+                };
+
+                if !should_start_sync {
+                    return;
+                }
+
                 let sync_service = self
                     .sync_service
                     .get()
                     .expect("Sync service not initialized");
-                let sync_service_clone = Arc::clone(sync_service);
+                let sync_service = Arc::clone(sync_service);
                 let ui_sender = sender.clone();
 
+                let (progress_tx, progress_rx) = unbounded::<SyncEvent>();
+
+                // Create cancellation channel
+                let (cancel_tx, cancel_rx) = unbounded::<()>();
+                self.cloud_sync_cancel_tx = Some(cancel_tx);
+
+                // Spawn task to forward progress messages to UI
                 task::spawn(async move {
-                    let (tx, rx) = unbounded::<SyncEvent>();
-
-                    // forward progress messages to UI
-                    task::spawn(async move {
-                        while let Ok(event) = rx.recv().await {
-                            ui_sender.input(AppMsg::ProcessFileSyncEvent(event));
-                        }
-                    });
-
-                    if let Err(e) = sync_service_clone.sync_to_cloud(tx).await {
-                        eprintln!("Error during sync: {}", e);
+                    while let Ok(event) = progress_rx.recv().await {
+                        ui_sender.input(AppMsg::ProcessFileSyncEvent(event));
                     }
+                });
+
+                sender.oneshot_command(async move {
+                    let res = sync_service.sync_to_cloud(progress_tx, cancel_rx).await;
+                    CommandMsg::SyncToCloudCompleted(res)
                 });
             }
             AppMsg::ProcessFileSyncEvent(event) => match event {
@@ -334,6 +404,9 @@ impl Component for AppModel {
                 }
                 SyncEvent::PartUploadFailed { .. } => {
                     // self.status_bar.emit(StatusBarMsg::Fail(error));
+                }
+                SyncEvent::SyncCancelled { .. } => {
+                    self.status_bar.emit(StatusBarMsg::Finish);
                 }
                 _ => { /* Handle other events as needed */ }
             },
@@ -369,6 +442,79 @@ impl Component for AppModel {
             AppMsg::UpdateSettings => {
                 // TODO
             }
+            AppMsg::CloseRequested => {
+                let sync_in_progress = {
+                    let mut flags = self.flags.lock().unwrap();
+
+                    if flags.app_closing {
+                        // Already closing, shouldn't reach here but just in case
+                        return;
+                    }
+
+                    // Mark that close was requested
+                    flags.close_requested = true;
+                    flags.cloud_sync_in_progress
+                };
+
+                if sync_in_progress {
+                    let dialog = gtk::MessageDialog::builder()
+                        .transient_for(root)
+                        .modal(true)
+                        .message_type(gtk::MessageType::Warning)
+                        .buttons(gtk::ButtonsType::YesNo)
+                        .text("Cloud sync in progress")
+                        .secondary_text(
+                            "A cloud sync operation is currently running. \
+                             Closing now will cancel the sync after the current file finishes uploading.\n\n\
+                             Do you want to cancel the sync and close the application?"
+                        )
+                        .build();
+
+                    let flags_clone = Arc::clone(&self.flags);
+                    let cancel_tx = self.cloud_sync_cancel_tx.clone();
+                    dialog.connect_response(clone!(
+                        #[strong]
+                        root,
+                        #[strong]
+                        flags_clone,
+                        move |dialog, response| {
+                            dialog.close();
+
+                            if response == gtk::ResponseType::Yes {
+                                // Check if sync is still in progress (might have completed while dialog was showing)
+                                let mut flags = flags_clone.lock().unwrap();
+                                let still_syncing = flags.cloud_sync_in_progress;
+
+                                if still_syncing {
+                                    // Sync is still running - send cancel signal
+                                    if let Some(cancel_tx) = &cancel_tx {
+                                        if let Err(e) = cancel_tx.try_send(()) {
+                                            tracing::warn!("Failed to send cancel signal: {:?}", e);
+                                        } else {
+                                            tracing::info!("Sync cancellation requested");
+                                        }
+                                    }
+                                }
+
+                                // Set closing flag and trigger close regardless
+                                flags.app_closing = true;
+                                drop(flags);
+                                root.close();
+                            }
+                            // If No clicked, just close dialog and do nothing
+                        }
+                    ));
+
+                    dialog.present();
+                } else {
+                    // No sync in progress, safe to close
+                    tracing::info!("Application closing normally");
+                    let mut flags = self.flags.lock().unwrap();
+                    flags.app_closing = true;
+                    drop(flags); // Release lock before closing
+                    root.close(); // Trigger close, flag is now set so it will proceed
+                }
+            }
         }
     }
 
@@ -376,7 +522,7 @@ impl Component for AppModel {
         &mut self,
         message: Self::CommandOutput,
         sender: ComponentSender<Self>,
-        _root: &Self::Root,
+        root: &Self::Root,
     ) {
         match message {
             CommandMsg::InitializationDone(init_result) => {
@@ -452,7 +598,6 @@ impl Component for AppModel {
                 self.sync_service
                     .set(sync_service)
                     .expect("Sync service already initialized");
-
                 self.release
                     .set(release_model)
                     .expect("ReleaseModel already initialized");
@@ -467,6 +612,55 @@ impl Component for AppModel {
                     eprintln!("Export failed: {}", e);
                 }
             },
+            CommandMsg::SyncToCloudCompleted(result) => {
+                // Clear the cancel sender
+                self.cloud_sync_cancel_tx = None;
+
+                let mut flags = self.flags.lock().unwrap();
+                flags.cloud_sync_in_progress = false;
+
+                let should_close = flags.app_closing;
+                let close_requested = flags.close_requested;
+
+                drop(flags); // Release lock before showing dialog or closing
+
+                if should_close {
+                    // If app is closing, trigger close now without showing dialog
+                    root.close();
+                    return;
+                }
+
+                if close_requested {
+                    // Close was requested but dialog might be showing
+                    // Don't show completion dialog, just trigger close
+                    let mut flags = self.flags.lock().unwrap();
+                    flags.app_closing = true;
+                    drop(flags);
+                    root.close();
+                    return;
+                }
+
+                // Normal completion - show dialog
+                match result {
+                    Ok(sync_result) => {
+                        let message = format!(
+                            "Cloud sync completed.\nSuccessful uploads: {}\nFailed uploads: {}\nSuccessful deletions: {}\nFailed deletions: {}",
+                            sync_result.successful_uploads,
+                            sync_result.failed_uploads,
+                            sync_result.successful_deletions,
+                            sync_result.failed_deletions
+                        );
+                        show_info_dialog(message, root);
+                    }
+                    Err(e) => match e {
+                        service::error::Error::OperationCancelled => show_info_dialog(
+                            "Cloud sync operation was cancelled.".to_string(),
+                            root,
+                        ),
+                        _ => show_error_dialog(format!("Cloud sync failed: {}", e), root),
+                    },
+                }
+            }
         }
     }
 

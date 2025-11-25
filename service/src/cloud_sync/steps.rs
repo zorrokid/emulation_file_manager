@@ -176,13 +176,23 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                         offset,
                         "Found pending files for upload"
                     );
-                   if pending_files.is_empty() {
+                    if pending_files.is_empty() {
                         break;
                     }
 
                     offset += pending_files.len() as u32;
 
                     for file in pending_files {
+                        // check for cancellation
+                        if context.cancel_rx.try_recv().is_ok() {
+                            tracing::info!("Cloud sync cancelled by user");
+                            context.progress_tx
+                                .send(SyncEvent::SyncCancelled {})
+                                .await
+                                .ok(); // TODO: add error handling
+                            return StepAction::Abort(Error::OperationCancelled);
+                        }
+
                         tracing::debug!(
                             file_info_id = file.file_info_id,
                             cloud_key = %file.cloud_key,
@@ -424,6 +434,17 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
                     offset += pending_files.len() as u32;
 
                     for file in pending_files {
+                        // check for cancellation
+                        if context.cancel_rx.try_recv().is_ok() {
+                            tracing::info!("Cloud sync cancelled by user");
+                            context.progress_tx
+                                .send(SyncEvent::SyncCancelled {})
+                                .await
+                                .ok(); // TODO: add error handling
+
+                            return StepAction::Abort(Error::OperationCancelled);
+                        }
+
                         context
                             .progress_tx
                             .send(SyncEvent::FileDeletionStarted {
@@ -812,6 +833,7 @@ mod tests {
         let cloud_ops = Arc::new(MockCloudStorage::new());
 
         let (tx, _rx) = async_std::channel::unbounded();
+        let (_cancel_tx, cancel_rx) = async_std::channel::unbounded::<()>();
 
         SyncContext {
             settings,
@@ -823,6 +845,7 @@ mod tests {
             upload_results: HashMap::new(),
             deletion_results: HashMap::new(),
             settings_service,
+            cancel_rx,
         }
     }
 
@@ -837,7 +860,8 @@ mod tests {
          let cloud_ops = Arc::new(MockCloudStorage::new());
          
          let (tx, rx) = async_std::channel::unbounded();
-        let settings_service = Arc::new(SettingsService::new(repo_manager.clone())); 
+         let settings_service = Arc::new(SettingsService::new(repo_manager.clone())); 
+         let (_cancel_tx, cancel_rx) = async_std::channel::unbounded::<()>();
          
          let mut context = SyncContext {
              settings,
@@ -849,6 +873,7 @@ mod tests {
              upload_results: HashMap::new(),
              deletion_results: HashMap::new(),
                 settings_service,
+                cancel_rx,
          };
      
          let file_info_id = context

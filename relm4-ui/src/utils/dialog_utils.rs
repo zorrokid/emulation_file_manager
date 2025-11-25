@@ -21,3 +21,19 @@ pub fn show_message_dialog(message: String, message_type: gtk::MessageType, root
     });
     dialog.show();
 }
+
+/// Show an error dialog with the specified message
+/// # Arguments
+/// * `message` - The error message to display
+/// * `root` - The root window to attach the dialog to
+pub fn show_error_dialog(message: String, root: &gtk::Window) {
+    show_message_dialog(message, gtk::MessageType::Error, root);
+}
+
+/// Show an info dialog with the specified message
+/// # Arguments
+/// * `message` - The info message to display
+/// * `root` - The root window to attach the dialog to
+pub fn show_info_dialog(message: String, root: &gtk::Window) {
+    show_message_dialog(message, gtk::MessageType::Info, root);
+}

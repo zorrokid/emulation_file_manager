@@ -55,6 +55,7 @@ pub enum SyncEvent {
         file_number: i64,
         total_files: i64,
     },
+    SyncCancelled {},
 }
 
 #[derive(Debug, Clone)]
