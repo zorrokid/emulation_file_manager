@@ -1,0 +1,1104 @@
+{
+  "name": "db.sqlite",
+  "tables": [
+    {
+      "name": "_sqlx_migrations",
+      "type": "table",
+      "columns": [
+        {
+          "name": "version",
+          "type": "BIGINT",
+          "nullable": true
+        },
+        {
+          "name": "description",
+          "type": "TEXT",
+          "nullable": false
+        },
+        {
+          "name": "installed_on",
+          "type": "TIMESTAMP",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP"
+        },
+        {
+          "name": "success",
+          "type": "BOOLEAN",
+          "nullable": false
+        },
+        {
+          "name": "checksum",
+          "type": "BLOB",
+          "nullable": false
+        },
+        {
+          "name": "execution_time",
+          "type": "BIGINT",
+          "nullable": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "sqlite_autoindex__sqlx_migrations_1",
+          "def": "PRIMARY KEY (version)",
+          "table": "_sqlx_migrations",
+          "columns": [
+            "version"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "version",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (version)",
+          "table": "_sqlx_migrations",
+          "columns": [
+            "version"
+          ]
+        },
+        {
+          "name": "sqlite_autoindex__sqlx_migrations_1",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (version)",
+          "table": "_sqlx_migrations",
+          "columns": [
+            "version"
+          ]
+        }
+      ],
+      "def": "CREATE TABLE _sqlx_migrations (\n    version BIGINT PRIMARY KEY,\n    description TEXT NOT NULL,\n    installed_on TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    success BOOLEAN NOT NULL,\n    checksum BLOB NOT NULL,\n    execution_time BIGINT NOT NULL\n)"
+    },
+    {
+      "name": "system",
+      "type": "table",
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "type": "TEXT",
+          "nullable": false
+        }
+      ],
+      "constraints": [
+        {
+          "name": "id",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (id)",
+          "table": "system",
+          "columns": [
+            "id"
+          ]
+        }
+      ],
+      "def": "CREATE TABLE system (\n    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,\n    name TEXT NOT NULL\n)"
+    },
+    {
+      "name": "emulator",
+      "type": "table",
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "type": "TEXT",
+          "nullable": false
+        },
+        {
+          "name": "executable",
+          "type": "TEXT",
+          "nullable": false
+        },
+        {
+          "name": "extract_files",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "arguments",
+          "type": "TEXT",
+          "nullable": false
+        },
+        {
+          "name": "system_id",
+          "type": "INTEGER",
+          "nullable": false
+        }
+      ],
+      "constraints": [
+        {
+          "name": "id",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (id)",
+          "table": "emulator",
+          "columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "- (Foreign key ID: 0)",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (system_id) REFERENCES system (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE",
+          "table": "emulator",
+          "referenced_table": "system",
+          "columns": [
+            "system_id"
+          ],
+          "referenced_columns": [
+            "id"
+          ]
+        }
+      ],
+      "def": "CREATE TABLE emulator (\n    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,\n    name TEXT NOT NULL,\n    executable TEXT NOT NULL,\n    extract_files INTEGER NOT NULL,\n    arguments TEXT NOT NULL, -- arguments as JSON string \n    system_id INTEGER NOT NULL,\n    FOREIGN KEY (system_id) REFERENCES system(id) ON DELETE CASCADE\n)"
+    },
+    {
+      "name": "franchise",
+      "type": "table",
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "type": "TEXT",
+          "nullable": false
+        }
+      ],
+      "constraints": [
+        {
+          "name": "id",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (id)",
+          "table": "franchise",
+          "columns": [
+            "id"
+          ]
+        }
+      ],
+      "def": "CREATE TABLE franchise (\n    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,\n    name TEXT NOT NULL\n)"
+    },
+    {
+      "name": "software_title",
+      "type": "table",
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "type": "TEXT",
+          "nullable": false
+        },
+        {
+          "name": "franchise_id",
+          "type": "INTEGER",
+          "nullable": true
+        }
+      ],
+      "constraints": [
+        {
+          "name": "id",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (id)",
+          "table": "software_title",
+          "columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "- (Foreign key ID: 0)",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (franchise_id) REFERENCES franchise (id) ON UPDATE NO ACTION ON DELETE NO ACTION MATCH NONE",
+          "table": "software_title",
+          "referenced_table": "franchise",
+          "columns": [
+            "franchise_id"
+          ],
+          "referenced_columns": [
+            "id"
+          ]
+        }
+      ],
+      "def": "CREATE TABLE software_title (\n    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,\n    name TEXT NOT NULL,\n    franchise_id INTEGER,\n    FOREIGN KEY (franchise_id) REFERENCES franchise(id)\n)"
+    },
+    {
+      "name": "release",
+      "type": "table",
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "type": "TEXT",
+          "nullable": false
+        }
+      ],
+      "constraints": [
+        {
+          "name": "id",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (id)",
+          "table": "release",
+          "columns": [
+            "id"
+          ]
+        }
+      ],
+      "def": "CREATE TABLE release (\n    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,\n    name TEXT NOT NULL\n)"
+    },
+    {
+      "name": "file_info",
+      "type": "table",
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "sha1_checksum",
+          "type": "BLOB",
+          "nullable": false
+        },
+        {
+          "name": "file_size",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "archive_file_name",
+          "type": "TEXT",
+          "nullable": false
+        },
+        {
+          "name": "file_type",
+          "type": "INTEGER",
+          "nullable": true
+        }
+      ],
+      "constraints": [
+        {
+          "name": "id",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (id)",
+          "table": "file_info",
+          "columns": [
+            "id"
+          ]
+        }
+      ],
+      "def": "CREATE TABLE file_info (\n    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,\n    sha1_checksum BLOB NOT NULL,\n    file_size INTEGER NOT NULL,\n    archive_file_name TEXT NOT NULL\n, file_type INTEGER)"
+    },
+    {
+      "name": "file_set",
+      "type": "table",
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "file_name",
+          "type": "TEXT",
+          "nullable": false
+        },
+        {
+          "name": "file_type",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "type": "TEXT",
+          "nullable": false
+        },
+        {
+          "name": "source",
+          "type": "TEXT",
+          "nullable": false,
+          "default": "''"
+        }
+      ],
+      "constraints": [
+        {
+          "name": "id",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (id)",
+          "table": "file_set",
+          "columns": [
+            "id"
+          ]
+        }
+      ],
+      "def": "CREATE TABLE file_set (\n    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,\n    file_name TEXT NOT NULL,\n    file_type INTEGER NOT NULL,\n    name TEXT NOT NULL\n , source TEXT NOT NULL DEFAULT '')"
+    },
+    {
+      "name": "file_set_file_info",
+      "type": "table",
+      "columns": [
+        {
+          "name": "file_set_id",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "file_info_id",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "file_name",
+          "type": "TEXT",
+          "nullable": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "sqlite_autoindex_file_set_file_info_1",
+          "def": "PRIMARY KEY (file_set_id, file_info_id)",
+          "table": "file_set_file_info",
+          "columns": [
+            "file_set_id",
+            "file_info_id"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "file_set_id",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (file_set_id)",
+          "table": "file_set_file_info",
+          "columns": [
+            "file_set_id"
+          ]
+        },
+        {
+          "name": "file_info_id",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (file_info_id)",
+          "table": "file_set_file_info",
+          "columns": [
+            "file_info_id"
+          ]
+        },
+        {
+          "name": "- (Foreign key ID: 0)",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (file_info_id) REFERENCES file_info (id) ON UPDATE NO ACTION ON DELETE NO ACTION MATCH NONE",
+          "table": "file_set_file_info",
+          "referenced_table": "file_info",
+          "columns": [
+            "file_info_id"
+          ],
+          "referenced_columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "- (Foreign key ID: 1)",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (file_set_id) REFERENCES file_set (id) ON UPDATE NO ACTION ON DELETE NO ACTION MATCH NONE",
+          "table": "file_set_file_info",
+          "referenced_table": "file_set",
+          "columns": [
+            "file_set_id"
+          ],
+          "referenced_columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_file_set_file_info_1",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (file_set_id, file_info_id)",
+          "table": "file_set_file_info",
+          "columns": [
+            "file_set_id",
+            "file_info_id"
+          ]
+        }
+      ],
+      "def": "CREATE TABLE file_set_file_info (\n    file_set_id INTEGER NOT NULL,\n    file_info_id INTEGER NOT NULL,\n    -- same file can have different names in different file sets \n    file_name TEXT NOT NULL,\n    PRIMARY KEY (file_set_id, file_info_id),\n    FOREIGN KEY (file_set_id) REFERENCES file_set(id),\n    FOREIGN KEY (file_info_id) REFERENCES file_info(id)\n)"
+    },
+    {
+      "name": "release_file_set",
+      "type": "table",
+      "columns": [
+        {
+          "name": "release_id",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "file_set_id",
+          "type": "INTEGER",
+          "nullable": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "sqlite_autoindex_release_file_set_1",
+          "def": "PRIMARY KEY (release_id, file_set_id)",
+          "table": "release_file_set",
+          "columns": [
+            "release_id",
+            "file_set_id"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "release_id",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (release_id)",
+          "table": "release_file_set",
+          "columns": [
+            "release_id"
+          ]
+        },
+        {
+          "name": "file_set_id",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (file_set_id)",
+          "table": "release_file_set",
+          "columns": [
+            "file_set_id"
+          ]
+        },
+        {
+          "name": "- (Foreign key ID: 0)",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (file_set_id) REFERENCES file_set (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE",
+          "table": "release_file_set",
+          "referenced_table": "file_set",
+          "columns": [
+            "file_set_id"
+          ],
+          "referenced_columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "- (Foreign key ID: 1)",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (release_id) REFERENCES release (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE",
+          "table": "release_file_set",
+          "referenced_table": "release",
+          "columns": [
+            "release_id"
+          ],
+          "referenced_columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_release_file_set_1",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (release_id, file_set_id)",
+          "table": "release_file_set",
+          "columns": [
+            "release_id",
+            "file_set_id"
+          ]
+        }
+      ],
+      "def": "CREATE TABLE release_file_set (\n    release_id INTEGER NOT NULL,\n    file_set_id INTEGER NOT NULL,\n    PRIMARY KEY (release_id, file_set_id),\n    FOREIGN KEY (release_id) REFERENCES release(id) ON DELETE CASCADE,\n    FOREIGN KEY (file_set_id) REFERENCES file_set(id) ON DELETE CASCADE\n)"
+    },
+    {
+      "name": "setting",
+      "type": "table",
+      "columns": [
+        {
+          "name": "key",
+          "type": "TEXT",
+          "nullable": false
+        },
+        {
+          "name": "value",
+          "type": "TEXT",
+          "nullable": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "sqlite_autoindex_setting_1",
+          "def": "PRIMARY KEY (key)",
+          "table": "setting",
+          "columns": [
+            "key"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "key",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (key)",
+          "table": "setting",
+          "columns": [
+            "key"
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_setting_1",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (key)",
+          "table": "setting",
+          "columns": [
+            "key"
+          ]
+        }
+      ],
+      "def": "CREATE TABLE setting (\n    key TEXT NOT NULL PRIMARY KEY,\n    value TEXT NOT NULL\n)"
+    },
+    {
+      "name": "document_viewer",
+      "type": "table",
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "type": "TEXT",
+          "nullable": false
+        },
+        {
+          "name": "executable",
+          "type": "TEXT",
+          "nullable": false
+        },
+        {
+          "name": "document_type",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "arguments",
+          "type": "TEXT",
+          "nullable": false
+        }
+      ],
+      "constraints": [
+        {
+          "name": "id",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (id)",
+          "table": "document_viewer",
+          "columns": [
+            "id"
+          ]
+        }
+      ],
+      "def": "CREATE TABLE document_viewer (\n    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,\n    name TEXT NOT NULL,\n    executable TEXT NOT NULL,\n    document_type INTEGER NOT NULL,\n    arguments TEXT NOT NULL\n)"
+    },
+    {
+      "name": "release_system",
+      "type": "table",
+      "columns": [
+        {
+          "name": "release_id",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "system_id",
+          "type": "INTEGER",
+          "nullable": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "sqlite_autoindex_release_system_1",
+          "def": "PRIMARY KEY (release_id, system_id)",
+          "table": "release_system",
+          "columns": [
+            "release_id",
+            "system_id"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "release_id",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (release_id)",
+          "table": "release_system",
+          "columns": [
+            "release_id"
+          ]
+        },
+        {
+          "name": "system_id",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (system_id)",
+          "table": "release_system",
+          "columns": [
+            "system_id"
+          ]
+        },
+        {
+          "name": "- (Foreign key ID: 0)",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (system_id) REFERENCES system (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE",
+          "table": "release_system",
+          "referenced_table": "system",
+          "columns": [
+            "system_id"
+          ],
+          "referenced_columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "- (Foreign key ID: 1)",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (release_id) REFERENCES release (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE",
+          "table": "release_system",
+          "referenced_table": "release",
+          "columns": [
+            "release_id"
+          ],
+          "referenced_columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_release_system_1",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (release_id, system_id)",
+          "table": "release_system",
+          "columns": [
+            "release_id",
+            "system_id"
+          ]
+        }
+      ],
+      "def": "CREATE TABLE \"release_system\" (\n    release_id INTEGER NOT NULL,\n    system_id INTEGER NOT NULL,\n    PRIMARY KEY (release_id, system_id),\n    FOREIGN KEY (release_id) REFERENCES release(id) ON DELETE CASCADE,\n    FOREIGN KEY (system_id) REFERENCES system(id) ON DELETE CASCADE\n)"
+    },
+    {
+      "name": "release_software_title",
+      "type": "table",
+      "columns": [
+        {
+          "name": "release_id",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "software_title_id",
+          "type": "INTEGER",
+          "nullable": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "sqlite_autoindex_release_software_title_1",
+          "def": "PRIMARY KEY (release_id, software_title_id)",
+          "table": "release_software_title",
+          "columns": [
+            "release_id",
+            "software_title_id"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "release_id",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (release_id)",
+          "table": "release_software_title",
+          "columns": [
+            "release_id"
+          ]
+        },
+        {
+          "name": "software_title_id",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (software_title_id)",
+          "table": "release_software_title",
+          "columns": [
+            "software_title_id"
+          ]
+        },
+        {
+          "name": "- (Foreign key ID: 0)",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (software_title_id) REFERENCES software_title (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE",
+          "table": "release_software_title",
+          "referenced_table": "software_title",
+          "columns": [
+            "software_title_id"
+          ],
+          "referenced_columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "- (Foreign key ID: 1)",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (release_id) REFERENCES release (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE",
+          "table": "release_software_title",
+          "referenced_table": "release",
+          "columns": [
+            "release_id"
+          ],
+          "referenced_columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_release_software_title_1",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (release_id, software_title_id)",
+          "table": "release_software_title",
+          "columns": [
+            "release_id",
+            "software_title_id"
+          ]
+        }
+      ],
+      "def": "CREATE TABLE \"release_software_title\" (\n    release_id INTEGER NOT NULL,\n    software_title_id INTEGER NOT NULL,\n    PRIMARY KEY (release_id, software_title_id),\n    FOREIGN KEY (release_id) REFERENCES release(id) ON DELETE CASCADE,\n    FOREIGN KEY (software_title_id) REFERENCES software_title(id) ON DELETE CASCADE\n)"
+    },
+    {
+      "name": "file_sync_log",
+      "type": "table",
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "file_info_id",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "sync_time",
+          "type": "TIMESTAMP",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP"
+        },
+        {
+          "name": "status",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "message",
+          "type": "TEXT",
+          "nullable": false,
+          "default": "''"
+        },
+        {
+          "name": "cloud_key",
+          "type": "TEXT",
+          "nullable": false
+        }
+      ],
+      "constraints": [
+        {
+          "name": "id",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (id)",
+          "table": "file_sync_log",
+          "columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "- (Foreign key ID: 0)",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (file_info_id) REFERENCES file_info (id) ON UPDATE NO ACTION ON DELETE NO ACTION MATCH NONE",
+          "table": "file_sync_log",
+          "referenced_table": "file_info",
+          "columns": [
+            "file_info_id"
+          ],
+          "referenced_columns": [
+            "id"
+          ]
+        }
+      ],
+      "def": "CREATE TABLE file_sync_log (\n    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,\n    file_info_id INTEGER NOT NULL,\n    sync_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    status INTEGER NOT NULL,\n    message TEXT NOT NULL DEFAULT '',\n    cloud_key TEXT NOT NULL,\n    FOREIGN KEY (file_info_id) REFERENCES file_info(id)\n)"
+    },
+    {
+      "name": "file_info_system",
+      "type": "table",
+      "columns": [
+        {
+          "name": "file_info_id",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "system_id",
+          "type": "INTEGER",
+          "nullable": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "sqlite_autoindex_file_info_system_1",
+          "def": "PRIMARY KEY (file_info_id, system_id)",
+          "table": "file_info_system",
+          "columns": [
+            "file_info_id",
+            "system_id"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "file_info_id",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (file_info_id)",
+          "table": "file_info_system",
+          "columns": [
+            "file_info_id"
+          ]
+        },
+        {
+          "name": "system_id",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (system_id)",
+          "table": "file_info_system",
+          "columns": [
+            "system_id"
+          ]
+        },
+        {
+          "name": "- (Foreign key ID: 0)",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (system_id) REFERENCES system (id) ON UPDATE NO ACTION ON DELETE NO ACTION MATCH NONE",
+          "table": "file_info_system",
+          "referenced_table": "system",
+          "columns": [
+            "system_id"
+          ],
+          "referenced_columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "- (Foreign key ID: 1)",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (file_info_id) REFERENCES file_info (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE",
+          "table": "file_info_system",
+          "referenced_table": "file_info",
+          "columns": [
+            "file_info_id"
+          ],
+          "referenced_columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_file_info_system_1",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (file_info_id, system_id)",
+          "table": "file_info_system",
+          "columns": [
+            "file_info_id",
+            "system_id"
+          ]
+        }
+      ],
+      "def": "CREATE TABLE file_info_system (\n    file_info_id INTEGER NOT NULL,\n    system_id INTEGER NOT NULL,\n    PRIMARY KEY (file_info_id, system_id),\n    FOREIGN KEY (file_info_id) REFERENCES file_info(id) ON DELETE CASCADE,\n    FOREIGN KEY (system_id) REFERENCES system(id)\n)"
+    }
+  ],
+  "relations": [
+    {
+      "table": "emulator",
+      "columns": [
+        "system_id"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "system",
+      "parent_columns": [
+        "id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (system_id) REFERENCES system (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
+    },
+    {
+      "table": "software_title",
+      "columns": [
+        "franchise_id"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "franchise",
+      "parent_columns": [
+        "id"
+      ],
+      "parent_cardinality": "zero_or_one",
+      "def": "FOREIGN KEY (franchise_id) REFERENCES franchise (id) ON UPDATE NO ACTION ON DELETE NO ACTION MATCH NONE"
+    },
+    {
+      "table": "file_set_file_info",
+      "columns": [
+        "file_info_id"
+      ],
+      "cardinality": "zero_or_one",
+      "parent_table": "file_info",
+      "parent_columns": [
+        "id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (file_info_id) REFERENCES file_info (id) ON UPDATE NO ACTION ON DELETE NO ACTION MATCH NONE"
+    },
+    {
+      "table": "file_set_file_info",
+      "columns": [
+        "file_set_id"
+      ],
+      "cardinality": "zero_or_one",
+      "parent_table": "file_set",
+      "parent_columns": [
+        "id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (file_set_id) REFERENCES file_set (id) ON UPDATE NO ACTION ON DELETE NO ACTION MATCH NONE"
+    },
+    {
+      "table": "release_file_set",
+      "columns": [
+        "file_set_id"
+      ],
+      "cardinality": "zero_or_one",
+      "parent_table": "file_set",
+      "parent_columns": [
+        "id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (file_set_id) REFERENCES file_set (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
+    },
+    {
+      "table": "release_file_set",
+      "columns": [
+        "release_id"
+      ],
+      "cardinality": "zero_or_one",
+      "parent_table": "release",
+      "parent_columns": [
+        "id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (release_id) REFERENCES release (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
+    },
+    {
+      "table": "release_system",
+      "columns": [
+        "system_id"
+      ],
+      "cardinality": "zero_or_one",
+      "parent_table": "system",
+      "parent_columns": [
+        "id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (system_id) REFERENCES system (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
+    },
+    {
+      "table": "release_system",
+      "columns": [
+        "release_id"
+      ],
+      "cardinality": "zero_or_one",
+      "parent_table": "release",
+      "parent_columns": [
+        "id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (release_id) REFERENCES release (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
+    },
+    {
+      "table": "release_software_title",
+      "columns": [
+        "software_title_id"
+      ],
+      "cardinality": "zero_or_one",
+      "parent_table": "software_title",
+      "parent_columns": [
+        "id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (software_title_id) REFERENCES software_title (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
+    },
+    {
+      "table": "release_software_title",
+      "columns": [
+        "release_id"
+      ],
+      "cardinality": "zero_or_one",
+      "parent_table": "release",
+      "parent_columns": [
+        "id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (release_id) REFERENCES release (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
+    },
+    {
+      "table": "file_sync_log",
+      "columns": [
+        "file_info_id"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "file_info",
+      "parent_columns": [
+        "id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (file_info_id) REFERENCES file_info (id) ON UPDATE NO ACTION ON DELETE NO ACTION MATCH NONE"
+    },
+    {
+      "table": "file_info_system",
+      "columns": [
+        "system_id"
+      ],
+      "cardinality": "zero_or_one",
+      "parent_table": "system",
+      "parent_columns": [
+        "id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (system_id) REFERENCES system (id) ON UPDATE NO ACTION ON DELETE NO ACTION MATCH NONE"
+    },
+    {
+      "table": "file_info_system",
+      "columns": [
+        "file_info_id"
+      ],
+      "cardinality": "zero_or_one",
+      "parent_table": "file_info",
+      "parent_columns": [
+        "id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (file_info_id) REFERENCES file_info (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
+    }
+  ],
+  "driver": {
+    "name": "sqlite",
+    "database_version": "3.50.4"
+  }
+}
