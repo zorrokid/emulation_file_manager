@@ -22,6 +22,17 @@ Run migrations: `sqlx migrate run`
 
 Migrations are automatically run at application startup via `sqlx::migrate!().run(&pool)` in `lib.rs`.
 
+## Updating Schema Documentation
+
+After creating or running migrations, regenerate the schema documentation:
+
+```bash
+# From the workspace root
+tbls doc
+```
+
+This updates the ER diagrams and table documentation in `docs/schema/`. Commit the updated documentation along with your migrations.
+
 # SQLx Offline Mode
 
 This project uses SQLx's offline mode for CI/CD. This allows the CI build to succeed without needing a database connection during compilation.
