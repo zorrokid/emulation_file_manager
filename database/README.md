@@ -14,6 +14,14 @@ When running application, runtime db is created to ~/.local/share/efm/db.sqlite 
 
 To reset db it can be simply deleted, new db will be created when starting application again.
 
+### querying the database manually
+
+To query the database manually, you can use the `sqlite3` command-line tool:
+
+```bash
+sqlite3 ~/.local/share/efm/db.sqlite
+```
+
 # Migrations
 
 Add migration: `sqlx migrate add <name>`
