@@ -70,7 +70,8 @@ SQLX_OFFLINE=true cargo check
 To verify that the offline data matches your current queries without regenerating:
 
 ```bash
-cargo sqlx prepare --check
+# From the workspace root
+cargo sqlx prepare --check --workspace
 ```
 
 This is useful in CI or pre-commit hooks to ensure developers haven't forgotten to update the offline data.
