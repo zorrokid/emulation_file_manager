@@ -31,7 +31,7 @@ After creating or running migrations, regenerate the schema documentation:
 tbls doc
 ```
 
-This updates the ER diagrams and table documentation in `docs/schema/`. Commit the updated documentation along with your migrations.
+This updates the ER diagrams and table documentation in `database/docs/schema/`. Commit the updated documentation along with your migrations.
 
 # SQLx Offline Mode
 

@@ -1,6 +1,6 @@
 # tbls configuration for Software Collection Manager
 dsn: sqlite://database/data/db.sqlite
-docPath: docs/schema
+docPath: database/docs/schema
 
 # Documentation settings
 er:
