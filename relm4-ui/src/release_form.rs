@@ -5,7 +5,10 @@ use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
         self, glib,
-        prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt},
+        prelude::{
+            BoxExt, ButtonExt, EditableExt, EntryBufferExtManual, EntryExt, GtkWindowExt,
+            OrientableExt, WidgetExt,
+        },
     },
     once_cell::sync::OnceCell,
     typed_view::list::TypedListView,
@@ -30,6 +33,7 @@ use crate::{
     system_selector::{
         SystemSelectInit, SystemSelectModel, SystemSelectMsg, SystemSelectOutputMsg,
     },
+    utils::dialog_utils::show_info_dialog,
 };
 
 #[derive(Debug)]
@@ -50,6 +54,7 @@ pub enum ReleaseFormMsg {
     Hide,
     EditFileSet,
     FileSetUpdated(FileSetListModel),
+    NameChanged(String),
 }
 
 #[derive(Debug)]
@@ -101,7 +106,9 @@ impl ReleaseFormModel {
                         ReleaseFormMsg::FileSetUpdated(file_set)
                     }
                 });
-            self.file_set_editor.set(file_set_editor);
+            if let Err(e) = self.file_set_editor.set(file_set_editor) {
+                eprintln!("Failed to set file set editor: {:?}", e);
+            }
         }
     }
 }
@@ -129,6 +136,17 @@ impl Component for ReleaseFormModel {
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
                 set_spacing: 10,
+
+                #[name="release_name_entry"]
+                gtk::Entry {
+                    set_text: "",
+                    set_placeholder_text: Some("Release Name"),
+                    connect_changed[sender] => move |entry| {
+                        let buffer = entry.buffer();
+                        sender.input(ReleaseFormMsg::NameChanged(buffer.text().into()));
+                    },
+                },
+
 
                 gtk::Box {
                     set_orientation: gtk::Orientation::Vertical,
@@ -305,7 +323,13 @@ impl Component for ReleaseFormModel {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
+    fn update_with_view(
+        &mut self,
+        widgets: &mut Self::Widgets,
+        msg: Self::Input,
+        sender: ComponentSender<Self>,
+        root: &Self::Root,
+    ) {
         match msg {
             ReleaseFormMsg::OpenSystemSelector => {
                 self.system_selector.emit(SystemSelectMsg::Show {
@@ -350,7 +374,7 @@ impl Component for ReleaseFormModel {
                     });
             }
             ReleaseFormMsg::StartSaveRelease => {
-                println!("Starting to save release with selected systems and file sets");
+                tracing::info!("Starting to save release with selected systems and file sets");
                 let repository_manager = Arc::clone(&self.repository_manager);
                 let software_title_ids =
                     get_item_ids(&self.selected_software_titles_list_view_wrapper);
@@ -359,23 +383,41 @@ impl Component for ReleaseFormModel {
                 let file_set_ids = get_item_ids(&self.selected_file_sets_list_view_wrapper);
 
                 if system_ids.is_empty() {
-                    println!("No systems selected, cannot create release.");
+                    show_info_dialog(
+                        "No systems selected, cannot create release.".to_string(),
+                        root,
+                    );
                 } else if file_set_ids.is_empty() {
-                    println!("No file sets selected, cannot create release.");
+                    show_info_dialog(
+                        "No file sets selected, cannot create release.".to_string(),
+                        root,
+                    );
                 } else if software_title_ids.is_empty() {
-                    println!("No software titles selected, cannot create release.");
+                    show_info_dialog(
+                        "No software titles selected, cannot create release.".to_string(),
+                        root,
+                    );
                 } else {
                     let release_id = self.release.as_ref().map(|r| r.id);
+                    let release_name = if let Some(release) = &self.release {
+                        release.name.clone()
+                    } else {
+                        String::new()
+                    };
 
                     sender.oneshot_command(async move {
                         let res = match release_id {
                             Some(id) => {
-                                println!("Editing existing release with id: {}", id);
+                                tracing::info!(
+                                    "Editing existing release {} with id: {}",
+                                    release_name,
+                                    id
+                                );
                                 repository_manager
                                     .get_release_repository()
                                     .update_release_full(
                                         id,
-                                        "",
+                                        release_name.as_str(),
                                         &software_title_ids,
                                         &file_set_ids,
                                         &system_ids,
@@ -383,11 +425,11 @@ impl Component for ReleaseFormModel {
                                     .await
                             }
                             _ => {
-                                println!("Creating new release");
+                                tracing::info!("Creating new release with name: {}", release_name);
                                 repository_manager
                                     .get_release_repository()
                                     .add_release_full(
-                                        "",
+                                        release_name.as_str(),
                                         &software_title_ids,
                                         &file_set_ids,
                                         &system_ids,
@@ -426,7 +468,8 @@ impl Component for ReleaseFormModel {
                 let mut selected_systems = vec![];
                 let mut selected_file_sets = vec![];
                 let mut selected_software_titles = vec![];
-                if let Some(release) = &release {
+                if let Some(release) = release {
+                    tracing::info!("Showing release form with release: {:?}", &release);
                     selected_systems = release
                         .systems
                         .iter()
@@ -456,6 +499,13 @@ impl Component for ReleaseFormModel {
                             can_delete: false,
                         })
                         .collect();
+                    let release_name = release.name.clone();
+                    widgets.release_name_entry.set_text(release_name.as_str());
+                    self.release = Some(release);
+                } else {
+                    tracing::info!("Showing release form for new release");
+                    widgets.release_name_entry.set_text("");
+                    self.release = None;
                 }
 
                 self.selected_systems_list_view_wrapper.clear();
@@ -478,7 +528,6 @@ impl Component for ReleaseFormModel {
                         id: st.id,
                         name: st.name.clone(),
                     }));
-                self.release = release;
                 root.show();
             }
             ReleaseFormMsg::Hide => {
@@ -503,15 +552,22 @@ impl Component for ReleaseFormModel {
             }
             ReleaseFormMsg::FileSetUpdated(file_set) => {
                 for i in 0..self.selected_file_sets_list_view_wrapper.len() {
-                    if let Some(item) = self.selected_file_sets_list_view_wrapper.get(i) {
-                        if item.borrow().id == file_set.id {
-                            item.borrow_mut().name = file_set.file_set_name.clone();
-                            break;
-                        }
+                    if let Some(item) = self.selected_file_sets_list_view_wrapper.get(i)
+                        && item.borrow().id == file_set.id
+                    {
+                        item.borrow_mut().name = file_set.file_set_name.clone();
+                        break;
                     }
                 }
             }
+            ReleaseFormMsg::NameChanged(name) => {
+                if let Some(release) = &mut self.release {
+                    release.name = name;
+                }
+            }
         }
+        // This is essential with update_with_view:
+        self.update_view(widgets, sender);
     }
 
     fn update_cmd(

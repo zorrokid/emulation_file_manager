@@ -208,9 +208,13 @@ impl ReleaseRepository {
     ) -> Result<i64, Error> {
         let mut transaction = self.pool.begin().await?;
 
-        sqlx::query!("UPDATE release SET name = ?", release_name)
-            .execute(&mut *transaction)
-            .await?;
+        sqlx::query!(
+            "UPDATE release SET name = ? WHERE id = ?",
+            release_name,
+            release_id
+        )
+        .execute(&mut *transaction)
+        .await?;
 
         // update software titles
 
