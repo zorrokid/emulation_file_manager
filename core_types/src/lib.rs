@@ -141,6 +141,13 @@ impl FileType {
             )),
         }
     }
+
+    pub fn is_media_type(&self) -> bool {
+        matches!(
+            self,
+            FileType::DiskImage | FileType::TapeImage | FileType::Rom | FileType::MemorySnapshot
+        )
+    }
 }
 
 pub const EMULATOR_FILE_TYPES: &[FileType] = &[
