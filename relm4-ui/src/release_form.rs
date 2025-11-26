@@ -437,14 +437,14 @@ impl Component for ReleaseFormModel {
                 }
             }
             ReleaseFormMsg::SoftwareTitleCreated(software_title) => {
-                tracing::info!("Creating software title: {:?}", &software_title);
+                tracing::info!("Software title created: {:?}", &software_title);
                 let res = sender.output(ReleaseFormOutputMsg::SoftwareTitleCreated(software_title));
                 if let Err(msg) = res {
                     tracing::error!("Error in sending message {:?}", msg);
                 }
             }
             ReleaseFormMsg::SoftwareTitleUpdated(software_title) => {
-                tracing::info!("Updating software title: {:?}", &software_title);
+                tracing::info!("Software title updated: {:?}", &software_title);
                 let res = sender.output(ReleaseFormOutputMsg::SoftwareTitleUpdated(software_title));
                 if let Err(msg) = res {
                     tracing::error!("Error in sending message {:?}", msg);
@@ -496,10 +496,12 @@ impl Component for ReleaseFormModel {
                         .collect();
                     let release_name = release.name.clone();
                     widgets.release_name_entry.set_text(release_name.as_str());
+                    self.release_name = release.name.clone();
                     self.release = Some(release);
                 } else {
                     tracing::info!("Showing release form for new release");
                     widgets.release_name_entry.set_text("");
+                    self.release_name = String::new();
                     self.release = None;
                 }
 
@@ -556,7 +558,7 @@ impl Component for ReleaseFormModel {
                 }
             }
             ReleaseFormMsg::NameChanged(name) => {
-                self.release_name = name.clone();
+                self.release_name = name;
             }
         }
         // This is essential with update_with_view:
