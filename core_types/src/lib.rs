@@ -326,4 +326,21 @@ mod tests {
             }
         );
     }
+
+    #[test]
+    fn test_is_media_type() {
+        assert!(FileType::Rom.is_media_type());
+        assert!(FileType::DiskImage.is_media_type());
+        assert!(FileType::TapeImage.is_media_type());
+        assert!(!FileType::Screenshot.is_media_type());
+        assert!(!FileType::Manual.is_media_type());
+        assert!(!FileType::CoverScan.is_media_type());
+        assert!(FileType::MemorySnapshot.is_media_type());
+        assert!(!FileType::LoadingScreen.is_media_type());
+        assert!(!FileType::TitleScreen.is_media_type());
+        assert!(!FileType::ManualScan.is_media_type());
+        assert!(!FileType::MediaScan.is_media_type());
+        assert!(!FileType::PackageScan.is_media_type());
+        assert!(!FileType::InlayScan.is_media_type());
+    }
 }
