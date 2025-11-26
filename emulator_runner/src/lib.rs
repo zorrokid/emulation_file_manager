@@ -35,11 +35,11 @@ pub async fn run_with_emulator(
         return Err(EmulatorRunnerError::NoFileSelected);
     }
     let file_path = Path::new(&source_path).join(&selected_file_name);
-    println!(
-        "Running emulator with file: {} and arguments: {:?}",
-        file_path.display(),
-        arguments
-    );
+
+    tracing::debug!("Emulator executable: {}", executable);
+    tracing::debug!("Emulator arguments: {:?}", arguments);
+    tracing::debug!("File to run: {}", file_path.display());
+
     if !file_path.exists() {
         return Err(EmulatorRunnerError::FileNotFound);
     }
@@ -47,10 +47,10 @@ pub async fn run_with_emulator(
     let mut command = Command::new(&executable);
 
     if arguments.is_empty() {
-        println!("No arguments provided, running with file only.");
+        tracing::debug!("No arguments provided, running with file path as only argument.");
         command.arg(&file_path).current_dir(&source_path);
     } else {
-        println!("Running with arguments: {:?}", arguments);
+        tracing::debug!("Preparing to run emulator with arguments {:?}", arguments);
 
         let mut args = Vec::new();
 
@@ -73,7 +73,7 @@ pub async fn run_with_emulator(
             .current_dir(&source_path);
     }
 
-    println!("Executing command: {:?}", command);
+    tracing::debug!("Command to execute: {:?}", command);
 
     let status = command.status().await.map_err(|e| {
         EmulatorRunnerError::IoError(format!("Failed to get status of emulator: {}", e))

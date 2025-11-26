@@ -10,3 +10,5 @@ async-std = { version = "1.13.1", features = ["attributes"] }
 thiserror = "2.0.12"
 tempfile = "3.19.1"
 core_types = { path = "../core_types" }
+tracing = "0.1"
+
