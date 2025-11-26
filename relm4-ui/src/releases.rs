@@ -262,20 +262,15 @@ impl Component for ReleasesModel {
                         let items: Vec<ListItem> = releases
                             .into_iter()
                             .map(|release| {
-                                let name = if !release.name.is_empty() {
-                                    format!(
-                                        "{} {} {}",
-                                        release.name,
-                                        release.system_names.join(", "),
-                                        release.media_file_types.join(", "),
-                                    )
-                                } else {
-                                    format!(
-                                        "{} {}",
-                                        release.system_names.join(", "),
-                                        release.media_file_types.join(", "),
-                                    )
-                                };
+                                let parts: Vec<String> = vec![
+                                    release.name.clone(),
+                                    release.system_names.join(", "),
+                                    release.media_file_types.join(", "),
+                                ]
+                                .into_iter()
+                                .filter(|s| !s.is_empty())
+                                .collect();
+                                let name = parts.join(" ");
 
                                 ListItem {
                                     id: release.id,
