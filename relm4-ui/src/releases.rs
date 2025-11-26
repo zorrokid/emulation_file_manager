@@ -111,7 +111,6 @@ impl Component for ReleasesModel {
             view_model_service: Arc::clone(&init_model.view_model_service),
             repository_manager: Arc::clone(&init_model.repository_manager),
             settings: Arc::clone(&init_model.settings),
-            //release: None,
         };
 
         let release_form = ReleaseFormModel::builder()
@@ -156,16 +155,16 @@ impl Component for ReleasesModel {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match msg {
             ReleasesMsg::SoftwareTitleSelected { id } => {
-                println!("Software title selected with ID: {}", id);
+                tracing::info!("Software title selected with ID: {}", id);
                 self.selected_software_title_id = Some(id);
                 sender.input(ReleasesMsg::FetchReleases);
             }
             ReleasesMsg::FetchReleases => {
                 if let Some(software_title_id) = self.selected_software_title_id {
-                    println!(
+                    tracing::info!(
                         "Fetching releases for software title ID: {}",
                         software_title_id
                     );
@@ -259,24 +258,23 @@ impl Component for ReleasesModel {
             CommandMsg::FetchedReleases(releases_result) => {
                 match releases_result {
                     Ok(releases) => {
-                        println!("Releases fetched successfully: {:?}", releases);
+                        tracing::info!("Releases fetched successfully.");
                         let items: Vec<ListItem> = releases
                             .into_iter()
                             .map(|release| {
-                                let name_string = if !release.name.is_empty() {
-                                    format!("{} ", release.name)
-                                } else {
-                                    String::new()
-                                };
+                                let parts: Vec<String> = vec![
+                                    release.name.clone(),
+                                    release.system_names.join(", "),
+                                    release.media_file_types.join(", "),
+                                ]
+                                .into_iter()
+                                .filter(|s| !s.is_empty())
+                                .collect();
+                                let name = parts.join(" ");
 
                                 ListItem {
                                     id: release.id,
-                                    name: format!(
-                                        "{}{} {}",
-                                        release.system_names.join(", "),
-                                        release.file_types.join(", "),
-                                        name_string,
-                                    ),
+                                    name,
                                 }
                             })
                             .collect();
