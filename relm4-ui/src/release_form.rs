@@ -33,7 +33,7 @@ use crate::{
     system_selector::{
         SystemSelectInit, SystemSelectModel, SystemSelectMsg, SystemSelectOutputMsg,
     },
-    utils::dialog_utils::show_info_dialog,
+    utils::dialog_utils::{show_error_dialog, show_info_dialog},
 };
 
 #[derive(Debug)]
@@ -82,6 +82,7 @@ pub struct ReleaseFormModel {
     selected_file_sets_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     release: Option<ReleaseViewModel>,
     file_set_editor: OnceCell<Controller<FileSetEditor>>,
+    release_name: String,
 }
 
 pub struct ReleaseFormInit {
@@ -107,7 +108,7 @@ impl ReleaseFormModel {
                     }
                 });
             if let Err(e) = self.file_set_editor.set(file_set_editor) {
-                eprintln!("Failed to set file set editor: {:?}", e);
+                tracing::error!("Failed to set file set editor: {:?}", e);
             }
         }
     }
@@ -139,8 +140,8 @@ impl Component for ReleaseFormModel {
 
                 #[name="release_name_entry"]
                 gtk::Entry {
-                    set_text: "",
-                    set_placeholder_text: Some("Release Name"),
+                    set_text: &model.release_name,
+                    set_placeholder_text: Some("Release name"),
                     connect_changed[sender] => move |entry| {
                         let buffer = entry.buffer();
                         sender.input(ReleaseFormMsg::NameChanged(buffer.text().into()));
@@ -313,6 +314,7 @@ impl Component for ReleaseFormModel {
             selected_systems_list_view_wrapper,
             selected_file_sets_list_view_wrapper,
             file_set_editor: OnceCell::new(),
+            release_name: String::new(),
         };
 
         let selected_systems_list_view = &model.selected_systems_list_view_wrapper.view;
@@ -352,21 +354,18 @@ impl Component for ReleaseFormModel {
             }
 
             ReleaseFormMsg::SystemSelected(system) => {
-                println!("System selected: {:?}", &system);
                 self.selected_systems_list_view_wrapper.append(ListItem {
                     name: system.name.clone(),
                     id: system.id,
                 });
             }
             ReleaseFormMsg::FileSetSelected(file_set) => {
-                println!("File set selected: {:?}", &file_set);
                 self.selected_file_sets_list_view_wrapper.append(ListItem {
                     name: file_set.file_set_name.clone(),
                     id: file_set.id,
                 });
             }
             ReleaseFormMsg::SoftwareTitleSelected(software_title) => {
-                println!("Software title selected: {:?}", &software_title);
                 self.selected_software_titles_list_view_wrapper
                     .append(ListItem {
                         name: software_title.name.clone(),
@@ -399,11 +398,7 @@ impl Component for ReleaseFormModel {
                     );
                 } else {
                     let release_id = self.release.as_ref().map(|r| r.id);
-                    let release_name = if let Some(release) = &self.release {
-                        release.name.clone()
-                    } else {
-                        String::new()
-                    };
+                    let release_name = self.release_name.clone();
 
                     sender.oneshot_command(async move {
                         let res = match release_id {
@@ -442,17 +437,17 @@ impl Component for ReleaseFormModel {
                 }
             }
             ReleaseFormMsg::SoftwareTitleCreated(software_title) => {
-                println!("Software title created: {:?}", &software_title);
+                tracing::info!("Creating software title: {:?}", &software_title);
                 let res = sender.output(ReleaseFormOutputMsg::SoftwareTitleCreated(software_title));
                 if let Err(msg) = res {
-                    eprintln!("Error in sending message {:?}", msg);
+                    tracing::error!("Error in sending message {:?}", msg);
                 }
             }
             ReleaseFormMsg::SoftwareTitleUpdated(software_title) => {
-                println!("Software title updated: {:?}", &software_title);
+                tracing::info!("Updating software title: {:?}", &software_title);
                 let res = sender.output(ReleaseFormOutputMsg::SoftwareTitleUpdated(software_title));
                 if let Err(msg) = res {
-                    eprintln!("Error in sending message {:?}", msg);
+                    tracing::error!("Error in sending message {:?}", msg);
                 }
             }
             ReleaseFormMsg::UnlinkSoftwareTitle => {
@@ -561,9 +556,7 @@ impl Component for ReleaseFormModel {
                 }
             }
             ReleaseFormMsg::NameChanged(name) => {
-                if let Some(release) = &mut self.release {
-                    release.name = name;
-                }
+                self.release_name = name.clone();
             }
         }
         // This is essential with update_with_view:
@@ -578,19 +571,19 @@ impl Component for ReleaseFormModel {
     ) {
         match message {
             CommandMsg::ReleaseCreatedOrUpdated(Ok(id)) => {
-                println!("Release created or updated with ID: {}", id);
+                tracing::info!("Release created or updated with ID: {}", id);
                 let res = sender.output(ReleaseFormOutputMsg::ReleaseCreatedOrUpdated { id });
                 if let Err(e) = res {
-                    eprintln!("Failed to send output message: {:?}", e);
-                    // TODO: show error to user
+                    tracing::error!("Error sending output message: {:?}", e);
                 } else {
-                    println!("Output message sent successfully");
                     root.close();
                 }
             }
             CommandMsg::ReleaseCreatedOrUpdated(Err(err)) => {
-                eprintln!("Failed to create release: {:?}", err);
-                // TODO: show error to user
+                show_error_dialog(
+                    format!("Failed to create or update release: {:?}", err),
+                    root,
+                );
             }
         }
     }
