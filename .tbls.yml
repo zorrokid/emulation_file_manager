@@ -1,0 +1,30 @@
+# tbls configuration for Emulation File Manager
+dsn: sqlite://database/data/db.sqlite
+docPath: database/docs/schema
+
+# Documentation settings
+er:
+  distance: 2
+  format: svg
+
+comments:
+  - table: system
+    comment: Platform/console systems (e.g., Commodore 64, Atari 2600)
+  - table: emulator
+    comment: Emulator configurations for running software on different systems
+  - table: franchise
+    comment: Game/software franchises (e.g., Zork, Jet Set Willy)
+  - table: software_title
+    comment: Individual software titles that can belong to a franchise
+  - table: release
+    comment: Specific releases of software (versions, editions, regions, compilations, different media)
+  - table: file_info
+    comment: Metadata about files including checksums and sizes
+  - table: file_set
+    comment: Collections of files that belong together
+  - table: file_sync_log
+    comment: Tracking log for file synchronization operations
+  - table: setting
+    comment: Application settings stored as key-value pairs
+  - table: document_viewer
+    comment: Configuration for external document viewers

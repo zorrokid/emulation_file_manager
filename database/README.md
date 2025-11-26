@@ -14,6 +14,14 @@ When running application, runtime db is created to ~/.local/share/efm/db.sqlite 
 
 To reset db it can be simply deleted, new db will be created when starting application again.
 
+### querying the database manually
+
+To query the database manually, you can use the `sqlite3` command-line tool:
+
+```bash
+sqlite3 ~/.local/share/efm/db.sqlite
+```
+
 # Migrations
 
 Add migration: `sqlx migrate add <name>`
@@ -21,6 +29,17 @@ Add migration: `sqlx migrate add <name>`
 Run migrations: `sqlx migrate run`
 
 Migrations are automatically run at application startup via `sqlx::migrate!().run(&pool)` in `lib.rs`.
+
+## Updating Schema Documentation
+
+After creating or running migrations, regenerate the schema documentation:
+
+```bash
+# From the workspace root
+tbls doc
+```
+
+This updates the ER diagrams and table documentation in `database/docs/schema/`. Commit the updated documentation along with your migrations.
 
 # SQLx Offline Mode
 
@@ -59,7 +78,8 @@ SQLX_OFFLINE=true cargo check
 To verify that the offline data matches your current queries without regenerating:
 
 ```bash
-cargo sqlx prepare --check
+# From the workspace root
+cargo sqlx prepare --check --workspace
 ```
 
 This is useful in CI or pre-commit hooks to ensure developers haven't forgotten to update the offline data.
