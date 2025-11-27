@@ -7,6 +7,7 @@ license = "GPL-3.0-or-later"
 [dependencies]
 async-process = "2.3.0"
 async-std = { version = "1.13.1", features = ["attributes"] }
+async-trait = "0.1"
 thiserror = "2.0.12"
 tempfile = "3.19.1"
 core_types = { path = "../core_types" }

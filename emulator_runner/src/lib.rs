@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use error::EmulatorRunnerError;
 
 pub mod error;
+pub mod ops;
 
 /// Asynchronous function to run an emulator with the given executable, arguments, and file names.
 /// It takes the selected file name and source path to locate the file.
@@ -23,7 +24,7 @@ pub mod error;
 /// * `EmulatorRunnerError::NoFileSelected`: If no file is selected.
 /// * `EmulatorRunnerError::FileNotFound`: If the selected file is not found.
 /// * `EmulatorRunnerError::IoError`: If there is an IO error while running the emulator.
-///
+#[deprecated(note = "Use EmulatorRunnerOps trait instead")]
 pub async fn run_with_emulator(
     executable: String,
     arguments: &[ArgumentType],
