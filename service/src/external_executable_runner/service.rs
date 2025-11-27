@@ -7,6 +7,7 @@ use emulator_runner::ops::{DefaultEmulatorRunnerOps, EmulatorRunnerOps};
 use crate::{
     error::Error,
     external_executable_runner::context::ExternalExecutableRunnerContext,
+    file_set_download::{download_service_ops::DownloadServiceOps, service::DownloadService},
     file_system_ops::{FileSystemOps, StdFileSystemOps},
     pipeline::generic_pipeline::Pipeline,
     view_models::Settings,
@@ -16,6 +17,7 @@ pub struct ExternalExecutableRunnerService {
     settings: Arc<Settings>,
     fs_ops: Arc<dyn FileSystemOps>,
     executable_runner_ops: Arc<dyn EmulatorRunnerOps>,
+    download_service_ops: Arc<dyn DownloadServiceOps>,
 }
 
 pub struct ExecutableRunnerModel {
@@ -28,11 +30,16 @@ pub struct ExecutableRunnerModel {
 }
 
 impl ExternalExecutableRunnerService {
-    pub fn new(settings: Arc<Settings>) -> Self {
+    pub fn new(settings: Arc<Settings>, repository_manager: Arc<RepositoryManager>) -> Self {
+        let download_service = Arc::new(DownloadService::new(
+            repository_manager.clone(),
+            settings.clone(),
+        ));
         Self::new_with_ops(
             settings,
             Arc::new(StdFileSystemOps),
             Arc::new(DefaultEmulatorRunnerOps),
+            download_service,
         )
     }
 
@@ -40,11 +47,13 @@ impl ExternalExecutableRunnerService {
         settings: Arc<Settings>,
         fs_ops: Arc<dyn FileSystemOps>,
         executable_runner_ops: Arc<dyn EmulatorRunnerOps>,
+        download_service_ops: Arc<dyn DownloadServiceOps>,
     ) -> Self {
         Self {
             settings,
             fs_ops,
             executable_runner_ops,
+            download_service_ops,
         }
     }
 
@@ -62,6 +71,7 @@ impl ExternalExecutableRunnerService {
             file_names: Vec::new(),
             executable_runner_ops: Arc::new(emulator_runner::ops::DefaultEmulatorRunnerOps {}),
             was_successful: false,
+            download_service_ops: self.download_service_ops.clone(),
         };
 
         let pipeline = Pipeline::<ExternalExecutableRunnerContext>::new();
