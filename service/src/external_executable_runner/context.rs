@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use core_types::ArgumentType;
 use database::repository_manager::RepositoryManager;
+use emulator_runner::ops::EmulatorRunnerOps;
 
 use crate::{file_system_ops::FileSystemOps, view_models::Settings};
 
@@ -14,4 +15,8 @@ pub struct ExternalExecutableRunnerContext {
     pub settings: Arc<Settings>,
     pub initial_file: Option<String>,
     pub fs_ops: Arc<dyn FileSystemOps>,
+    pub executable_runner_ops: Arc<dyn EmulatorRunnerOps>,
+    pub file_names: Vec<String>,
+    pub was_successful: bool,
+    pub error_message: Vec<String>,
 }

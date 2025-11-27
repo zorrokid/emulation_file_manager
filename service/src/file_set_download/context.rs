@@ -38,8 +38,11 @@ pub struct DownloadContext {
     pub files_in_set: Vec<FileSetFileInfo>,
     pub files_to_download: Vec<FileInfo>,
     pub file_download_results: Vec<FileDownloadResult>,
+    /// Depending if extract_files is true or false, this maps to either
+    /// the extracted files or contents of the output zip-file.
     pub file_output_mapping: HashMap<String, OutputFile>,
     pub thumbnail_path_map: ThumbnailPathMap,
+    pub output_file_names: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -88,6 +91,7 @@ impl DownloadContext {
             export_ops: settings.export_ops,
             thumbnail_generator: settings.thumbnail_generator,
             thumbnail_path_map: ThumbnailPathMap::new(),
+            output_file_names: vec![],
         }
     }
 

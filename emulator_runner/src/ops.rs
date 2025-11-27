@@ -5,6 +5,7 @@ use core_types::ArgumentType;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+// TODO: this should be more generic, like ExternalExecutableRunnerOps
 /// Trait for emulator runner operations.
 ///
 /// This trait abstracts emulator execution functionality to allow for different implementations,
@@ -59,7 +60,14 @@ impl EmulatorRunnerOps for DefaultEmulatorRunnerOps {
         source_path: PathBuf,
     ) -> Result<(), EmulatorRunnerError> {
         #[allow(deprecated)]
-        run_with_emulator(executable, arguments, file_names, selected_file_name, source_path).await
+        run_with_emulator(
+            executable,
+            arguments,
+            file_names,
+            selected_file_name,
+            source_path,
+        )
+        .await
     }
 }
 

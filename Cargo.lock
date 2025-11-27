@@ -3980,6 +3980,7 @@ dependencies = [
  "core_types",
  "credentials_storage",
  "database",
+ "emulator_runner",
  "file_export",
  "file_import",
  "file_system",
