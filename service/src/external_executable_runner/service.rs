@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use core_types::ArgumentType;
+use database::repository_manager::RepositoryManager;
 
 use crate::{
     error::Error,
@@ -16,10 +17,11 @@ pub struct ExternalExecutableRunnerService {
 }
 
 pub struct ExecutableRunnerModel {
+    pub repository_manager: Arc<RepositoryManager>,
     pub executable: String,
     pub arguments: Vec<ArgumentType>,
     pub extract_files: bool,
-    pub file_set: FileSetViewModel,
+    pub file_set_id: i64,
     pub initial_file: Option<String>,
 }
 
@@ -37,9 +39,11 @@ impl ExternalExecutableRunnerService {
             executable: model.executable,
             arguments: model.arguments,
             extract_files: model.extract_files,
-            file_set: model.file_set,
-            settinsgs: self.settings.clone(),
+            file_set_id: model.file_set_id,
+            settings: self.settings.clone(),
             initial_file: model.initial_file,
+            fs_ops: self.fs_ops.clone(),
+            repository_manager: model.repository_manager.clone(),
         };
 
         let pipeline = Pipeline::<ExternalExecutableRunnerContext>::new();
