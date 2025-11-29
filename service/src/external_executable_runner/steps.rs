@@ -17,20 +17,12 @@ impl PipelineStep<ExternalExecutableRunnerContext> for PrepareFilesStep {
     }
 
     async fn execute(&self, context: &mut ExternalExecutableRunnerContext) -> StepAction {
-        let settings_service = Arc::new(SettingsService::new(context.repository_manager.clone()));
-
-        let download_service = DownloadService::new_with_fs_ops(
-            context.repository_manager.clone(),
-            context.settings.clone(),
-            settings_service,
-            context.fs_ops.clone(),
-        );
-
-        let res = download_service
+        let res = context
+            .download_service_ops
             .download_file_set(
                 context.file_set_id,
                 context.extract_files,
-                None, /* TODO: maybe add progress channel */
+                context.progress_tx.clone(),
             )
             .await;
 
@@ -135,5 +127,67 @@ impl PipelineStep<ExternalExecutableRunnerContext> for CleanupFilesStep {
             }
         }
         StepAction::Continue
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{path::PathBuf, sync::Arc};
+
+    use database::{repository_manager::RepositoryManager, setup_test_db};
+    use emulator_runner::ops::MockEmulatorRunnerOps;
+
+    use crate::{
+        external_executable_runner::{
+            context::ExternalExecutableRunnerContext, steps::PrepareFilesStep,
+        },
+        file_set_download::download_service_ops::{DownloadServiceOps, MockDownloadServiceOps},
+        file_system_ops::mock::MockFileSystemOps,
+        pipeline::pipeline_step::PipelineStep,
+        view_models::Settings,
+    };
+
+    #[async_std::test]
+    async fn test_prepare_files_step() {
+        let download_service_ops = Arc::new(MockDownloadServiceOps::new());
+
+        let mut context = initialize_context(download_service_ops.clone()).await;
+        let step = PrepareFilesStep;
+        step.execute(&mut context).await;
+        let download_calls = download_service_ops.download_calls();
+        assert_eq!(download_calls.len(), 1);
+        let call = &download_calls[0];
+        assert_eq!(call.file_set_id, context.file_set_id);
+        assert_eq!(call.extract_files, context.extract_files);
+    }
+
+    async fn initialize_context(
+        download_service_ops: Arc<dyn DownloadServiceOps>,
+    ) -> ExternalExecutableRunnerContext {
+        let pool = Arc::new(setup_test_db().await);
+        let repository_manager = Arc::new(RepositoryManager::new(pool));
+        let settings = Arc::new(Settings {
+            collection_root_dir: PathBuf::from("/"),
+            ..Default::default()
+        });
+        let fs_ops = Arc::new(MockFileSystemOps::new());
+        let executable_runner_ops = Arc::new(MockEmulatorRunnerOps::new());
+
+        ExternalExecutableRunnerContext {
+            executable: "emulator".to_string(),
+            arguments: vec![],
+            extract_files: true,
+            file_set_id: 1,
+            settings,
+            initial_file: None,
+            fs_ops,
+            repository_manager,
+            error_message: Vec::new(),
+            file_names: Vec::new(),
+            executable_runner_ops,
+            was_successful: false,
+            download_service_ops,
+            progress_tx: None,
+        }
     }
 }

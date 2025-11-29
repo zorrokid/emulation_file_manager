@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use core_types::ArgumentType;
+use async_std::channel::Sender;
+use core_types::{ArgumentType, events::DownloadEvent};
 use database::repository_manager::RepositoryManager;
 use emulator_runner::ops::EmulatorRunnerOps;
 
@@ -23,4 +24,5 @@ pub struct ExternalExecutableRunnerContext {
     pub was_successful: bool,
     pub error_message: Vec<String>,
     pub download_service_ops: Arc<dyn DownloadServiceOps>,
+    pub progress_tx: Option<Sender<DownloadEvent>>,
 }

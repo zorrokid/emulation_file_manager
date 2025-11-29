@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use core_types::ArgumentType;
+use async_std::channel::Sender;
+use core_types::{ArgumentType, events::DownloadEvent};
 use database::repository_manager::RepositoryManager;
 use emulator_runner::ops::{DefaultEmulatorRunnerOps, EmulatorRunnerOps};
 
@@ -57,7 +58,11 @@ impl ExternalExecutableRunnerService {
         }
     }
 
-    pub async fn run_executable(&self, model: ExecutableRunnerModel) -> Result<(), Error> {
+    pub async fn run_executable(
+        &self,
+        model: ExecutableRunnerModel,
+        progress_tx: Option<Sender<DownloadEvent>>,
+    ) -> Result<(), Error> {
         let mut context = ExternalExecutableRunnerContext {
             executable: model.executable,
             arguments: model.arguments,
@@ -72,6 +77,7 @@ impl ExternalExecutableRunnerService {
             executable_runner_ops: Arc::new(emulator_runner::ops::DefaultEmulatorRunnerOps {}),
             was_successful: false,
             download_service_ops: self.download_service_ops.clone(),
+            progress_tx,
         };
 
         let pipeline = Pipeline::<ExternalExecutableRunnerContext>::new();
