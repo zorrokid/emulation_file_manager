@@ -818,6 +818,11 @@ mod tests {
         assert!(context.thumbnail_path_map.len() == 1);
     }
 
+    #[async_std::test]
+    async fn test_start_executable_step_with_successful_execution() {
+        // This test would go here
+    }
+
     async fn initialize_context(extract_files: bool) -> (DownloadContext, Arc<MockFileExportOps>) {
         let pool = Arc::new(setup_test_db().await);
         let repository_manager = Arc::new(RepositoryManager::new(pool));

@@ -83,6 +83,8 @@ pub struct MockDownloadServiceOps {
     should_fail: bool,
     error_message: Option<String>,
     download_calls: Arc<Mutex<Vec<DownloadCall>>>,
+    failed_downloads_count: Option<usize>,
+    successful_downloads_count: Option<usize>,
 }
 
 impl MockDownloadServiceOps {
@@ -112,6 +114,14 @@ impl MockDownloadServiceOps {
         Self {
             should_fail: true,
             error_message: Some(error_msg.into()),
+            ..Default::default()
+        }
+    }
+
+    pub fn with_successful_and_failed_downloads(successful: usize, failed: usize) -> Self {
+        Self {
+            successful_downloads_count: Some(successful),
+            failed_downloads_count: Some(failed),
             ..Default::default()
         }
     }
@@ -150,8 +160,8 @@ impl DownloadServiceOps for MockDownloadServiceOps {
         }
 
         Ok(DownloadResult {
-            successful_downloads: 1,
-            failed_downloads: 0,
+            successful_downloads: self.successful_downloads_count.unwrap_or(1),
+            failed_downloads: self.failed_downloads_count.unwrap_or(0),
             thumbnail_path_map: ThumbnailPathMap::new(),
             output_file_names: vec![],
         })
