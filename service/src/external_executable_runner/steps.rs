@@ -195,13 +195,44 @@ mod tests {
     #[async_std::test]
     async fn test_start_executable_step_with_success() {
         let executable_runner_ops = Arc::new(MockEmulatorRunnerOps::new());
-        let mut context = initialize_context(None, Some(executable_runner_ops)).await;
+        let mut context = initialize_context(None, Some(executable_runner_ops.clone())).await;
         context.file_names = vec!["file1".to_string(), "file2".to_string()];
         let step = crate::external_executable_runner::steps::StartExecutableStep;
         let res = step.execute(&mut context).await;
         assert!(matches!(res, StepAction::Continue));
         assert!(context.was_successful);
         assert!(context.error_message.is_empty());
+        assert!(executable_runner_ops.total_calls() == 1);
+        assert_eq!(
+            executable_runner_ops.run_calls()[0].file_names,
+            vec!["file1".to_string(), "file2".to_string()]
+        );
+        assert_eq!(
+            executable_runner_ops.run_calls()[0].selected_file_name,
+            "file1".to_string()
+        );
+    }
+
+    #[async_std::test]
+    async fn test_start_executable_step_success_with_start_file_defined() {
+        let executable_runner_ops = Arc::new(MockEmulatorRunnerOps::new());
+        let mut context = initialize_context(None, Some(executable_runner_ops.clone())).await;
+        context.file_names = vec!["file1".to_string(), "file2".to_string()];
+        context.initial_file = Some("file2".to_string());
+        let step = crate::external_executable_runner::steps::StartExecutableStep;
+        let res = step.execute(&mut context).await;
+        assert!(matches!(res, StepAction::Continue));
+        assert!(context.was_successful);
+        assert!(context.error_message.is_empty());
+        assert!(executable_runner_ops.total_calls() == 1);
+        assert_eq!(
+            executable_runner_ops.run_calls()[0].file_names,
+            vec!["file1".to_string(), "file2".to_string()]
+        );
+        assert_eq!(
+            executable_runner_ops.run_calls()[0].selected_file_name,
+            "file2".to_string()
+        );
     }
 
     async fn initialize_context(
