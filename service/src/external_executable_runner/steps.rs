@@ -50,6 +50,10 @@ impl PipelineStep<ExternalExecutableRunnerContext> for StartExecutableStep {
         "start_executable"
     }
 
+    fn should_execute(&self, context: &ExternalExecutableRunnerContext) -> bool {
+        !context.file_names.is_empty()
+    }
+
     async fn execute(&self, context: &mut ExternalExecutableRunnerContext) -> StepAction {
         let temp_dir = context.settings.temp_output_dir.clone();
 
@@ -60,7 +64,9 @@ impl PipelineStep<ExternalExecutableRunnerContext> for StartExecutableStep {
         } else if !context.file_names.is_empty() {
             context.file_names[0].clone()
         } else {
-            "".to_string()
+            return StepAction::Abort(Error::InvalidInput(
+                "No files available to start executable".to_string(),
+            ));
         };
 
         let res = context
@@ -138,7 +144,7 @@ mod tests {
             context::ExternalExecutableRunnerContext, steps::PrepareFilesStep,
         },
         file_set_download::download_service_ops::{DownloadServiceOps, MockDownloadServiceOps},
-        file_system_ops::mock::MockFileSystemOps,
+        file_system_ops::{FileSystemOps, mock::MockFileSystemOps},
         pipeline::pipeline_step::{PipelineStep, StepAction},
         view_models::Settings,
     };
@@ -147,7 +153,7 @@ mod tests {
     async fn test_prepare_files_step_success() {
         let download_service_ops = Arc::new(MockDownloadServiceOps::new());
 
-        let mut context = initialize_context(Some(download_service_ops.clone()), None).await;
+        let mut context = initialize_context(Some(download_service_ops.clone()), None, None).await;
         let step = PrepareFilesStep;
         let res = step.execute(&mut context).await;
         let download_calls = download_service_ops.download_calls();
@@ -164,7 +170,7 @@ mod tests {
             "Simulated download failure",
         ));
 
-        let mut context = initialize_context(Some(download_service_ops.clone()), None).await;
+        let mut context = initialize_context(Some(download_service_ops.clone()), None, None).await;
         let step = PrepareFilesStep;
         let res = step.execute(&mut context).await;
         let download_calls = download_service_ops.download_calls();
@@ -181,7 +187,7 @@ mod tests {
         let download_service_ops =
             Arc::new(MockDownloadServiceOps::with_successful_and_failed_downloads(1, 1));
 
-        let mut context = initialize_context(Some(download_service_ops.clone()), None).await;
+        let mut context = initialize_context(Some(download_service_ops.clone()), None, None).await;
         let step = PrepareFilesStep;
         let res = step.execute(&mut context).await;
         let download_calls = download_service_ops.download_calls();
@@ -195,7 +201,7 @@ mod tests {
     #[async_std::test]
     async fn test_start_executable_step_with_success() {
         let executable_runner_ops = Arc::new(MockEmulatorRunnerOps::new());
-        let mut context = initialize_context(None, Some(executable_runner_ops.clone())).await;
+        let mut context = initialize_context(None, Some(executable_runner_ops.clone()), None).await;
         context.file_names = vec!["file1".to_string(), "file2".to_string()];
         let step = crate::external_executable_runner::steps::StartExecutableStep;
         let res = step.execute(&mut context).await;
@@ -216,7 +222,7 @@ mod tests {
     #[async_std::test]
     async fn test_start_executable_step_success_with_start_file_defined() {
         let executable_runner_ops = Arc::new(MockEmulatorRunnerOps::new());
-        let mut context = initialize_context(None, Some(executable_runner_ops.clone())).await;
+        let mut context = initialize_context(None, Some(executable_runner_ops.clone()), None).await;
         context.file_names = vec!["file1".to_string(), "file2".to_string()];
         context.initial_file = Some("file2".to_string());
         let step = crate::external_executable_runner::steps::StartExecutableStep;
@@ -235,17 +241,60 @@ mod tests {
         );
     }
 
+    #[async_std::test]
+    async fn test_start_executable_failure_without_files() {
+        let executable_runner_ops = Arc::new(MockEmulatorRunnerOps::new());
+        let mut context = initialize_context(None, Some(executable_runner_ops.clone()), None).await;
+        context.file_names = vec![];
+        let step = crate::external_executable_runner::steps::StartExecutableStep;
+        assert!(!step.should_execute(&context));
+        let res = step.execute(&mut context).await;
+        assert!(matches!(res, StepAction::Abort(_)));
+    }
+
+    #[async_std::test]
+    async fn test_start_executable_step_with_failure() {
+        let executable_runner_ops = Arc::new(MockEmulatorRunnerOps::with_failure(
+            "Simulated emulator failure",
+        ));
+        let mut context = initialize_context(None, Some(executable_runner_ops.clone()), None).await;
+        context.file_names = vec!["file1".to_string()];
+        let step = crate::external_executable_runner::steps::StartExecutableStep;
+        let res = step.execute(&mut context).await;
+        // should continue even on failure to allow cleanup
+        assert!(matches!(res, StepAction::Continue));
+        assert!(!context.was_successful);
+        assert!(!context.error_message.is_empty());
+        assert!(executable_runner_ops.total_calls() == 1);
+    }
+
+    #[async_std::test]
+    async fn test_cleanup_files_step_execution() {
+        let fs_ops = Arc::new(MockFileSystemOps::new());
+        fs_ops.add_file("/temp/file1");
+        fs_ops.add_file("/temp/file2");
+
+        let mut context = initialize_context(None, None, Some(fs_ops.clone())).await;
+        context.file_names = vec!["file1".to_string(), "file2".to_string()];
+        let step = crate::external_executable_runner::steps::CleanupFilesStep;
+        let res = step.execute(&mut context).await;
+        assert!(matches!(res, StepAction::Continue));
+        assert!(fs_ops.was_deleted("/temp/file1"));
+        assert!(fs_ops.was_deleted("/temp/file2"));
+    }
+
     async fn initialize_context(
         download_service_ops: Option<Arc<dyn DownloadServiceOps>>,
         executable_runner_ops: Option<Arc<dyn EmulatorRunnerOps>>,
+        file_system_ops: Option<Arc<dyn FileSystemOps>>,
     ) -> ExternalExecutableRunnerContext {
         let pool = Arc::new(setup_test_db().await);
         let repository_manager = Arc::new(RepositoryManager::new(pool));
         let settings = Arc::new(Settings {
             collection_root_dir: PathBuf::from("/"),
+            temp_output_dir: PathBuf::from("/temp"),
             ..Default::default()
         });
-        let fs_ops = Arc::new(MockFileSystemOps::new());
 
         ExternalExecutableRunnerContext {
             executable: "emulator".to_string(),
@@ -254,7 +303,7 @@ mod tests {
             file_set_id: 1,
             settings,
             initial_file: None,
-            fs_ops,
+            fs_ops: file_system_ops.unwrap_or(Arc::new(MockFileSystemOps::new())),
             repository_manager,
             error_message: Vec::new(),
             file_names: Vec::new(),
