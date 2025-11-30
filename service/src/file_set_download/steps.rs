@@ -298,7 +298,15 @@ impl PipelineStep<DownloadContext> for ExportFilesStep {
 
         match res {
             Ok(_) => {
-                tracing::info!(file_set_id = file_set.id, "Files exported successfully");
+                if context.extract_files {
+                    context.output_file_names = export_model
+                        .output_mapping
+                        .values()
+                        .map(|f| f.output_file_name.clone())
+                        .collect();
+                } else {
+                    context.output_file_names = vec![export_model.exported_zip_file_name.clone()];
+                }
                 context.file_output_mapping = export_model.output_mapping;
                 StepAction::Continue
             }

@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use error::EmulatorRunnerError;
 
 pub mod error;
+pub mod ops;
 
 /// Asynchronous function to run an emulator with the given executable, arguments, and file names.
 /// It takes the selected file name and source path to locate the file.
@@ -23,7 +24,7 @@ pub mod error;
 /// * `EmulatorRunnerError::NoFileSelected`: If no file is selected.
 /// * `EmulatorRunnerError::FileNotFound`: If the selected file is not found.
 /// * `EmulatorRunnerError::IoError`: If there is an IO error while running the emulator.
-///
+#[deprecated(note = "Use EmulatorRunnerOps trait instead")]
 pub async fn run_with_emulator(
     executable: String,
     arguments: &[ArgumentType],
@@ -35,11 +36,11 @@ pub async fn run_with_emulator(
         return Err(EmulatorRunnerError::NoFileSelected);
     }
     let file_path = Path::new(&source_path).join(&selected_file_name);
-    println!(
-        "Running emulator with file: {} and arguments: {:?}",
-        file_path.display(),
-        arguments
-    );
+
+    tracing::debug!("Emulator executable: {}", executable);
+    tracing::debug!("Emulator arguments: {:?}", arguments);
+    tracing::debug!("File to run: {}", file_path.display());
+
     if !file_path.exists() {
         return Err(EmulatorRunnerError::FileNotFound);
     }
@@ -47,10 +48,10 @@ pub async fn run_with_emulator(
     let mut command = Command::new(&executable);
 
     if arguments.is_empty() {
-        println!("No arguments provided, running with file only.");
+        tracing::debug!("No arguments provided, running with file path as only argument.");
         command.arg(&file_path).current_dir(&source_path);
     } else {
-        println!("Running with arguments: {:?}", arguments);
+        tracing::debug!("Preparing to run emulator with arguments {:?}", arguments);
 
         let mut args = Vec::new();
 
@@ -73,7 +74,7 @@ pub async fn run_with_emulator(
             .current_dir(&source_path);
     }
 
-    println!("Executing command: {:?}", command);
+    tracing::debug!("Command to execute: {:?}", command);
 
     let status = command.status().await.map_err(|e| {
         EmulatorRunnerError::IoError(format!("Failed to get status of emulator: {}", e))

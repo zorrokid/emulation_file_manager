@@ -6,11 +6,11 @@ use crate::{
         DocumentViewerFormOutputMsg,
     },
     list_item::ListItem,
+    utils::dialog_utils::show_error_dialog,
 };
 use database::{
     database_error::DatabaseError, models::FileSetFileInfo, repository_manager::RepositoryManager,
 };
-use emulator_runner::{error::EmulatorRunnerError, run_with_emulator};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
@@ -22,7 +22,7 @@ use relm4::{
 };
 use service::{
     error::Error as ServiceError,
-    file_set_download::service::{DownloadResult, DownloadService},
+    external_executable_runner::service::{ExecutableRunnerModel, ExternalExecutableRunnerService},
     view_model_service::ViewModelService,
     view_models::{DocumentViewerListModel, DocumentViewerViewModel, FileSetViewModel, Settings},
 };
@@ -42,7 +42,6 @@ pub enum DocumentViewerMsg {
     AddViewer(DocumentViewerListModel),
     UpdateViewer(DocumentViewerListModel),
 
-    PrepareFilesForViewer,
     StartViewer,
     StartEdit,
     ConfirmDelete,
@@ -55,11 +54,11 @@ pub enum DocumentViewerMsg {
 }
 
 #[derive(Debug)]
+
 pub enum DocumentViewerCommandMsg {
     ViewersFetched(Result<Vec<DocumentViewerViewModel>, ServiceError>),
-    FinishedRunningViewer(Result<(), EmulatorRunnerError>),
+    FinishedRunningViewer(Result<(), ServiceError>),
     Deleted(Result<i64, DatabaseError>),
-    FilePreparationDone(Result<DownloadResult, ServiceError>),
 }
 
 pub struct DocumentViewerInit {
@@ -73,7 +72,7 @@ pub struct DocumentViewer {
     // services
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
-    file_download_service: Arc<DownloadService>,
+    external_executable_runner_service: Arc<ExternalExecutableRunnerService>,
 
     // list views
     file_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
@@ -140,7 +139,7 @@ impl Component for DocumentViewer {
 
                 gtk::Button {
                     set_label: "Start",
-                    connect_clicked => DocumentViewerMsg::PrepareFilesForViewer,
+                    connect_clicked => DocumentViewerMsg::StartViewer,
                     #[watch]
                     set_sensitive: model.selected_viewer.is_some() && model.selected_file.is_some(),
                 },
@@ -183,15 +182,15 @@ impl Component for DocumentViewer {
                 ConfirmDialogOutputMsg::Canceled => DocumentViewerMsg::Ignore,
             });
 
-        let file_download_service = Arc::new(DownloadService::new(
-            Arc::clone(&init.repository_manager),
+        let external_executable_runner_service = Arc::new(ExternalExecutableRunnerService::new(
             Arc::clone(&init.settings),
+            Arc::clone(&init.repository_manager),
         ));
 
         let model = DocumentViewer {
             view_model_service: init.view_model_service,
             repository_manager: init.repository_manager,
-            file_download_service,
+            external_executable_runner_service,
 
             viewers: Vec::new(),
             settings: init.settings,
@@ -241,19 +240,6 @@ impl Component for DocumentViewer {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         match msg {
-            DocumentViewerMsg::PrepareFilesForViewer => {
-                if let Some(file_set) = &self.file_set {
-                    let download_service = Arc::clone(&self.file_download_service);
-                    let file_set_id = file_set.id;
-
-                    sender.oneshot_command(async move {
-                        let res = download_service
-                            .download_file_set(file_set_id, true, None)
-                            .await;
-                        DocumentViewerCommandMsg::FilePreparationDone(res)
-                    });
-                }
-            }
             DocumentViewerMsg::StartViewer => {
                 if let (Some(viewer), Some(selected_file), Some(file_set)) =
                     (&self.selected_viewer, &self.selected_file, &self.file_set)
@@ -262,30 +248,30 @@ impl Component for DocumentViewer {
                     // TODO: create a viewer view model that has processed arguments already to
                     // correct format
                     let arguments = Vec::new(); // TODO: viewer.arguments.clone();
-                    let files_in_fileset = file_set
-                        .files
-                        .iter()
-                        .map(|f| f.file_name.clone())
-                        .collect::<Vec<_>>();
+                    let executable_runner_service =
+                        Arc::clone(&self.external_executable_runner_service);
 
-                    let starting_file = selected_file.file_name.clone();
-                    let temp_dir = self.settings.temp_output_dir.clone();
+                    let executable_runner_model = ExecutableRunnerModel {
+                        executable,
+                        arguments,
+                        extract_files: true,
+                        file_set_id: file_set.id,
+                        initial_file: Some(selected_file.file_name.clone()),
+                        // Viewers spawn child processes, don't cleanup
+                        // TODO: make this configurable for viewer
+                        skip_cleanup: true,
+                    };
 
                     sender.oneshot_command(async move {
-                        let res = run_with_emulator(
-                            executable,
-                            &arguments,
-                            &files_in_fileset,
-                            starting_file,
-                            temp_dir,
-                        )
-                        .await;
+                        let res = executable_runner_service
+                            .run_executable(executable_runner_model, None)
+                            .await;
+
                         DocumentViewerCommandMsg::FinishedRunningViewer(res)
                     });
                 }
             }
             DocumentViewerMsg::FileSelected { index } => {
-                println!("File selected at index: {}", index);
                 let file_list_item = self.file_list_view_wrapper.get(index);
                 if let (Some(item), Some(file_set)) = (file_list_item, &self.file_set) {
                     let id = item.borrow().id;
@@ -294,7 +280,6 @@ impl Component for DocumentViewer {
                 }
             }
             DocumentViewerMsg::ViewerSelected { index } => {
-                println!("Viewer selected at index: {}", index);
                 let viewer_list_item = self.viewer_list_view_wrapper.get(index);
                 if let Some(item) = viewer_list_item {
                     let id = item.borrow().id;
@@ -311,12 +296,9 @@ impl Component for DocumentViewer {
                 sender.input(DocumentViewerMsg::FetchViewers);
             }
             DocumentViewerMsg::UpdateViewer(_viewer_list_model) => {
-                println!("Viewer updated: {:?}", _viewer_list_model);
                 sender.input(DocumentViewerMsg::FetchViewers);
             }
             DocumentViewerMsg::FetchViewers => {
-                println!("Fetching viewers");
-
                 let view_model_service = Arc::clone(&self.view_model_service);
                 sender.oneshot_command(async move {
                     let viewers_result = view_model_service.get_document_viewer_view_models().await;
@@ -379,7 +361,7 @@ impl Component for DocumentViewer {
     ) {
         match message {
             DocumentViewerCommandMsg::ViewersFetched(Ok(viewer_view_models)) => {
-                println!("Viewers fetched successfully: {:?}", viewer_view_models);
+                tracing::info!("Viewers fetched successfully");
                 let viewer_list_items = viewer_view_models
                     .iter()
                     .map(|viewer| ListItem {
@@ -393,30 +375,34 @@ impl Component for DocumentViewer {
                     .extend_from_iter(viewer_list_items);
             }
             DocumentViewerCommandMsg::ViewersFetched(Err(error)) => {
-                eprintln!("Error fetching viewers: {:?}", error);
-                // TODO: Handle error appropriately, e.g., show a dialog or log the error
+                show_error_dialog(
+                    format!(
+                        "An error occurred while fetching document viewers: {}",
+                        error
+                    ),
+                    root,
+                );
             }
             DocumentViewerCommandMsg::FinishedRunningViewer(Ok(())) => {
-                println!("Viewer ran successfully");
+                tracing::info!("Viewer executed successfully");
                 root.close();
             }
             DocumentViewerCommandMsg::FinishedRunningViewer(Err(error)) => {
-                eprintln!("Error running viewer: {:?}", error);
+                show_error_dialog(
+                    format!("An error occurred while running the viewer: {}", error),
+                    root,
+                );
             }
             DocumentViewerCommandMsg::Deleted(Ok(_)) => {
-                println!("Viewer deleted successfully");
+                tracing::info!("Viewer deleted successfully");
                 // TODO: delete directly from the list?
                 sender.input(DocumentViewerMsg::FetchViewers);
             }
             DocumentViewerCommandMsg::Deleted(Err(error)) => {
-                eprintln!("Error deleting viewer: {:?}", error);
-            }
-            DocumentViewerCommandMsg::FilePreparationDone(Ok(_download_result)) => {
-                println!("Files prepared successfully for viewer");
-                sender.input(DocumentViewerMsg::StartViewer);
-            }
-            DocumentViewerCommandMsg::FilePreparationDone(Err(error)) => {
-                eprintln!("Error preparing files for viewer: {:?}", error);
+                show_error_dialog(
+                    format!("An error occurred while deleting the viewer: {}", error),
+                    root,
+                );
             }
         }
     }

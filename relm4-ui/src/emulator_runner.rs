@@ -3,13 +3,13 @@ use std::sync::Arc;
 use crate::{
     emulator_form::{EmulatorFormInit, EmulatorFormModel, EmulatorFormMsg, EmulatorFormOutputMsg},
     list_item::ListItem,
+    utils::dialog_utils::show_error_dialog,
 };
 use database::{
     database_error::Error,
     models::{FileSetFileInfo, System},
     repository_manager::RepositoryManager,
 };
-use emulator_runner::{error::EmulatorRunnerError, run_with_emulator};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
@@ -21,6 +21,7 @@ use relm4::{
 };
 use service::{
     error::Error as ServiceError,
+    external_executable_runner::service::{ExecutableRunnerModel, ExternalExecutableRunnerService},
     file_set_download::service::{DownloadResult, DownloadService},
     view_model_service::ViewModelService,
     view_models::{EmulatorListModel, EmulatorViewModel, FileSetViewModel, Settings},
@@ -56,8 +57,6 @@ pub enum EmulatorRunnerMsg {
     AddEmulator(EmulatorListModel),
     UpdateEmulator(EmulatorListModel),
 
-    PrepareFilesForEmulator,
-
     Show {
         file_set: FileSetViewModel,
         systems: Vec<System>,
@@ -70,9 +69,8 @@ pub enum EmulatorRunnerMsg {
 #[derive(Debug)]
 pub enum EmulatorRunnerCommandMsg {
     EmulatorsFetched(Result<Vec<EmulatorViewModel>, ServiceError>),
-    FinishedRunningEmulator(Result<(), EmulatorRunnerError>),
+    FinishedRunningEmulator(Result<(), ServiceError>),
     EmulatorDeleted(Result<i64, Error>),
-    FilePreparationDone(Result<DownloadResult, ServiceError>),
 }
 
 pub struct EmulatorRunnerInit {
@@ -86,7 +84,7 @@ pub struct EmulatorRunnerModel {
     // services
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
-    file_download_service: Arc<DownloadService>,
+    external_executable_runner_service: Arc<ExternalExecutableRunnerService>,
 
     // list views
     file_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
@@ -102,7 +100,6 @@ pub struct EmulatorRunnerModel {
     systems: Vec<System>,
 
     // needed for running the emulator:
-    settings: Arc<Settings>,
     file_set: Option<FileSetViewModel>,
     selected_file: Option<FileSetFileInfo>,
     selected_system: Option<System>,
@@ -156,9 +153,9 @@ impl Component for EmulatorRunnerModel {
 
                 gtk::Button {
                     set_label: "Run Emulator",
-                    connect_clicked => EmulatorRunnerMsg::PrepareFilesForEmulator,
+                    connect_clicked => EmulatorRunnerMsg::StartEmulator,
                     #[watch]
-                    set_sensitive: model.selected_emulator.is_some() && model.selected_file.is_some(),
+                    set_sensitive: model.selected_emulator.is_some() && model.selected_file.is_some() && model.file_set.is_some(),
                 },
             }
         }
@@ -201,19 +198,18 @@ impl Component for EmulatorRunnerModel {
                 ConfirmDialogOutputMsg::Canceled => EmulatorRunnerMsg::Ignore,
             });
 
-        let file_download_service = Arc::new(DownloadService::new(
-            Arc::clone(&init.repository_manager),
+        let external_executable_runner_service = Arc::new(ExternalExecutableRunnerService::new(
             Arc::clone(&init.settings),
+            Arc::clone(&init.repository_manager),
         ));
 
         let model = EmulatorRunnerModel {
             view_model_service: init.view_model_service,
             repository_manager: init.repository_manager,
-            file_download_service,
+            external_executable_runner_service,
 
             systems: Vec::new(),
             emulators: Vec::new(),
-            settings: init.settings,
             file_set: None,
 
             file_list_view_wrapper,
@@ -275,9 +271,6 @@ impl Component for EmulatorRunnerModel {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         match msg {
-            EmulatorRunnerMsg::PrepareFilesForEmulator => {
-                self.prepare_files_for_emulalator(&sender)
-            }
             EmulatorRunnerMsg::FileSelected { index } => {
                 self.handle_file_selection(index);
             }
@@ -294,7 +287,7 @@ impl Component for EmulatorRunnerModel {
             }
             EmulatorRunnerMsg::StartEditEmulator => {
                 if let Some(selected_emulator) = &self.selected_emulator {
-                    println!("Editing Emulator: {}", selected_emulator.name);
+                    tracing::info!("Starting edit for emulator ID {}", selected_emulator.id);
                     sender.input(EmulatorRunnerMsg::OpenEmulatorForm {
                         editable_emulator: self.selected_emulator.clone(),
                     });
@@ -361,11 +354,11 @@ impl Component for EmulatorRunnerModel {
         &mut self,
         message: Self::CommandOutput,
         sender: ComponentSender<Self>,
-        _root: &Self::Root,
+        root: &Self::Root,
     ) {
         match message {
             EmulatorRunnerCommandMsg::EmulatorsFetched(Ok(emulator_view_models)) => {
-                println!("Emulators fetched successfully: {:?}", emulator_view_models);
+                tracing::info!("Emulators fetched successfully");
                 let emulator_list_items = emulator_view_models
                     .iter()
                     .map(|emulator| ListItem {
@@ -379,18 +372,17 @@ impl Component for EmulatorRunnerModel {
                     .extend_from_iter(emulator_list_items);
             }
             EmulatorRunnerCommandMsg::EmulatorsFetched(Err(error)) => {
-                eprintln!("Error fetching emulators: {:?}", error);
-                // TODO: Handle error appropriately, e.g., show a dialog or log the error
+                show_error_dialog(format!("Error Fetching Emulators {:?}", error), root);
             }
             EmulatorRunnerCommandMsg::FinishedRunningEmulator(Ok(())) => {
-                println!("Emulator ran successfully");
+                tracing::info!("Emulator executed successfully");
                 sender.input(EmulatorRunnerMsg::Hide);
             }
             EmulatorRunnerCommandMsg::FinishedRunningEmulator(Err(error)) => {
-                eprintln!("Error running emulator: {:?}", error);
+                show_error_dialog(format!("Error running emulator: {:?}", error), root);
             }
             EmulatorRunnerCommandMsg::EmulatorDeleted(Ok(deleted_id)) => {
-                println!("Emulator with ID {} deleted successfully", deleted_id);
+                tracing::info!("Emulator with ID {} deleted successfully", deleted_id);
                 // TODO: instead of fetching maybe just remove from the list
                 if let Some(system) = &self.selected_system {
                     sender.input(EmulatorRunnerMsg::FetchEmulators {
@@ -399,22 +391,7 @@ impl Component for EmulatorRunnerModel {
                 }
             }
             EmulatorRunnerCommandMsg::EmulatorDeleted(Err(error)) => {
-                eprintln!("Error deleting emulator: {:?}", error);
-            }
-            EmulatorRunnerCommandMsg::FilePreparationDone(Ok(download_result)) => {
-                if download_result.failed_downloads > 0 {
-                    eprintln!(
-                        "{} files failed to download, cannot start emulator.",
-                        download_result.failed_downloads
-                    );
-                } else {
-                    println!("All files downloaded successfully, starting emulator...");
-                    sender.input(EmulatorRunnerMsg::StartEmulator);
-                }
-            }
-
-            EmulatorRunnerCommandMsg::FilePreparationDone(Err(error)) => {
-                eprintln!("Error preparing files: {:?}", error);
+                show_error_dialog(format!("Error deleting emulator: {:?}", error), root);
             }
         }
     }
@@ -451,32 +428,12 @@ impl EmulatorRunnerModel {
         }
     }
 
-    pub fn prepare_files_for_emulalator(&self, sender: &ComponentSender<Self>) {
-        if let (Some(emulator), Some(file_set)) = (&self.selected_emulator, &self.file_set) {
-            let download_service = Arc::clone(&self.file_download_service);
-            let file_set_id = file_set.id;
-            let extract_files = emulator.extract_files;
-
-            sender.oneshot_command(async move {
-                let res = download_service
-                    .download_file_set(file_set_id, extract_files, None)
-                    .await;
-                EmulatorRunnerCommandMsg::FilePreparationDone(res)
-            });
-        }
-    }
-
     pub fn start_emulator(&self, sender: &ComponentSender<Self>) {
         if let (Some(emulator), Some(selected_file), Some(file_set)) =
             (&self.selected_emulator, &self.selected_file, &self.file_set)
         {
             let executable = emulator.executable.clone();
             let arguments = emulator.arguments.clone();
-            let files_in_fileset = file_set
-                .files
-                .iter()
-                .map(|f| f.file_name.clone())
-                .collect::<Vec<_>>();
 
             let starting_file = if emulator.extract_files {
                 selected_file.file_name.clone()
@@ -484,17 +441,23 @@ impl EmulatorRunnerModel {
                 file_set.file_set_name.clone()
             };
 
-            let temp_dir = self.settings.temp_output_dir.clone();
+            let executable_runner_service = Arc::clone(&self.external_executable_runner_service);
+
+            let executable_runner_model = ExecutableRunnerModel {
+                executable,
+                arguments,
+                extract_files: emulator.extract_files,
+                file_set_id: file_set.id,
+                initial_file: Some(starting_file.clone()),
+                // Emulators block until closed, cleanup after
+                // TODO: make this configurable
+                skip_cleanup: false,
+            };
 
             sender.oneshot_command(async move {
-                let res = run_with_emulator(
-                    executable,
-                    &arguments,
-                    &files_in_fileset,
-                    starting_file,
-                    temp_dir,
-                )
-                .await;
+                let res = executable_runner_service
+                    .run_executable(executable_runner_model, None)
+                    .await;
                 EmulatorRunnerCommandMsg::FinishedRunningEmulator(res)
             });
         }

@@ -2,6 +2,7 @@ pub mod cloud_sync;
 pub mod download_service;
 pub mod error;
 pub mod export_service;
+pub mod external_executable_runner;
 pub mod file_import;
 pub mod file_set_deletion;
 pub mod file_set_download;

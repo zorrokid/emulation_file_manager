@@ -13,6 +13,7 @@ pub enum Error {
     DownloadError(String),
     FileImportError(String),
     OperationCancelled,
+    InvalidInput(String),
 }
 
 impl Display for Error {
@@ -27,6 +28,7 @@ impl Display for Error {
             Error::DownloadError(message) => write!(f, "Download error: {}", message),
             Error::FileImportError(message) => write!(f, "File import error: {}", message),
             Error::OperationCancelled => write!(f, "Operation was cancelled"),
+            Error::InvalidInput(message) => write!(f, "Invalid input: {}", message),
         }
     }
 }
