@@ -70,6 +70,12 @@ impl PipelineStep<ExternalExecutableRunnerContext> for StartExecutableStep {
             ));
         };
 
+        tracing::info!(
+            "Starting executable '{}' with initial file '{}'",
+            context.executable,
+            initial_file
+        );
+
         let res = context
             .executable_runner_ops
             .run_with_emulator(
@@ -80,6 +86,8 @@ impl PipelineStep<ExternalExecutableRunnerContext> for StartExecutableStep {
                 temp_dir,
             )
             .await;
+
+        tracing::info!("Executable run attempt finished");
 
         match res {
             Ok(_) => {
@@ -106,7 +114,7 @@ impl PipelineStep<ExternalExecutableRunnerContext> for CleanupFilesStep {
     }
 
     fn should_execute(&self, context: &ExternalExecutableRunnerContext) -> bool {
-        !context.file_names.is_empty()
+        !context.file_names.is_empty() && !context.skip_cleanup
     }
 
     async fn execute(&self, context: &mut ExternalExecutableRunnerContext) -> StepAction {
@@ -301,6 +309,23 @@ mod tests {
         });
     }
 
+    #[async_std::test]
+    async fn test_cleanup_files_step_skipped_when_skip_cleanup_is_true() {
+        let fs_ops = Arc::new(MockFileSystemOps::new());
+        fs_ops.add_file("/temp/file1");
+
+        let mut context = initialize_context(None, None, Some(fs_ops.clone())).await;
+        context.file_names = vec!["file1".to_string()];
+        context.skip_cleanup = true;
+        let step = crate::external_executable_runner::steps::CleanupFilesStep;
+        
+        // Should not execute when skip_cleanup is true
+        assert!(!step.should_execute(&context));
+        
+        // File should NOT be deleted since step should not execute
+        assert!(!fs_ops.was_deleted("/temp/file1"));
+    }
+
     async fn initialize_context(
         download_service_ops: Option<Arc<dyn DownloadServiceOps>>,
         executable_runner_ops: Option<Arc<dyn EmulatorRunnerOps>>,
@@ -331,6 +356,7 @@ mod tests {
             download_service_ops: download_service_ops
                 .unwrap_or(Arc::new(MockDownloadServiceOps::new())),
             progress_tx: None,
+            skip_cleanup: false,
         }
     }
 }

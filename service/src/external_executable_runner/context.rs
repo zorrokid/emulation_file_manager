@@ -25,4 +25,8 @@ pub struct ExternalExecutableRunnerContext {
     pub error_message: Vec<String>,
     pub download_service_ops: Arc<dyn DownloadServiceOps>,
     pub progress_tx: Option<Sender<DownloadEvent>>,
+    /// Whether to skip automatic cleanup of temporary files.
+    /// Set to true for viewers that spawn child processes (like xdg-open)
+    /// where the parent returns immediately.
+    pub skip_cleanup: bool,
 }

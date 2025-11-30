@@ -35,6 +35,10 @@ pub struct ExecutableRunnerModel {
     pub extract_files: bool,
     pub file_set_id: i64,
     pub initial_file: Option<String>,
+    /// Whether to skip automatic cleanup of temporary files.
+    /// Set to true for viewers that spawn child processes (like xdg-open)
+    /// where the parent returns immediately.
+    pub skip_cleanup: bool,
 }
 
 impl ExternalExecutableRunnerService {
@@ -88,6 +92,7 @@ impl ExternalExecutableRunnerService {
             was_successful: false,
             download_service_ops: self.download_service_ops.clone(),
             progress_tx,
+            skip_cleanup: model.skip_cleanup,
         };
 
         let pipeline = Pipeline::<ExternalExecutableRunnerContext>::new();
