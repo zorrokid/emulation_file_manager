@@ -7,8 +7,8 @@ use relm4::{
     gtk::{
         self, glib,
         prelude::{
-            BoxExt, ButtonExt, EditableExt, EntryBufferExtManual, EntryExt, GtkWindowExt,
-            OrientableExt, WidgetExt,
+            BoxExt, ButtonExt, CheckButtonExt, EditableExt, EntryBufferExtManual, EntryExt,
+            GtkWindowExt, OrientableExt, WidgetExt,
         },
     },
 };
@@ -31,6 +31,7 @@ pub enum DocumentViewerFormMsg {
     Hide,
     ArgumentsChanged(Vec<ArgumentType>),
     DocumentTypeChanged(DocumentType),
+    CleanupTempFilesToggled(bool),
 }
 
 #[derive(Debug)]
@@ -59,6 +60,7 @@ pub struct DocumentViewerFormModel {
     arguments: Vec<ArgumentType>,
     editable_viewer_id: Option<i64>,
     dropdown: Controller<DocumentTypeDropDown>,
+    pub cleanup_temp_files: bool,
 }
 
 #[relm4::component(pub)]
@@ -141,6 +143,23 @@ impl Component for DocumentViewerFormModel {
                     append = model.argument_list.widget(),
                 },
 
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    set_spacing: 6,
+
+                    #[name = "cleanup_checkbox"]
+                    gtk::CheckButton {
+                        set_label: Some("Cleanup temporary files after launch"),
+                        #[watch]
+                        #[block_signal(cleanup_temp_files_toggled)]
+                        set_active: model.cleanup_temp_files,
+                        set_tooltip_text: Some("Enable if viewer blocks until closed. Disable for spawning viewers like xdg-open."),
+                        connect_toggled[sender] => move |checkbox| {
+                            sender.input(DocumentViewerFormMsg::CleanupTempFilesToggled(checkbox.is_active()));
+                        } @cleanup_temp_files_toggled,
+                    },
+                },
+
                 gtk::Button {
                     set_label: "Submit",
                     #[watch]
@@ -168,6 +187,7 @@ impl Component for DocumentViewerFormModel {
                     let executable = self.executable.clone();
                     let name = self.name.clone();
                     let arguments = self.arguments.clone();
+                    let cleanup_temp_files = self.cleanup_temp_files;
 
                     if let Some(editable_id) = self.editable_viewer_id {
                         sender.oneshot_command(async move {
@@ -179,6 +199,7 @@ impl Component for DocumentViewerFormModel {
                                     &executable,
                                     &arguments,
                                     &document_type,
+                                    cleanup_temp_files,
                                 )
                                 .await;
                             DocumentViewerFormCommandMsg::DocumentViewerUpdated(res)
@@ -187,7 +208,13 @@ impl Component for DocumentViewerFormModel {
                         sender.oneshot_command(async move {
                             let res = repository_manager
                                 .get_document_viewer_repository()
-                                .add_document_viewer(&name, &executable, &arguments, &document_type)
+                                .add_document_viewer(
+                                    &name,
+                                    &executable,
+                                    &arguments,
+                                    &document_type,
+                                    cleanup_temp_files,
+                                )
                                 .await;
                             DocumentViewerFormCommandMsg::DocumentViewerSubmitted(res)
                         });
@@ -206,8 +233,10 @@ impl Component for DocumentViewerFormModel {
                     self.executable = editable_viewer.executable;
                     self.arguments = editable_viewer.arguments;
                     self.selected_document_type = Some(editable_viewer.document_type);
+                    self.cleanup_temp_files = editable_viewer.cleanup_temp_files;
                     widgets.name_entry.set_text(&self.name);
                     widgets.executable_entry.set_text(&self.executable);
+                    widgets.cleanup_checkbox.set_active(self.cleanup_temp_files);
                     self.argument_list
                         .emit(ArgumentListMsg::SetArguments(self.arguments.clone()));
                 } else {
@@ -216,8 +245,10 @@ impl Component for DocumentViewerFormModel {
                     self.executable.clear();
                     self.arguments.clear();
                     self.selected_document_type = None;
+                    self.cleanup_temp_files = false;
                     widgets.name_entry.set_text("");
                     widgets.executable_entry.set_text("");
+                    widgets.cleanup_checkbox.set_active(false);
                     self.argument_list
                         .emit(ArgumentListMsg::SetArguments(Vec::new()));
                 }
@@ -231,6 +262,9 @@ impl Component for DocumentViewerFormModel {
             }
             DocumentViewerFormMsg::DocumentTypeChanged(document_type) => {
                 self.selected_document_type = Some(document_type);
+            }
+            DocumentViewerFormMsg::CleanupTempFilesToggled(value) => {
+                self.cleanup_temp_files = value;
             }
             _ => {}
         }
@@ -313,6 +347,7 @@ impl Component for DocumentViewerFormModel {
             argument_list,
             editable_viewer_id: None,
             dropdown,
+            cleanup_temp_files: false,
         };
 
         let document_types_dropdown = model.dropdown.widget();

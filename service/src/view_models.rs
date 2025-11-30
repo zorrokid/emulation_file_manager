@@ -279,6 +279,7 @@ pub struct DocumentViewerViewModel {
     pub executable: String,
     pub arguments: Vec<ArgumentType>,
     pub document_type: DocumentType,
+    pub cleanup_temp_files: bool,
 }
 
 impl Display for DocumentViewerViewModel {

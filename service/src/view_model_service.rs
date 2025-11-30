@@ -165,6 +165,7 @@ impl ViewModelService {
                 executable: document_viewer.executable,
                 arguments,
                 document_type: document_viewer.document_type,
+                cleanup_temp_files: document_viewer.cleanup_temp_files,
             };
 
             view_models.push(view_model);

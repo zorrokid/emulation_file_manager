@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE document_viewer SET \n             name = ?, \n             executable = ?, \n             arguments = ?,\n             document_type = ?,\n             cleanup_temp_files = ?\n             WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "c550635cdb29590896abe31a0249fad80b5bdeaa2ed7d673ff791ca30d94872e"
+}

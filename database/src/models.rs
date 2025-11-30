@@ -116,6 +116,7 @@ pub struct DocumentViewer {
     pub executable: String,
     pub document_type: DocumentType,
     pub arguments: String, // as JSON string
+    pub cleanup_temp_files: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
