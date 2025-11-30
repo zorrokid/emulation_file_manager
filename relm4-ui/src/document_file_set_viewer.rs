@@ -257,7 +257,9 @@ impl Component for DocumentViewer {
                         extract_files: true,
                         file_set_id: file_set.id,
                         initial_file: Some(selected_file.file_name.clone()),
-                        skip_cleanup: true, // Viewers spawn child processes, don't cleanup
+                        // Viewers spawn child processes, don't cleanup
+                        // TODO: make this configurable for viewer
+                        skip_cleanup: true,
                     };
 
                     sender.oneshot_command(async move {

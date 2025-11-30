@@ -449,7 +449,9 @@ impl EmulatorRunnerModel {
                 extract_files: emulator.extract_files,
                 file_set_id: file_set.id,
                 initial_file: Some(starting_file.clone()),
-                skip_cleanup: false, // Emulators block until closed, cleanup after
+                // Emulators block until closed, cleanup after
+                // TODO: make this configurable
+                skip_cleanup: false,
             };
 
             sender.oneshot_command(async move {
