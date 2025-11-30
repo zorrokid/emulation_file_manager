@@ -31,6 +31,7 @@ impl PipelineStep<ExternalExecutableRunnerContext> for PrepareFilesStep {
                         "Some files failed to download".to_string(),
                     ));
                 }
+                context.file_names = download_result.output_file_names;
                 StepAction::Continue
             }
             Err(e) => {

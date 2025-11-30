@@ -15,14 +15,21 @@ use crate::{
 };
 
 pub struct ExternalExecutableRunnerService {
+    repository_manager: Arc<RepositoryManager>,
     settings: Arc<Settings>,
     fs_ops: Arc<dyn FileSystemOps>,
     executable_runner_ops: Arc<dyn EmulatorRunnerOps>,
     download_service_ops: Arc<dyn DownloadServiceOps>,
 }
 
+impl std::fmt::Debug for ExternalExecutableRunnerService {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ExternalExecutableRunnerService")
+            .finish_non_exhaustive()
+    }
+}
+
 pub struct ExecutableRunnerModel {
-    pub repository_manager: Arc<RepositoryManager>,
     pub executable: String,
     pub arguments: Vec<ArgumentType>,
     pub extract_files: bool,
@@ -37,6 +44,7 @@ impl ExternalExecutableRunnerService {
             settings.clone(),
         ));
         Self::new_with_ops(
+            repository_manager,
             settings,
             Arc::new(StdFileSystemOps),
             Arc::new(DefaultEmulatorRunnerOps),
@@ -45,12 +53,14 @@ impl ExternalExecutableRunnerService {
     }
 
     pub fn new_with_ops(
+        repository_manager: Arc<RepositoryManager>,
         settings: Arc<Settings>,
         fs_ops: Arc<dyn FileSystemOps>,
         executable_runner_ops: Arc<dyn EmulatorRunnerOps>,
         download_service_ops: Arc<dyn DownloadServiceOps>,
     ) -> Self {
         Self {
+            repository_manager,
             settings,
             fs_ops,
             executable_runner_ops,
@@ -71,10 +81,10 @@ impl ExternalExecutableRunnerService {
             settings: self.settings.clone(),
             initial_file: model.initial_file,
             fs_ops: self.fs_ops.clone(),
-            repository_manager: model.repository_manager.clone(),
+            repository_manager: self.repository_manager.clone(),
             error_message: Vec::new(),
             file_names: Vec::new(),
-            executable_runner_ops: Arc::new(emulator_runner::ops::DefaultEmulatorRunnerOps {}),
+            executable_runner_ops: self.executable_runner_ops.clone(),
             was_successful: false,
             download_service_ops: self.download_service_ops.clone(),
             progress_tx,
