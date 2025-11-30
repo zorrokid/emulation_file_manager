@@ -269,7 +269,7 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn test_cleanup_files_step_execution() {
+    async fn test_cleanup_files_step_execution_success() {
         let fs_ops = Arc::new(MockFileSystemOps::new());
         fs_ops.add_file("/temp/file1");
         fs_ops.add_file("/temp/file2");
@@ -281,6 +281,23 @@ mod tests {
         assert!(matches!(res, StepAction::Continue));
         assert!(fs_ops.was_deleted("/temp/file1"));
         assert!(fs_ops.was_deleted("/temp/file2"));
+    }
+
+    #[async_std::test]
+    async fn test_cleanup_files_step_execution_failure() {
+        let fs_ops = Arc::new(MockFileSystemOps::new());
+        fs_ops.fail_delete_with("Simulated delete failure");
+
+        let mut context = initialize_context(None, None, Some(fs_ops.clone())).await;
+        context.file_names = vec!["file1".to_string(), "file2".to_string()];
+        let step = crate::external_executable_runner::steps::CleanupFilesStep;
+        let res = step.execute(&mut context).await;
+        assert!(matches!(res, StepAction::Continue));
+        context.error_message.iter().for_each(|msg| {
+            assert!(msg.contains("Failed to delete temporary file"));
+            assert!(msg.contains("Simulated delete failure"));
+            assert!(msg.contains("file1") || msg.contains("file2"));
+        });
     }
 
     async fn initialize_context(
