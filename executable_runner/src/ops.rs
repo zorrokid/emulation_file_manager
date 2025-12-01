@@ -1,66 +1,66 @@
-use crate::error::EmulatorRunnerError;
+use crate::error::ExecutableRunnerError;
 #[allow(deprecated)]
-use crate::run_with_emulator;
+use crate::run_executable;
 use core_types::ArgumentType;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 // TODO: this should be more generic, like ExternalExecutableRunnerOps
-/// Trait for emulator runner operations.
+/// Trait for executable runner operations.
 ///
-/// This trait abstracts emulator execution functionality to allow for different implementations,
+/// This trait abstracts executable execution functionality to allow for different implementations,
 /// including mocks for testing purposes.
 #[async_trait::async_trait]
-pub trait EmulatorRunnerOps: Send + Sync {
-    /// Runs an emulator with the given executable, arguments, and files.
+pub trait ExecutableRunnerOps: Send + Sync {
+    /// Runs the given executable, arguments, and files.
     ///
     /// # Arguments
-    /// * `executable` - Emulator executable name (if on system PATH) or full path to executable
-    /// * `arguments` - Arguments to pass to the emulator
-    /// * `file_names` - Vector of file names to be used with emulator
+    /// * `executable` - Executable name (if on system PATH) or full path to executable
+    /// * `arguments` - Arguments to pass to the executable  
+    /// * `file_names` - Vector of file names to be used with executable
     /// * `selected_file_name` - Entry point file in the set of files
     /// * `source_path` - Path where the files are located
     ///
     /// # Returns
     /// * `Ok(())` on successful execution
-    /// * `Err(EmulatorRunnerError)` if execution fails
-    async fn run_with_emulator(
+    /// * `Err(ExecutableRunnerError)` if execution fails
+    async fn run_executable(
         &self,
         executable: String,
         arguments: &[ArgumentType],
         file_names: &[String],
         selected_file_name: String,
         source_path: PathBuf,
-    ) -> Result<(), EmulatorRunnerError>;
+    ) -> Result<(), ExecutableRunnerError>;
 }
 
-/// Default implementation that performs actual emulator execution.
-pub struct DefaultEmulatorRunnerOps;
+/// Default implementation that performs actual executable execution.
+pub struct DefaultExecutableRunnerOps;
 
-impl DefaultEmulatorRunnerOps {
+impl DefaultExecutableRunnerOps {
     pub fn new() -> Self {
         Self
     }
 }
 
-impl Default for DefaultEmulatorRunnerOps {
+impl Default for DefaultExecutableRunnerOps {
     fn default() -> Self {
         Self::new()
     }
 }
 
 #[async_trait::async_trait]
-impl EmulatorRunnerOps for DefaultEmulatorRunnerOps {
-    async fn run_with_emulator(
+impl ExecutableRunnerOps for DefaultExecutableRunnerOps {
+    async fn run_executable(
         &self,
         executable: String,
         arguments: &[ArgumentType],
         file_names: &[String],
         selected_file_name: String,
         source_path: PathBuf,
-    ) -> Result<(), EmulatorRunnerError> {
+    ) -> Result<(), ExecutableRunnerError> {
         #[allow(deprecated)]
-        run_with_emulator(
+        run_executable(
             executable,
             arguments,
             file_names,
@@ -71,14 +71,14 @@ impl EmulatorRunnerOps for DefaultEmulatorRunnerOps {
     }
 }
 
-/// Represents a recorded call to an emulator runner operation.
+/// Represents a recorded call to an executable runner operation.
 ///
-/// Used by `MockEmulatorRunnerOps` to track and verify emulator calls in tests.
+/// Used by `MockExecutableRunnerOps` to track and verify executable calls in tests.
 #[derive(Debug, Clone)]
-pub struct EmulatorRunCall {
+pub struct ExecutableRunCall {
     /// Executable that was called
     pub executable: String,
-    /// Arguments passed to the emulator
+    /// Arguments passed to the executable
     pub arguments: Vec<ArgumentType>,
     /// File names in the set
     pub file_names: Vec<String>,
@@ -88,24 +88,24 @@ pub struct EmulatorRunCall {
     pub source_path: PathBuf,
 }
 
-/// Mock implementation for testing emulator runner operations.
+/// Mock implementation for testing executable runner operations.
 ///
-/// This mock tracks all emulator run calls and can simulate failures, allowing comprehensive
-/// testing without actually executing emulators.
+/// This mock tracks all executable run calls and can simulate failures, allowing comprehensive
+/// testing without actually executing executables.
 ///
 /// # Examples
 ///
 /// ```
-/// use emulator_runner::ops::{EmulatorRunnerOps, MockEmulatorRunnerOps};
+/// use executable_runner::ops::{ExecutableRunnerOps, MockExecutableRunnerOps};
 /// use core_types::ArgumentType;
 /// use std::path::PathBuf;
 ///
 /// #[async_std::main]
 /// async fn main() {
 ///     // Test successful run
-///     let mock = MockEmulatorRunnerOps::new();
-///     let result = mock.run_with_emulator(
-///         "emulator".to_string(),
+///     let mock = MockExecutableRunnerOps::new();
+///     let result = mock.run_executable(
+///         "executable".to_string(),
 ///         &[ArgumentType::Flag { name: "-verbose".to_string() }],
 ///         &["game.rom".to_string()],
 ///         "game.rom".to_string(),
@@ -116,38 +116,38 @@ pub struct EmulatorRunCall {
 ///     // Verify calls
 ///     assert_eq!(mock.total_calls(), 1);
 ///     let calls = mock.run_calls();
-///     assert_eq!(calls[0].executable, "emulator");
+///     assert_eq!(calls[0].executable, "executable");
 /// }
 /// ```
 #[derive(Clone, Default)]
-pub struct MockEmulatorRunnerOps {
+pub struct MockExecutableRunnerOps {
     should_fail: bool,
     error_message: Option<String>,
-    run_calls: Arc<Mutex<Vec<EmulatorRunCall>>>,
+    run_calls: Arc<Mutex<Vec<ExecutableRunCall>>>,
 }
 
-impl MockEmulatorRunnerOps {
-    /// Creates a new mock that succeeds on all emulator run operations.
+impl MockExecutableRunnerOps {
+    /// Creates a new mock that succeeds on all executable run operations.
     ///
-    /// Use this for testing happy path scenarios where emulator runs should succeed.
+    /// Use this for testing happy path scenarios where executable runs should succeed.
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Creates a new mock that fails on all emulator run operations with the given error message.
+    /// Creates a new mock that fails on all executable run operations with the given error message.
     ///
     /// Use this for testing error handling paths in your code.
     ///
     /// # Arguments
-    /// * `error_msg` - The error message to return when emulator run operations fail
+    /// * `error_msg` - The error message to return when executable run operations fail
     ///
     /// # Examples
     ///
     /// ```
-    /// use emulator_runner::ops::MockEmulatorRunnerOps;
+    /// use executable_runner::ops::MockExecutableRunnerOps;
     ///
-    /// let mock = MockEmulatorRunnerOps::with_failure("Emulator crashed");
-    /// // All emulator run operations will now fail with "Emulator crashed" error
+    /// let mock = MockExecutableRunnerOps::with_failure("Executable crashed");
+    /// // All executable run operations will now fail with "Executable crashed" error
     /// ```
     pub fn with_failure(error_msg: impl Into<String>) -> Self {
         Self {
@@ -157,28 +157,28 @@ impl MockEmulatorRunnerOps {
         }
     }
 
-    /// Returns all calls made to the `run_with_emulator` method.
-    pub fn run_calls(&self) -> Vec<EmulatorRunCall> {
+    /// Returns all calls made to the `run_executable` method.
+    pub fn run_calls(&self) -> Vec<ExecutableRunCall> {
         self.run_calls.lock().unwrap().clone()
     }
 
-    /// Returns the total number of emulator run calls made.
+    /// Returns the total number of executable run calls made.
     pub fn total_calls(&self) -> usize {
         self.run_calls.lock().unwrap().len()
     }
 }
 
 #[async_trait::async_trait]
-impl EmulatorRunnerOps for MockEmulatorRunnerOps {
-    async fn run_with_emulator(
+impl ExecutableRunnerOps for MockExecutableRunnerOps {
+    async fn run_executable(
         &self,
         executable: String,
         arguments: &[ArgumentType],
         file_names: &[String],
         selected_file_name: String,
         source_path: PathBuf,
-    ) -> Result<(), EmulatorRunnerError> {
-        let call = EmulatorRunCall {
+    ) -> Result<(), ExecutableRunnerError> {
+        let call = ExecutableRunCall {
             executable: executable.clone(),
             arguments: arguments.to_vec(),
             file_names: file_names.to_vec(),
@@ -188,10 +188,10 @@ impl EmulatorRunnerOps for MockEmulatorRunnerOps {
         self.run_calls.lock().unwrap().push(call);
 
         if self.should_fail {
-            return Err(EmulatorRunnerError::IoError(
+            return Err(ExecutableRunnerError::IoError(
                 self.error_message
                     .clone()
-                    .unwrap_or_else(|| "Mock emulator run failed".to_string()),
+                    .unwrap_or_else(|| "Mock executable run failed".to_string()),
             ));
         }
         Ok(())
@@ -205,12 +205,12 @@ mod tests {
     use std::path::PathBuf;
 
     #[async_std::test]
-    async fn test_mock_emulator_runner_ops_success() {
-        let mock = MockEmulatorRunnerOps::new();
+    async fn test_mock_executable_runner_ops_success() {
+        let mock = MockExecutableRunnerOps::new();
 
         let result = mock
-            .run_with_emulator(
-                "emulator".to_string(),
+            .run_executable(
+                "executable".to_string(),
                 &[ArgumentType::Flag {
                     name: "-verbose".to_string(),
                 }],
@@ -228,19 +228,19 @@ mod tests {
         assert_eq!(calls.len(), 1);
 
         let call = &calls[0];
-        assert_eq!(call.executable, "emulator");
+        assert_eq!(call.executable, "executable");
         assert_eq!(call.file_names, vec!["game.rom"]);
         assert_eq!(call.selected_file_name, "game.rom");
         assert_eq!(call.source_path, PathBuf::from("/games"));
     }
 
     #[async_std::test]
-    async fn test_mock_emulator_runner_ops_failure() {
-        let mock = MockEmulatorRunnerOps::with_failure("Simulated emulator crash");
+    async fn test_mock_executable_runner_ops_failure() {
+        let mock = MockExecutableRunnerOps::with_failure("Simulated executable crash");
 
         let result = mock
-            .run_with_emulator(
-                "emulator".to_string(),
+            .run_executable(
+                "executable".to_string(),
                 &[],
                 &["game.rom".to_string()],
                 "game.rom".to_string(),
@@ -254,8 +254,8 @@ mod tests {
         assert_eq!(mock.total_calls(), 1);
 
         match result {
-            Err(EmulatorRunnerError::IoError(msg)) => {
-                assert_eq!(msg, "Simulated emulator crash");
+            Err(ExecutableRunnerError::IoError(msg)) => {
+                assert_eq!(msg, "Simulated executable crash");
             }
             _ => panic!("Expected IoError"),
         }
@@ -263,10 +263,10 @@ mod tests {
 
     #[async_std::test]
     async fn test_mock_tracks_multiple_calls() {
-        let mock = MockEmulatorRunnerOps::new();
+        let mock = MockExecutableRunnerOps::new();
 
-        mock.run_with_emulator(
-            "emulator1".to_string(),
+        mock.run_executable(
+            "executable1".to_string(),
             &[],
             &["game1.rom".to_string()],
             "game1.rom".to_string(),
@@ -275,8 +275,8 @@ mod tests {
         .await
         .unwrap();
 
-        mock.run_with_emulator(
-            "emulator2".to_string(),
+        mock.run_executable(
+            "executable2".to_string(),
             &[ArgumentType::FlagWithValue {
                 name: "-config".to_string(),
                 value: "config.ini".to_string(),
@@ -290,7 +290,7 @@ mod tests {
 
         assert_eq!(mock.total_calls(), 2);
         let calls = mock.run_calls();
-        assert_eq!(calls[0].executable, "emulator1");
-        assert_eq!(calls[1].executable, "emulator2");
+        assert_eq!(calls[0].executable, "executable1");
+        assert_eq!(calls[1].executable, "executable2");
     }
 }

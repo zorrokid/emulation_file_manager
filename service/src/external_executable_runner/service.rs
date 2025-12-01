@@ -3,7 +3,7 @@ use std::sync::Arc;
 use async_std::channel::Sender;
 use core_types::{ArgumentType, events::DownloadEvent};
 use database::repository_manager::RepositoryManager;
-use emulator_runner::ops::{DefaultEmulatorRunnerOps, EmulatorRunnerOps};
+use executable_runner::ops::{DefaultExecutableRunnerOps, ExecutableRunnerOps};
 
 use crate::{
     error::Error,
@@ -18,7 +18,7 @@ pub struct ExternalExecutableRunnerService {
     repository_manager: Arc<RepositoryManager>,
     settings: Arc<Settings>,
     fs_ops: Arc<dyn FileSystemOps>,
-    executable_runner_ops: Arc<dyn EmulatorRunnerOps>,
+    executable_runner_ops: Arc<dyn ExecutableRunnerOps>,
     download_service_ops: Arc<dyn DownloadServiceOps>,
 }
 
@@ -51,7 +51,7 @@ impl ExternalExecutableRunnerService {
             repository_manager,
             settings,
             Arc::new(StdFileSystemOps),
-            Arc::new(DefaultEmulatorRunnerOps),
+            Arc::new(DefaultExecutableRunnerOps),
             download_service,
         )
     }
@@ -60,7 +60,7 @@ impl ExternalExecutableRunnerService {
         repository_manager: Arc<RepositoryManager>,
         settings: Arc<Settings>,
         fs_ops: Arc<dyn FileSystemOps>,
-        executable_runner_ops: Arc<dyn EmulatorRunnerOps>,
+        executable_runner_ops: Arc<dyn ExecutableRunnerOps>,
         download_service_ops: Arc<dyn DownloadServiceOps>,
     ) -> Self {
         Self {

@@ -1266,7 +1266,6 @@ dependencies = [
  "cloud_storage",
  "core_types",
  "database",
- "emulator_runner",
  "file_export",
  "file_import",
  "file_system",
@@ -1291,19 +1290,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "48c757948c5ede0e46177b7add2e67155f70e33c07fea8284df6576da70b3719"
 dependencies = [
  "serde",
-]
-
-[[package]]
-name = "emulator_runner"
-version = "0.1.0"
-dependencies = [
- "async-process",
- "async-std",
- "async-trait",
- "core_types",
- "tempfile",
- "thiserror 2.0.17",
- "tracing",
 ]
 
 [[package]]
@@ -1387,6 +1373,19 @@ checksum = "8be9f3dfaaffdae2972880079a491a1a8bb7cbed0b8dd7a347f668b4150a3b93"
 dependencies = [
  "event-listener 5.4.0",
  "pin-project-lite",
+]
+
+[[package]]
+name = "executable_runner"
+version = "0.1.0"
+dependencies = [
+ "async-process",
+ "async-std",
+ "async-trait",
+ "core_types",
+ "tempfile",
+ "thiserror 2.0.17",
+ "tracing",
 ]
 
 [[package]]
@@ -3980,7 +3979,7 @@ dependencies = [
  "core_types",
  "credentials_storage",
  "database",
- "emulator_runner",
+ "executable_runner",
  "file_export",
  "file_import",
  "file_system",

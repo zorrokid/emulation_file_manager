@@ -78,7 +78,7 @@ impl PipelineStep<ExternalExecutableRunnerContext> for StartExecutableStep {
 
         let res = context
             .executable_runner_ops
-            .run_with_emulator(
+            .run_executable(
                 context.executable.clone(), // TODO: pass executable as reference
                 &context.arguments,
                 &context.file_names,
@@ -146,7 +146,7 @@ mod tests {
     use std::{path::PathBuf, sync::Arc};
 
     use database::{repository_manager::RepositoryManager, setup_test_db};
-    use emulator_runner::ops::{EmulatorRunnerOps, MockEmulatorRunnerOps};
+    use executable_runner::ops::{ExecutableRunnerOps, MockExecutableRunnerOps};
 
     use crate::{
         external_executable_runner::{
@@ -209,7 +209,7 @@ mod tests {
 
     #[async_std::test]
     async fn test_start_executable_step_with_success() {
-        let executable_runner_ops = Arc::new(MockEmulatorRunnerOps::new());
+        let executable_runner_ops = Arc::new(MockExecutableRunnerOps::new());
         let mut context = initialize_context(None, Some(executable_runner_ops.clone()), None).await;
         context.file_names = vec!["file1".to_string(), "file2".to_string()];
         let step = crate::external_executable_runner::steps::StartExecutableStep;
@@ -230,7 +230,7 @@ mod tests {
 
     #[async_std::test]
     async fn test_start_executable_step_success_with_start_file_defined() {
-        let executable_runner_ops = Arc::new(MockEmulatorRunnerOps::new());
+        let executable_runner_ops = Arc::new(MockExecutableRunnerOps::new());
         let mut context = initialize_context(None, Some(executable_runner_ops.clone()), None).await;
         context.file_names = vec!["file1".to_string(), "file2".to_string()];
         context.initial_file = Some("file2".to_string());
@@ -252,7 +252,7 @@ mod tests {
 
     #[async_std::test]
     async fn test_start_executable_failure_without_files() {
-        let executable_runner_ops = Arc::new(MockEmulatorRunnerOps::new());
+        let executable_runner_ops = Arc::new(MockExecutableRunnerOps::new());
         let mut context = initialize_context(None, Some(executable_runner_ops.clone()), None).await;
         context.file_names = vec![];
         let step = crate::external_executable_runner::steps::StartExecutableStep;
@@ -263,8 +263,8 @@ mod tests {
 
     #[async_std::test]
     async fn test_start_executable_step_with_failure() {
-        let executable_runner_ops = Arc::new(MockEmulatorRunnerOps::with_failure(
-            "Simulated emulator failure",
+        let executable_runner_ops = Arc::new(MockExecutableRunnerOps::with_failure(
+            "Simulated executable failure",
         ));
         let mut context = initialize_context(None, Some(executable_runner_ops.clone()), None).await;
         context.file_names = vec!["file1".to_string()];
@@ -318,17 +318,17 @@ mod tests {
         context.file_names = vec!["file1".to_string()];
         context.skip_cleanup = true;
         let step = crate::external_executable_runner::steps::CleanupFilesStep;
-        
+
         // Should not execute when skip_cleanup is true
         assert!(!step.should_execute(&context));
-        
+
         // File should NOT be deleted since step should not execute
         assert!(!fs_ops.was_deleted("/temp/file1"));
     }
 
     async fn initialize_context(
         download_service_ops: Option<Arc<dyn DownloadServiceOps>>,
-        executable_runner_ops: Option<Arc<dyn EmulatorRunnerOps>>,
+        executable_runner_ops: Option<Arc<dyn ExecutableRunnerOps>>,
         file_system_ops: Option<Arc<dyn FileSystemOps>>,
     ) -> ExternalExecutableRunnerContext {
         let pool = Arc::new(setup_test_db().await);
@@ -340,7 +340,7 @@ mod tests {
         });
 
         ExternalExecutableRunnerContext {
-            executable: "emulator".to_string(),
+            executable: "executable".to_string(),
             arguments: vec![],
             extract_files: true,
             file_set_id: 1,
@@ -351,7 +351,7 @@ mod tests {
             error_message: Vec::new(),
             file_names: Vec::new(),
             executable_runner_ops: executable_runner_ops
-                .unwrap_or(Arc::new(MockEmulatorRunnerOps::new())),
+                .unwrap_or(Arc::new(MockExecutableRunnerOps::new())),
             was_successful: false,
             download_service_ops: download_service_ops
                 .unwrap_or(Arc::new(MockDownloadServiceOps::new())),

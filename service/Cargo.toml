@@ -19,4 +19,4 @@ thumbnails = { path = "../thumbnails" }
 utils = { path = "../utils" }
 file_import = { path = "../file_import" }
 http_downloader = { path = "../http_downloader" }
-emulator_runner = { path = "../emulator_runner" }
+executable_runner = { path = "../executable_runner" }
