@@ -2,38 +2,38 @@ use async_process::Command;
 use core_types::ArgumentType;
 use std::path::{Path, PathBuf};
 
-use error::EmulatorRunnerError;
+use error::ExecutableRunnerError;
 
 pub mod error;
 pub mod ops;
 
-/// Asynchronous function to run an emulator with the given executable, arguments, and file names.
+/// Asynchronous function to run an the given executable, arguments, and file names.
 /// It takes the selected file name and source path to locate the file.
 ///
 /// # arguments
-/// * `executable`: emulator executable name (if it's found on system path) or the full path to the emulator executable.
-/// * `arguments`: The arguments to pass to the emulator.
-/// * `file_names`: A vector of file names to be used with emulator to run a certain software release.
+/// * `executable`: executable name (if it's found on system path) or the full path to the executable.
+/// * `arguments`: The arguments to pass to the executable.
+/// * `file_names`: A vector of file names to be used with executable.
 /// * `selected_file_name`: The name of the entry point file of the set of file_names to be executed.
 /// * `source_path`: The path where the files are located.
 ///
 /// # returns
-/// * `Result<(), EmulatorRunnerError>`: Returns Ok if the emulator runs successfully, or an error if it fails.
+/// * `Result<(), ExecutableRunnerError>`: Returns Ok if the executable runs successfully, or an error if it fails.
 ///
 /// # errors
-/// * `EmulatorRunnerError::NoFileSelected`: If no file is selected.
-/// * `EmulatorRunnerError::FileNotFound`: If the selected file is not found.
-/// * `EmulatorRunnerError::IoError`: If there is an IO error while running the emulator.
-#[deprecated(note = "Use EmulatorRunnerOps trait instead")]
-pub async fn run_with_emulator(
+/// * `ExecutableRunnerError::NoFileSelected`: If no file is selected.
+/// * `ExecutableRunnerError::FileNotFound`: If the selected file is not found.
+/// * `ExecutableRunnerError::IoError`: If there is an IO error while running the executable.
+#[deprecated(note = "Use ExecutableRunnerOps trait instead")]
+pub async fn run_executable(
     executable: String,
     arguments: &[ArgumentType],
     file_names: &[String],      // list of files selected for running
     selected_file_name: String, // entry point file in possible set of files
     source_path: PathBuf,       // where to find files
-) -> Result<(), EmulatorRunnerError> {
+) -> Result<(), ExecutableRunnerError> {
     if file_names.is_empty() {
-        return Err(EmulatorRunnerError::NoFileSelected);
+        return Err(ExecutableRunnerError::NoFileSelected);
     }
     let file_path = Path::new(&source_path).join(&selected_file_name);
 
@@ -42,7 +42,7 @@ pub async fn run_with_emulator(
     tracing::debug!("File to run: {}", file_path.display());
 
     if !file_path.exists() {
-        return Err(EmulatorRunnerError::FileNotFound);
+        return Err(ExecutableRunnerError::FileNotFound);
     }
 
     let mut command = Command::new(&executable);
@@ -51,7 +51,7 @@ pub async fn run_with_emulator(
         tracing::debug!("No arguments provided, running with file path as only argument.");
         command.arg(&file_path).current_dir(&source_path);
     } else {
-        tracing::debug!("Preparing to run emulator with arguments {:?}", arguments);
+        tracing::debug!("Preparing to run executable with arguments {:?}", arguments);
 
         let mut args = Vec::new();
 
@@ -77,11 +77,11 @@ pub async fn run_with_emulator(
     tracing::debug!("Command to execute: {:?}", command);
 
     let status = command.status().await.map_err(|e| {
-        EmulatorRunnerError::IoError(format!("Failed to get status of emulator: {}", e))
+        ExecutableRunnerError::IoError(format!("Failed to get status of executable: {}", e))
     })?;
 
     if !status.success() {
-        return Err(EmulatorRunnerError::IoError(format!(
+        return Err(ExecutableRunnerError::IoError(format!(
             "Emulator failed with status: {}",
             status
         )));
@@ -96,7 +96,7 @@ mod tests {
     use tempfile::tempdir;
 
     #[async_std::test]
-    async fn test_run_with_emulator() {
+    async fn test_run_executable() {
         let temp_dir = tempdir().unwrap();
         let output_path = temp_dir.path();
         let file_name = "test.d64";
@@ -109,7 +109,7 @@ mod tests {
         let file_names = vec![file_name.to_string()];
         let selected_file_name = file_name.to_string();
         let source_path = output_path.to_path_buf();
-        let result = run_with_emulator(
+        let result = run_executable(
             executable,
             &[arguments],
             &file_names,
@@ -117,6 +117,6 @@ mod tests {
             source_path,
         )
         .await;
-        assert!(result.is_ok(), "Emulator run failed: {:?}", result);
+        assert!(result.is_ok(), "Executable run failed: {:?}", result);
     }
 }

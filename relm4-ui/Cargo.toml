@@ -15,7 +15,6 @@ file_export = { path = "../file_export" }
 file_import = { path = "../file_import" }
 file_system = { path = "../file_system" }
 core_types = { path = "../core_types" }
-emulator_runner = { path = "../emulator_runner" }
 thumbnails = { path = "../thumbnails" }
 utils = { path = "../utils" }
 ui-components = { path = "../ui-components" }

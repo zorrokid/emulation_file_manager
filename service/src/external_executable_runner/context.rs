@@ -3,7 +3,7 @@ use std::sync::Arc;
 use async_std::channel::Sender;
 use core_types::{ArgumentType, events::DownloadEvent};
 use database::repository_manager::RepositoryManager;
-use emulator_runner::ops::EmulatorRunnerOps;
+use executable_runner::ops::ExecutableRunnerOps;
 
 use crate::{
     file_set_download::download_service_ops::DownloadServiceOps, file_system_ops::FileSystemOps,
@@ -19,7 +19,7 @@ pub struct ExternalExecutableRunnerContext {
     pub settings: Arc<Settings>,
     pub initial_file: Option<String>,
     pub fs_ops: Arc<dyn FileSystemOps>,
-    pub executable_runner_ops: Arc<dyn EmulatorRunnerOps>,
+    pub executable_runner_ops: Arc<dyn ExecutableRunnerOps>,
     pub file_names: Vec<String>,
     pub was_successful: bool,
     pub error_message: Vec<String>,
