@@ -70,3 +70,25 @@ fn update_with_view(
 }
 ```
 
+## Closing dialog window
+
+Add a `connect_close_request` handler to the `Window` component, which is triggered on close button (X) click:
+```
+view! {
+    gtk::Window {
+         connect_close_request[sender] => move |_| {
+            sender.input(Msg::Hide);
+            glib::Propagation::Stop
+        },
+    }
+}
+```
+
+In message handler, do NOT call `root.close()`:
+```
+Msg::Hide => {
+    root.hide();
+}
+```
+
+
