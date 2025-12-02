@@ -14,6 +14,7 @@ use relm4::{
     typed_view::list::TypedListView,
 };
 use service::{
+    error::Error as ServiceError,
     view_model_service::ViewModelService,
     view_models::{
         FileSetListModel, ReleaseViewModel, Settings, SoftwareTitleListModel, SystemListModel,
@@ -50,11 +51,12 @@ pub enum ReleaseFormMsg {
     UnlinkSoftwareTitle,
     UnlinkSystem,
     UnlinkFileSet,
-    Show { release: Option<ReleaseViewModel> },
+    Show { release_id: Option<i64> },
     Hide,
     EditFileSet,
     FileSetUpdated(FileSetListModel),
     NameChanged(String),
+    UpdateEditFields,
 }
 
 #[derive(Debug)]
@@ -67,6 +69,7 @@ pub enum ReleaseFormOutputMsg {
 #[derive(Debug)]
 pub enum CommandMsg {
     ReleaseCreatedOrUpdated(Result<i64, Error>),
+    ReleaseFetched(Result<ReleaseViewModel, ServiceError>),
 }
 
 #[derive(Debug)]
@@ -89,7 +92,6 @@ pub struct ReleaseFormInit {
     pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
     pub settings: Arc<Settings>,
-    //pub release: Option<ReleaseViewModel>,
 }
 
 impl ReleaseFormModel {
@@ -459,12 +461,12 @@ impl Component for ReleaseFormModel {
             ReleaseFormMsg::UnlinkFileSet => {
                 remove_selected(&mut self.selected_file_sets_list_view_wrapper);
             }
-            ReleaseFormMsg::Show { release } => {
+            ReleaseFormMsg::UpdateEditFields => {
                 let mut selected_systems = vec![];
                 let mut selected_file_sets = vec![];
                 let mut selected_software_titles = vec![];
-                if let Some(release) = release {
-                    tracing::info!("Showing release form with release: {:?}", &release);
+                let mut release_name = String::new();
+                if let Some(release) = &self.release {
                     selected_systems = release
                         .systems
                         .iter()
@@ -485,6 +487,7 @@ impl Component for ReleaseFormModel {
                             file_name: fs.file_name.clone(),
                         })
                         .collect();
+
                     selected_software_titles = release
                         .software_titles
                         .iter()
@@ -494,16 +497,12 @@ impl Component for ReleaseFormModel {
                             can_delete: false,
                         })
                         .collect();
-                    let release_name = release.name.clone();
-                    widgets.release_name_entry.set_text(release_name.as_str());
-                    self.release_name = release.name.clone();
-                    self.release = Some(release);
-                } else {
-                    tracing::info!("Showing release form for new release");
-                    widgets.release_name_entry.set_text("");
-                    self.release_name = String::new();
-                    self.release = None;
+
+                    release_name = release.name.clone();
                 }
+
+                widgets.release_name_entry.set_text(release_name.as_str());
+                self.release_name = release_name;
 
                 self.selected_systems_list_view_wrapper.clear();
                 self.selected_systems_list_view_wrapper.extend_from_iter(
@@ -525,6 +524,20 @@ impl Component for ReleaseFormModel {
                         id: st.id,
                         name: st.name.clone(),
                     }));
+            }
+            ReleaseFormMsg::Show { release_id } => {
+                if let Some(id) = release_id {
+                    tracing::info!("Loading release with ID: {}", id);
+                    let view_model_service = Arc::clone(&self.view_model_service);
+                    sender.oneshot_command(async move {
+                        let release_result = view_model_service.get_release_view_model(id).await;
+                        CommandMsg::ReleaseFetched(release_result)
+                    });
+                } else {
+                    self.release = None;
+                    sender.input(ReleaseFormMsg::UpdateEditFields);
+                }
+
                 root.show();
             }
             ReleaseFormMsg::Hide => {
@@ -586,6 +599,14 @@ impl Component for ReleaseFormModel {
                     format!("Failed to create or update release: {:?}", err),
                     root,
                 );
+            }
+            CommandMsg::ReleaseFetched(Ok(release)) => {
+                tracing::info!("Release fetched: {:?}", &release);
+                self.release = Some(release);
+                sender.input(ReleaseFormMsg::UpdateEditFields);
+            }
+            CommandMsg::ReleaseFetched(Err(err)) => {
+                show_error_dialog(format!("Failed to fetch release: {:?}", err), root);
             }
         }
     }

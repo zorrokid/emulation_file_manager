@@ -6,10 +6,9 @@ use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
         self,
-        glib::{self, SignalHandlerId, clone, object::ObjectExt},
+        glib::{SignalHandlerId, clone, object::ObjectExt},
         prelude::{
-            BoxExt, ButtonExt, EditableExt, EntryBufferExtManual, EntryExt, GtkWindowExt,
-            OrientableExt, WidgetExt,
+            BoxExt, ButtonExt, EditableExt, EntryBufferExtManual, EntryExt, GtkWindowExt, WidgetExt,
         },
     },
 };

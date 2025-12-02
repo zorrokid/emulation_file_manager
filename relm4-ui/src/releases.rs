@@ -28,6 +28,7 @@ pub enum ReleasesMsg {
     SofwareTitleCreated(SoftwareTitleListModel),
     SofwareTitleUpdated(SoftwareTitleListModel),
     RemoveRelease,
+    EditRelease,
 }
 
 #[derive(Debug)]
@@ -87,6 +88,11 @@ impl Component for ReleasesModel {
                 set_vexpand: true,
                 #[local_ref]
                 releases_list_view -> gtk::ListView {}
+            },
+
+            gtk::Button {
+                set_label: "Edit Release",
+                connect_clicked => ReleasesMsg::EditRelease,
             },
 
             gtk::Button {
@@ -202,7 +208,7 @@ impl Component for ReleasesModel {
 
             ReleasesMsg::StartAddRelease => {
                 self.release_form
-                    .emit(ReleaseFormMsg::Show { release: None });
+                    .emit(ReleaseFormMsg::Show { release_id: None });
             }
             ReleasesMsg::AddRelease(release_list_model) => {
                 println!("Release added: {:?}", release_list_model);
@@ -243,6 +249,15 @@ impl Component for ReleasesModel {
                             .delete_release(release_id)
                             .await;
                         CommandMsg::ReleaseDeleted(result)
+                    });
+                }
+            }
+            ReleasesMsg::EditRelease => {
+                let selected_index = self.releases_list_view_wrapper.selection_model.selected();
+                if let Some(item) = self.releases_list_view_wrapper.get_visible(selected_index) {
+                    let release_id = item.borrow().id;
+                    self.release_form.emit(ReleaseFormMsg::Show {
+                        release_id: Some(release_id),
                     });
                 }
             }

@@ -25,7 +25,6 @@ use crate::{
     emulator_runner::{EmulatorRunnerInit, EmulatorRunnerModel, EmulatorRunnerMsg},
     image_fileset_viewer::{ImageFileSetViewerInit, ImageFilesetViewer, ImageFilesetViewerMsg},
     list_item::ListItem,
-    release_form::{ReleaseFormInit, ReleaseFormModel, ReleaseFormMsg, ReleaseFormOutputMsg},
     tabbed_image_viewer::{TabbedImageViewer, TabbedImageViewerInit, TabbedImageViewerMsg},
 };
 
@@ -46,7 +45,6 @@ pub struct ReleaseModel {
     emulator_runner: Controller<EmulatorRunnerModel>,
     image_file_set_viewer: Controller<ImageFilesetViewer>,
     document_file_set_viewer: Controller<DocumentViewer>,
-    release_form: Controller<ReleaseFormModel>,
     tabbed_image_viewer: Controller<TabbedImageViewer>,
 }
 
@@ -68,7 +66,6 @@ pub enum ReleaseMsg {
     StartEmulatorRunner,
     StartImageFileSetViewer,
     StartDocumentFileSetViewer,
-    StartEditRelease,
     UpdateRelease(ReleaseListModel),
     Clear,
     FileSetSelected {
@@ -159,28 +156,6 @@ impl Component for ReleaseModel {
                     set_spacing: 5,
 
                     gtk::Label {
-                        set_label: "Image File Sets:",
-                    },
-                    #[local_ref]
-                    image_file_set_list_view -> gtk::ListView {
-                        set_vexpand: true,
-                    },
-
-                    gtk::Button {
-                        set_label: "View Image File Set",
-                        #[watch]
-                        set_sensitive: model.selected_image_file_set.is_some(),
-                        connect_clicked => ReleaseMsg::StartImageFileSetViewer,
-                    },
-                },
-
-                gtk::Box {
-                    set_orientation: gtk::Orientation::Vertical,
-                    set_hexpand: true,
-
-                    set_spacing: 5,
-
-                    gtk::Label {
                         set_label: "Document File Sets:",
                     },
                     #[local_ref]
@@ -196,11 +171,6 @@ impl Component for ReleaseModel {
                     },
                 }
             },
-
-            gtk::Button {
-                set_label: "Edit release",
-                connect_clicked => ReleaseMsg::StartEditRelease,
-            }
         }
     }
 
@@ -220,32 +190,6 @@ impl Component for ReleaseModel {
         let tabbed_image_viewer = TabbedImageViewer::builder()
             .launch(tabbed_image_viewer_init)
             .detach();
-
-        let release_form_init_model = ReleaseFormInit {
-            view_model_service: Arc::clone(&init_model.view_model_service),
-            repository_manager: Arc::clone(&init_model.repository_manager),
-            settings: Arc::clone(&init_model.settings),
-        };
-        let release_form = ReleaseFormModel::builder()
-            .transient_for(&root)
-            .launch(release_form_init_model)
-            .forward(sender.input_sender(), |msg| match msg {
-                ReleaseFormOutputMsg::ReleaseCreatedOrUpdated { id } => {
-                    ReleaseMsg::FetchRelease { id }
-                }
-                ReleaseFormOutputMsg::SoftwareTitleCreated(software_title_list_model) => {
-                    println!("Software title created: {:?}", software_title_list_model);
-                    ReleaseMsg::SoftwareTitleCreated {
-                        software_title_list_model,
-                    }
-                }
-                ReleaseFormOutputMsg::SoftwareTitleUpdated(software_title_list_model) => {
-                    println!("Software title updated: {:?}", software_title_list_model);
-                    ReleaseMsg::SoftwareTitleUpdated {
-                        software_title_list_model,
-                    }
-                }
-            });
 
         let emulator_runner_init_model = EmulatorRunnerInit {
             view_model_service: Arc::clone(&init_model.view_model_service),
@@ -291,7 +235,6 @@ impl Component for ReleaseModel {
             image_file_set_viewer,
             tabbed_image_viewer,
             document_file_set_viewer,
-            release_form,
         };
 
         let file_set_list_view = &model.emulator_file_set_list_view_wrapper.view;
@@ -306,7 +249,6 @@ impl Component for ReleaseModel {
             }
         ));
 
-        let image_file_set_list_view = &model.image_file_set_list_view_wrapper.view;
         let image_selection_model = &model.image_file_set_list_view_wrapper.selection_model;
         image_selection_model.connect_selected_notify(clone!(
             #[strong]
@@ -380,13 +322,6 @@ impl Component for ReleaseModel {
             ReleaseMsg::UpdateRelease(release_list_model) => {
                 println!("Updating release with model: {:?}", release_list_model);
                 // TODO
-            }
-            ReleaseMsg::StartEditRelease => {
-                if let Some(release) = &self.selected_release {
-                    self.release_form.emit(ReleaseFormMsg::Show {
-                        release: Some(release.clone()),
-                    });
-                }
             }
             ReleaseMsg::Clear => {
                 println!("Clearing release model");
