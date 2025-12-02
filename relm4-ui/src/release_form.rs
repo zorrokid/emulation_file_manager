@@ -11,7 +11,7 @@ use relm4::{
         },
     },
     once_cell::sync::OnceCell,
-    typed_view::list::TypedListView,
+    typed_view::list::{RelmListItem, TypedListView},
 };
 use service::{
     error::Error as ServiceError,
@@ -26,7 +26,7 @@ use crate::{
     file_set_selector::{
         FileSetSelector, FileSetSelectorInit, FileSetSelectorMsg, FileSetSelectorOutputMsg,
     },
-    list_item::ListItem,
+    list_item::{HasId, ListItem},
     software_title_selector::{
         SoftwareTitleSelectInit, SoftwareTitleSelectModel, SoftwareTitleSelectMsg,
         SoftwareTitleSelectOutputMsg,
@@ -36,6 +36,57 @@ use crate::{
     },
     utils::dialog_utils::{show_error_dialog, show_info_dialog},
 };
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct FileSetListItem {
+    pub name: String,
+    pub id: i64,
+    pub file_type: String,
+}
+
+impl HasId for FileSetListItem {
+    fn id(&self) -> i64 {
+        self.id
+    }
+}
+
+pub struct ListItemWidgets {
+    name_label: gtk::Label,
+    file_type_label: gtk::Label,
+}
+
+impl RelmListItem for FileSetListItem {
+    type Root = gtk::Box;
+    type Widgets = ListItemWidgets;
+
+    fn setup(_item: &gtk::ListItem) -> (gtk::Box, ListItemWidgets) {
+        relm4::view! {
+            my_box = gtk::Box {
+                set_spacing: 10,
+                #[name = "name_label"]
+                gtk::Label,
+                #[name = "file_type_label"]
+                gtk::Label,
+            }
+        }
+
+        let widgets = ListItemWidgets {
+            name_label,
+            file_type_label,
+        };
+
+        (my_box, widgets)
+    }
+
+    fn bind(&mut self, widgets: &mut Self::Widgets, _root: &mut Self::Root) {
+        let ListItemWidgets {
+            name_label,
+            file_type_label,
+        } = widgets;
+        name_label.set_label(&self.name);
+        file_type_label.set_label(&self.file_type);
+    }
+}
 
 #[derive(Debug)]
 pub enum ReleaseFormMsg {
@@ -82,7 +133,7 @@ pub struct ReleaseFormModel {
     software_title_selector: Controller<SoftwareTitleSelectModel>,
     selected_software_titles_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     selected_systems_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
-    selected_file_sets_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
+    selected_file_sets_list_view_wrapper: TypedListView<FileSetListItem, gtk::SingleSelection>,
     release: Option<ReleaseViewModel>,
     file_set_editor: OnceCell<Controller<FileSetEditor>>,
     release_name: String,
@@ -140,21 +191,28 @@ impl Component for ReleaseFormModel {
                 set_orientation: gtk::Orientation::Vertical,
                 set_spacing: 10,
 
-                #[name="release_name_entry"]
-                gtk::Entry {
-                    set_text: &model.release_name,
-                    set_placeholder_text: Some("Release name"),
-                    connect_changed[sender] => move |entry| {
-                        let buffer = entry.buffer();
-                        sender.input(ReleaseFormMsg::NameChanged(buffer.text().into()));
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    gtk::Label {
+                        set_label: "Release Name:",
                     },
+                    #[name="release_name_entry"]
+                    gtk::Entry {
+                        set_text: &model.release_name,
+                        set_placeholder_text: Some("Release name"),
+                        connect_changed[sender] => move |entry| {
+                            let buffer = entry.buffer();
+                            sender.input(ReleaseFormMsg::NameChanged(buffer.text().into()));
+                        },
+                    },
+
                 },
 
 
                 gtk::Box {
                     set_orientation: gtk::Orientation::Vertical,
                     gtk::Label {
-                        set_label: "Software titles",
+                        set_label: "Selected software titles",
                     },
                     gtk::ScrolledWindow {
                         set_vexpand: true,
@@ -179,7 +237,7 @@ impl Component for ReleaseFormModel {
                 gtk::Box {
                     set_orientation: gtk::Orientation::Vertical,
                     gtk::Label {
-                        set_label: "Systems",
+                        set_label: "Selected systems",
                     },
 
                     gtk::ScrolledWindow {
@@ -205,7 +263,7 @@ impl Component for ReleaseFormModel {
                 gtk::Box {
                     set_orientation: gtk::Orientation::Vertical,
                     gtk::Label {
-                        set_label: "File sets",
+                        set_label: "Selected file sets",
                     },
 
                    gtk::ScrolledWindow {
@@ -233,7 +291,6 @@ impl Component for ReleaseFormModel {
                     },
                 },
 
-
                 gtk::Button {
                     set_label: "Submit Release",
                     connect_clicked => ReleaseFormMsg::StartSaveRelease,
@@ -250,8 +307,10 @@ impl Component for ReleaseFormModel {
         let selected_systems_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
             TypedListView::new();
 
-        let selected_file_sets_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
-            TypedListView::new();
+        let selected_file_sets_list_view_wrapper: TypedListView<
+            FileSetListItem,
+            gtk::SingleSelection,
+        > = TypedListView::new();
 
         let selected_software_titles_list_view_wrapper: TypedListView<
             ListItem,
@@ -362,10 +421,12 @@ impl Component for ReleaseFormModel {
                 });
             }
             ReleaseFormMsg::FileSetSelected(file_set) => {
-                self.selected_file_sets_list_view_wrapper.append(ListItem {
-                    name: file_set.file_set_name.clone(),
-                    id: file_set.id,
-                });
+                self.selected_file_sets_list_view_wrapper
+                    .append(FileSetListItem {
+                        name: file_set.file_set_name.clone(),
+                        id: file_set.id,
+                        file_type: file_set.file_type.to_string(),
+                    });
             }
             ReleaseFormMsg::SoftwareTitleSelected(software_title) => {
                 self.selected_software_titles_list_view_wrapper
@@ -513,9 +574,10 @@ impl Component for ReleaseFormModel {
                 );
                 self.selected_file_sets_list_view_wrapper.clear();
                 self.selected_file_sets_list_view_wrapper.extend_from_iter(
-                    selected_file_sets.iter().map(|fs| ListItem {
+                    selected_file_sets.iter().map(|fs| FileSetListItem {
                         id: fs.id,
                         name: fs.file_set_name.clone(),
+                        file_type: fs.file_type.to_string(),
                     }),
                 );
                 self.selected_software_titles_list_view_wrapper.clear();
@@ -612,12 +674,18 @@ impl Component for ReleaseFormModel {
     }
 }
 
-fn get_item_ids(list_view_wrapper: &TypedListView<ListItem, gtk::SingleSelection>) -> Vec<i64> {
+fn get_item_ids<T>(list_view_wrapper: &TypedListView<T, gtk::SingleSelection>) -> Vec<i64>
+where
+    T: RelmListItem + HasId,
+{
     (0..list_view_wrapper.len())
-        .filter_map(|i| list_view_wrapper.get(i).map(|st| st.borrow().id))
+        .filter_map(|i| list_view_wrapper.get(i).map(|st| st.borrow().id()))
         .collect()
 }
 
-fn remove_selected(list_view_wrapper: &mut TypedListView<ListItem, gtk::SingleSelection>) {
+fn remove_selected<T>(list_view_wrapper: &mut TypedListView<T, gtk::SingleSelection>)
+where
+    T: RelmListItem + HasId,
+{
     list_view_wrapper.remove(list_view_wrapper.selection_model.selected());
 }

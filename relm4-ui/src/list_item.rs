@@ -1,13 +1,22 @@
 use relm4::{
-    gtk::{self, prelude::*},
-    prelude::*,
+    gtk::{self},
     typed_view::list::RelmListItem,
 };
+
+pub trait HasId {
+    fn id(&self) -> i64;
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ListItem {
     pub name: String,
     pub id: i64,
+}
+
+impl HasId for ListItem {
+    fn id(&self) -> i64 {
+        self.id
+    }
 }
 
 pub struct ListItemWidgets {
