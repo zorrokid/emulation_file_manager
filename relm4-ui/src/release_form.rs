@@ -50,16 +50,16 @@ impl HasId for FileSetListItem {
     }
 }
 
-pub struct ListItemWidgets {
+pub struct FileSetListItemWidgets {
     name_label: gtk::Label,
     file_type_label: gtk::Label,
 }
 
 impl RelmListItem for FileSetListItem {
     type Root = gtk::Box;
-    type Widgets = ListItemWidgets;
+    type Widgets = FileSetListItemWidgets;
 
-    fn setup(_item: &gtk::ListItem) -> (gtk::Box, ListItemWidgets) {
+    fn setup(_item: &gtk::ListItem) -> (gtk::Box, FileSetListItemWidgets) {
         relm4::view! {
             my_box = gtk::Box {
                 set_spacing: 10,
@@ -70,7 +70,7 @@ impl RelmListItem for FileSetListItem {
             }
         }
 
-        let widgets = ListItemWidgets {
+        let widgets = FileSetListItemWidgets {
             name_label,
             file_type_label,
         };
@@ -79,7 +79,7 @@ impl RelmListItem for FileSetListItem {
     }
 
     fn bind(&mut self, widgets: &mut Self::Widgets, _root: &mut Self::Root) {
-        let ListItemWidgets {
+        let FileSetListItemWidgets {
             name_label,
             file_type_label,
         } = widgets;
@@ -193,6 +193,7 @@ impl Component for ReleaseFormModel {
 
                 gtk::Box {
                     set_orientation: gtk::Orientation::Horizontal,
+                    set_spacing: 5,
                     gtk::Label {
                         set_label: "Release Name:",
                     },
