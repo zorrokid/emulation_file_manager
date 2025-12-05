@@ -65,6 +65,7 @@ pub struct SystemSelectModel {
     selected_system_ids: Vec<i64>,
     system_form_controller: Controller<SystemFormModel>,
     confirm_dialog_controller: Controller<ConfirmDialog>,
+    selected_list_item: Option<DeletableListItem>,
 }
 
 #[relm4::component(pub)]
@@ -135,6 +136,13 @@ impl Component for SystemSelectModel {
         let list_view_wrapper: TypedListView<DeletableListItem, gtk::SingleSelection> =
             TypedListView::with_sorting();
 
+        list_view_wrapper
+            .selection_model
+            .connect_selected_notify(|selection_model| {
+                let selected_index = selection_model.selected();
+                tracing::info!("Selected index changed to {:?}", selected_index);
+            });
+
         let confirm_dialog_controller = ConfirmDialog::builder()
             .transient_for(&root)
             .launch(ConfirmDialogInit {
@@ -167,6 +175,7 @@ impl Component for SystemSelectModel {
             selected_system_ids: Vec::new(),
             system_form_controller,
             confirm_dialog_controller,
+            selected_list_item: None,
         };
 
         let systems_list_view = &model.list_view_wrapper.view;
