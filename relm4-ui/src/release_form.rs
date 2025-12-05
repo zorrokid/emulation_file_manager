@@ -2,16 +2,16 @@ use std::sync::Arc;
 
 use database::{database_error::Error, repository_manager::RepositoryManager};
 use relm4::{
-    Component, ComponentController, ComponentParts, ComponentSender, Controller,
+    Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
         self, glib,
         prelude::{
-            BoxExt, ButtonExt, EditableExt, EntryBufferExtManual, EntryExt, GtkWindowExt,
+            BoxExt, ButtonExt, EditableExt, EntryBufferExtManual, EntryExt, FrameExt, GtkWindowExt,
             OrientableExt, WidgetExt,
         },
     },
     once_cell::sync::OnceCell,
-    typed_view::list::TypedListView,
+    typed_view::list::{RelmListItem, TypedListView},
 };
 use service::{
     error::Error as ServiceError,
@@ -26,7 +26,7 @@ use crate::{
     file_set_selector::{
         FileSetSelector, FileSetSelectorInit, FileSetSelectorMsg, FileSetSelectorOutputMsg,
     },
-    list_item::ListItem,
+    list_item::{HasId, ListItem},
     software_title_selector::{
         SoftwareTitleSelectInit, SoftwareTitleSelectModel, SoftwareTitleSelectMsg,
         SoftwareTitleSelectOutputMsg,
@@ -36,6 +36,57 @@ use crate::{
     },
     utils::dialog_utils::{show_error_dialog, show_info_dialog},
 };
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct FileSetListItem {
+    pub name: String,
+    pub id: i64,
+    pub file_type: String,
+}
+
+impl HasId for FileSetListItem {
+    fn id(&self) -> i64 {
+        self.id
+    }
+}
+
+pub struct FileSetListItemWidgets {
+    name_label: gtk::Label,
+    file_type_label: gtk::Label,
+}
+
+impl RelmListItem for FileSetListItem {
+    type Root = gtk::Box;
+    type Widgets = FileSetListItemWidgets;
+
+    fn setup(_item: &gtk::ListItem) -> (gtk::Box, FileSetListItemWidgets) {
+        relm4::view! {
+            my_box = gtk::Box {
+                set_spacing: 10,
+                #[name = "name_label"]
+                gtk::Label,
+                #[name = "file_type_label"]
+                gtk::Label,
+            }
+        }
+
+        let widgets = FileSetListItemWidgets {
+            name_label,
+            file_type_label,
+        };
+
+        (my_box, widgets)
+    }
+
+    fn bind(&mut self, widgets: &mut Self::Widgets, _root: &mut Self::Root) {
+        let FileSetListItemWidgets {
+            name_label,
+            file_type_label,
+        } = widgets;
+        name_label.set_label(&self.name);
+        file_type_label.set_label(&self.file_type);
+    }
+}
 
 #[derive(Debug)]
 pub enum ReleaseFormMsg {
@@ -76,13 +127,12 @@ pub enum CommandMsg {
 pub struct ReleaseFormModel {
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
-    settings: Arc<Settings>,
     system_selector: Controller<SystemSelectModel>,
     file_selector: Controller<FileSetSelector>,
     software_title_selector: Controller<SoftwareTitleSelectModel>,
     selected_software_titles_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     selected_systems_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
-    selected_file_sets_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
+    selected_file_sets_list_view_wrapper: TypedListView<FileSetListItem, gtk::SingleSelection>,
     release: Option<ReleaseViewModel>,
     file_set_editor: OnceCell<Controller<FileSetEditor>>,
     release_name: String,
@@ -129,6 +179,10 @@ impl Component for ReleaseFormModel {
             set_default_width: 800,
             set_default_height: 600,
             set_title: Some("Release Form"),
+            set_margin_top: 5,
+            set_margin_bottom: 5,
+            set_margin_start: 5,
+            set_margin_end: 5,
 
             connect_close_request[sender] => move |_| {
                 sender.input(ReleaseFormMsg::Hide);
@@ -138,101 +192,106 @@ impl Component for ReleaseFormModel {
 
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
-                set_spacing: 10,
+                add_css_class: "form-container",
 
-                #[name="release_name_entry"]
-                gtk::Entry {
-                    set_text: &model.release_name,
-                    set_placeholder_text: Some("Release name"),
-                    connect_changed[sender] => move |entry| {
-                        let buffer = entry.buffer();
-                        sender.input(ReleaseFormMsg::NameChanged(buffer.text().into()));
+                gtk::Frame {
+                    set_label: Some("Release Name:"),
+                    #[name="release_name_entry"]
+                    gtk::Entry {
+                        set_text: &model.release_name,
+                        set_placeholder_text: Some("Release name"),
+                        connect_changed[sender] => move |entry| {
+                            let buffer = entry.buffer();
+                            sender.input(ReleaseFormMsg::NameChanged(buffer.text().into()));
+                        },
+                        set_hexpand: true,
                     },
                 },
 
+                gtk::Frame {
+                    set_label: Some("Software Titles"),
+                    gtk::Box {
+                        set_orientation: gtk::Orientation::Horizontal,
+                        gtk::ScrolledWindow {
+                            set_hexpand: true,
+                            #[local_ref]
+                            selected_software_titles_list_view -> gtk::ListView {}
+                        },
+                        gtk::Box {
+                            set_orientation: gtk::Orientation::Vertical,
+                            set_width_request: 250,
+                            add_css_class: "button-group",
+                            gtk::Button {
+                                set_label: "Select Software Title",
+                                connect_clicked => ReleaseFormMsg::OpenSoftwareTitleSelector,
+                            },
+                            gtk::Button {
+                                set_label: "Unlink Software Title",
+                                connect_clicked => ReleaseFormMsg::UnlinkSoftwareTitle,
+                            },
+                        },
+                    },
+                },
 
-                gtk::Box {
-                    set_orientation: gtk::Orientation::Vertical,
-                    gtk::Label {
-                        set_label: "Software titles",
-                    },
-                    gtk::ScrolledWindow {
-                        set_vexpand: true,
-                        #[local_ref]
-                        selected_software_titles_list_view -> gtk::ListView {}
-                    },
+                gtk::Frame {
+                    set_label: Some("Systems"),
                     gtk::Box {
                         set_orientation: gtk::Orientation::Horizontal,
 
-                        gtk::Button {
-                            set_label: "Select Software Title",
-                            connect_clicked => ReleaseFormMsg::OpenSoftwareTitleSelector,
+                        gtk::ScrolledWindow {
+                            set_hexpand: true,
+                            #[local_ref]
+                            selected_systems_list_view -> gtk::ListView {}
                         },
-                        gtk::Button {
-                            set_label: "Unlink Software Title",
-                            connect_clicked => ReleaseFormMsg::UnlinkSoftwareTitle,
+                        gtk::Box {
+                            set_orientation: gtk::Orientation::Vertical,
+                            set_width_request: 250,
+                            add_css_class: "button-group",
+
+                            gtk::Button {
+                                set_label: "Select System",
+                                connect_clicked => ReleaseFormMsg::OpenSystemSelector,
+                            },
+                            gtk::Button {
+                                set_label: "Unlink System",
+                                connect_clicked => ReleaseFormMsg::UnlinkSystem,
+                            },
                         },
+
                     },
                 },
 
-
-                gtk::Box {
-                    set_orientation: gtk::Orientation::Vertical,
-                    gtk::Label {
-                        set_label: "Systems",
-                    },
-
-                    gtk::ScrolledWindow {
-                        set_vexpand: true,
-                        #[local_ref]
-                        selected_systems_list_view -> gtk::ListView {}
-                    },
+                gtk::Frame {
+                    set_label: Some("File Sets"),
                     gtk::Box {
-                        set_orientation: gtk::Orientation::Horizontal,
+                       set_orientation: gtk::Orientation::Horizontal,
+                       gtk::ScrolledWindow {
+                            set_min_content_height: 360,
+                            set_hexpand: true,
 
-                        gtk::Button {
-                            set_label: "Select System",
-                            connect_clicked => ReleaseFormMsg::OpenSystemSelector,
+                            #[local_ref]
+                            selected_file_sets_list_view -> gtk::ListView {}
+
                         },
-                        gtk::Button {
-                            set_label: "Unlink System",
-                            connect_clicked => ReleaseFormMsg::UnlinkSystem,
-                        },
-                    },
-
-                },
-
-                gtk::Box {
-                    set_orientation: gtk::Orientation::Vertical,
-                    gtk::Label {
-                        set_label: "File sets",
-                    },
-
-                   gtk::ScrolledWindow {
-                        set_min_content_height: 360,
-                        set_vexpand: true,
-
-                        #[local_ref]
-                        selected_file_sets_list_view -> gtk::ListView {}
-
-                    },
-                    gtk::Box {
-                        set_orientation: gtk::Orientation::Horizontal,
-                         gtk::Button {
-                            set_label: "Select File Set",
-                            connect_clicked => ReleaseFormMsg::OpenFileSelector,
-                        },
-                        gtk::Button {
-                            set_label: "Edit File Set",
-                            connect_clicked => ReleaseFormMsg::EditFileSet,
-                        },
-                        gtk::Button {
-                            set_label: "Unlink File Set",
-                            connect_clicked => ReleaseFormMsg::UnlinkFileSet,
+                        gtk::Box {
+                            set_orientation: gtk::Orientation::Vertical,
+                            set_width_request: 250,
+                            add_css_class: "button-group",
+                             gtk::Button {
+                                set_label: "Select File Set",
+                                connect_clicked => ReleaseFormMsg::OpenFileSelector,
+                            },
+                            gtk::Button {
+                                set_label: "Edit File Set",
+                                connect_clicked => ReleaseFormMsg::EditFileSet,
+                            },
+                            gtk::Button {
+                                set_label: "Unlink File Set",
+                                connect_clicked => ReleaseFormMsg::UnlinkFileSet,
+                            },
                         },
                     },
                 },
-
 
                 gtk::Button {
                     set_label: "Submit Release",
@@ -250,8 +309,10 @@ impl Component for ReleaseFormModel {
         let selected_systems_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
             TypedListView::new();
 
-        let selected_file_sets_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
-            TypedListView::new();
+        let selected_file_sets_list_view_wrapper: TypedListView<
+            FileSetListItem,
+            gtk::SingleSelection,
+        > = TypedListView::new();
 
         let selected_software_titles_list_view_wrapper: TypedListView<
             ListItem,
@@ -307,8 +368,7 @@ impl Component for ReleaseFormModel {
         let model = ReleaseFormModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
-            settings: init_model.settings,
-            release: None, // init_model.release,
+            release: None,
             system_selector,
             file_selector,
             software_title_selector,
@@ -362,10 +422,12 @@ impl Component for ReleaseFormModel {
                 });
             }
             ReleaseFormMsg::FileSetSelected(file_set) => {
-                self.selected_file_sets_list_view_wrapper.append(ListItem {
-                    name: file_set.file_set_name.clone(),
-                    id: file_set.id,
-                });
+                self.selected_file_sets_list_view_wrapper
+                    .append(FileSetListItem {
+                        name: file_set.file_set_name.clone(),
+                        id: file_set.id,
+                        file_type: file_set.file_type.to_string(),
+                    });
             }
             ReleaseFormMsg::SoftwareTitleSelected(software_title) => {
                 self.selected_software_titles_list_view_wrapper
@@ -513,9 +575,10 @@ impl Component for ReleaseFormModel {
                 );
                 self.selected_file_sets_list_view_wrapper.clear();
                 self.selected_file_sets_list_view_wrapper.extend_from_iter(
-                    selected_file_sets.iter().map(|fs| ListItem {
+                    selected_file_sets.iter().map(|fs| FileSetListItem {
                         id: fs.id,
                         name: fs.file_set_name.clone(),
+                        file_type: fs.file_type.to_string(),
                     }),
                 );
                 self.selected_software_titles_list_view_wrapper.clear();
@@ -612,12 +675,18 @@ impl Component for ReleaseFormModel {
     }
 }
 
-fn get_item_ids(list_view_wrapper: &TypedListView<ListItem, gtk::SingleSelection>) -> Vec<i64> {
+fn get_item_ids<T>(list_view_wrapper: &TypedListView<T, gtk::SingleSelection>) -> Vec<i64>
+where
+    T: RelmListItem + HasId,
+{
     (0..list_view_wrapper.len())
-        .filter_map(|i| list_view_wrapper.get(i).map(|st| st.borrow().id))
+        .filter_map(|i| list_view_wrapper.get(i).map(|st| st.borrow().id()))
         .collect()
 }
 
-fn remove_selected(list_view_wrapper: &mut TypedListView<ListItem, gtk::SingleSelection>) {
+fn remove_selected<T>(list_view_wrapper: &mut TypedListView<T, gtk::SingleSelection>)
+where
+    T: RelmListItem + HasId,
+{
     list_view_wrapper.remove(list_view_wrapper.selection_model.selected());
 }

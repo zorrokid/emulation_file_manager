@@ -13,10 +13,13 @@ use relm4::{
 };
 use service::view_models::SystemListModel;
 
+use crate::utils::dialog_utils::show_error_dialog;
+
 #[derive(Debug)]
 pub struct SystemFormModel {
     pub name: String,
     pub edit_system_id: Option<i64>,
+    pub can_delete: bool,
     pub repository_manager: Arc<RepositoryManager>,
 }
 
@@ -112,14 +115,14 @@ impl Component for SystemFormModel {
                 let edit_id = self.edit_system_id;
                 sender.oneshot_command(async move {
                     if let Some(edit_id) = edit_id {
-                        println!("Updating system with ID {}: {}", edit_id, name);
+                        tracing::info!("Updating system with ID {}: {}", edit_id, name);
                         let result = repository_manager
                             .get_system_repository()
                             .update_system(edit_id, &name)
                             .await;
                         SystemFormCommandMsg::SystemSubmitted(result)
                     } else {
-                        println!("Adding new software title: {}", name);
+                        tracing::info!("Adding new software title: {}", name);
                         let result = repository_manager
                             .get_system_repository()
                             .add_system(&name)
@@ -133,17 +136,18 @@ impl Component for SystemFormModel {
                     self.name = edit_system.name.clone();
                     widgets.name_entry.set_text(&self.name);
                     self.edit_system_id = Some(edit_system.id);
+                    self.can_delete = edit_system.can_delete;
                 } else {
                     self.name.clear();
                     widgets.name_entry.set_text("");
                     self.edit_system_id = None;
+                    self.can_delete = true;
                 }
                 root.show();
             }
             SystemFormMsg::Hide => {
                 root.hide();
             }
-            _ => (),
         }
         // This is essential:
         self.update_view(widgets, sender);
@@ -157,28 +161,31 @@ impl Component for SystemFormModel {
     ) {
         match message {
             SystemFormCommandMsg::SystemSubmitted(Ok(id)) => {
-                let res = sender.output(if let Some(edit_id) = self.edit_system_id {
-                    SystemFormOutputMsg::SystemUpdated(SystemListModel {
-                        id: edit_id,
-                        name: self.name.clone(),
-                        can_delete: false,
+                sender
+                    .output(if let Some(edit_id) = self.edit_system_id {
+                        SystemFormOutputMsg::SystemUpdated(SystemListModel {
+                            id: edit_id,
+                            name: self.name.clone(),
+                            can_delete: self.can_delete,
+                        })
+                    } else {
+                        SystemFormOutputMsg::SystemAdded(SystemListModel {
+                            id,
+                            name: self.name.clone(),
+                            can_delete: self.can_delete,
+                        })
                     })
-                } else {
-                    SystemFormOutputMsg::SystemAdded(SystemListModel {
-                        id,
-                        name: self.name.clone(),
-                        can_delete: false,
-                    })
-                });
-                if let Err(e) = res {
-                    eprintln!("Failed to send output message: {:?}", e);
-                }
+                    .unwrap_or_else(|res| {
+                        println!("Failed to send output message: {:?}", res);
+                    });
                 root.close();
             }
             SystemFormCommandMsg::SystemSubmitted(Err(e)) => {
-                eprintln!("Error submitting software title: {}", e);
+                show_error_dialog(
+                    format!("An error occurred while submitting the system: {}", e),
+                    root,
+                );
             }
-            _ => (),
         }
     }
 
@@ -190,6 +197,7 @@ impl Component for SystemFormModel {
         let model = SystemFormModel {
             name: "".to_string(),
             edit_system_id: None,
+            can_delete: false,
             repository_manager: init.repository_manager,
         };
         let widgets = view_output!();

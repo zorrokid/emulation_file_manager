@@ -4,11 +4,9 @@ use database::{database_error::Error as DatabaseError, repository_manager::Repos
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
-        self, glib,
-        prelude::{
-            BoxExt as _, ButtonExt, EntryBufferExtManual, EntryExt, GtkWindowExt, OrientableExt,
-            WidgetExt,
-        },
+        self,
+        glib::{self, clone},
+        prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt},
     },
     typed_view::list::TypedListView,
 };
@@ -21,14 +19,14 @@ use ui_components::confirm_dialog::{
 };
 
 use crate::{
-    list_item::ListItem,
+    list_item::DeletableListItem,
     system_form::{SystemFormInit, SystemFormModel, SystemFormMsg, SystemFormOutputMsg},
+    utils::dialog_utils::show_error_dialog,
 };
 
 #[derive(Debug)]
 pub enum SystemSelectMsg {
     FetchSystems,
-    AddSystem { name: String },
     SelectClicked,
     EditClicked,
     DeleteClicked,
@@ -39,6 +37,7 @@ pub enum SystemSelectMsg {
     Hide,
     SystemAdded(SystemListModel),
     SystemUpdated(SystemListModel),
+    SelectionChanged(u32),
 }
 
 #[derive(Debug)]
@@ -49,9 +48,10 @@ pub enum SystemSelectOutputMsg {
 #[derive(Debug)]
 pub enum CommandMsg {
     SystemsFetched(Result<Vec<SystemListModel>, ServiceError>),
-    SystemAdded(SystemListModel),
-    AddingSystemFailed(DatabaseError),
-    Deleted(Result<(), DatabaseError>),
+    Deleted {
+        result: Result<(), DatabaseError>,
+        id: i64,
+    },
 }
 
 pub struct SystemSelectInit {
@@ -63,11 +63,11 @@ pub struct SystemSelectInit {
 pub struct SystemSelectModel {
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
-    systems: Vec<SystemListModel>,
-    list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
+    list_view_wrapper: TypedListView<DeletableListItem, gtk::SingleSelection>,
     selected_system_ids: Vec<i64>,
     system_form_controller: Controller<SystemFormModel>,
     confirm_dialog_controller: Controller<ConfirmDialog>,
+    selected_list_item: Option<DeletableListItem>,
 }
 
 #[relm4::component(pub)]
@@ -98,18 +98,6 @@ impl Component for SystemSelectModel {
                     set_label: "System Selector",
                 },
 
-                gtk::Entry {
-                    connect_activate[sender] => move |entry|  {
-                        let buffer = entry.buffer();
-                        sender.input(
-                            SystemSelectMsg::AddSystem {
-                                name: buffer.text().into(),
-                            }
-                        );
-                        buffer.delete_text(0, None);
-                    }
-                },
-
                 gtk::ScrolledWindow {
                     set_vexpand: true,
                     #[local_ref]
@@ -131,6 +119,8 @@ impl Component for SystemSelectModel {
                     gtk::Button {
                         set_label: "Delete",
                         connect_clicked => SystemSelectMsg::DeleteClicked,
+                        #[watch]
+                        set_sensitive: model.selected_list_item.as_ref().is_some_and(|item| item.can_delete),
                     },
                     gtk::Button {
                         set_label: "Select",
@@ -146,8 +136,20 @@ impl Component for SystemSelectModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
+        let list_view_wrapper: TypedListView<DeletableListItem, gtk::SingleSelection> =
             TypedListView::with_sorting();
+
+        list_view_wrapper
+            .selection_model
+            .connect_selected_notify(clone!(
+                #[strong]
+                sender,
+                move |selection_model| {
+                    let selected_index = selection_model.selected();
+                    tracing::info!("Selected index changed to {:?}", selected_index);
+                    sender.input(SystemSelectMsg::SelectionChanged(selected_index));
+                }
+            ));
 
         let confirm_dialog_controller = ConfirmDialog::builder()
             .transient_for(&root)
@@ -177,11 +179,11 @@ impl Component for SystemSelectModel {
         let model = SystemSelectModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
-            systems: Vec::new(),
             list_view_wrapper,
             selected_system_ids: Vec::new(),
             system_form_controller,
             confirm_dialog_controller,
+            selected_list_item: None,
         };
 
         let systems_list_view = &model.list_view_wrapper.view;
@@ -194,54 +196,21 @@ impl Component for SystemSelectModel {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         match msg {
             SystemSelectMsg::FetchSystems => {
-                println!("Fetching systems...");
+                tracing::info!("Fetching systems...");
                 let view_model_service = Arc::clone(&self.view_model_service);
                 sender.oneshot_command(async move {
                     let systems_result = view_model_service.get_system_list_models().await;
                     CommandMsg::SystemsFetched(systems_result)
                 });
             }
-            SystemSelectMsg::AddSystem { name } => {
-                println!("Adding new system: {}", name);
-                let repository_manager = Arc::clone(&self.repository_manager);
-                sender.oneshot_command(async move {
-                    let result = repository_manager
-                        .get_system_repository()
-                        .add_system(&name)
-                        .await;
-                    match result {
-                        Ok(id) => {
-                            let system_list_model = SystemListModel {
-                                id,
-                                name: name.clone(),
-                                can_delete: true, // OK to delete since this was just added
-                            };
-                            CommandMsg::SystemAdded(system_list_model)
-                        }
-                        Err(e) => CommandMsg::AddingSystemFailed(e),
-                    }
-                });
-            }
             SystemSelectMsg::SelectClicked => {
-                let selected = self.list_view_wrapper.selection_model.selected();
-                if let Some(system) = self.list_view_wrapper.get_visible(selected) {
-                    let system = system.borrow();
-                    println!("System selected: {} with ID: {}", system.name, system.id);
-                    let res =
-                        sender.output(SystemSelectOutputMsg::SystemSelected(SystemListModel {
-                            id: system.id,
-                            name: system.name.clone(),
-                            can_delete: false, // TODO
-                        }));
-                    match res {
-                        Ok(_) => {
-                            println!("System selection output sent successfully.");
-                            root.close();
-                        }
-                        Err(e) => eprintln!("Failed to send system selection output: {:?}", e),
-                    }
-                } else {
-                    eprintln!("No system found at selected index {}", selected);
+                if let Some(system) = self.get_selected_system_list_model() {
+                    sender
+                        .output(SystemSelectOutputMsg::SystemSelected(system.clone()))
+                        .unwrap_or_else(|e| {
+                            tracing::error!("Failed to send system selection output: {:?}", e)
+                        });
+                    root.close();
                 }
             }
             SystemSelectMsg::Show {
@@ -251,24 +220,13 @@ impl Component for SystemSelectModel {
                 sender.input(SystemSelectMsg::FetchSystems);
                 root.show();
             }
-            SystemSelectMsg::Hide => {
-                root.hide();
-            }
+            SystemSelectMsg::Hide => root.hide(),
             SystemSelectMsg::AddClicked => {
                 self.system_form_controller
                     .emit(SystemFormMsg::Show { edit_system: None });
             }
             SystemSelectMsg::EditClicked => {
-                let edit_system = self
-                    .list_view_wrapper
-                    .get_visible(self.list_view_wrapper.selection_model.selected())
-                    .and_then(|st| {
-                        self.systems
-                            .iter()
-                            .find(|s| s.id == st.borrow().id)
-                            .cloned()
-                    });
-                if let Some(edit_system) = &edit_system {
+                if let Some(edit_system) = self.get_selected_system_list_model() {
                     self.system_form_controller.emit(SystemFormMsg::Show {
                         edit_system: Some(edit_system.clone()),
                     });
@@ -279,77 +237,137 @@ impl Component for SystemSelectModel {
             }
             SystemSelectMsg::DeleteConfirmed => {
                 let repository_manager = Arc::clone(&self.repository_manager);
-                let selected = self.list_view_wrapper.selection_model.selected();
-                let system = self.list_view_wrapper.get_visible(selected);
-                let id = system.as_ref().map(|st| st.borrow().id);
-                if let Some(id) = id {
+                if let Some(system) = self.get_selected_system_list_model() {
+                    let id = system.id;
                     sender.oneshot_command(async move {
-                        println!("Deleting system with ID {}", id);
+                        tracing::info!("Deleting system with ID {}", id);
                         let result = repository_manager
                             .get_system_repository()
                             .delete_system(id)
                             .await;
-                        CommandMsg::Deleted(result)
+                        CommandMsg::Deleted { result, id }
                     });
                 }
             }
-            SystemSelectMsg::SystemAdded(_system_list_model) => {
-                // TODO: add system to the list directly
-                sender.input(SystemSelectMsg::FetchSystems);
+            SystemSelectMsg::SystemAdded(system_list_model) => {
+                // TODO: is this check necessary here?
+                if !self.selected_system_ids.contains(&system_list_model.id) {
+                    self.add_system_to_list(&system_list_model);
+                }
             }
-            SystemSelectMsg::SystemUpdated(_system_list_model) => {
-                // TODO: update system in the list directly
-                sender.input(SystemSelectMsg::FetchSystems);
+            SystemSelectMsg::SystemUpdated(system_list_model) => {
+                tracing::info!("Updating system list item ID {}", system_list_model.id);
+                self.remove_item_from_list(system_list_model.id);
+                self.add_system_to_list(&system_list_model);
             }
             SystemSelectMsg::Ignore => (),
-            _ => (),
+            SystemSelectMsg::SelectionChanged(_selected_index) => {
+                self.selected_list_item = self.get_selected_list_item();
+                tracing::info!(
+                    "Selected list item changed to: {:?}",
+                    self.selected_list_item
+                );
+            }
         }
     }
 
     fn update_cmd(
         &mut self,
         message: Self::CommandOutput,
-        sender: ComponentSender<Self>,
-        _: &Self::Root,
+        _sender: ComponentSender<Self>,
+        root: &Self::Root,
     ) {
         match message {
             CommandMsg::SystemsFetched(Ok(systems)) => {
-                // Handle the fetched systems, e.g., populate a dropdown or list
-                for system in &systems {
-                    println!("Fetched system: {} with ID: {}", system.name, system.id);
-                }
-                self.systems = systems;
-                let list_items = self
-                    .systems
-                    .iter()
-                    .filter(|f| !self.selected_system_ids.contains(&f.id))
-                    .map(|system| ListItem {
-                        name: system.name.clone(),
-                        id: system.id,
-                    });
-                self.list_view_wrapper.clear();
-                self.list_view_wrapper.extend_from_iter(list_items);
+                tracing::info!("Fetched {} systems", systems.len());
+                self.populate_list(systems);
             }
             CommandMsg::SystemsFetched(Err(e)) => {
-                eprintln!("Error fetching systems: {:?}", e);
-                // TODO: show error to user
+                show_error_dialog(format!("Error fetching systems: {:?}", e), root);
             }
-            CommandMsg::SystemAdded(system_list_model) => {
-                println!("Successfully added system: {}", system_list_model.name);
-                sender.input(SystemSelectMsg::FetchSystems);
+            CommandMsg::Deleted { result, id } => match result {
+                Ok(_) => {
+                    tracing::info!("System deleted successfully");
+                    self.remove_item_from_list(id);
+                }
+                Err(e) => {
+                    show_error_dialog(format!("Error deleting system: {:?}", e), root);
+                }
+            },
+        }
+    }
+}
+
+impl SystemSelectModel {
+    fn remove_item_from_list(&mut self, id: i64) {
+        for i in 0..self.list_view_wrapper.len() {
+            if let Some(item) = self.list_view_wrapper.get(i)
+                && item.borrow().id == id
+            {
+                tracing::info!("Removing system list item ID {} from list", id);
+                self.list_view_wrapper.remove(i);
+                break;
             }
-            CommandMsg::AddingSystemFailed(error) => {
-                eprintln!("Error adding system: {:?}", error);
-                // TODO: show error to user
+        }
+    }
+
+    fn add_system_to_list(&mut self, system_list_model: &SystemListModel) {
+        let new_item = DeletableListItem {
+            name: system_list_model.name.clone(),
+            id: system_list_model.id,
+            can_delete: system_list_model.can_delete,
+        };
+        self.list_view_wrapper.append(new_item);
+
+        for i in 0..self.list_view_wrapper.len() {
+            if let Some(item) = self.list_view_wrapper.get_visible(i)
+                && item.borrow().id == system_list_model.id
+            {
+                tracing::info!(
+                    "Selecting newly added system list item ID {} at index {}",
+                    system_list_model.id,
+                    i
+                );
+                self.list_view_wrapper.selection_model.set_selected(i);
+                break;
             }
-            CommandMsg::Deleted(Ok(_id)) => {
-                println!("Successfully deleted system");
-                // TODO: just remove from the list
-                sender.input(SystemSelectMsg::FetchSystems);
-            }
-            CommandMsg::Deleted(Err(e)) => {
-                eprintln!("Error deleting system: {:?}", e);
-            }
+        }
+    }
+
+    fn populate_list(&mut self, systems: Vec<SystemListModel>) {
+        let list_items = systems
+            .iter()
+            .filter(|f| !self.selected_system_ids.contains(&f.id))
+            .map(|system| DeletableListItem {
+                name: system.name.clone(),
+                id: system.id,
+                can_delete: system.can_delete,
+            });
+        self.list_view_wrapper.clear();
+        self.list_view_wrapper.extend_from_iter(list_items);
+    }
+
+    fn get_selected_list_item(&self) -> Option<DeletableListItem> {
+        let selected_index = self.list_view_wrapper.selection_model.selected();
+        if let Some(item) = self.list_view_wrapper.get_visible(selected_index) {
+            let item = item.borrow();
+            Some(item.clone())
+        } else {
+            None
+        }
+    }
+
+    fn get_selected_system_list_model(&self) -> Option<SystemListModel> {
+        let selected_index = self.list_view_wrapper.selection_model.selected();
+        if let Some(item) = self.list_view_wrapper.get_visible(selected_index) {
+            let item = item.borrow();
+            Some(SystemListModel {
+                id: item.id,
+                name: item.name.clone(),
+                can_delete: item.can_delete,
+            })
+        } else {
+            None
         }
     }
 }

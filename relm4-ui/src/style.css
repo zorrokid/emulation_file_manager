@@ -1,0 +1,72 @@
+/* Default spacing - add more styles as needed */
+.default-spacing {
+    margin: 10px;
+}
+
+/* Form layouts with cascading */
+.form-container {
+    margin: 15px;
+}
+
+.form-container > box {
+    margin: 5px 0;
+}
+
+.form-container label {
+    margin-end: 10px;
+}
+
+/* Frame spacing - space between frames and inside frames */
+.form-container frame {
+    margin: 10px 0;
+}
+
+.form-container frame > box {
+    margin: 10px;
+}
+
+.form-row {
+    margin: 5px 10px;
+}
+
+/* List containers */
+.list-container {
+    margin: 10px;
+}
+
+/* Button groups - all buttons get consistent spacing */
+.button-group {
+    margin: 10px;
+}
+
+.button-group button {
+    margin: 5px;
+}
+
+/* Compact layouts for dense UIs */
+.compact > * {
+    margin: 3px;
+}
+
+/* Section with title and content */
+.section {
+    margin: 15px 10px;
+}
+
+.section > label:first-child {
+    margin-bottom: 10px;
+    font-weight: bold;
+}
+
+/* Dialog styling */
+.dialog-content > * {
+    margin: 10px;
+}
+
+.dialog-buttons {
+    margin-top: 15px;
+}
+
+.dialog-buttons button {
+    margin: 0 5px;
+}
