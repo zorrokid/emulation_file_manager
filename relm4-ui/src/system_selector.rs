@@ -61,7 +61,6 @@ pub struct SystemSelectInit {
 pub struct SystemSelectModel {
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
-    systems: Vec<SystemListModel>,
     list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     selected_system_ids: Vec<i64>,
     system_form_controller: Controller<SystemFormModel>,
@@ -114,6 +113,7 @@ impl Component for SystemSelectModel {
                         set_label: "Edit",
                         connect_clicked => SystemSelectMsg::EditClicked,
                     },
+                    // TODO: Disable if system cannot be deleted
                     gtk::Button {
                         set_label: "Delete",
                         connect_clicked => SystemSelectMsg::DeleteClicked,
@@ -163,7 +163,6 @@ impl Component for SystemSelectModel {
         let model = SystemSelectModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
-            systems: Vec::new(),
             list_view_wrapper,
             selected_system_ids: Vec::new(),
             system_form_controller,
@@ -234,21 +233,12 @@ impl Component for SystemSelectModel {
                 }
             }
             SystemSelectMsg::SystemAdded(system_list_model) => {
-                self.systems.push(system_list_model.clone());
-
+                // TODO: is this check necessary here?
                 if !self.selected_system_ids.contains(&system_list_model.id) {
                     self.add_system_to_list(&system_list_model);
                 }
             }
             SystemSelectMsg::SystemUpdated(system_list_model) => {
-                if let Some(system) = self
-                    .systems
-                    .iter_mut()
-                    .find(|s| s.id == system_list_model.id)
-                {
-                    system.name = system_list_model.name.clone();
-                }
-
                 tracing::info!("Updating system list item ID {}", system_list_model.id);
                 self.remove_item_from_list(system_list_model.id);
                 self.add_system_to_list(&system_list_model);
@@ -266,8 +256,7 @@ impl Component for SystemSelectModel {
         match message {
             CommandMsg::SystemsFetched(Ok(systems)) => {
                 tracing::info!("Fetched {} systems", systems.len());
-                self.systems = systems;
-                self.populate_list();
+                self.populate_list(systems);
             }
             CommandMsg::SystemsFetched(Err(e)) => {
                 show_error_dialog(format!("Error fetching systems: {:?}", e), root);
@@ -320,9 +309,8 @@ impl SystemSelectModel {
         }
     }
 
-    fn populate_list(&mut self) {
-        let list_items = self
-            .systems
+    fn populate_list(&mut self, systems: Vec<SystemListModel>) {
+        let list_items = systems
             .iter()
             .filter(|f| !self.selected_system_ids.contains(&f.id))
             .map(|system| ListItem {
@@ -337,7 +325,11 @@ impl SystemSelectModel {
         let selected_index = self.list_view_wrapper.selection_model.selected();
         if let Some(item) = self.list_view_wrapper.get_visible(selected_index) {
             let item = item.borrow();
-            self.systems.iter().find(|s| s.id == item.id).cloned()
+            Some(SystemListModel {
+                id: item.id,
+                name: item.name.clone(),
+                can_delete: false, // TODO: add to list model
+            })
         } else {
             None
         }
