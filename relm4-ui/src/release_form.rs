@@ -2,11 +2,11 @@ use std::sync::Arc;
 
 use database::{database_error::Error, repository_manager::RepositoryManager};
 use relm4::{
-    Component, ComponentController, ComponentParts, ComponentSender, Controller,
+    Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
         self, glib,
         prelude::{
-            BoxExt, ButtonExt, EditableExt, EntryBufferExtManual, EntryExt, GtkWindowExt,
+            BoxExt, ButtonExt, EditableExt, EntryBufferExtManual, EntryExt, FrameExt, GtkWindowExt,
             OrientableExt, WidgetExt,
         },
     },
@@ -127,7 +127,6 @@ pub enum CommandMsg {
 pub struct ReleaseFormModel {
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
-    settings: Arc<Settings>,
     system_selector: Controller<SystemSelectModel>,
     file_selector: Controller<FileSetSelector>,
     software_title_selector: Controller<SoftwareTitleSelectModel>,
@@ -180,6 +179,10 @@ impl Component for ReleaseFormModel {
             set_default_width: 800,
             set_default_height: 600,
             set_title: Some("Release Form"),
+            set_margin_top: 5,
+            set_margin_bottom: 5,
+            set_margin_start: 5,
+            set_margin_end: 5,
 
             connect_close_request[sender] => move |_| {
                 sender.input(ReleaseFormMsg::Hide);
@@ -189,14 +192,10 @@ impl Component for ReleaseFormModel {
 
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
-                set_spacing: 10,
+                add_css_class: "form-container",
 
-                gtk::Box {
-                    set_orientation: gtk::Orientation::Horizontal,
-                    set_spacing: 5,
-                    gtk::Label {
-                        set_label: "Release Name:",
-                    },
+                gtk::Frame {
+                    set_label: Some("Release Name:"),
                     #[name="release_name_entry"]
                     gtk::Entry {
                         set_text: &model.release_name,
@@ -205,89 +204,91 @@ impl Component for ReleaseFormModel {
                             let buffer = entry.buffer();
                             sender.input(ReleaseFormMsg::NameChanged(buffer.text().into()));
                         },
-                    },
-
-                },
-
-
-                gtk::Box {
-                    set_orientation: gtk::Orientation::Vertical,
-                    gtk::Label {
-                        set_label: "Selected software titles",
-                    },
-                    gtk::ScrolledWindow {
-                        set_vexpand: true,
-                        #[local_ref]
-                        selected_software_titles_list_view -> gtk::ListView {}
-                    },
-                    gtk::Box {
-                        set_orientation: gtk::Orientation::Horizontal,
-
-                        gtk::Button {
-                            set_label: "Select Software Title",
-                            connect_clicked => ReleaseFormMsg::OpenSoftwareTitleSelector,
-                        },
-                        gtk::Button {
-                            set_label: "Unlink Software Title",
-                            connect_clicked => ReleaseFormMsg::UnlinkSoftwareTitle,
-                        },
+                        set_hexpand: true,
                     },
                 },
 
-
-                gtk::Box {
-                    set_orientation: gtk::Orientation::Vertical,
-                    gtk::Label {
-                        set_label: "Selected systems",
-                    },
-
-                    gtk::ScrolledWindow {
-                        set_vexpand: true,
-                        #[local_ref]
-                        selected_systems_list_view -> gtk::ListView {}
-                    },
+                gtk::Frame {
+                    set_label: Some("Software Titles"),
                     gtk::Box {
                         set_orientation: gtk::Orientation::Horizontal,
-
-                        gtk::Button {
-                            set_label: "Select System",
-                            connect_clicked => ReleaseFormMsg::OpenSystemSelector,
+                        gtk::ScrolledWindow {
+                            set_hexpand: true,
+                            #[local_ref]
+                            selected_software_titles_list_view -> gtk::ListView {}
                         },
-                        gtk::Button {
-                            set_label: "Unlink System",
-                            connect_clicked => ReleaseFormMsg::UnlinkSystem,
+                        gtk::Box {
+                            set_orientation: gtk::Orientation::Vertical,
+                            set_width_request: 250,
+                            add_css_class: "button-group",
+                            gtk::Button {
+                                set_label: "Select Software Title",
+                                connect_clicked => ReleaseFormMsg::OpenSoftwareTitleSelector,
+                            },
+                            gtk::Button {
+                                set_label: "Unlink Software Title",
+                                connect_clicked => ReleaseFormMsg::UnlinkSoftwareTitle,
+                            },
                         },
                     },
-
                 },
 
-                gtk::Box {
-                    set_orientation: gtk::Orientation::Vertical,
-                    gtk::Label {
-                        set_label: "Selected file sets",
-                    },
-
-                   gtk::ScrolledWindow {
-                        set_min_content_height: 360,
-                        set_vexpand: true,
-
-                        #[local_ref]
-                        selected_file_sets_list_view -> gtk::ListView {}
-
-                    },
+                gtk::Frame {
+                    set_label: Some("Systems"),
                     gtk::Box {
                         set_orientation: gtk::Orientation::Horizontal,
-                         gtk::Button {
-                            set_label: "Select File Set",
-                            connect_clicked => ReleaseFormMsg::OpenFileSelector,
+
+                        gtk::ScrolledWindow {
+                            set_hexpand: true,
+                            #[local_ref]
+                            selected_systems_list_view -> gtk::ListView {}
                         },
-                        gtk::Button {
-                            set_label: "Edit File Set",
-                            connect_clicked => ReleaseFormMsg::EditFileSet,
+                        gtk::Box {
+                            set_orientation: gtk::Orientation::Vertical,
+                            set_width_request: 250,
+                            add_css_class: "button-group",
+
+                            gtk::Button {
+                                set_label: "Select System",
+                                connect_clicked => ReleaseFormMsg::OpenSystemSelector,
+                            },
+                            gtk::Button {
+                                set_label: "Unlink System",
+                                connect_clicked => ReleaseFormMsg::UnlinkSystem,
+                            },
                         },
-                        gtk::Button {
-                            set_label: "Unlink File Set",
-                            connect_clicked => ReleaseFormMsg::UnlinkFileSet,
+
+                    },
+                },
+
+                gtk::Frame {
+                    set_label: Some("File Sets"),
+                    gtk::Box {
+                       set_orientation: gtk::Orientation::Horizontal,
+                       gtk::ScrolledWindow {
+                            set_min_content_height: 360,
+                            set_hexpand: true,
+
+                            #[local_ref]
+                            selected_file_sets_list_view -> gtk::ListView {}
+
+                        },
+                        gtk::Box {
+                            set_orientation: gtk::Orientation::Vertical,
+                            set_width_request: 250,
+                            add_css_class: "button-group",
+                             gtk::Button {
+                                set_label: "Select File Set",
+                                connect_clicked => ReleaseFormMsg::OpenFileSelector,
+                            },
+                            gtk::Button {
+                                set_label: "Edit File Set",
+                                connect_clicked => ReleaseFormMsg::EditFileSet,
+                            },
+                            gtk::Button {
+                                set_label: "Unlink File Set",
+                                connect_clicked => ReleaseFormMsg::UnlinkFileSet,
+                            },
                         },
                     },
                 },
@@ -367,8 +368,7 @@ impl Component for ReleaseFormModel {
         let model = ReleaseFormModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
-            settings: init_model.settings,
-            release: None, // init_model.release,
+            release: None,
             system_selector,
             file_selector,
             software_title_selector,

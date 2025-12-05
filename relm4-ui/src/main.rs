@@ -20,6 +20,7 @@ mod software_title_form;
 mod software_title_selector;
 mod software_titles_list;
 mod status_bar;
+mod style;
 mod system_form;
 mod system_selector;
 mod tabbed_image_viewer;
@@ -136,6 +137,8 @@ impl Component for AppModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        style::load_app_css();
+        
         let flags = Arc::new(Mutex::new(Flags {
             app_closing: false,
             cloud_sync_in_progress: false,
