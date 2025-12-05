@@ -18,7 +18,7 @@ use ui_components::confirm_dialog::{
 };
 
 use crate::{
-    list_item::ListItem,
+    list_item::DeletableListItem,
     system_form::{SystemFormInit, SystemFormModel, SystemFormMsg, SystemFormOutputMsg},
     utils::dialog_utils::show_error_dialog,
 };
@@ -61,7 +61,7 @@ pub struct SystemSelectInit {
 pub struct SystemSelectModel {
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
-    list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
+    list_view_wrapper: TypedListView<DeletableListItem, gtk::SingleSelection>,
     selected_system_ids: Vec<i64>,
     system_form_controller: Controller<SystemFormModel>,
     confirm_dialog_controller: Controller<ConfirmDialog>,
@@ -132,7 +132,7 @@ impl Component for SystemSelectModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
+        let list_view_wrapper: TypedListView<DeletableListItem, gtk::SingleSelection> =
             TypedListView::with_sorting();
 
         let confirm_dialog_controller = ConfirmDialog::builder()
@@ -288,9 +288,10 @@ impl SystemSelectModel {
     }
 
     fn add_system_to_list(&mut self, system_list_model: &SystemListModel) {
-        let new_item = ListItem {
+        let new_item = DeletableListItem {
             name: system_list_model.name.clone(),
             id: system_list_model.id,
+            can_delete: system_list_model.can_delete,
         };
         self.list_view_wrapper.append(new_item);
 
@@ -313,9 +314,10 @@ impl SystemSelectModel {
         let list_items = systems
             .iter()
             .filter(|f| !self.selected_system_ids.contains(&f.id))
-            .map(|system| ListItem {
+            .map(|system| DeletableListItem {
                 name: system.name.clone(),
                 id: system.id,
+                can_delete: system.can_delete,
             });
         self.list_view_wrapper.clear();
         self.list_view_wrapper.extend_from_iter(list_items);
