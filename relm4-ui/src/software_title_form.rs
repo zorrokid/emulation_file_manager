@@ -15,6 +15,8 @@ use relm4::{
 };
 use service::view_models::SoftwareTitleListModel;
 
+use crate::utils::dialog_utils::show_error_dialog;
+
 #[derive(Debug)]
 pub struct SoftwareTitleFormModel {
     pub name: String,
@@ -115,7 +117,11 @@ impl Component for SoftwareTitleFormModel {
                 let edit_id = self.edit_software_title_id;
                 sender.oneshot_command(async move {
                     if let Some(edit_id) = edit_id {
-                        println!("Updating software title with ID {}: {}", edit_id, name);
+                        tracing::info!(
+                            "Submitting update for software title ID {}: {}",
+                            edit_id,
+                            name
+                        );
                         let update_software_title = SoftwareTitle {
                             id: edit_id,
                             name: name.clone(),
@@ -127,7 +133,7 @@ impl Component for SoftwareTitleFormModel {
                             .await;
                         SoftwareTitleFormCommandMsg::SoftwareTitleSubmitted(result)
                     } else {
-                        println!("Adding new software title: {}", name);
+                        tracing::info!("Adding new software title: {}", name);
                         let result = repository_manager
                             .get_software_title_repository()
                             .add_software_title(&name, None)
@@ -155,7 +161,6 @@ impl Component for SoftwareTitleFormModel {
             SoftwareTitleFormMsg::Hide => {
                 root.hide();
             }
-            _ => (),
         }
         // This is essential:
         self.update_view(widgets, sender);
@@ -169,28 +174,28 @@ impl Component for SoftwareTitleFormModel {
     ) {
         match message {
             SoftwareTitleFormCommandMsg::SoftwareTitleSubmitted(Ok(id)) => {
-                let res = sender.output(if let Some(edit_id) = self.edit_software_title_id {
-                    SoftwareTitleFormOutputMsg::SoftwareTitleUpdated(SoftwareTitleListModel {
-                        id: edit_id,
-                        name: self.name.clone(),
-                        can_delete: self.can_delete,
+                sender
+                    .output(if let Some(edit_id) = self.edit_software_title_id {
+                        SoftwareTitleFormOutputMsg::SoftwareTitleUpdated(SoftwareTitleListModel {
+                            id: edit_id,
+                            name: self.name.clone(),
+                            can_delete: self.can_delete,
+                        })
+                    } else {
+                        SoftwareTitleFormOutputMsg::SoftwareTitleAdded(SoftwareTitleListModel {
+                            id,
+                            name: self.name.clone(),
+                            can_delete: self.can_delete,
+                        })
                     })
-                } else {
-                    SoftwareTitleFormOutputMsg::SoftwareTitleAdded(SoftwareTitleListModel {
-                        id,
-                        name: self.name.clone(),
-                        can_delete: self.can_delete,
-                    })
-                });
-                if let Err(e) = res {
-                    eprintln!("Failed to send output message: {:?}", e);
-                }
+                    .unwrap_or_else(|e| {
+                        eprintln!("Failed to send output message: {:?}", e);
+                    });
                 root.close();
             }
             SoftwareTitleFormCommandMsg::SoftwareTitleSubmitted(Err(e)) => {
-                eprintln!("Error submitting software title: {}", e);
+                show_error_dialog(format!("Error submitting software title: {}", e), root);
             }
-            _ => (),
         }
     }
 
