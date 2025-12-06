@@ -19,6 +19,7 @@ use service::view_models::SoftwareTitleListModel;
 pub struct SoftwareTitleFormModel {
     pub name: String,
     pub edit_software_title_id: Option<i64>,
+    pub can_delete: bool,
     pub repository_manager: Arc<RepositoryManager>,
 }
 
@@ -142,10 +143,12 @@ impl Component for SoftwareTitleFormModel {
                     self.name = edit_software_title.name.clone();
                     widgets.name_entry.set_text(&self.name);
                     self.edit_software_title_id = Some(edit_software_title.id);
+                    self.can_delete = edit_software_title.can_delete;
                 } else {
                     self.name.clear();
                     widgets.name_entry.set_text("");
                     self.edit_software_title_id = None;
+                    self.can_delete = true;
                 }
                 root.show();
             }
@@ -170,13 +173,13 @@ impl Component for SoftwareTitleFormModel {
                     SoftwareTitleFormOutputMsg::SoftwareTitleUpdated(SoftwareTitleListModel {
                         id: edit_id,
                         name: self.name.clone(),
-                        can_delete: false,
+                        can_delete: self.can_delete,
                     })
                 } else {
                     SoftwareTitleFormOutputMsg::SoftwareTitleAdded(SoftwareTitleListModel {
                         id,
                         name: self.name.clone(),
-                        can_delete: false,
+                        can_delete: self.can_delete,
                     })
                 });
                 if let Err(e) = res {
@@ -200,6 +203,7 @@ impl Component for SoftwareTitleFormModel {
             name: "".to_string(),
             edit_software_title_id: None,
             repository_manager: init.repository_manager,
+            can_delete: false,
         };
         let widgets = view_output!();
         ComponentParts { model, widgets }

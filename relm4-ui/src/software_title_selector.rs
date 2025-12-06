@@ -4,7 +4,8 @@ use database::{database_error::DatabaseError, repository_manager::RepositoryMana
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
-        self, glib,
+        self,
+        glib::{self, clone},
         prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt},
     },
     typed_view::list::TypedListView,
@@ -15,11 +16,12 @@ use service::{
 };
 
 use crate::{
-    list_item::ListItem,
+    list_item::DeletableListItem,
     software_title_form::{
         SoftwareTitleFormInit, SoftwareTitleFormModel, SoftwareTitleFormMsg,
         SoftwareTitleFormOutputMsg,
     },
+    utils::dialog_utils::show_error_dialog,
 };
 
 use ui_components::confirm_dialog::{
@@ -41,6 +43,7 @@ pub enum SoftwareTitleSelectMsg {
         selected_software_title_ids: Vec<i64>,
     },
     Hide,
+    SelectionChanged,
 }
 
 #[derive(Debug)]
@@ -54,13 +57,11 @@ pub enum SoftwareTitleSelectOutputMsg {
 pub enum CommandMsg {
     SoftwareTitlesFetched(Result<Vec<SoftwareTitleListModel>, ServiceError>),
     Deleted(Result<i64, DatabaseError>),
-    Canceled,
 }
 
 pub struct SoftwareTitleSelectInit {
     pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
-    //pub selected_software_title_ids: Vec<i64>,
 }
 
 #[derive(Debug)]
@@ -68,10 +69,11 @@ pub struct SoftwareTitleSelectModel {
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
     software_titles: Vec<SoftwareTitleListModel>,
-    list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
+    list_view_wrapper: TypedListView<DeletableListItem, gtk::SingleSelection>,
     selected_software_title_ids: Vec<i64>,
     software_title_form_controller: Controller<SoftwareTitleFormModel>,
     confirm_dialog_controller: Controller<ConfirmDialog>,
+    selected_list_item: Option<DeletableListItem>,
 }
 
 #[relm4::component(pub)]
@@ -118,6 +120,8 @@ impl Component for SoftwareTitleSelectModel {
                     gtk::Button {
                         set_label: "Delete",
                         connect_clicked => SoftwareTitleSelectMsg::DeleteClicked,
+                        #[watch]
+                        set_sensitive: model.selected_list_item.as_ref().is_some_and(|item| item.can_delete),
                     },
                     gtk::Button {
                         set_label: "Select",
@@ -133,8 +137,18 @@ impl Component for SoftwareTitleSelectModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
+        let list_view_wrapper: TypedListView<DeletableListItem, gtk::SingleSelection> =
             TypedListView::with_sorting();
+
+        list_view_wrapper
+            .selection_model
+            .connect_selected_notify(clone!(
+                #[strong]
+                sender,
+                move |_| {
+                    sender.input(SoftwareTitleSelectMsg::SelectionChanged);
+                }
+            ));
 
         let confirm_dialog_controller = ConfirmDialog::builder()
             .transient_for(&root)
@@ -169,6 +183,7 @@ impl Component for SoftwareTitleSelectModel {
             selected_software_title_ids: Vec::new(),
             software_title_form_controller,
             confirm_dialog_controller,
+            selected_list_item: None,
         };
 
         let software_titles_list_view = &model.list_view_wrapper.view;
@@ -181,7 +196,7 @@ impl Component for SoftwareTitleSelectModel {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         match msg {
             SoftwareTitleSelectMsg::FetchSoftwareTitles => {
-                println!("Fetching software_titles...");
+                tracing::info!("Fetching software_titles.");
                 let view_model_service = Arc::clone(&self.view_model_service);
                 sender.oneshot_command(async move {
                     let software_titles_result =
@@ -190,31 +205,19 @@ impl Component for SoftwareTitleSelectModel {
                 });
             }
             SoftwareTitleSelectMsg::SelectClicked => {
-                let selected = self.list_view_wrapper.selection_model.selected();
-                if let Some(software_title) = self.list_view_wrapper.get_visible(selected) {
-                    let software_title = software_title.borrow();
-                    println!(
-                        "SoftwareTitle selected: {} with ID: {}",
-                        software_title.name, software_title.id
-                    );
-                    let res = sender.output(SoftwareTitleSelectOutputMsg::Selected(
-                        SoftwareTitleListModel {
-                            id: software_title.id,
-                            name: software_title.name.clone(),
-                            can_delete: false, // TODO
-                        },
-                    ));
+                if let Some(software_title) = self.get_selected_software_title_list_model() {
+                    let res = sender.output(SoftwareTitleSelectOutputMsg::Selected(software_title));
                     match res {
                         Ok(_) => {
-                            println!("SoftwareTitle selection output sent successfully.");
                             sender.input(SoftwareTitleSelectMsg::Hide);
                         }
                         Err(e) => {
-                            eprintln!("Failed to send software_title selection output: {:?}", e)
+                            tracing::error!(
+                                "Failed to send software_title selection output: {:?}",
+                                e
+                            );
                         }
                     }
-                } else {
-                    eprintln!("No software_title found at selected index {}", selected);
                 }
             }
             SoftwareTitleSelectMsg::AddClicked => {
@@ -224,16 +227,7 @@ impl Component for SoftwareTitleSelectModel {
                     });
             }
             SoftwareTitleSelectMsg::EditClicked => {
-                let edit_software_title = self
-                    .list_view_wrapper
-                    .get_visible(self.list_view_wrapper.selection_model.selected())
-                    .and_then(|st| {
-                        self.software_titles
-                            .iter()
-                            .find(|s| s.id == st.borrow().id)
-                            .cloned()
-                    });
-                if let Some(edit_software_title) = &edit_software_title {
+                if let Some(edit_software_title) = self.get_selected_software_title_list_model() {
                     self.software_title_form_controller
                         .emit(SoftwareTitleFormMsg::Show {
                             edit_software_title: Some(edit_software_title.clone()),
@@ -241,20 +235,16 @@ impl Component for SoftwareTitleSelectModel {
                 }
             }
             SoftwareTitleSelectMsg::DeleteClicked => {
-                println!("Delete clicked");
                 self.confirm_dialog_controller.emit(ConfirmDialogMsg::Show);
             }
             SoftwareTitleSelectMsg::DeleteCanceled => {
-                println!("Canceled deletion");
+                tracing::info!("Deletion canceled by user.");
             }
             SoftwareTitleSelectMsg::DeleteConfirmed => {
                 let repository_manager = Arc::clone(&self.repository_manager);
-                let selected = self.list_view_wrapper.selection_model.selected();
-                let software_title = self.list_view_wrapper.get_visible(selected);
-                let id = software_title.as_ref().map(|st| st.borrow().id);
-                if let Some(id) = id {
+                if let Some(id) = self.get_selected_list_item().map(|item| item.id) {
                     sender.oneshot_command(async move {
-                        println!("Deleting software_title with ID {}", id);
+                        tracing::info!("Deleting software_title with ID {}", id);
                         let result = repository_manager
                             .get_software_title_repository()
                             .delete_software_title(id)
@@ -264,24 +254,32 @@ impl Component for SoftwareTitleSelectModel {
                 }
             }
             SoftwareTitleSelectMsg::SoftwareTitleAdded(software_title_list_model) => {
-                println!(
-                    "Successfully added software_title: {}",
-                    software_title_list_model.name
-                );
+                tracing::info!("Added software_title: {:?}", software_title_list_model.name);
+                if !self
+                    .selected_software_title_ids
+                    .contains(&software_title_list_model.id)
+                {
+                    self.add_to_list(&software_title_list_model);
+                }
+
                 sender
                     .output(SoftwareTitleSelectOutputMsg::Created(
                         software_title_list_model,
                     ))
-                    .expect("Failed to send software_title selection output");
-                sender.input(SoftwareTitleSelectMsg::FetchSoftwareTitles);
+                    .unwrap_or_else(|e| {
+                        tracing::error!("Failed to send software_title creation output: {:?}", e);
+                    });
             }
-            SoftwareTitleSelectMsg::SoftwareTitleUpdated(_software_title_list_model) => {
+            SoftwareTitleSelectMsg::SoftwareTitleUpdated(software_title_list_model) => {
+                self.remove_from_list(software_title_list_model.id);
+                self.add_to_list(&software_title_list_model);
                 sender
                     .output(SoftwareTitleSelectOutputMsg::Updated(
-                        _software_title_list_model,
+                        software_title_list_model,
                     ))
-                    .expect("Failed to send software_title update output");
-                sender.input(SoftwareTitleSelectMsg::FetchSoftwareTitles);
+                    .unwrap_or_else(|_e| {
+                        tracing::error!("Failed to send software_title update output");
+                    });
             }
             SoftwareTitleSelectMsg::Show {
                 selected_software_title_ids,
@@ -293,6 +291,9 @@ impl Component for SoftwareTitleSelectModel {
             SoftwareTitleSelectMsg::Hide => {
                 root.hide();
             }
+            SoftwareTitleSelectMsg::SelectionChanged => {
+                self.selected_list_item = self.get_selected_list_item();
+            }
         }
     }
 
@@ -300,36 +301,95 @@ impl Component for SoftwareTitleSelectModel {
         &mut self,
         message: Self::CommandOutput,
         sender: ComponentSender<Self>,
-        _: &Self::Root,
+        root: &Self::Root,
     ) {
         match message {
             CommandMsg::SoftwareTitlesFetched(Ok(software_titles)) => {
                 self.software_titles = software_titles;
-                let list_items = self
-                    .software_titles
-                    .iter()
-                    .filter(|st| !self.selected_software_title_ids.contains(&st.id))
-                    .map(|software_title| ListItem {
-                        name: software_title.name.clone(),
-                        id: software_title.id,
-                    });
-                self.list_view_wrapper.clear();
-                self.list_view_wrapper.extend_from_iter(list_items);
+                self.populate_list(self.software_titles.clone());
             }
             CommandMsg::SoftwareTitlesFetched(Err(e)) => {
-                eprintln!("Error fetching software_titles: {:?}", e);
-                // TODO: show error to user
+                show_error_dialog(format!("Failed to fetch software titles: {}", e), root);
             }
             CommandMsg::Deleted(Ok(_id)) => {
-                println!("Successfully deleted software_title");
+                tracing::info!("Software title deleted successfully.");
                 sender.input(SoftwareTitleSelectMsg::FetchSoftwareTitles);
             }
-            CommandMsg::Deleted(Err(error)) => {
-                eprintln!("Error deleting software_title: {:?}", error);
+            CommandMsg::Deleted(Err(e)) => {
+                show_error_dialog(format!("Failed to delete software title: {}", e), root);
             }
-            CommandMsg::Canceled => {
-                // No action needed
+        }
+    }
+}
+
+impl SoftwareTitleSelectModel {
+    fn remove_from_list(&mut self, id: i64) {
+        for i in 0..self.list_view_wrapper.len() {
+            if let Some(item) = self.list_view_wrapper.get(i)
+                && item.borrow().id == id
+            {
+                tracing::info!("Removing list item ID {} from list", id);
+                self.list_view_wrapper.remove(i);
+                break;
             }
+        }
+    }
+
+    fn add_to_list(&mut self, list_model: &SoftwareTitleListModel) {
+        let new_item = DeletableListItem {
+            name: list_model.name.clone(),
+            id: list_model.id,
+            can_delete: list_model.can_delete,
+        };
+        self.list_view_wrapper.append(new_item);
+
+        for i in 0..self.list_view_wrapper.len() {
+            if let Some(item) = self.list_view_wrapper.get_visible(i)
+                && item.borrow().id == list_model.id
+            {
+                tracing::info!(
+                    "Selecting newly added list item ID {} at index {}",
+                    list_model.id,
+                    i
+                );
+                self.list_view_wrapper.selection_model.set_selected(i);
+                break;
+            }
+        }
+    }
+
+    fn populate_list(&mut self, software_titles: Vec<SoftwareTitleListModel>) {
+        let list_items = software_titles
+            .iter()
+            .filter(|f| !self.selected_software_title_ids.contains(&f.id))
+            .map(|software_title| DeletableListItem {
+                name: software_title.name.clone(),
+                id: software_title.id,
+                can_delete: software_title.can_delete,
+            });
+        self.list_view_wrapper.clear();
+        self.list_view_wrapper.extend_from_iter(list_items);
+    }
+
+    fn get_selected_list_item(&self) -> Option<DeletableListItem> {
+        let selected_index = self.list_view_wrapper.selection_model.selected();
+        if let Some(item) = self.list_view_wrapper.get_visible(selected_index) {
+            let item = item.borrow();
+            Some(item.clone())
+        } else {
+            None
+        }
+    }
+
+    fn get_selected_software_title_list_model(&self) -> Option<SoftwareTitleListModel> {
+        if let Some(selected_item) = self.get_selected_list_item() {
+            Some(SoftwareTitleListModel {
+                id: selected_item.id,
+                name: selected_item.name,
+                can_delete: selected_item.can_delete,
+            })
+        } else {
+            None
         }
     }
 }
