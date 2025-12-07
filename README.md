@@ -1,51 +1,16 @@
 # Emulation File Manager and Launcher
 
+Emulation File Manager can be used to manage your emulation related files and launch them with emulators and docment viewers. Files are stored under collection root folder and can be synced to S3 compatible cloud storage. File meta data is stored to local SQLite database. Files can be added from local file system or providing a download URL (for example to Internet Archive). 
+
+Emulators and document viewers can be configured for laumching files with. Bitmap-file types can be viewed directly in application.
+
+
 ## Technologies
 
 - [Rust](https://www.rust-lang.org/): The primary programming language used for development.
 - [relm4](https://relm4.org/): GTK4 UI 
 - [SQLx](https://github.com/launchbadge/sqlx): Used for SQLite database management, providing an asynchronous interface to SQLite database.
 - [rust-s3](https://github.com/durch/rust-s3): S3 compatible cloud storage
-
-## Crates
-
-### core crates
-#### core_types
-
-Common types used across the project.
-
-#### utils
-
-Common utility functions used across the project.
-
-#### emulator_runner
-
-A crate for running emulators with provided arguments.
-
-#### file_import
-
-A crate for importing emulation related files into configured directories. User can import different types of files which are defined in `FileType` enum in `core_types` crate. Imported file is defined with `ImportedFile` struct in `core_types` crate. 
-
-#### file_export 
-
-A crate for exporting emulation related files from configured directories. When emulation files are used with emulators, they are exported to a temporary directory and then deleted after the emulator exits.
-
-#### file_system
-
-A crate for file system related operationgs, for example resolving paths for databse and emulation files.
-
-### database
-
-A crate for database related operations, including migrations for creating and managing the SQLite database used by the application and `models` module for creating objects from database entities.
-
-### service
-
-A crate for providing services to the, such as view model service defined in `view_model_service.rs` and the view model definitions. 
-
-
-### relm4-ui
-
-User interface (GTK4 GUI created with relm4). This is the main crate for the application, providing the user interface and integrating with other crates.
 
 ## Architecture
 
