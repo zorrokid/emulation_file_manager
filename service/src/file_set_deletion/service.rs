@@ -4,7 +4,7 @@ use database::repository_manager::RepositoryManager;
 
 use crate::{
     error::Error,
-    file_set_deletion::context::DeletionContext,
+    file_set_deletion::{context::DeletionContext, model::FileDeletionResult},
     file_system_ops::{FileSystemOps, StdFileSystemOps},
     pipeline::generic_pipeline::Pipeline,
     view_models::Settings,
@@ -43,7 +43,10 @@ impl FileSetDeletionService {
         }
     }
 
-    pub async fn delete_file_set(&self, file_set_id: i64) -> Result<(), Error> {
+    pub async fn delete_file_set(
+        &self,
+        file_set_id: i64,
+    ) -> Result<Vec<FileDeletionResult>, Error> {
         let mut context = DeletionContext {
             file_set_id,
             repository_manager: self.repository_manager.clone(),
@@ -66,12 +69,13 @@ impl FileSetDeletionService {
             .filter(|r| !r.file_deletion_success || !r.was_deleted_from_db)
             .count();
 
-        eprintln!(
+        tracing::info!(
             "Deletion complete: {} successful, {} failed",
-            successful_deletions, failed_deletions
+            successful_deletions,
+            failed_deletions
         );
 
-        Ok(())
+        Ok(context.deletion_results.values().cloned().collect())
     }
 }
 

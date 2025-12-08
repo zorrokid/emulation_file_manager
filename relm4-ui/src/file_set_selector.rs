@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use core_types::FileType;
-use database::{database_error::Error as DatabaseError, repository_manager::RepositoryManager};
+use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
@@ -13,7 +13,7 @@ use relm4::{
 };
 use service::{
     error::Error as ServiceError,
-    file_set_deletion::service::FileSetDeletionService,
+    file_set_deletion::{model::FileDeletionResult, service::FileSetDeletionService},
     view_model_service::ViewModelService,
     view_models::{FileSetListModel, Settings},
 };
@@ -22,7 +22,8 @@ use ui_components::{DropDownOutputMsg, FileTypeDropDown, FileTypeSelectedMsg};
 use crate::{
     file_set_details_view::{FileSetDetailsInit, FileSetDetailsMsg, FileSetDetailsView},
     file_set_form::{FileSetFormInit, FileSetFormModel, FileSetFormMsg, FileSetFormOutputMsg},
-    list_item::ListItem,
+    list_item::FileSetListItem,
+    utils::dialog_utils::{show_error_dialog, show_info_dialog},
 };
 
 #[derive(Debug)]
@@ -32,9 +33,7 @@ pub enum FileSetSelectorMsg {
     DeleteClicked,
     OpenFileSetForm,
     FileSetCreated(FileSetListModel),
-    FileSetSelected {
-        index: u32,
-    },
+    FileSetSelected,
     FileTypeChanged(FileType),
     Show {
         selected_system_ids: Vec<i64>,
@@ -47,15 +46,15 @@ pub enum FileSetSelectorMsg {
 #[derive(Debug)]
 pub enum FileSetSelectorOutputMsg {
     FileSetSelected(FileSetListModel),
-    //FileSetUpdated(FileSetListModel),
 }
 
 #[derive(Debug)]
 pub enum CommandMsg {
     FilesFetched(Result<Vec<FileSetListModel>, ServiceError>),
-    FileSetAdded(FileSetListModel),
-    AddingFileSetFailed(DatabaseError),
-    FilesSetDeletionFinished(Result<(), ServiceError>),
+    FilesSetDeletionFinished {
+        result: Result<Vec<FileDeletionResult>, ServiceError>,
+        id: i64,
+    },
 }
 
 pub struct FileSetSelectorInit {
@@ -67,10 +66,8 @@ pub struct FileSetSelectorInit {
 #[derive(Debug)]
 pub struct FileSetSelector {
     view_model_service: Arc<ViewModelService>,
-    repository_manager: Arc<RepositoryManager>,
-    settings: Arc<Settings>,
     file_sets: Vec<FileSetListModel>,
-    list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
+    list_view_wrapper: TypedListView<FileSetListItem, gtk::SingleSelection>,
     file_set_form: Controller<FileSetFormModel>,
     selected_system_ids: Vec<i64>,
     selected_file_type: Option<FileType>,
@@ -140,7 +137,7 @@ impl Component for FileSetSelector {
                         set_label: "Delete File Set",
                         connect_clicked => FileSetSelectorMsg::DeleteClicked,
                         #[watch]
-                        set_sensitive: model.selected_file_set.is_some(),
+                        set_sensitive: model.selected_file_set.is_some() && model.selected_file_set.as_ref().is_some_and(|fs| fs.can_delete),
                     },
                     gtk::Label {
                         set_label: "When deleting a file set, also that actual files will be deleted\nunless they are linked to other file sets\n(in that case only those files that are linked won't be deleted).",
@@ -161,7 +158,8 @@ impl Component for FileSetSelector {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> = TypedListView::new();
+        let list_view_wrapper: TypedListView<FileSetListItem, gtk::SingleSelection> =
+            TypedListView::new();
 
         let dropdown = FileTypeDropDown::builder().launch(None).forward(
             sender.input_sender(),
@@ -176,19 +174,15 @@ impl Component for FileSetSelector {
         let file_set_form_init_model = FileSetFormInit {
             repository_manager: Arc::clone(&init_model.repository_manager),
             settings: Arc::clone(&init_model.settings),
-            // TODO set in Show message
-            //selected_system_ids: self.selected_system_ids.clone(),
-            //selected_file_type,
         };
 
         let file_set_form = FileSetFormModel::builder()
             .transient_for(&root)
             .launch(file_set_form_init_model)
             .forward(sender.input_sender(), |msg| match msg {
-                FileSetFormOutputMsg::FileSetCreated(file_set_liset_model) => {
-                    FileSetSelectorMsg::FileSetCreated(file_set_liset_model)
+                FileSetFormOutputMsg::FileSetCreated(file_set_list_model) => {
+                    FileSetSelectorMsg::FileSetCreated(file_set_list_model)
                 }
-                _ => FileSetSelectorMsg::Ignore,
             });
 
         let file_set_details_view_init = FileSetDetailsInit {
@@ -207,8 +201,6 @@ impl Component for FileSetSelector {
 
         let model = FileSetSelector {
             view_model_service: init_model.view_model_service,
-            repository_manager: init_model.repository_manager,
-            settings: init_model.settings,
             file_sets: Vec::new(),
             list_view_wrapper,
             file_set_form,
@@ -229,10 +221,8 @@ impl Component for FileSetSelector {
             .connect_selected_notify(clone!(
                 #[strong]
                 sender,
-                move |selection| {
-                    let selected = selection.selected();
-                    println!("File Select - Selected item index: {:?}", selected);
-                    sender.input(FileSetSelectorMsg::FileSetSelected { index: selected });
+                move |_| {
+                    sender.input(FileSetSelectorMsg::FileSetSelected);
                 }
             ));
         let widgets = view_output!();
@@ -251,79 +241,42 @@ impl Component for FileSetSelector {
                 }
             }
             FileSetSelectorMsg::FileSetCreated(file_set_list_model) => {
-                println!("File Selector - File set created {}", file_set_list_model);
-                self.list_view_wrapper.append(ListItem {
-                    id: file_set_list_model.id,
-                    name: file_set_list_model.file_set_name.clone(),
-                });
+                tracing::info!("File set created with id: {}", file_set_list_model.id);
+                self.add_to_list(&file_set_list_model);
             }
             FileSetSelectorMsg::SelectClicked => {
-                let selection = self.list_view_wrapper.selection_model.selected();
-                println!("File Select Clicked - Selected item: {:?}", selection);
-                if let (Some(selected_item), Some(file_type)) = (
-                    self.list_view_wrapper.get(selection),
-                    self.selected_file_type,
-                ) {
-                    let selected_item = selected_item.borrow();
-                    println!(
-                        "File set selected: {} with ID: {}",
-                        selected_item.name, selected_item.id
-                    );
-                    let file_set_list_model = FileSetListModel {
-                        id: selected_item.id,
-                        file_set_name: selected_item.name.clone(), // TODO
-                        file_type,
-                        file_name: selected_item.name.clone(),
-                    };
-                    let res = sender.output(FileSetSelectorOutputMsg::FileSetSelected(
-                        file_set_list_model,
-                    ));
-                    if let Err(e) = res {
-                        eprintln!("Failed to send output message: {:?}", e);
-                        // TODO handle error
-                    } else {
-                        println!("File set selection output sent successfully.");
-                        root.close();
-                    }
-                } else {
-                    eprintln!("No file set selected");
+                if let Some(file_set_list_model) = self.get_selected_list_model() {
+                    sender
+                        .output(FileSetSelectorOutputMsg::FileSetSelected(
+                            file_set_list_model,
+                        ))
+                        .unwrap_or_else(|e| {
+                            tracing::error!(
+                                "Failed to send FileSetSelected output message: {:?}",
+                                e
+                            );
+                        });
+                    root.close();
                 }
             }
-            FileSetSelectorMsg::FileSetSelected { index } => {
-                println!("File set selected at index: {}", index);
-                if let (Some(file_set), Some(file_type)) =
-                    (self.list_view_wrapper.get(index), self.selected_file_type)
-                {
-                    let file_set = file_set.borrow();
-                    println!(
-                        "File set selected: {} with ID: {}",
-                        file_set.name, file_set.id
-                    );
-                    let file_set_list_model = FileSetListModel {
-                        id: file_set.id,
-                        file_set_name: file_set.name.clone(),
-                        file_type,
-                        file_name: file_set.name.clone(), // TODO?
-                    };
-                    self.selected_file_set = Some(file_set_list_model);
+            FileSetSelectorMsg::FileSetSelected => {
+                if let Some(file_set) = self.get_selected_list_model() {
+                    tracing::info!("File set selected with id: {}", file_set.id);
                     self.file_set_details_view
                         .emit(FileSetDetailsMsg::LoadFileSet(file_set.id));
-                } else {
-                    eprintln!("No file set found at index {}", index);
+                    self.selected_file_set = Some(file_set);
                 }
             }
             FileSetSelectorMsg::FileTypeChanged(file_type) => {
-                println!("File type changed to: {:?}", file_type);
+                tracing::info!("File type changed to: {:?}", file_type);
                 self.selected_file_type = Some(file_type);
                 sender.input(FileSetSelectorMsg::FetchFiles);
             }
             FileSetSelectorMsg::FetchFiles => {
-                println!("Fetching file sets for selected systems and file type");
+                tracing::info!("Fetching file sets for selected systems and file type");
                 if let Some(file_type) = self.selected_file_type {
-                    println!("Selected file type: {:?}", file_type);
                     let view_model_service = Arc::clone(&self.view_model_service);
                     let system_ids = self.selected_system_ids.clone();
-                    println!("Selected system IDs: {:?}", system_ids);
                     sender.oneshot_command(clone!(
                         #[strong]
                         view_model_service,
@@ -358,13 +311,15 @@ impl Component for FileSetSelector {
                         file_set_deletion_service,
                         async move {
                             let res = file_set_deletion_service.delete_file_set(file_set_id).await;
-                            // Return a command message if needed
-                            CommandMsg::FilesSetDeletionFinished(res)
+                            CommandMsg::FilesSetDeletionFinished {
+                                result: res,
+                                id: file_set_id,
+                            }
                         }
                     ));
                 }
             }
-            _ => {}
+            FileSetSelectorMsg::Ignore => {}
         }
     }
 
@@ -372,38 +327,137 @@ impl Component for FileSetSelector {
         &mut self,
         message: Self::CommandOutput,
         _sender: ComponentSender<Self>,
-        _root: &Self::Root,
+        root: &Self::Root,
     ) {
         match message {
             CommandMsg::FilesFetched(Ok(file_sets)) => {
-                println!("File sets fetched successfully: {:?}", file_sets);
+                tracing::info!("{} file sets fetched", file_sets.len());
                 self.file_sets = file_sets;
                 self.list_view_wrapper.clear();
                 let list_items = self
                     .file_sets
                     .iter()
                     .filter(|f| !self.selected_file_set_ids.contains(&f.id))
-                    .map(|file_set| ListItem {
+                    .map(|file_set| FileSetListItem {
                         id: file_set.id,
                         name: format!("{} [{}]", file_set.file_set_name, file_set.file_name),
+                        file_type: file_set.file_type,
+                        can_delete: file_set.can_delete,
                     });
                 self.list_view_wrapper.extend_from_iter(list_items);
             }
             CommandMsg::FilesFetched(Err(e)) => {
-                eprintln!("Failed to fetch file sets: {:?}", e);
-                // TODO handle error
+                show_error_dialog(format!("Error fetching file sets: {}", e), root);
             }
-            CommandMsg::FilesSetDeletionFinished(Ok(())) => {
-                println!("File set deleted successfully.");
-                // Refresh the file sets list
+            CommandMsg::FilesSetDeletionFinished { result, id } => match result {
+                Err(e) => show_error_dialog(format!("Error deleting file set: {}", e), root),
+                Ok(deletion_results) => self.handle_deletion_result(deletion_results, id, root),
+            },
+        }
+    }
+}
+
+impl FileSetSelector {
+    fn remove_from_list(&mut self, file_set_id: i64) {
+        for i in 0..self.list_view_wrapper.len() {
+            if let Some(item) = self.list_view_wrapper.get_visible(i)
+                && item.borrow().id == file_set_id
+            {
+                self.list_view_wrapper.remove(i);
+                tracing::info!("Removed file set with ID: {} from the list", file_set_id);
+                break;
             }
-            CommandMsg::FilesSetDeletionFinished(Err(e)) => {
-                eprintln!("Failed to delete file set: {:?}", e);
-                // TODO handle error
+        }
+    }
+
+    fn add_to_list(&mut self, file_set: &FileSetListModel) {
+        self.list_view_wrapper.append(FileSetListItem {
+            id: file_set.id,
+            name: file_set.file_set_name.clone(),
+            file_type: file_set.file_type,
+            can_delete: file_set.can_delete,
+        });
+
+        for i in 0..self.list_view_wrapper.len() {
+            if let Some(item) = self.list_view_wrapper.get_visible(i)
+                && item.borrow().id == file_set.id
+            {
+                tracing::info!("Selecting newly added file set with ID: {}", file_set.id);
+                self.list_view_wrapper.selection_model.set_selected(i);
+                break;
             }
-            _ => {
-                // Handle command outputs here
+        }
+    }
+
+    fn get_selected_list_item(&self) -> Option<FileSetListItem> {
+        let selected_index = self.list_view_wrapper.selection_model.selected();
+        if let Some(item) = self.list_view_wrapper.get_visible(selected_index) {
+            let item = item.borrow();
+            Some(item.clone())
+        } else {
+            None
+        }
+    }
+
+    fn get_selected_list_model(&self) -> Option<FileSetListModel> {
+        if let Some(list_item) = self.get_selected_list_item() {
+            Some(FileSetListModel {
+                id: list_item.id,
+                file_set_name: list_item.name.clone(),
+                file_type: list_item.file_type,
+                file_name: list_item.name.clone(),
+                can_delete: list_item.can_delete,
+            })
+        } else {
+            None
+        }
+    }
+    fn handle_deletion_result(
+        &mut self,
+        deletion_results: Vec<FileDeletionResult>,
+        id: i64,
+        root: &gtk::Window,
+    ) {
+        let successful_deletions = deletion_results
+            .iter()
+            .filter(|r| r.file_deletion_success && r.was_deleted_from_db)
+            .collect::<Vec<_>>();
+
+        let failed_deletions = deletion_results
+            .iter()
+            .filter(|r| !r.file_deletion_success || !r.was_deleted_from_db)
+            .collect::<Vec<_>>();
+
+        tracing::info!(
+            "File set deletion complete for id {}: {} successful, {} failed",
+            id,
+            successful_deletions.len(),
+            failed_deletions.len()
+        );
+
+        // TODO: create better summary dialog
+        if !failed_deletions.is_empty() {
+            let mut message = String::from("Some files failed to delete:\n");
+            for result in &failed_deletions {
+                message.push_str(&format!(
+                    "- File ID {}: (Deleted from FS: {}, Deleted from DB: {})\n",
+                    result.file_info.id, result.file_deletion_success, result.was_deleted_from_db
+                ));
+                for error in result.error_messages.iter() {
+                    message.push_str(&format!("  Error: {}\n", error));
+                }
             }
+            show_error_dialog(message, root);
+        } else if !successful_deletions.is_empty() {
+            // TODO: list which files were deleted?
+            // TODO: show total amount of files in file set?
+            show_info_dialog(format!("File set deleted successfully.",), root);
+            self.remove_from_list(id);
+        } else {
+            show_info_dialog(
+                "File set was deleted but no files included in file set were deleted.\nFiles may be linked to other file sets.".to_string(),
+                root,
+            );
         }
     }
 }

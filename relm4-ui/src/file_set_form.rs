@@ -694,6 +694,7 @@ impl Component for FileSetFormModel {
                         file_set_name: self.file_set_name.clone(),
                         file_type,
                         file_name: self.file_set_file_name.clone(),
+                        can_delete: true,
                     };
 
                     let res =

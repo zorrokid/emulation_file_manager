@@ -70,7 +70,7 @@ pub struct ReadFile {
     pub file_size: FileSize,
 }
 
-#[derive(Debug, Clone, PartialEq, Copy, EnumIter, Display)]
+#[derive(Debug, Clone, PartialEq, Copy, EnumIter, Display, Eq, Ord, PartialOrd, Hash)]
 #[repr(u8)]
 pub enum FileType {
     Rom = 1,

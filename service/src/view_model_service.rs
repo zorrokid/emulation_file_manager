@@ -245,8 +245,17 @@ impl ViewModelService {
             .await
             .map_err(|err| Error::DbError(err.to_string()))?;
 
-        let list_models: Vec<FileSetListModel> =
+        let mut list_models: Vec<FileSetListModel> =
             file_sets.iter().map(FileSetListModel::from).collect();
+
+        for file_set in list_models.iter_mut() {
+            file_set.can_delete = !self
+                .repository_manager
+                .get_file_set_repository()
+                .is_in_use(file_set.id)
+                .await
+                .map_err(|err| Error::DbError(err.to_string()))?;
+        }
 
         Ok(list_models)
     }
@@ -340,6 +349,13 @@ impl ViewModelService {
                 .await
                 .map_err(|err| Error::DbError(err.to_string()))?;
 
+            let can_delete = !self
+                .repository_manager
+                .get_file_set_repository()
+                .is_in_use(file_set.id)
+                .await
+                .map_err(|err| Error::DbError(err.to_string()))?;
+
             file_set_view_models.push(FileSetViewModel {
                 id: file_set.id,
                 file_set_name: file_set.name.clone(),
@@ -347,6 +363,7 @@ impl ViewModelService {
                 files,
                 file_name: file_set.file_name.clone(),
                 source: file_set.source.clone(),
+                can_delete,
             });
         }
 
@@ -378,6 +395,13 @@ impl ViewModelService {
             .await
             .map_err(|err| Error::DbError(err.to_string()))?;
 
+        let can_delete = !self
+            .repository_manager
+            .get_file_set_repository()
+            .is_in_use(file_set.id)
+            .await
+            .map_err(|err| Error::DbError(err.to_string()))?;
+
         Ok(FileSetViewModel {
             id: file_set.id,
             file_set_name: file_set.name.clone(),
@@ -385,6 +409,7 @@ impl ViewModelService {
             files,
             file_name: file_set.file_name.clone(),
             source: file_set.source.clone(),
+            can_delete,
         })
     }
 

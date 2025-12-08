@@ -163,6 +163,7 @@ pub struct FileSetListModel {
     pub file_set_name: String,
     pub file_type: FileType,
     pub file_name: String,
+    pub can_delete: bool,
 }
 
 impl From<&FileSet> for FileSetListModel {
@@ -172,6 +173,7 @@ impl From<&FileSet> for FileSetListModel {
             file_name: file_set.file_name.clone(),
             file_type: file_set.file_type,
             file_set_name: file_set.name.clone(),
+            can_delete: false,
         }
     }
 }
@@ -190,6 +192,7 @@ pub struct FileSetViewModel {
     pub files: Vec<FileSetFileInfo>,
     pub file_name: String,
     pub source: String,
+    pub can_delete: bool,
 }
 
 impl Display for FileSetViewModel {

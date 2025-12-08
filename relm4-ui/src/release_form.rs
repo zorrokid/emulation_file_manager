@@ -547,6 +547,7 @@ impl Component for ReleaseFormModel {
                             file_set_name: fs.file_set_name.clone(),
                             file_type: fs.file_type,
                             file_name: fs.file_name.clone(),
+                            can_delete: fs.can_delete,
                         })
                         .collect();
 

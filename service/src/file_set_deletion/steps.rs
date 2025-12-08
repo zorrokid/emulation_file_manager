@@ -2,7 +2,7 @@ use core_types::FileSyncStatus;
 
 use crate::{
     error::Error,
-    file_set_deletion::context::{DeletionContext, FileDeletionResult},
+    file_set_deletion::{context::DeletionContext, model::FileDeletionResult},
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
 

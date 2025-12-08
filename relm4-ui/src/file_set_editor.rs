@@ -232,7 +232,8 @@ impl Component for FileSetEditor {
                         id: file_set_id,
                         file_set_name: file_set_name.clone(),
                         file_name: file_set_file_name.clone(),
-                        file_type: file_type,
+                        file_type,
+                        can_delete: true,
                     };
                     sender.oneshot_command(async move {
                         let res = repository_manager
