@@ -16,22 +16,37 @@ impl PipelineStep<DeletionContext> for ValidateNotInUseStep {
     }
 
     async fn execute(&self, context: &mut DeletionContext) -> StepAction {
+        tracing::info!(
+            "Validating that file set with id {} is not in use",
+            context.file_set_id
+        );
+
+        let file_set_id = context.file_set_id;
+
         let is_in_use_res = context
             .repository_manager
             .get_file_set_repository()
-            .is_in_use(context.file_set_id)
+            .is_in_use(file_set_id)
             .await;
         match is_in_use_res {
             Err(e) => StepAction::Abort(Error::DbError(format!(
-                "Failed to check if file set is in use: {}",
-                e
+                "Failed to check if file set with id {} is in use: {}",
+                file_set_id, e
             ))),
             Ok(in_use) => {
                 if in_use {
+                    tracing::warn!(
+                        "File set with id {} is in use by one or more releases, aborting deletion",
+                        file_set_id
+                    );
                     StepAction::Abort(Error::DbError(
                         "File set is in use by one or more releases".to_string(),
                     ))
                 } else {
+                    tracing::info!(
+                        "File set with id {} is not in use, proceeding with deletion",
+                        file_set_id
+                    );
                     StepAction::Continue
                 }
             }
@@ -49,6 +64,11 @@ impl PipelineStep<DeletionContext> for FetchFileInfosStep {
     }
 
     async fn execute(&self, context: &mut DeletionContext) -> StepAction {
+        tracing::info!(
+            "Fetching file infos for file set with id {}",
+            context.file_set_id
+        );
+
         let file_infos_res = context
             .repository_manager
             .get_file_info_repository()
@@ -57,10 +77,16 @@ impl PipelineStep<DeletionContext> for FetchFileInfosStep {
 
         match file_infos_res {
             Ok(file_infos) => {
+                tracing::info!(
+                    "Fetched {} file infos for file set {}",
+                    file_infos.len(),
+                    context.file_set_id
+                );
                 // even if file_infos is empty, continue to delete the file set
                 context.deletion_results = file_infos
                     .into_iter()
                     .map(|fi| {
+                        tracing::info!("Found file info with id {} for deletion", fi.id);
                         (
                             fi.sha1_checksum.clone(),
                             FileDeletionResult {
@@ -79,47 +105,18 @@ impl PipelineStep<DeletionContext> for FetchFileInfosStep {
                 StepAction::Continue
             }
             Err(e) => {
+                tracing::error!(
+                    "Failed to fetch file infos for file set {}: {}",
+                    context.file_set_id,
+                    e
+                );
                 StepAction::Abort(Error::DbError(format!("Failed to fetch file infos: {}", e)))
             }
         }
     }
 }
 
-/// Step 3: Delete the file set from database
-pub struct DeleteFileSetStep;
-
-#[async_trait::async_trait]
-impl PipelineStep<DeletionContext> for DeleteFileSetStep {
-    fn name(&self) -> &'static str {
-        "delete_file_set"
-    }
-
-    async fn execute(&self, context: &mut DeletionContext) -> StepAction {
-        println!("Deleting file set {}", context.file_set_id);
-        let res = context
-            .repository_manager
-            .get_file_set_repository()
-            .delete_file_set(context.file_set_id)
-            .await;
-
-        println!("Deleted file set {}: {:?}", context.file_set_id, res);
-        match res {
-            Ok(_) => {
-                if context.deletion_results.is_empty() {
-                    // No files to process, can skip remaining steps
-                    StepAction::Skip
-                } else {
-                    StepAction::Continue
-                }
-            }
-            Err(e) => {
-                StepAction::Abort(Error::DbError(format!("Failed to delete file set: {}", e)))
-            }
-        }
-    }
-}
-
-/// Step 4: Filter files that are only in this file set (safe to delete)
+/// Step 3: Filter files that are only in this file set (safe to delete)
 pub struct FilterDeletableFilesStep;
 
 #[async_trait::async_trait]
@@ -134,7 +131,16 @@ impl PipelineStep<DeletionContext> for FilterDeletableFilesStep {
     }
 
     async fn execute(&self, context: &mut DeletionContext) -> StepAction {
+        tracing::info!(
+            "Filtering deletable files for file set {}",
+            context.file_set_id
+        );
         for deletion_result in context.deletion_results.values_mut() {
+            tracing::info!(
+                "Checking if file info with id {} is deletable",
+                deletion_result.file_info.id
+            );
+
             let file_sets_res = context
                 .repository_manager
                 .get_file_set_repository()
@@ -143,16 +149,31 @@ impl PipelineStep<DeletionContext> for FilterDeletableFilesStep {
 
             match file_sets_res {
                 Err(e) => {
+                    tracing::error!(
+                        "Failed to fetch file sets for file info with id {}: {}",
+                        deletion_result.file_info.id,
+                        e
+                    );
                     return StepAction::Abort(Error::DbError(format!(
-                        "Failed to fetch file sets for file info {}: {}",
+                        "Failed to fetch file sets for file info with id {}: {}",
                         deletion_result.file_info.id, e
                     )));
                 }
                 Ok(file_sets) => {
+                    tracing::info!(
+                        "File info with id {} is used in {} file sets",
+                        deletion_result.file_info.id,
+                        file_sets.len()
+                    );
                     // Only delete if file is used in exactly this one file set
                     if let [single_entry] = &file_sets[..]
                         && single_entry.id == context.file_set_id
                     {
+                        tracing::info!(
+                            "File info with id {} is only used in file set with id {}, marking as deletable",
+                            deletion_result.file_info.id,
+                            context.file_set_id
+                        );
                         deletion_result.is_deletable = true;
                     }
                 }
@@ -160,6 +181,53 @@ impl PipelineStep<DeletionContext> for FilterDeletableFilesStep {
         }
 
         StepAction::Continue
+    }
+}
+
+/// Step 4: Delete the file set from database
+pub struct DeleteFileSetStep;
+
+#[async_trait::async_trait]
+impl PipelineStep<DeletionContext> for DeleteFileSetStep {
+    fn name(&self) -> &'static str {
+        "delete_file_set"
+    }
+
+    async fn execute(&self, context: &mut DeletionContext) -> StepAction {
+        tracing::info!("Deleting file set with id {}", context.file_set_id);
+
+        let res = context
+            .repository_manager
+            .get_file_set_repository()
+            .delete_file_set(context.file_set_id)
+            .await;
+
+        match res {
+            Ok(_) => {
+                if context.deletion_results.is_empty() {
+                    tracing::info!(
+                        "Deleted file set {} from database. No files associated with file set, skipping remaining steps",
+                        context.file_set_id
+                    );
+                    // No files to process, can skip remaining steps
+                    StepAction::Skip
+                } else {
+                    tracing::info!(
+                        "Deleted file set {} from database, proceeding with file deletions",
+                        context.file_set_id
+                    );
+                    StepAction::Continue
+                }
+            }
+            Err(e) => {
+                tracing::error!(
+                    "Failed to delete file set {} from database: {}",
+                    context.file_set_id,
+                    e
+                );
+                StepAction::Abort(Error::DbError(format!("Failed to delete file set: {}", e)))
+            }
+        }
     }
 }
 
@@ -178,6 +246,10 @@ impl PipelineStep<DeletionContext> for MarkForCloudDeletionStep {
     }
 
     async fn execute(&self, context: &mut DeletionContext) -> StepAction {
+        tracing::info!(
+            "Marking files for cloud deletion for file set with id {}",
+            context.file_set_id
+        );
         for deletion_result in context.deletion_results.values_mut() {
             let sync_logs_res = context
                 .repository_manager
@@ -185,20 +257,31 @@ impl PipelineStep<DeletionContext> for MarkForCloudDeletionStep {
                 .get_logs_by_file_info(deletion_result.file_info.id)
                 .await;
 
-            println!(
-                "Marking file info {} for cloud deletion check",
-                deletion_result.file_info.id
-            );
-
             match sync_logs_res {
                 Err(e) => {
+                    tracing::error!(
+                        "Failed to fetch sync logs for file info with id {}: {}",
+                        deletion_result.file_info.id,
+                        e
+                    );
                     return StepAction::Abort(Error::DbError(format!(
-                        "Failed to fetch sync logs for file info {}: {}",
+                        "Failed to fetch sync logs for file info with id {}: {}",
                         deletion_result.file_info.id, e
                     )));
                 }
                 Ok(sync_logs) => {
+                    tracing::info!(
+                        "Fetched sync logs for file info with id {}",
+                        deletion_result.file_info.id
+                    );
+
                     if let Some(entry) = sync_logs.last() {
+                        tracing::info!(
+                            "File info with id {} has last sync log with status {:?}, marking for cloud deletion",
+                            deletion_result.file_info.id,
+                            entry.status
+                        );
+
                         let update_res = context
                             .repository_manager
                             .get_file_sync_log_repository()
@@ -211,8 +294,13 @@ impl PipelineStep<DeletionContext> for MarkForCloudDeletionStep {
                             .await;
                         if let Err(e) = update_res {
                             // TODO: should this abort?
+                            tracing::error!(
+                                "Failed to mark file info with id {} for cloud deletion: {}",
+                                deletion_result.file_info.id,
+                                e
+                            );
                             return StepAction::Abort(Error::DbError(format!(
-                                "Failed to mark file info {} for cloud deletion: {}",
+                                "Failed to mark file info with id {} for cloud deletion: {}",
                                 deletion_result.file_info.id, e
                             )));
                         }
@@ -240,31 +328,46 @@ impl PipelineStep<DeletionContext> for DeleteLocalFilesStep {
     }
 
     async fn execute(&self, context: &mut DeletionContext) -> StepAction {
+        tracing::info!(
+            "Deleting local files for file set with id {}",
+            context.file_set_id
+        );
+
         for deletion_result in context.deletion_results.values_mut() {
+            tracing::info!(
+                "Processing file info with id {} for local deletion",
+                deletion_result.file_info.id
+            );
             let file_path = context.settings.get_file_path(
                 &deletion_result.file_info.file_type,
                 &deletion_result.file_info.archive_file_name,
             );
 
             let path_str = file_path.to_string_lossy().to_string();
+            tracing::info!(
+                "Resolved file path for file info id {}: {}",
+                deletion_result.file_info.id,
+                path_str
+            );
             deletion_result.file_path = Some(path_str.clone());
 
-            println!("Deleting local file: {}", path_str);
+            tracing::info!("Attempting to delete local file: {}", path_str);
+
             if context.fs_ops.exists(&file_path) {
-                println!("File exists, attempting deletion: {}", path_str);
+                tracing::info!("File exists, proceeding with deletion: {}", path_str);
                 match context.fs_ops.remove_file(&file_path) {
                     Ok(_) => {
-                        println!("Deleted local file: {}", path_str);
+                        tracing::info!("Deleted local file: {}", path_str);
                         deletion_result.file_deletion_success = true;
                     }
                     Err(e) => {
-                        println!("Failed to delete local file {}: {}", path_str, e);
+                        tracing::error!("Failed to delete local file {}: {}", path_str, e);
                         deletion_result.file_deletion_success = false;
                         deletion_result.error_messages.push(e.to_string());
                     }
                 }
             } else {
-                println!("File does not exist, skipping deletion: {}", path_str);
+                tracing::info!("File {} does not exist, skipping deletion.", path_str);
                 deletion_result.file_deletion_success = true; // consider non-existing file as "deleted" (user might have done it manually)
             }
         }
@@ -290,29 +393,36 @@ impl PipelineStep<DeletionContext> for DeleteFileInfosStep {
     }
 
     async fn execute(&self, context: &mut DeletionContext) -> StepAction {
+        tracing::info!(
+            "Deleting file_info entries for file set {}",
+            context.file_set_id
+        );
         for dr in context.deletion_results.values_mut() {
-            println!(
-                "Deleting file_info {} from DB",
-                dr.file_info.archive_file_name
+            tracing::info!(
+                "Processing file_info with id {} for deletion",
+                dr.file_info.id
             );
             let delete_res = context
                 .repository_manager
                 .get_file_info_repository()
                 .delete_file_info(dr.file_info.id)
                 .await;
-            println!(
-                "Delete file_info {} result: {:?}",
-                dr.file_info.archive_file_name, delete_res
-            );
-
             match delete_res {
                 Ok(_) => {
+                    tracing::info!("Deleted file_info with id {} from DB", dr.file_info.id);
                     dr.was_deleted_from_db = true;
                 }
                 Err(e) => {
+                    tracing::error!(
+                        "Failed to delete file_info with id {} from DB: {}",
+                        dr.file_info.id,
+                        e
+                    );
                     dr.was_deleted_from_db = false;
-                    dr.error_messages
-                        .push(format!("Failed to delete file_info from DB: {}", e));
+                    dr.error_messages.push(format!(
+                        "Failed to delete file_info with id {} from DB: {}",
+                        dr.file_info.id, e
+                    ));
                 }
             }
         }

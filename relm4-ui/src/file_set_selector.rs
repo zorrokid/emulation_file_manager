@@ -90,7 +90,7 @@ impl Component for FileSetSelector {
         gtk::Window {
             set_default_width: 800,
             set_default_height: 800,
-            set_title: Some("Select File Set"),
+            set_title: Some("File Set Selector"),
 
             connect_close_request[sender] => move |_| {
                 sender.input(FileSetSelectorMsg::Hide);
@@ -114,10 +114,18 @@ impl Component for FileSetSelector {
                     gtk::Label {
                         set_label: "File Selector",
                     },
-                    #[local_ref]
-                    file_types_dropdown -> gtk::Box {},
+
+                    gtk::Box {
+                        set_orientation: gtk::Orientation::Horizontal,
+                        gtk::Label {
+                            set_label: "File Type:",
+                        },
+                        #[local_ref]
+                        file_types_dropdown -> gtk::Box {},
+                    },
+
                     gtk::Button {
-                        set_label: "Add File Set",
+                        set_label: "Create File Set",
                         connect_clicked => FileSetSelectorMsg::OpenFileSetForm,
                     },
 
@@ -303,6 +311,7 @@ impl Component for FileSetSelector {
             }
             FileSetSelectorMsg::DeleteClicked => {
                 if let Some(selected_file_set) = &self.selected_file_set {
+                    tracing::info!("Deleting file set with id: {}", selected_file_set.id);
                     let file_set_deletion_service = self.file_set_deletion_service.clone();
                     let file_set_id = selected_file_set.id;
 
@@ -451,13 +460,14 @@ impl FileSetSelector {
         } else if !successful_deletions.is_empty() {
             // TODO: list which files were deleted?
             // TODO: show total amount of files in file set?
-            show_info_dialog(format!("File set deleted successfully.",), root);
+            show_info_dialog("File set deleted successfully.".to_string(), root);
             self.remove_from_list(id);
         } else {
             show_info_dialog(
                 "File set was deleted but no files included in file set were deleted.\nFiles may be linked to other file sets.".to_string(),
                 root,
             );
+            self.remove_from_list(id);
         }
     }
 }

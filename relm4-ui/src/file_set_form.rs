@@ -213,11 +213,20 @@ impl Component for FileSetFormModel {
                 set_spacing: 5,
                 set_margin_all: 5,
 
-                #[local_ref]
-                file_types_dropdown -> gtk::Box,
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    set_spacing: 5,
+
+                    gtk::Label {
+                        set_label: "File Type:",
+                    },
+
+                    #[local_ref]
+                    file_types_dropdown -> gtk::Box,
+                },
 
                 gtk::Button {
-                    set_label: "Open file selector",
+                    set_label: "Open File Picker",
                     connect_clicked => FileSetFormMsg::OpenFileSelector,
                     #[watch]
                     set_sensitive: model.selected_file_type.is_some(),
@@ -294,29 +303,46 @@ impl Component for FileSetFormModel {
                     files_list_box -> gtk::ListBox {}
                 },
 
-                gtk::Entry {
-                    set_placeholder_text: Some("File Set File Name"),
-                    #[watch]
-                    set_text: &model.file_set_file_name,
-                    connect_activate[sender] => move |entry| {
-                        let buffer = entry.buffer();
-                        sender.input(
-                            FileSetFormMsg::FileSetFileNameChanged(buffer.text().into()),
-                        );
-                    }
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    set_spacing: 5,
+
+                    gtk::Label {
+                        set_label: "File Set File Name:",
+                    },
+
+                    gtk::Entry {
+                        set_placeholder_text: Some("File Set File Name"),
+                        #[watch]
+                        set_text: &model.file_set_file_name,
+                        connect_activate[sender] => move |entry| {
+                            let buffer = entry.buffer();
+                            sender.input(
+                                FileSetFormMsg::FileSetFileNameChanged(buffer.text().into()),
+                            );
+                        }
+                    },
                 },
 
 
-                gtk::Entry {
-                    set_placeholder_text: Some("File Set Description"),
-                    #[watch]
-                    set_text: &model.file_set_name,
-                    connect_activate[sender] => move |entry| {
-                        let buffer = entry.buffer();
-                        sender.input(
-                            FileSetFormMsg::FileSetNameChanged(buffer.text().into()),
-                        );
-                    }
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    set_spacing: 5,
+
+                    gtk::Label {
+                        set_label: "File Set Display Name:",
+                    },
+                    gtk::Entry {
+                        set_placeholder_text: Some("File Set Display Name"),
+                        #[watch]
+                        set_text: &model.file_set_name,
+                        connect_activate[sender] => move |entry| {
+                            let buffer = entry.buffer();
+                            sender.input(
+                                FileSetFormMsg::FileSetNameChanged(buffer.text().into()),
+                            );
+                        }
+                    },
                 },
 
                 gtk::Entry {
