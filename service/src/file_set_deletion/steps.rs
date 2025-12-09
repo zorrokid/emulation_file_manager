@@ -87,18 +87,7 @@ impl PipelineStep<DeletionContext> for FetchFileInfosStep {
                     .into_iter()
                     .map(|fi| {
                         tracing::info!("Found file info with id {} for deletion", fi.id);
-                        (
-                            fi.sha1_checksum.clone(),
-                            FileDeletionResult {
-                                file_info: fi,
-                                file_path: None,
-                                file_deletion_success: false,
-                                error_messages: vec![],
-                                is_deletable: false,
-                                was_deleted_from_db: false,
-                                cloud_sync_marked: false,
-                            },
-                        )
+                        (fi.sha1_checksum.clone(), FileDeletionResult::new(fi))
                     })
                     .collect();
 
@@ -596,27 +585,11 @@ mod tests {
             deletion_results: HashMap::from([
                 (
                     file_info_1.sha1_checksum.clone(),
-                    FileDeletionResult {
-                        file_info: file_info_1.clone(),
-                        file_path: None,
-                        file_deletion_success: false,
-                        error_messages: vec![],
-                        is_deletable: false,
-                        was_deleted_from_db: false,
-                        cloud_sync_marked: false,
-                    },
+                    FileDeletionResult::new(file_info_1.clone()),
                 ),
                 (
                     file_info_2.sha1_checksum.clone(),
-                    FileDeletionResult {
-                        file_info: file_info_2.clone(),
-                        file_path: None,
-                        file_deletion_success: false,
-                        error_messages: vec![],
-                        is_deletable: false,
-                        was_deleted_from_db: false,
-                        cloud_sync_marked: false,
-                    },
+                    FileDeletionResult::new(file_info_2.clone()),
                 ),
             ]),
         };
@@ -698,6 +671,9 @@ mod tests {
             .await
             .unwrap();
 
+        let mut file_deletion_result = FileDeletionResult::new(file_info.clone());
+        file_deletion_result.is_deletable = true;
+
         let mut context = DeletionContext {
             file_set_id,
             repository_manager: repo_manager.clone(),
@@ -705,15 +681,7 @@ mod tests {
             fs_ops: fs_ops.clone(),
             deletion_results: HashMap::from([(
                 file_info.sha1_checksum.clone(),
-                FileDeletionResult {
-                    file_info: file_info.clone(),
-                    file_path: None,
-                    file_deletion_success: false,
-                    error_messages: vec![],
-                    is_deletable: true,
-                    was_deleted_from_db: false,
-                    cloud_sync_marked: false,
-                },
+                file_deletion_result,
             )]),
         };
         let step = MarkForCloudDeletionStep;
@@ -750,6 +718,8 @@ mod tests {
         // let file_path = settings.get_file_path(&file_info.file_type, &file_info.archive_file_name);
         // fs_ops.add_file(file_path.to_string_lossy().as_ref());
 
+        let mut file_deletion_result = FileDeletionResult::new(file_info.clone());
+        file_deletion_result.is_deletable = true;
         let mut context = DeletionContext {
             file_set_id,
             repository_manager: repo_manager.clone(),
@@ -757,15 +727,7 @@ mod tests {
             fs_ops: fs_ops.clone(),
             deletion_results: HashMap::from([(
                 file_info.sha1_checksum.clone(),
-                FileDeletionResult {
-                    file_info: file_info.clone(),
-                    file_path: None,
-                    file_deletion_success: false,
-                    error_messages: vec![],
-                    is_deletable: true,
-                    was_deleted_from_db: false,
-                    cloud_sync_marked: false,
-                },
+                file_deletion_result,
             )]),
         };
         let step = DeleteLocalFilesStep;
@@ -810,6 +772,8 @@ mod tests {
         let file_path = settings.get_file_path(&file_info.file_type, &file_info.archive_file_name);
         fs_ops.add_file(file_path.to_string_lossy().as_ref());
 
+        let mut file_deletion_result = FileDeletionResult::new(file_info.clone());
+        file_deletion_result.is_deletable = true;
         let mut context = DeletionContext {
             file_set_id,
             repository_manager: repo_manager.clone(),
@@ -817,15 +781,7 @@ mod tests {
             fs_ops: fs_ops.clone(),
             deletion_results: HashMap::from([(
                 file_info.sha1_checksum.clone(),
-                FileDeletionResult {
-                    file_info: file_info.clone(),
-                    file_path: None,
-                    file_deletion_success: false,
-                    error_messages: vec![],
-                    is_deletable: true,
-                    was_deleted_from_db: false,
-                    cloud_sync_marked: false,
-                },
+                file_deletion_result,
             )]),
         };
         let step = DeleteLocalFilesStep;
@@ -862,6 +818,9 @@ mod tests {
         let file_path = settings.get_file_path(&file_info.file_type, &file_info.archive_file_name);
         fs_ops.add_file(file_path.to_string_lossy().as_ref());
 
+        let mut file_deletion_result = FileDeletionResult::new(file_info.clone());
+        file_deletion_result.is_deletable = true;
+
         let mut context = DeletionContext {
             file_set_id,
             repository_manager: repo_manager.clone(),
@@ -869,15 +828,7 @@ mod tests {
             fs_ops: fs_ops.clone(),
             deletion_results: HashMap::from([(
                 file_info.sha1_checksum.clone(),
-                FileDeletionResult {
-                    file_info: file_info.clone(),
-                    file_path: None,
-                    file_deletion_success: false,
-                    error_messages: vec![],
-                    is_deletable: true,
-                    was_deleted_from_db: false,
-                    cloud_sync_marked: false,
-                },
+                file_deletion_result,
             )]),
         };
         let step = DeleteLocalFilesStep;
@@ -927,6 +878,9 @@ mod tests {
 
         let file_info = file_infos.first().unwrap();
 
+        let mut file_deletion_result = FileDeletionResult::new(file_info.clone());
+        file_deletion_result.is_deletable = true;
+        file_deletion_result.file_deletion_success = true;
         let mut context = DeletionContext {
             file_set_id,
             repository_manager: repo_manager.clone(),
@@ -934,15 +888,7 @@ mod tests {
             fs_ops: fs_ops.clone(),
             deletion_results: HashMap::from([(
                 file_info.sha1_checksum.clone(),
-                FileDeletionResult {
-                    file_info: file_info.clone(),
-                    file_path: None,
-                    file_deletion_success: true,
-                    error_messages: vec![],
-                    is_deletable: true,
-                    was_deleted_from_db: false,
-                    cloud_sync_marked: false,
-                },
+                file_deletion_result,
             )]),
         };
 
@@ -987,6 +933,8 @@ mod tests {
 
         let file_info = file_infos.first().unwrap();
 
+        let mut file_deletion_result = FileDeletionResult::new(file_info.clone());
+        file_deletion_result.is_deletable = true;
         let mut context = DeletionContext {
             file_set_id,
             repository_manager: repo_manager.clone(),
@@ -994,15 +942,7 @@ mod tests {
             fs_ops: fs_ops.clone(),
             deletion_results: HashMap::from([(
                 file_info.sha1_checksum.clone(),
-                FileDeletionResult {
-                    file_info: file_info.clone(),
-                    file_path: None,
-                    file_deletion_success: false,
-                    error_messages: vec![],
-                    is_deletable: true,
-                    was_deleted_from_db: false,
-                    cloud_sync_marked: false,
-                },
+                file_deletion_result,
             )]),
         };
 
