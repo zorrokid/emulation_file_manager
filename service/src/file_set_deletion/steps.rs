@@ -1054,6 +1054,77 @@ mod tests {
         assert!(res.is_err());
     }
 
+    #[async_std::test]
+    async fn test_delete_file_infos_step_with_file_deletion_failed() {
+        let TestSetup {
+            settings,
+            repo_manager,
+            fs_ops,
+            system_id,
+            file1,
+        } = prepare_test().await;
+
+        let file_set_id = repo_manager
+            .get_file_set_repository()
+            .add_file_set(
+                "test_set",
+                "file name",
+                &FileType::Rom,
+                "",
+                &[file1],
+                &[system_id],
+            )
+            .await
+            .unwrap();
+
+        let file_infos = repo_manager
+            .get_file_info_repository()
+            .get_file_infos_by_file_set(file_set_id)
+            .await
+            .unwrap();
+
+        let file_info = file_infos.first().unwrap();
+
+        let mut context = DeletionContext {
+            file_set_id,
+            repository_manager: repo_manager.clone(),
+            settings: settings.clone(),
+            fs_ops: fs_ops.clone(),
+            deletion_results: HashMap::from([(
+                file_info.sha1_checksum.clone(),
+                FileDeletionResult {
+                    file_info: file_info.clone(),
+                    file_path: None,
+                    file_deletion_success: false,
+                    error_messages: vec![],
+                    is_deletable: true,
+                    was_deleted_from_db: false,
+                    cloud_sync_marked: false,
+                },
+            )]),
+        };
+
+        let delete_file_set_step = DeleteFileSetStep;
+        delete_file_set_step.execute(&mut context).await;
+
+        let step = DeleteFileInfosStep;
+        let action = step.execute(&mut context).await;
+        assert_eq!(action, StepAction::Continue);
+
+        let deletion_result = context
+            .deletion_results
+            .get(&file_info.sha1_checksum)
+            .unwrap();
+
+        assert!(!deletion_result.was_deleted_from_db);
+
+        let res = repo_manager
+            .get_file_info_repository()
+            .get_file_info(file_info.id)
+            .await;
+        assert!(res.is_ok());
+    }
+
     struct TestSetup {
         settings: Arc<Settings>,
         repo_manager: Arc<RepositoryManager>,
