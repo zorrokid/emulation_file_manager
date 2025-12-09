@@ -232,6 +232,9 @@ impl PipelineStep<DeletionContext> for DeleteFileSetStep {
 }
 
 /// Step 5: Mark files for cloud deletion (if synced)
+/// We don't delete from cloud here, just mark them for deletion in the sync logs.
+/// The reason is the cloud deletion needs an internet connection but file set deletion should work
+/// offline.
 pub struct MarkForCloudDeletionStep;
 
 #[async_trait::async_trait]
@@ -407,7 +410,7 @@ impl PipelineStep<DeletionContext> for DeleteFileInfosStep {
                 );
                 continue;
             }
-            
+
             tracing::info!(
                 "Processing file_info with id {} for deletion",
                 dr.file_info.id
