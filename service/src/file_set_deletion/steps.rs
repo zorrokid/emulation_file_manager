@@ -527,18 +527,7 @@ mod tests {
             file1,
         } = prepare_test().await;
 
-        let file_set_id = repo_manager
-            .get_file_set_repository()
-            .add_file_set(
-                "test_set",
-                "file name",
-                &FileType::Rom,
-                "",
-                &[file1],
-                &[system_id],
-            )
-            .await
-            .unwrap();
+        let file_set_id = prepare_file_set_with_files(&repo_manager, system_id, &[file1]).await;
 
         let mut context = DeletionContext {
             file_set_id,
@@ -576,32 +565,12 @@ mod tests {
 
         let file2_clone = file2.clone();
 
-        let file_set_id = repo_manager
-            .get_file_set_repository()
-            .add_file_set(
-                "test_set",
-                "file name",
-                &FileType::Rom,
-                "",
-                &[file1, file2],
-                &[system_id],
-            )
-            .await
-            .unwrap();
+        let file_set_id =
+            prepare_file_set_with_files(&repo_manager, system_id, &[file1, file2]).await;
 
         // add another file set that uses file2
-        let _another_file_set_id = repo_manager
-            .get_file_set_repository()
-            .add_file_set(
-                "another_set",
-                "file name",
-                &FileType::Rom,
-                "",
-                &[file2_clone],
-                &[system_id],
-            )
-            .await
-            .unwrap();
+        let _another_file_set_id =
+            prepare_file_set_with_files(&repo_manager, system_id, &[file2_clone]).await;
 
         let file_infos = repo_manager
             .get_file_info_repository()
@@ -686,18 +655,7 @@ mod tests {
             file1,
         } = prepare_test().await;
 
-        let file_set_id = repo_manager
-            .get_file_set_repository()
-            .add_file_set(
-                "test_set",
-                "file name",
-                &FileType::Rom,
-                "",
-                &[file1],
-                &[system_id],
-            )
-            .await
-            .unwrap();
+        let file_set_id = prepare_file_set_with_files(&repo_manager, system_id, &[file1]).await;
 
         let file_infos = repo_manager
             .get_file_info_repository()
@@ -779,18 +737,7 @@ mod tests {
             file1,
         } = prepare_test().await;
 
-        let file_set_id = repo_manager
-            .get_file_set_repository()
-            .add_file_set(
-                "test_set",
-                "file name",
-                &FileType::Rom,
-                "",
-                &[file1],
-                &[system_id],
-            )
-            .await
-            .unwrap();
+        let file_set_id = prepare_file_set_with_files(&repo_manager, system_id, &[file1]).await;
 
         let file_infos = repo_manager
             .get_file_info_repository()
@@ -852,18 +799,7 @@ mod tests {
 
         fs_ops.fail_delete_with("Permission denied");
 
-        let file_set_id = repo_manager
-            .get_file_set_repository()
-            .add_file_set(
-                "test_set",
-                "file name",
-                &FileType::Rom,
-                "",
-                &[file1],
-                &[system_id],
-            )
-            .await
-            .unwrap();
+        let file_set_id = prepare_file_set_with_files(&repo_manager, system_id, &[file1]).await;
 
         let file_infos = repo_manager
             .get_file_info_repository()
@@ -916,19 +852,7 @@ mod tests {
             file1,
         } = prepare_test().await;
 
-        let file_set_id = repo_manager
-            .get_file_set_repository()
-            .add_file_set(
-                "test_set",
-                "file name",
-                &FileType::Rom,
-                "",
-                &[file1],
-                &[system_id],
-            )
-            .await
-            .unwrap();
-
+        let file_set_id = prepare_file_set_with_files(&repo_manager, system_id, &[file1]).await;
         let file_infos = repo_manager
             .get_file_info_repository()
             .get_file_infos_by_file_set(file_set_id)
@@ -993,18 +917,7 @@ mod tests {
             file1,
         } = prepare_test().await;
 
-        let file_set_id = repo_manager
-            .get_file_set_repository()
-            .add_file_set(
-                "test_set",
-                "file name",
-                &FileType::Rom,
-                "",
-                &[file1],
-                &[system_id],
-            )
-            .await
-            .unwrap();
+        let file_set_id = prepare_file_set_with_files(&repo_manager, system_id, &[file1]).await;
 
         let file_infos = repo_manager
             .get_file_info_repository()
@@ -1064,18 +977,7 @@ mod tests {
             file1,
         } = prepare_test().await;
 
-        let file_set_id = repo_manager
-            .get_file_set_repository()
-            .add_file_set(
-                "test_set",
-                "file name",
-                &FileType::Rom,
-                "",
-                &[file1],
-                &[system_id],
-            )
-            .await
-            .unwrap();
+        let file_set_id = prepare_file_set_with_files(&repo_manager, system_id, &[file1]).await;
 
         let file_infos = repo_manager
             .get_file_info_repository()
