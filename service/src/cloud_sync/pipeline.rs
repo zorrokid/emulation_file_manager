@@ -2,8 +2,8 @@ use crate::{
     cloud_sync::{
         context::SyncContext,
         steps::{
-            DeleteMarkedFilesStep, GetSyncFileCountsStep, PrepareFilesForUploadStep,
-            UploadPendingFilesStep,
+            CleanupOrphanedSyncLogsStep, DeleteMarkedFilesStep, GetSyncFileCountsStep,
+            PrepareFilesForUploadStep, UploadPendingFilesStep,
         },
     },
     pipeline::{cloud_connection::ConnectToCloudStep, generic_pipeline::Pipeline},
@@ -23,6 +23,7 @@ impl Pipeline<SyncContext> {
             Box::new(ConnectToCloudStep::<SyncContext>::new()),
             Box::new(UploadPendingFilesStep),
             Box::new(DeleteMarkedFilesStep),
+            Box::new(CleanupOrphanedSyncLogsStep),
         ])
     }
 }

@@ -155,6 +155,17 @@ impl FileSyncLogRepository {
         .await?;
         Ok(result.last_insert_rowid())
     }
+
+    /// Clean up sync log entries for file_info records that no longer exist
+    pub async fn cleanup_orphaned_logs(&self) -> Result<u64, sqlx::Error> {
+        let result = sqlx::query!(
+            "DELETE FROM file_sync_log 
+             WHERE file_info_id NOT IN (SELECT id FROM file_info)"
+        )
+        .execute(&*self.pool)
+        .await?;
+        Ok(result.rows_affected())
+    }
 }
 
 #[cfg(test)]

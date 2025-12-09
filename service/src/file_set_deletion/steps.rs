@@ -398,6 +398,16 @@ impl PipelineStep<DeletionContext> for DeleteFileInfosStep {
             context.file_set_id
         );
         for dr in context.deletion_results.values_mut() {
+            if !dr.is_deletable || !dr.file_deletion_success {
+                tracing::info!(
+                    "Skipping file_info with id {} (is_deletable: {}, file_deletion_success: {})",
+                    dr.file_info.id,
+                    dr.is_deletable,
+                    dr.file_deletion_success
+                );
+                continue;
+            }
+            
             tracing::info!(
                 "Processing file_info with id {} for deletion",
                 dr.file_info.id
