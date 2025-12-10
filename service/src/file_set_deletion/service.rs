@@ -47,6 +47,7 @@ impl FileSetDeletionService {
         &self,
         file_set_id: i64,
     ) -> Result<Vec<FileDeletionResult>, Error> {
+        tracing::info!("Starting deletion for file set ID {}", file_set_id);
         let mut context = DeletionContext {
             file_set_id,
             repository_manager: self.repository_manager.clone(),
@@ -58,23 +59,7 @@ impl FileSetDeletionService {
         let pipeline = Pipeline::<DeletionContext>::new();
         pipeline.execute(&mut context).await?;
 
-        let successful_deletions = context
-            .deletion_results
-            .values()
-            .filter(|r| r.file_deletion_success && r.was_deleted_from_db)
-            .count();
-        let failed_deletions = context
-            .deletion_results
-            .values()
-            .filter(|r| !r.file_deletion_success || !r.was_deleted_from_db)
-            .count();
-
-        tracing::info!(
-            "Deletion complete: {} successful, {} failed",
-            successful_deletions,
-            failed_deletions
-        );
-
+        tracing::info!("Completed deletion for file set ID {}", file_set_id);
         Ok(context.deletion_results.values().cloned().collect())
     }
 }
