@@ -10,3 +10,17 @@ pub struct FileDeletionResult {
     pub was_deleted_from_db: bool,
     pub cloud_sync_marked: bool,
 }
+
+impl FileDeletionResult {
+    pub fn new(file_info: FileInfo) -> Self {
+        Self {
+            file_info,
+            file_path: None,
+            file_deletion_success: false,
+            error_messages: vec![],
+            is_deletable: false,
+            was_deleted_from_db: false,
+            cloud_sync_marked: false,
+        }
+    }
+}
