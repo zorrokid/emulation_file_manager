@@ -140,8 +140,8 @@ mod tests {
         let file_deletion_result = result.unwrap();
         assert_eq!(file_deletion_result.len(), 1);
         let deletion_info = &file_deletion_result[0];
-        assert!(deletion_info.file_deletion_success);
-        assert!(deletion_info.was_deleted_from_db);
-        assert!(deletion_info.cloud_sync_marked);
+        assert!(deletion_info.file_deletion_success.unwrap());
+        assert!(deletion_info.db_deletion_success.unwrap());
+        assert!(deletion_info.cloud_delete_marked_successfully.unwrap());
     }
 }

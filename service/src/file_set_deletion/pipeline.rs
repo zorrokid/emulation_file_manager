@@ -16,8 +16,8 @@ impl Pipeline<DeletionContext> {
             Box::new(FetchFileInfosStep),
             Box::new(FilterDeletableFilesStep),
             Box::new(DeleteFileSetStep),
-            Box::new(MarkForCloudDeletionStep),
             Box::new(DeleteLocalFilesStep),
+            Box::new(MarkForCloudDeletionStep),
             Box::new(DeleteFileInfosStep),
         ])
     }

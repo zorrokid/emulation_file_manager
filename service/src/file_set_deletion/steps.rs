@@ -220,7 +220,73 @@ impl PipelineStep<DeletionContext> for DeleteFileSetStep {
     }
 }
 
-/// Step 5: Mark files for cloud deletion (if synced)
+/// Step 5: Delete local files and track results
+pub struct DeleteLocalFilesStep;
+
+#[async_trait::async_trait]
+impl PipelineStep<DeletionContext> for DeleteLocalFilesStep {
+    fn name(&self) -> &'static str {
+        "delete_local_files"
+    }
+
+    fn should_execute(&self, context: &DeletionContext) -> bool {
+        context.deletion_results.values().any(|v| v.is_deletable)
+    }
+
+    async fn execute(&self, context: &mut DeletionContext) -> StepAction {
+        tracing::info!(
+            "Deleting local files for file set with id {}",
+            context.file_set_id
+        );
+
+        for deletion_result in context
+            .deletion_results
+            .values_mut()
+            .filter(|f| f.is_deletable)
+        {
+            tracing::info!(
+                "Processing file info with id {} for local deletion",
+                deletion_result.file_info.id
+            );
+            let file_path = context.settings.get_file_path(
+                &deletion_result.file_info.file_type,
+                &deletion_result.file_info.archive_file_name,
+            );
+
+            let path_str = file_path.to_string_lossy().to_string();
+            tracing::info!(
+                "Resolved file path for file info id {}: {}",
+                deletion_result.file_info.id,
+                path_str
+            );
+            deletion_result.file_path = Some(path_str.clone());
+
+            tracing::info!("Attempting to delete local file: {}", path_str);
+
+            if context.fs_ops.exists(&file_path) {
+                tracing::info!("File exists, proceeding with deletion: {}", path_str);
+                match context.fs_ops.remove_file(&file_path) {
+                    Ok(_) => {
+                        tracing::info!("Deleted local file: {}", path_str);
+                        deletion_result.file_deletion_success = Some(true);
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to delete local file {}: {}", path_str, e);
+                        deletion_result.file_deletion_success = Some(false);
+                        deletion_result.error_messages.push(e.to_string());
+                    }
+                }
+            } else {
+                tracing::info!("File {} does not exist, skipping deletion.", path_str);
+                deletion_result.file_deletion_success = Some(true); // consider non-existing file as "deleted" (user might have done it manually)
+            }
+        }
+
+        StepAction::Continue
+    }
+}
+
+/// Step 6: Mark files for cloud deletion (if synced)
 /// We don't delete from cloud here, just mark them for deletion in the sync logs.
 /// The reason is the cloud deletion needs an internet connection but file set deletion should work
 /// offline.
@@ -233,8 +299,16 @@ impl PipelineStep<DeletionContext> for MarkForCloudDeletionStep {
     }
 
     fn should_execute(&self, context: &DeletionContext) -> bool {
-        // Only execute if there are files to process
-        context.deletion_results.values().any(|r| r.is_deletable)
+        // No need to check if cloud sync is enabled here
+        // - if sync has been enabled at some point and files were synced, we need to mark them for
+        // deletion anyway, next time the sync is enabled and triggered, the files marked
+        // for deletion will be processed.
+        //
+        // // Only execute if there are deletable files to process
+        context
+            .deletion_results
+            .values()
+            .any(|r| r.is_deletable && r.file_deletion_success.is_some_and(|s| s))
     }
 
     async fn execute(&self, context: &mut DeletionContext) -> StepAction {
@@ -242,7 +316,11 @@ impl PipelineStep<DeletionContext> for MarkForCloudDeletionStep {
             "Marking files for cloud deletion for file set with id {}",
             context.file_set_id
         );
-        for deletion_result in context.deletion_results.values_mut() {
+        for deletion_result in context
+            .deletion_results
+            .values_mut()
+            .filter(|f| f.is_deletable && f.file_deletion_success.is_some_and(|s| s))
+        {
             let sync_logs_res = context
                 .repository_manager
                 .get_file_sync_log_repository()
@@ -286,6 +364,7 @@ impl PipelineStep<DeletionContext> for MarkForCloudDeletionStep {
                             .await;
                         if let Err(e) = update_res {
                             // TODO: should this abort?
+                            deletion_result.cloud_delete_marked_successfully = Some(false);
                             tracing::error!(
                                 "Failed to mark file info with id {} for cloud deletion: {}",
                                 deletion_result.file_info.id,
@@ -296,71 +375,9 @@ impl PipelineStep<DeletionContext> for MarkForCloudDeletionStep {
                                 deletion_result.file_info.id, e
                             )));
                         }
-                        deletion_result.cloud_sync_marked = true;
+                        deletion_result.cloud_delete_marked_successfully = Some(true);
                     }
                 }
-            }
-        }
-
-        StepAction::Continue
-    }
-}
-
-/// Step 6: Delete local files and track results
-pub struct DeleteLocalFilesStep;
-
-#[async_trait::async_trait]
-impl PipelineStep<DeletionContext> for DeleteLocalFilesStep {
-    fn name(&self) -> &'static str {
-        "delete_local_files"
-    }
-
-    fn should_execute(&self, context: &DeletionContext) -> bool {
-        context.deletion_results.values().any(|v| v.is_deletable)
-    }
-
-    async fn execute(&self, context: &mut DeletionContext) -> StepAction {
-        tracing::info!(
-            "Deleting local files for file set with id {}",
-            context.file_set_id
-        );
-
-        for deletion_result in context.deletion_results.values_mut() {
-            tracing::info!(
-                "Processing file info with id {} for local deletion",
-                deletion_result.file_info.id
-            );
-            let file_path = context.settings.get_file_path(
-                &deletion_result.file_info.file_type,
-                &deletion_result.file_info.archive_file_name,
-            );
-
-            let path_str = file_path.to_string_lossy().to_string();
-            tracing::info!(
-                "Resolved file path for file info id {}: {}",
-                deletion_result.file_info.id,
-                path_str
-            );
-            deletion_result.file_path = Some(path_str.clone());
-
-            tracing::info!("Attempting to delete local file: {}", path_str);
-
-            if context.fs_ops.exists(&file_path) {
-                tracing::info!("File exists, proceeding with deletion: {}", path_str);
-                match context.fs_ops.remove_file(&file_path) {
-                    Ok(_) => {
-                        tracing::info!("Deleted local file: {}", path_str);
-                        deletion_result.file_deletion_success = true;
-                    }
-                    Err(e) => {
-                        tracing::error!("Failed to delete local file {}: {}", path_str, e);
-                        deletion_result.file_deletion_success = false;
-                        deletion_result.error_messages.push(e.to_string());
-                    }
-                }
-            } else {
-                tracing::info!("File {} does not exist, skipping deletion.", path_str);
-                deletion_result.file_deletion_success = true; // consider non-existing file as "deleted" (user might have done it manually)
             }
         }
 
@@ -381,7 +398,7 @@ impl PipelineStep<DeletionContext> for DeleteFileInfosStep {
         context
             .deletion_results
             .values()
-            .any(|v| v.is_deletable && v.file_deletion_success)
+            .any(|v| v.is_deletable && v.file_deletion_success.is_some_and(|s| s))
     }
 
     async fn execute(&self, context: &mut DeletionContext) -> StepAction {
@@ -389,17 +406,11 @@ impl PipelineStep<DeletionContext> for DeleteFileInfosStep {
             "Deleting file_info entries for file set {}",
             context.file_set_id
         );
-        for dr in context.deletion_results.values_mut() {
-            if !dr.is_deletable || !dr.file_deletion_success {
-                tracing::info!(
-                    "Skipping file_info with id {} (is_deletable: {}, file_deletion_success: {})",
-                    dr.file_info.id,
-                    dr.is_deletable,
-                    dr.file_deletion_success
-                );
-                continue;
-            }
-
+        for dr in context
+            .deletion_results
+            .values_mut()
+            .filter(|f| f.is_deletable && f.file_deletion_success.is_some_and(|s| s))
+        {
             tracing::info!(
                 "Processing file_info with id {} for deletion",
                 dr.file_info.id
@@ -412,7 +423,7 @@ impl PipelineStep<DeletionContext> for DeleteFileInfosStep {
             match delete_res {
                 Ok(_) => {
                     tracing::info!("Deleted file_info with id {} from DB", dr.file_info.id);
-                    dr.was_deleted_from_db = true;
+                    dr.db_deletion_success = Some(true);
                 }
                 Err(e) => {
                     tracing::error!(
@@ -420,7 +431,7 @@ impl PipelineStep<DeletionContext> for DeleteFileInfosStep {
                         dr.file_info.id,
                         e
                     );
-                    dr.was_deleted_from_db = false;
+                    dr.db_deletion_success = Some(false);
                     dr.error_messages.push(format!(
                         "Failed to delete file_info with id {} from DB: {}",
                         dr.file_info.id, e
@@ -673,6 +684,7 @@ mod tests {
 
         let mut file_deletion_result = FileDeletionResult::new(file_info.clone());
         file_deletion_result.is_deletable = true;
+        file_deletion_result.file_deletion_success = Some(true);
 
         let mut context = DeletionContext {
             file_set_id,
@@ -693,6 +705,77 @@ mod tests {
             .unwrap();
         assert_eq!(logs.len(), 4);
         assert_eq!(logs[0].status, FileSyncStatus::DeletionPending);
+    }
+
+    #[async_std::test]
+    async fn test_mark_for_cloud_deletion_step_with_failed_local_deletion() {
+        let TestSetup {
+            settings,
+            repo_manager,
+            fs_ops,
+            system_id,
+            file1,
+        } = prepare_test().await;
+
+        let file_set_id = prepare_file_set_with_files(&repo_manager, system_id, &[file1]).await;
+
+        let file_infos = repo_manager
+            .get_file_info_repository()
+            .get_file_infos_by_file_set(file_set_id)
+            .await
+            .unwrap();
+
+        let file_info = file_infos.first().unwrap();
+
+        let file_info_id = file_info.id;
+
+        repo_manager
+            .get_file_sync_log_repository()
+            .add_log_entry(
+                file_info_id,
+                FileSyncStatus::UploadPending,
+                "",
+                "cloud/key/file.zst",
+            )
+            .await
+            .unwrap();
+        repo_manager
+            .get_file_sync_log_repository()
+            .add_log_entry(
+                file_info_id,
+                FileSyncStatus::UploadInProgress,
+                "",
+                "cloud/key/file.zst",
+            )
+            .await
+            .unwrap();
+        repo_manager
+            .get_file_sync_log_repository()
+            .add_log_entry(
+                file_info_id,
+                FileSyncStatus::UploadCompleted,
+                "",
+                "cloud/key/file.zst",
+            )
+            .await
+            .unwrap();
+
+        let mut file_deletion_result = FileDeletionResult::new(file_info.clone());
+        file_deletion_result.is_deletable = true;
+        file_deletion_result.file_deletion_success = Some(false);
+
+        let context = DeletionContext {
+            file_set_id,
+            repository_manager: repo_manager.clone(),
+            settings: settings.clone(),
+            fs_ops: fs_ops.clone(),
+            deletion_results: HashMap::from([(
+                file_info.sha1_checksum.clone(),
+                file_deletion_result,
+            )]),
+        };
+        let step = MarkForCloudDeletionStep;
+        assert!(!step.should_execute(&context));
     }
 
     #[async_std::test]
@@ -744,6 +827,7 @@ mod tests {
                 .get(&file_info.sha1_checksum)
                 .unwrap()
                 .file_deletion_success
+                .unwrap()
         );
 
         assert_eq!(res, StepAction::Continue);
@@ -793,6 +877,7 @@ mod tests {
                 .get(&file_info.sha1_checksum)
                 .unwrap()
                 .file_deletion_success
+                .unwrap()
         );
 
         assert_eq!(res, StepAction::Continue);
@@ -853,6 +938,7 @@ mod tests {
                 .get(&file_info.sha1_checksum)
                 .unwrap()
                 .file_deletion_success
+                .unwrap()
         );
 
         assert_eq!(res, StepAction::Continue);
@@ -880,7 +966,7 @@ mod tests {
 
         let mut file_deletion_result = FileDeletionResult::new(file_info.clone());
         file_deletion_result.is_deletable = true;
-        file_deletion_result.file_deletion_success = true;
+        file_deletion_result.file_deletion_success = Some(true);
         let mut context = DeletionContext {
             file_set_id,
             repository_manager: repo_manager.clone(),
@@ -904,7 +990,7 @@ mod tests {
             .get(&file_info.sha1_checksum)
             .unwrap();
 
-        assert!(deletion_result.was_deleted_from_db);
+        assert!(deletion_result.db_deletion_success.unwrap());
 
         let res = repo_manager
             .get_file_info_repository()
@@ -935,7 +1021,8 @@ mod tests {
 
         let mut file_deletion_result = FileDeletionResult::new(file_info.clone());
         file_deletion_result.is_deletable = true;
-        let mut context = DeletionContext {
+        file_deletion_result.file_deletion_success = Some(false);
+        let context = DeletionContext {
             file_set_id,
             repository_manager: repo_manager.clone(),
             settings: settings.clone(),
@@ -946,25 +1033,8 @@ mod tests {
             )]),
         };
 
-        let delete_file_set_step = DeleteFileSetStep;
-        delete_file_set_step.execute(&mut context).await;
-
-        let step = DeleteFileInfosStep;
-        let action = step.execute(&mut context).await;
-        assert_eq!(action, StepAction::Continue);
-
-        let deletion_result = context
-            .deletion_results
-            .get(&file_info.sha1_checksum)
-            .unwrap();
-
-        assert!(!deletion_result.was_deleted_from_db);
-
-        let res = repo_manager
-            .get_file_info_repository()
-            .get_file_info(file_info.id)
-            .await;
-        assert!(res.is_ok());
+        let delete_file_infos_step = DeleteFileInfosStep;
+        assert!(!delete_file_infos_step.should_execute(&context));
     }
 
     struct TestSetup {

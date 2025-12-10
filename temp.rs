@@ -429,18 +429,12 @@ impl FileSetSelector {
     ) {
         let successful_deletions = deletion_results
             .iter()
-            .filter(|r| {
-                r.file_deletion_success.is_some_and(|s| s)
-                    && r.db_deletion_success.is_some_and(|s| s)
-            })
+            .filter(|r| r.file_deletion_success && r.db_deletion_success)
             .collect::<Vec<_>>();
 
         let failed_deletions = deletion_results
             .iter()
-            .filter(|r| {
-                r.file_deletion_success.is_some_and(|s| !s)
-                    || r.db_deletion_success.is_some_and(|s| !s)
-            })
+            .filter(|r| !r.file_deletion_success || !r.db_deletion_success)
             .collect::<Vec<_>>();
 
         tracing::info!(
