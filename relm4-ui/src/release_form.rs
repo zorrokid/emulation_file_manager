@@ -22,7 +22,7 @@ use service::{
 };
 
 use crate::{
-    file_set_editor::FileSetEditor,
+    file_set_editor::{FileSetEditor, FileSetEditorInit, FileSetEditorMsg, FileSetEditorOutputMsg},
     file_set_selector::{
         FileSetSelector, FileSetSelectorInit, FileSetSelectorMsg, FileSetSelectorOutputMsg,
     },
@@ -147,7 +147,7 @@ pub struct ReleaseFormInit {
 impl ReleaseFormModel {
     fn ensure_file_set_editor(&mut self, root: &gtk::Window, sender: &ComponentSender<Self>) {
         if self.file_set_editor.get().is_none() {
-            let file_set_editor_init = crate::file_set_editor::FileSetEditorInit {
+            let file_set_editor_init = FileSetEditorInit {
                 view_model_service: Arc::clone(&self.view_model_service),
                 repository_manager: Arc::clone(&self.repository_manager),
             };
@@ -155,7 +155,7 @@ impl ReleaseFormModel {
                 .transient_for(root)
                 .launch(file_set_editor_init)
                 .forward(sender.input_sender(), |msg| match msg {
-                    crate::file_set_editor::FileSetEditorOutputMsg::FileSetUpdated(file_set) => {
+                    FileSetEditorOutputMsg::FileSetUpdated(file_set) => {
                         ReleaseFormMsg::FileSetUpdated(file_set)
                     }
                 });
@@ -621,7 +621,7 @@ impl Component for ReleaseFormModel {
                     self.file_set_editor
                         .get()
                         .expect("File set editor should be initialized")
-                        .emit(crate::file_set_editor::FileSetEditorMsg::Show { file_set_id });
+                        .emit(FileSetEditorMsg::Show { file_set_id });
                 }
             }
             ReleaseFormMsg::FileSetUpdated(file_set) => {

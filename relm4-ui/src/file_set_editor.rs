@@ -5,14 +5,13 @@ use database::{database_error::DatabaseError, repository_manager::RepositoryMana
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
-        self,
-        glib::{SignalHandlerId, clone, object::ObjectExt},
+        self, glib,
         prelude::{
-            BoxExt, ButtonExt, EditableExt, EntryBufferExtManual, EntryExt, GtkWindowExt, WidgetExt,
+            BoxExt, ButtonExt, EditableExt, EntryBufferExtManual, EntryExt, GtkWindowExt,
+            OrientableExt, WidgetExt,
         },
     },
 };
-
 use service::{
     view_model_service::ViewModelService,
     view_models::{FileSetListModel, FileSetViewModel},
@@ -31,27 +30,18 @@ pub struct FileSetEditor {
     file_set_file_name: String,
     source: String,
     dropdown: Controller<FileTypeDropDown>,
-    file_name_changed_signal_id: SignalHandlerId,
-    file_set_name_connect_changed_signal_id: SignalHandlerId,
-    source_changed_signal_id: SignalHandlerId,
-}
-
-#[derive(Debug)]
-pub struct AppWidgets {
-    entry_file_name: gtk::Entry,
-    entry_set_name: gtk::Entry,
-    entry_source: gtk::Entry,
 }
 
 #[derive(Debug)]
 pub enum FileSetEditorMsg {
     Show { file_set_id: i64 },
-    Hide,
     SaveChanges,
     FileSetFileNameChanged(String),
     FileSetNameChanged(String),
     SourceChanged(String),
     FileTypeChanged(FileType),
+    Hide,
+    UpdateFormFields,
 }
 
 #[derive(Debug)]
@@ -70,124 +60,113 @@ pub struct FileSetEditorInit {
     pub repository_manager: Arc<database::repository_manager::RepositoryManager>,
 }
 
+#[relm4::component(pub)]
 impl Component for FileSetEditor {
     type Input = FileSetEditorMsg;
     type Output = FileSetEditorOutputMsg;
     type Init = FileSetEditorInit;
     type CommandOutput = CommandMsg;
-    type Root = gtk::Window;
-    type Widgets = AppWidgets;
 
-    fn init_root() -> Self::Root {
-        gtk::Window::builder()
-            .title("Edit File Set")
-            .default_width(400)
-            .default_height(300)
-            .build()
-    }
+    view! {
+        #[root]
+        gtk::Window {
+            set_default_width: 800,
+            set_default_height: 600,
+            set_margin_all: 10,
+            set_title: Some("Edit File Set names"),
 
-    fn init(
-        init: Self::Init,
-        root: Self::Root,
-        sender: ComponentSender<Self>,
-    ) -> ComponentParts<Self> {
-        let vbox = gtk::Box::new(gtk::Orientation::Vertical, 5);
-        vbox.set_margin_all(5);
-
-        let drop_down = FileTypeDropDown::builder().launch(None).forward(
-            sender.input_sender(),
-            |msg| match msg {
-                DropDownOutputMsg::ItemSelected(FileTypeSelectedMsg::FileTypeSelected(
-                    file_type,
-                )) => FileSetEditorMsg::FileTypeChanged(file_type),
-                _ => unreachable!(),
+            connect_close_request[sender] => move |_| {
+                sender.input(FileSetEditorMsg::Hide);
+                glib::Propagation::Proceed
             },
-        );
 
-        let file_types_box = drop_down.widget();
+            gtk::Box {
+                set_orientation: gtk::Orientation::Vertical,
+                set_spacing: 5,
+                set_margin_all: 5,
 
-        let entry_file_name = gtk::Entry::new();
-        entry_file_name.set_placeholder_text(Some("File Set File Name"));
-        let file_name_changed_signal_id = entry_file_name.connect_changed(clone!(
-            #[strong]
-            sender,
-            #[strong]
-            entry_file_name,
-            move |_| {
-                let buffer = entry_file_name.buffer();
-                sender.input(FileSetEditorMsg::FileSetFileNameChanged(
-                    buffer.text().into(),
-                ));
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    set_spacing: 5,
+
+                    gtk::Label {
+                        set_label: "File Type:",
+                    },
+
+                    #[local_ref]
+                    file_types_dropdown -> gtk::Box,
+                },
+
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    set_spacing: 5,
+
+                    gtk::Label {
+                        set_label: "File Set File Name:",
+                    },
+
+                    #[name = "file_name_entry"]
+                    gtk::Entry {
+                        set_placeholder_text: Some("File Set File Name"),
+                        set_text: &model.file_set_file_name,
+                        connect_activate[sender] => move |entry| {
+                            let buffer = entry.buffer();
+                            sender.input(
+                                FileSetEditorMsg::FileSetFileNameChanged(buffer.text().into()),
+                            );
+                        }
+                    },
+                },
+
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    set_spacing: 5,
+
+                    gtk::Label {
+                        set_label: "File Set Display Name:",
+                    },
+                    #[name = "name_entry"]
+                    gtk::Entry {
+                        set_placeholder_text: Some("File Set Display Name"),
+                        set_text: &model.file_set_name,
+                        connect_activate[sender] => move |entry| {
+                            let buffer = entry.buffer();
+                            sender.input(
+                                FileSetEditorMsg::FileSetNameChanged(buffer.text().into()),
+                            );
+                        }
+                    },
+                },
+
+                #[name = "source_entry"]
+                gtk::Entry {
+                    set_placeholder_text: Some("Source (e.g. website URL)"),
+                    set_text: &model.source,
+                    connect_activate[sender] => move |entry| {
+                        let buffer = entry.buffer();
+                        sender.input(
+                            FileSetEditorMsg::SourceChanged(buffer.text().into()),
+                        );
+                    }
+                },
+
+               gtk::Button {
+                    set_label: "Update File Set",
+                    connect_clicked => FileSetEditorMsg::SaveChanges,
+                    #[watch]
+                    set_sensitive: model.file_set_id.is_some() && model.selected_file_type.is_some(),
+               },
             }
-        ));
-
-        let entry_set_name = gtk::Entry::new();
-        entry_set_name.set_placeholder_text(Some("File Set Description"));
-        let file_set_name_connect_changed_signal_id = entry_set_name.connect_changed(clone!(
-            #[strong]
-            sender,
-            #[strong]
-            entry_set_name,
-            move |_| {
-                let buffer = entry_set_name.buffer();
-                sender.input(FileSetEditorMsg::FileSetNameChanged(buffer.text().into()));
-            }
-        ));
-
-        let entry_source = gtk::Entry::new();
-        entry_source.set_placeholder_text(Some("Source (e.g. website URL)"));
-        let source_changed_signal_id = entry_source.connect_changed(clone!(
-            #[strong]
-            sender,
-            #[strong]
-            entry_source,
-            move |_| {
-                let buffer = entry_source.buffer();
-                sender.input(FileSetEditorMsg::SourceChanged(buffer.text().into()));
-            }
-        ));
-
-        let button_save = gtk::Button::with_label("Save Changes");
-        button_save.connect_clicked(clone!(
-            #[strong]
-            sender,
-            move |_| {
-                sender.input(FileSetEditorMsg::SaveChanges);
-            }
-        ));
-
-        vbox.append(file_types_box);
-        vbox.append(&entry_file_name);
-        vbox.append(&entry_set_name);
-        vbox.append(&entry_source);
-        vbox.append(&button_save);
-
-        root.set_child(Some(&vbox));
-
-        let model = FileSetEditor {
-            file_set_id: None,
-            selected_file_type: None,
-            file_set_name: String::new(),
-            file_set_file_name: String::new(),
-            source: String::new(),
-            repository_manager: init.repository_manager,
-            view_model_service: init.view_model_service,
-            dropdown: drop_down,
-            file_name_changed_signal_id,
-            file_set_name_connect_changed_signal_id,
-            source_changed_signal_id,
-        };
-
-        let widgets = AppWidgets {
-            entry_file_name,
-            entry_set_name,
-            entry_source,
-        };
-
-        ComponentParts { model, widgets }
+        }
     }
 
-    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
+    fn update_with_view(
+        &mut self,
+        widgets: &mut Self::Widgets,
+        msg: Self::Input,
+        sender: ComponentSender<Self>,
+        root: &Self::Root,
+    ) {
         match msg {
             FileSetEditorMsg::Show { file_set_id } => {
                 root.show();
@@ -204,27 +183,31 @@ impl Component for FileSetEditor {
                 root.hide();
             }
             FileSetEditorMsg::FileSetFileNameChanged(file_name) => {
-                if file_name != self.file_set_file_name {
-                    self.file_set_file_name = file_name;
-                }
+                self.file_set_file_name = file_name;
             }
             FileSetEditorMsg::FileSetNameChanged(name) => {
-                if name != self.file_set_name {
-                    self.file_set_name = name;
-                }
+                tracing::info!("File set name changed to: {}", name);
+                self.file_set_name = name;
             }
             FileSetEditorMsg::SourceChanged(source) => {
-                if source != self.source {
-                    self.source = source;
-                }
+                self.source = source;
             }
             FileSetEditorMsg::FileTypeChanged(file_type) => {
                 self.selected_file_type = Some(file_type);
             }
             FileSetEditorMsg::SaveChanges => {
+                tracing::info!("Saving changes to file set");
                 if let (Some(file_set_id), Some(file_type)) =
                     (self.file_set_id, self.selected_file_type)
                 {
+                    tracing::info!(
+                        "Updating file set ID {} with name: {}, file name: {}, source: {}, file type: {:?}",
+                        file_set_id,
+                        self.file_set_name,
+                        self.file_set_file_name,
+                        self.source,
+                        file_type
+                    );
                     let repository_manager = Arc::clone(&self.repository_manager);
                     let file_set_name = self.file_set_name.clone();
                     let file_set_file_name = self.file_set_file_name.clone();
@@ -249,11 +232,16 @@ impl Component for FileSetEditor {
                             .await;
                         CommandMsg::FileSetUpdated(res, file_set_list_model)
                     });
-                } else {
-                    eprintln!("File type or file set ID not selected");
                 }
             }
+            FileSetEditorMsg::UpdateFormFields => {
+                widgets.file_name_entry.set_text(&self.file_set_file_name);
+                widgets.name_entry.set_text(&self.file_set_name);
+                widgets.source_entry.set_text(&self.source);
+            }
         }
+        // This is essential with update_with_view:
+        self.update_view(widgets, sender);
     }
 
     fn update_cmd(
@@ -270,11 +258,13 @@ impl Component for FileSetEditor {
                 self.selected_file_type = Some(file_set.file_type);
                 self.dropdown
                     .emit(DropDownMsg::SetSelected(file_set.file_type));
+                sender.input(FileSetEditorMsg::UpdateFormFields);
             }
             CommandMsg::FileSetFetched(Err(e)) => {
                 show_error_dialog(format!("Error fetching file set: {:?}", e), root);
             }
             CommandMsg::FileSetUpdated(Ok(_), file_set_list_model) => {
+                tracing::info!("File set updated successfully");
                 sender
                     .output(FileSetEditorOutputMsg::FileSetUpdated(file_set_list_model))
                     .unwrap_or_else(|e| {
@@ -289,33 +279,43 @@ impl Component for FileSetEditor {
         }
     }
 
-    fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
-        if widgets.entry_file_name.text() != self.file_set_file_name {
-            widgets
-                .entry_file_name
-                .block_signal(&self.file_name_changed_signal_id);
-            widgets.entry_file_name.set_text(&self.file_set_file_name);
-            widgets
-                .entry_file_name
-                .unblock_signal(&self.file_name_changed_signal_id);
-        }
-        if widgets.entry_set_name.text() != self.file_set_name {
-            widgets
-                .entry_set_name
-                .block_signal(&self.file_set_name_connect_changed_signal_id);
-            widgets.entry_set_name.set_text(&self.file_set_name);
-            widgets
-                .entry_set_name
-                .unblock_signal(&self.file_set_name_connect_changed_signal_id);
-        }
-        if widgets.entry_source.text() != self.source {
-            widgets
-                .entry_source
-                .block_signal(&self.source_changed_signal_id);
-            widgets.entry_source.set_text(&self.source);
-            widgets
-                .entry_source
-                .unblock_signal(&self.source_changed_signal_id);
-        }
+    fn init(
+        init: Self::Init,
+        root: Self::Root,
+        sender: ComponentSender<Self>,
+    ) -> ComponentParts<Self> {
+        let dropdown = Self::create_dropdown(None, &sender);
+
+        let model = FileSetEditor {
+            file_set_id: None,
+            selected_file_type: None,
+            file_set_name: String::new(),
+            file_set_file_name: String::new(),
+            source: String::new(),
+            repository_manager: init.repository_manager,
+            view_model_service: init.view_model_service,
+            dropdown,
+        };
+        let file_types_dropdown = model.dropdown.widget();
+
+        let widgets = view_output!();
+
+        ComponentParts { model, widgets }
+    }
+}
+
+impl FileSetEditor {
+    fn create_dropdown(
+        initial_selection: Option<FileType>,
+        sender: &ComponentSender<Self>,
+    ) -> Controller<FileTypeDropDown> {
+        FileTypeDropDown::builder()
+            .launch(initial_selection)
+            .forward(sender.input_sender(), |msg| match msg {
+                DropDownOutputMsg::ItemSelected(FileTypeSelectedMsg::FileTypeSelected(
+                    file_type,
+                )) => FileSetEditorMsg::FileTypeChanged(file_type),
+                _ => unreachable!(),
+            })
     }
 }

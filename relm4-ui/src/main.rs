@@ -138,7 +138,7 @@ impl Component for AppModel {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         style::load_app_css();
-        
+
         let flags = Arc::new(Mutex::new(Flags {
             app_closing: false,
             cloud_sync_in_progress: false,
