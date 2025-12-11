@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use core_types::FileSyncStatus;
-use sqlx::{prelude::FromRow, sqlite::SqliteRow, Pool, Row, Sqlite};
+use sqlx::{Pool, Row, Sqlite, prelude::FromRow, sqlite::SqliteRow};
 
 use crate::models::{FileSyncLog, FileSyncLogWithFileInfo};
 
@@ -155,6 +155,17 @@ impl FileSyncLogRepository {
         .await?;
         Ok(result.last_insert_rowid())
     }
+
+    /// Clean up sync log entries for file_info records that no longer exist
+    pub async fn cleanup_orphaned_logs(&self) -> Result<u64, sqlx::Error> {
+        let result = sqlx::query!(
+            "DELETE FROM file_sync_log 
+             WHERE file_info_id NOT IN (SELECT id FROM file_info)"
+        )
+        .execute(&*self.pool)
+        .await?;
+        Ok(result.rows_affected())
+    }
 }
 
 #[cfg(test)]
@@ -281,6 +292,26 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(count, 1);
+    }
+
+    #[async_std::test]
+    async fn test_cleanup_orphaned_logs() {
+        let pool = Arc::new(setup_test_db().await);
+        let repository = FileSyncLogRepository::new(Arc::clone(&pool));
+        let file_info_id = insert_file_info(&pool).await;
+        repository
+            .add_log_entry(file_info_id, FileSyncStatus::UploadCompleted, "", "")
+            .await
+            .unwrap();
+
+        // delete the file_info record to create an orphaned log
+        sqlx::query!("DELETE FROM file_info WHERE id = ?", file_info_id)
+            .execute(&*pool)
+            .await
+            .unwrap();
+
+        let deleted_count = repository.cleanup_orphaned_logs().await.unwrap();
+        assert_eq!(deleted_count, 1);
     }
 
     async fn insert_file_info(pool: &Pool<Sqlite>) -> i64 {

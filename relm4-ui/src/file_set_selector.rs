@@ -429,12 +429,18 @@ impl FileSetSelector {
     ) {
         let successful_deletions = deletion_results
             .iter()
-            .filter(|r| r.file_deletion_success && r.was_deleted_from_db)
+            .filter(|r| {
+                r.file_deletion_success.is_some_and(|s| s)
+                    && r.db_deletion_success.is_some_and(|s| s)
+            })
             .collect::<Vec<_>>();
 
         let failed_deletions = deletion_results
             .iter()
-            .filter(|r| !r.file_deletion_success || !r.was_deleted_from_db)
+            .filter(|r| {
+                r.file_deletion_success.is_some_and(|s| !s)
+                    || r.db_deletion_success.is_some_and(|s| !s)
+            })
             .collect::<Vec<_>>();
 
         tracing::info!(
@@ -450,7 +456,9 @@ impl FileSetSelector {
             for result in &failed_deletions {
                 message.push_str(&format!(
                     "- File ID {}: (Deleted from FS: {}, Deleted from DB: {})\n",
-                    result.file_info.id, result.file_deletion_success, result.was_deleted_from_db
+                    result.file_info.id,
+                    result.file_deletion_success.is_some_and(|s| s),
+                    result.db_deletion_success.is_some_and(|s| s)
                 ));
                 for error in result.error_messages.iter() {
                     message.push_str(&format!("  Error: {}\n", error));
