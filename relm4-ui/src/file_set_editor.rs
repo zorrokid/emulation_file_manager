@@ -19,6 +19,8 @@ use service::{
 };
 use ui_components::{DropDownMsg, DropDownOutputMsg, FileTypeDropDown, FileTypeSelectedMsg};
 
+use crate::utils::dialog_utils::show_error_dialog;
+
 #[derive(Debug)]
 pub struct FileSetEditor {
     repository_manager: Arc<RepositoryManager>,
@@ -50,7 +52,6 @@ pub enum FileSetEditorMsg {
     FileSetNameChanged(String),
     SourceChanged(String),
     FileTypeChanged(FileType),
-    FileSetUpdated(Result<i64, DatabaseError>),
 }
 
 #[derive(Debug)]
@@ -252,7 +253,6 @@ impl Component for FileSetEditor {
                     eprintln!("File type or file set ID not selected");
                 }
             }
-            _ => (),
         }
     }
 
@@ -272,21 +272,19 @@ impl Component for FileSetEditor {
                     .emit(DropDownMsg::SetSelected(file_set.file_type));
             }
             CommandMsg::FileSetFetched(Err(e)) => {
-                eprintln!("Error fetching file set: {:?}", e);
+                show_error_dialog(format!("Error fetching file set: {:?}", e), root);
             }
-            CommandMsg::FileSetUpdated(Ok(file_set_id), file_set_list_model) => {
-                let res =
-                    sender.output(FileSetEditorOutputMsg::FileSetUpdated(file_set_list_model));
-                if res.is_ok() {
-                    println!("File set updated with ID: {}", file_set_id);
+            CommandMsg::FileSetUpdated(Ok(_), file_set_list_model) => {
+                sender
+                    .output(FileSetEditorOutputMsg::FileSetUpdated(file_set_list_model))
+                    .unwrap_or_else(|e| {
+                        eprintln!("Error sending FileSetUpdated output message: {:?}", e);
+                    });
 
-                    root.close();
-                } else {
-                    eprintln!("Failed to send FileSetUpdated message");
-                }
+                root.close();
             }
             CommandMsg::FileSetUpdated(Err(e), _) => {
-                eprintln!("Error updating file set: {:?}", e);
+                show_error_dialog(format!("Error updating file set: {:?}", e), root);
             }
         }
     }
