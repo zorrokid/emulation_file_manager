@@ -22,6 +22,7 @@ use crate::{
     system_selector::{
         SystemSelectInit, SystemSelectModel, SystemSelectMsg, SystemSelectOutputMsg,
     },
+    utils::dialog_utils::show_error_dialog,
 };
 
 #[derive(Debug)]
@@ -29,7 +30,6 @@ pub enum EmulatorFormMsg {
     ExecutableChanged(String),
     NameChanged(String),
     ExtractFilesToggled,
-    UpdateExtractFiles(bool),
     SystemSelected(SystemListModel),
     OpenSystemSelector,
     Submit,
@@ -60,7 +60,6 @@ pub struct EmulatorFormInit {
 
 #[derive(Debug)]
 pub struct EmulatorFormModel {
-    pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
     pub name: String,
     pub executable: String,
@@ -184,14 +183,12 @@ impl Component for EmulatorFormModel {
     ) {
         match msg {
             EmulatorFormMsg::ExecutableChanged(executable) => {
-                println!("Executable changed: {}", executable);
                 self.executable = executable;
             }
             EmulatorFormMsg::ExtractFilesToggled => {
                 self.extract_files = !self.extract_files;
             }
             EmulatorFormMsg::SystemSelected(system) => {
-                println!("System selected: {}", system.name);
                 self.selected_system = Some(system);
             }
             EmulatorFormMsg::OpenSystemSelector => {
@@ -208,10 +205,7 @@ impl Component for EmulatorFormModel {
             }
             EmulatorFormMsg::Submit => {
                 if let Some(system) = &self.selected_system {
-                    println!(
-                        "Submitting Emulator: {}, Extract Files: {}, System: {:?}",
-                        self.executable, self.extract_files, self.selected_system
-                    );
+                    tracing::info!("Submitting emulator {}", self.executable);
                     let repository_manager = Arc::clone(&self.repository_manager);
                     let executable = self.executable.clone();
                     let name = self.name.clone();
@@ -256,21 +250,18 @@ impl Component for EmulatorFormModel {
             EmulatorFormMsg::NameChanged(name) => {
                 self.name = name;
             }
-            EmulatorFormMsg::UpdateExtractFiles(value) => {
-                self.extract_files = value;
-            }
             EmulatorFormMsg::Show { editable_emulator } => {
                 if let Some(editable_emulator) = editable_emulator {
-                    println!("Editing emulator: {:?}", editable_emulator);
+                    tracing::info!(
+                        "Showing emulator form for editing, with emulator id: {}",
+                        editable_emulator.id
+                    );
                     self.editable_emulator_id = Some(editable_emulator.id);
 
                     self.name = editable_emulator.name.clone();
                     self.executable = editable_emulator.executable.clone();
                     self.extract_files = editable_emulator.extract_files;
                     self.selected_system = Some(editable_emulator.system.clone());
-
-                    println!("Selected system: {:?}", self.selected_system);
-                    println!("Executable: {}", self.executable);
 
                     widgets.name_entry.set_text(&self.name);
                     widgets.executable_entry.set_text(&self.executable);
@@ -297,7 +288,6 @@ impl Component for EmulatorFormModel {
             EmulatorFormMsg::ArgumentsChanged(arguments) => {
                 self.arguments = arguments;
             }
-            _ => {}
         }
         // This is essential with update_with_view:
         self.update_view(widgets, sender);
@@ -313,47 +303,32 @@ impl Component for EmulatorFormModel {
             EmulatorFormCommandMsg::EmulatorSubmitted(Ok(id)) => {
                 println!("Emulator submitted with id {}", id);
                 let name = self.name.clone();
-                let res = sender.output(EmulatorFormOutputMsg::EmulatorAdded(EmulatorListModel {
-                    id,
-                    name,
-                }));
+                sender
+                    .output(EmulatorFormOutputMsg::EmulatorAdded(EmulatorListModel {
+                        id,
+                        name,
+                    }))
+                    .unwrap_or_else(|e| eprintln!("Failed to send output message: {:?}", e));
 
-                match res {
-                    Ok(()) => {
-                        root.close();
-                    }
-                    Err(error) => {
-                        eprintln!("Sending message failed: {:?}", error);
-                    }
-                }
+                root.close();
             }
             EmulatorFormCommandMsg::EmulatorUpdated(Ok(id)) => {
                 println!("Emulator updated with id {}", id);
                 let name = self.name.clone();
-                let res =
-                    sender.output(EmulatorFormOutputMsg::EmulatorUpdated(EmulatorListModel {
+                sender
+                    .output(EmulatorFormOutputMsg::EmulatorUpdated(EmulatorListModel {
                         id,
                         name,
-                    }));
+                    }))
+                    .unwrap_or_else(|e| eprintln!("Failed to send output message: {:?}", e));
 
-                match res {
-                    Ok(()) => {
-                        root.close();
-                    }
-                    Err(error) => {
-                        eprintln!("Sending message failed: {:?}", error);
-                    }
-                }
+                root.close();
             }
             EmulatorFormCommandMsg::EmulatorSubmitted(Err(error)) => {
-                eprintln!("Error in submitting emulator: {}", error);
-                // TODO: show error to user
+                show_error_dialog(format!("Error submitting emulator: {}", error), root);
             }
             EmulatorFormCommandMsg::EmulatorUpdated(Err(error)) => {
-                eprintln!("Error in updating emulator: {}", error);
-            }
-            _ => {
-                // Handle command outputs if necessary
+                show_error_dialog(format!("Error updating emulator: {}", error), root);
             }
         }
     }
@@ -384,11 +359,9 @@ impl Component for EmulatorFormModel {
                     ArgumentListOutputMsg::ArgumentsChanged(arguments) => {
                         EmulatorFormMsg::ArgumentsChanged(arguments)
                     }
-                    _ => unreachable!(),
                 });
 
         let model = Self {
-            view_model_service: init.view_model_service,
             repository_manager: init.repository_manager,
             executable: String::new(),
             extract_files: false,

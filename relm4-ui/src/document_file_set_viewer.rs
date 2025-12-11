@@ -35,8 +35,8 @@ pub enum DocumentViewerMsg {
     FetchViewers,
 
     // list selection messages
-    FileSelected { index: u32 },
-    ViewerSelected { index: u32 },
+    FileSelected,
+    ViewerSelected,
 
     OpenViewerForm,
     AddViewer(DocumentViewerListModel),
@@ -86,7 +86,6 @@ pub struct DocumentViewer {
     viewers: Vec<DocumentViewerViewModel>,
 
     // needed for running the viewer:
-    settings: Arc<Settings>,
     file_set: Option<FileSetViewModel>,
     selected_file: Option<FileSetFileInfo>,
     selected_viewer: Option<DocumentViewerViewModel>,
@@ -193,7 +192,6 @@ impl Component for DocumentViewer {
             external_executable_runner_service,
 
             viewers: Vec::new(),
-            settings: init.settings,
             file_set: None,
 
             file_list_view_wrapper,
@@ -214,9 +212,8 @@ impl Component for DocumentViewer {
             .connect_selected_notify(clone!(
                 #[strong]
                 sender,
-                move |selection| {
-                    let selected = selection.selected();
-                    sender.input(DocumentViewerMsg::FileSelected { index: selected });
+                move |_| {
+                    sender.input(DocumentViewerMsg::FileSelected);
                 }
             ));
 
@@ -226,14 +223,13 @@ impl Component for DocumentViewer {
             .connect_selected_notify(clone!(
                 #[strong]
                 sender,
-                move |selection| {
-                    let selected = selection.selected();
-                    sender.input(DocumentViewerMsg::ViewerSelected { index: selected });
+                move |_| {
+                    sender.input(DocumentViewerMsg::ViewerSelected);
                 }
             ));
 
         let widgets = view_output!();
-        sender.input(DocumentViewerMsg::FileSelected { index: 0 });
+        sender.input(DocumentViewerMsg::FileSelected);
         sender.input(DocumentViewerMsg::FetchViewers);
         ComponentParts { model, widgets }
     }
@@ -269,21 +265,11 @@ impl Component for DocumentViewer {
                     });
                 }
             }
-            DocumentViewerMsg::FileSelected { index } => {
-                let file_list_item = self.file_list_view_wrapper.get(index);
-                if let (Some(item), Some(file_set)) = (file_list_item, &self.file_set) {
-                    let id = item.borrow().id;
-                    let file_info = file_set.files.iter().find(|f| f.file_info_id == id);
-                    self.selected_file = file_info.cloned();
-                }
+            DocumentViewerMsg::FileSelected => {
+                self.selected_file = self.get_selected_file_info();
             }
-            DocumentViewerMsg::ViewerSelected { index } => {
-                let viewer_list_item = self.viewer_list_view_wrapper.get(index);
-                if let Some(item) = viewer_list_item {
-                    let id = item.borrow().id;
-                    let viewer = self.viewers.iter().find(|e| e.id == id);
-                    self.selected_viewer = viewer.cloned();
-                }
+            DocumentViewerMsg::ViewerSelected => {
+                self.selected_viewer = self.get_selected_viewer();
             }
             DocumentViewerMsg::OpenViewerForm => {
                 self.viewer_form.emit(DocumentViewerFormMsg::Show {
@@ -346,8 +332,7 @@ impl Component for DocumentViewer {
                     });
                 }
             }
-
-            _ => {}
+            DocumentViewerMsg::Ignore => {}
         }
     }
 
@@ -402,6 +387,32 @@ impl Component for DocumentViewer {
                     root,
                 );
             }
+        }
+    }
+}
+
+impl DocumentViewer {
+    fn get_selected_file_info(&self) -> Option<FileSetFileInfo> {
+        let selected_index = self.file_list_view_wrapper.selection_model.selected();
+        let file_list_item = self.file_list_view_wrapper.get_visible(selected_index);
+        if let (Some(item), Some(file_set)) = (file_list_item, &self.file_set) {
+            let id = item.borrow().id;
+            let file_info = file_set.files.iter().find(|f| f.file_info_id == id);
+            file_info.cloned()
+        } else {
+            None
+        }
+    }
+
+    fn get_selected_viewer(&self) -> Option<DocumentViewerViewModel> {
+        let selected_index = self.viewer_list_view_wrapper.selection_model.selected();
+        let viewer_list_item = self.viewer_list_view_wrapper.get_visible(selected_index);
+        if let Some(item) = viewer_list_item {
+            let id = item.borrow().id;
+            let viewer = self.viewers.iter().find(|e| e.id == id);
+            viewer.cloned()
+        } else {
+            None
         }
     }
 }

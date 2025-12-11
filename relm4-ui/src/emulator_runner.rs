@@ -22,7 +22,6 @@ use relm4::{
 use service::{
     error::Error as ServiceError,
     external_executable_runner::service::{ExecutableRunnerModel, ExternalExecutableRunnerService},
-    file_set_download::service::{DownloadResult, DownloadService},
     view_model_service::ViewModelService,
     view_models::{EmulatorListModel, EmulatorViewModel, FileSetViewModel, Settings},
 };
