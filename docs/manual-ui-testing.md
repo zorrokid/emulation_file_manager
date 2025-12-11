@@ -49,6 +49,7 @@ Starting point: a release has been created
 - Ensure that the File Type dropdown has the correct type selected (same as when the file set was created)
     - File set appears in the list
 - Select the File Set in the list
+    - "Delete File Set" button becomes enabled
 - Press "Delete File Set" button
     - TODO: implement this - Confirmation dialog appears
 - Confirm deletion

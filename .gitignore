@@ -2,3 +2,4 @@ target
 
 # Application logs
 logs/
+*.deb

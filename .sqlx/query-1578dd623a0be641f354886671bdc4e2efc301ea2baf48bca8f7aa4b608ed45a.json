@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM file_sync_log \n             WHERE file_info_id NOT IN (SELECT id FROM file_info)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "1578dd623a0be641f354886671bdc4e2efc301ea2baf48bca8f7aa4b608ed45a"
+}

@@ -603,6 +603,46 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
     }
 }
 
+/// Step 6: Clean up sync log entries for deleted file_info records
+pub struct CleanupOrphanedSyncLogsStep;
+
+#[async_trait::async_trait]
+impl PipelineStep<SyncContext> for CleanupOrphanedSyncLogsStep {
+    fn name(&self) -> &'static str {
+        "cleanup_orphaned_sync_logs"
+    }
+
+    async fn execute(&self, context: &mut SyncContext) -> StepAction {
+        tracing::debug!("Cleaning up orphaned sync log entries");
+
+        let cleanup_res = context
+            .repository_manager
+            .get_file_sync_log_repository()
+            .cleanup_orphaned_logs()
+            .await;
+
+        match cleanup_res {
+            Ok(rows_deleted) => {
+                if rows_deleted > 0 {
+                    tracing::info!(
+                        "Cleaned up {} orphaned sync log entries",
+                        rows_deleted
+                    );
+                }
+            }
+            Err(e) => {
+                tracing::error!(
+                    error = %e,
+                    "Failed to cleanup orphaned sync log entries"
+                );
+                // Don't abort - this is a cleanup operation
+            }
+        }
+
+        StepAction::Continue
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::{collections::HashMap, path::PathBuf, sync::Arc};
