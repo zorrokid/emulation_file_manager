@@ -28,7 +28,7 @@ use service::{
 };
 use ui_components::{DropDownMsg, DropDownOutputMsg, FileTypeDropDown, FileTypeSelectedMsg};
 
-use crate::utils::{dialog_utils::show_message_dialog, string_utils::format_bytes};
+use crate::utils::{dialog_utils::show_error_dialog, string_utils::format_bytes};
 
 #[derive(Debug, Clone)]
 struct File {
@@ -67,13 +67,12 @@ impl FactoryComponent for File {
                 set_margin_all: 12,
                 connect_toggled[sender, sha1_checksum = self.sha1_checksun.clone()] => move |checkbox| {
                     sender.input(FileInput::Toggle(checkbox.is_active()));
-                    let res = sender.output(FileOutput::SetFileSelected {
+                    sender.output(FileOutput::SetFileSelected {
                         sha1_checksum,
                         selected: checkbox.is_active(),
+                    }).unwrap_or_else(|e| {
+                        tracing::error!("Error sending output: {:?}", e);
                     });
-                    if let Err(e) = res {
-                        eprintln!("Error sending output: {:?}", e);
-                    }
                 }
             },
 
@@ -427,7 +426,6 @@ impl Component for FileSetFormModel {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         match msg {
             FileSetFormMsg::OpenFileSelector => {
-                println!("Open file selector button clicked");
                 let dialog = FileChooserDialog::builder()
                     .title("Select Files")
                     .action(gtk::FileChooserAction::Open)
@@ -529,7 +527,7 @@ impl Component for FileSetFormModel {
                             if let Err(e) =
                                 ui_sender.send(FileSetFormMsg::ProcessDownloadEvent(event))
                             {
-                                eprintln!(
+                                tracing::error!(
                                     "Error sending download event to UI, stopping handling events: {:?}",
                                     e
                                 );
@@ -651,7 +649,7 @@ impl Component for FileSetFormModel {
                 if let Some(cancel_tx) = self.download_cancel_tx.take() {
                     // Send cancellation signal
                     if let Err(e) = cancel_tx.try_send(()) {
-                        eprintln!("Failed to send cancel signal: {:?}", e);
+                        tracing::error!("Failed to send cancel signal: {:?}", e);
                     }
                 }
             }
@@ -660,7 +658,7 @@ impl Component for FileSetFormModel {
                     self.download_in_progress = true;
                     self.download_total_size = total_size;
                     self.download_bytes = 0;
-                    println!("Download started (size: {:?})", total_size);
+                    tracing::info!("Download started (size: {:?})", total_size);
                 }
                 HttpDownloadEvent::Progress { bytes_downloaded } => {
                     self.download_bytes = bytes_downloaded;
@@ -670,14 +668,14 @@ impl Component for FileSetFormModel {
                     self.download_bytes = 0;
                     self.download_total_size = None;
                     self.download_cancel_tx = None;
-                    println!("Download completed: {:?}", file_path);
+                    tracing::info!("Download completed: {:?}", file_path);
                 }
                 HttpDownloadEvent::Failed { error } => {
                     self.download_in_progress = false;
                     self.download_bytes = 0;
                     self.download_total_size = None;
                     self.download_cancel_tx = None;
-                    eprintln!("Download failed: {}", error);
+                    tracing::error!("Download failed: {}", error);
                 }
             },
         }
@@ -723,30 +721,22 @@ impl Component for FileSetFormModel {
                         can_delete: true,
                     };
 
-                    let res =
-                        sender.output(FileSetFormOutputMsg::FileSetCreated(file_set_list_model));
+                    sender
+                        .output(FileSetFormOutputMsg::FileSetCreated(file_set_list_model))
+                        .unwrap_or_else(|err| {
+                            tracing::error!("Error sending output message: {:?}", err);
+                        });
 
-                    if let Err(e) = res {
-                        eprintln!("Error sending output: {:?}", e);
-                        // TODO: show error to user
-                    } else {
-                        println!("File set created successfully");
-                        root.close();
-                    }
+                    root.close();
                 }
             }
             CommandMsg::FileImportDone(Err(e)) => {
                 self.processing = false;
-                eprintln!("Error importing file set: {:?}", e);
+                show_error_dialog(format!("File set import failed: {:?}", e), root);
             }
             CommandMsg::FileImportPrepared(Err(e)) => {
                 self.processing = false;
-                eprintln!("Error preparing file import: {:?}", e);
-                show_message_dialog(
-                    format!("Preparing file import failed: {:?}", e),
-                    gtk::MessageType::Error,
-                    root,
-                );
+                show_error_dialog(format!("Preparing file import failed: {:?}", e), root);
             }
         }
     }

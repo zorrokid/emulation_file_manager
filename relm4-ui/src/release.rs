@@ -25,7 +25,9 @@ use crate::{
     emulator_runner::{EmulatorRunnerInit, EmulatorRunnerModel, EmulatorRunnerMsg},
     image_fileset_viewer::{ImageFileSetViewerInit, ImageFilesetViewer, ImageFilesetViewerMsg},
     list_item::ListItem,
-    tabbed_image_viewer::{TabbedImageViewer, TabbedImageViewerInit, TabbedImageViewerMsg},
+    tabbed_image_viewer::{
+        TabbedImageViewer, TabbedImageViewerInit, TabbedImageViewerMsg, TabbedImageViewerOutputMsg,
+    },
 };
 
 #[derive(Debug)]
@@ -86,6 +88,7 @@ pub enum ReleaseMsg {
     SoftwareTitleUpdated {
         software_title_list_model: SoftwareTitleListModel,
     },
+    ShowError(String),
 }
 
 #[derive(Debug)]
@@ -96,6 +99,7 @@ pub enum ReleaseCommandMsg {
 #[derive(Debug)]
 pub enum ReleaseOutputMsg {
     SoftwareTitleCreated(SoftwareTitleListModel),
+    ShowError(String),
 }
 
 #[relm4::component(pub)]
@@ -189,7 +193,9 @@ impl Component for ReleaseModel {
         };
         let tabbed_image_viewer = TabbedImageViewer::builder()
             .launch(tabbed_image_viewer_init)
-            .detach();
+            .forward(sender.input_sender(), |msg| match msg {
+                TabbedImageViewerOutputMsg::ShowError(err_msg) => ReleaseMsg::ShowError(err_msg),
+            });
 
         let emulator_runner_init_model = EmulatorRunnerInit {
             view_model_service: Arc::clone(&init_model.view_model_service),
@@ -403,8 +409,18 @@ impl Component for ReleaseModel {
                     eprintln!("Error sending SoftwareTitleCreated output: {:?}", err);
                 }
             }
-
-            _ => (),
+            ReleaseMsg::ShowError(err_msg) => {
+                sender
+                    .output(ReleaseOutputMsg::ShowError(err_msg))
+                    .unwrap_or_else(|res| {
+                        tracing::error!("Error sending ShowError output: {:?}", res);
+                    });
+            }
+            ReleaseMsg::SoftwareTitleUpdated {
+                software_title_list_model: _,
+            } => {
+                // TODO
+            }
         }
     }
 

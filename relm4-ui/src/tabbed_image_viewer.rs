@@ -10,12 +10,13 @@ use service::{
     view_models::{FileSetViewModel, Settings},
 };
 
-use crate::image_viewer::{ImageViewer, ImageViewerInit};
+use crate::image_viewer::{ImageViewer, ImageViewerInit, ImageViewerOutputMsg};
 
 #[derive(Debug)]
 pub enum TabbedImageViewerMsg {
     SetFileSets { file_sets: Vec<FileSetViewModel> },
     Clear,
+    ShowError(String),
 }
 
 #[derive(Debug)]
@@ -33,11 +34,16 @@ pub struct TabbedImageViewerInit {
 }
 
 #[derive(Debug)]
+pub enum TabbedImageViewerOutputMsg {
+    ShowError(String),
+}
+
+#[derive(Debug)]
 pub struct AppWidgets {}
 
 impl Component for TabbedImageViewer {
     type Input = TabbedImageViewerMsg;
-    type Output = ();
+    type Output = TabbedImageViewerOutputMsg;
     type CommandOutput = ();
     type Init = TabbedImageViewerInit;
     type Root = gtk::Notebook;
@@ -65,7 +71,7 @@ impl Component for TabbedImageViewer {
         }
     }
 
-    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>, root: &Self::Root) {
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         match msg {
             TabbedImageViewerMsg::SetFileSets { file_sets } => {
                 self.viewers = Vec::new();
@@ -89,8 +95,13 @@ impl Component for TabbedImageViewer {
                             download_service: Arc::clone(&self.download_service),
                         };
 
-                        let box_scan_image_viewer =
-                            ImageViewer::builder().launch(image_viewer_init).detach();
+                        let box_scan_image_viewer = ImageViewer::builder()
+                            .launch(image_viewer_init)
+                            .forward(sender.input_sender(), |output_msg| match output_msg {
+                                ImageViewerOutputMsg::ShowError(msg) => {
+                                    TabbedImageViewerMsg::ShowError(msg)
+                                }
+                            });
 
                         let box_scans_page = gtk::Box::builder()
                             .orientation(gtk::Orientation::Vertical)
@@ -111,6 +122,13 @@ impl Component for TabbedImageViewer {
                     root.remove_page(Some(*page_number));
                 }
                 self.page_numbers.clear();
+            }
+            TabbedImageViewerMsg::ShowError(error_msg) => {
+                sender
+                    .output(TabbedImageViewerOutputMsg::ShowError(error_msg))
+                    .unwrap_or_else(|e| {
+                        tracing::error!("Failed to send output message: {:?}", e);
+                    });
             }
         }
     }

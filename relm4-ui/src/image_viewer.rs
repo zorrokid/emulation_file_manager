@@ -31,6 +31,11 @@ pub enum ImageViewerCommandMsg {
     HandleDownloadResult(Result<DownloadResult, ServiceError>),
 }
 
+#[derive(Debug)]
+pub enum ImageViewerOutputMsg {
+    ShowError(String),
+}
+
 #[derive(Debug, Clone)]
 pub struct ImageViewerInit {
     pub settings: Arc<Settings>,
@@ -52,7 +57,7 @@ pub struct ImageViewer {
 impl Component for ImageViewer {
     type Init = ImageViewerInit;
     type Input = ImageViewerMsg;
-    type Output = ();
+    type Output = ImageViewerOutputMsg;
     type CommandOutput = ImageViewerCommandMsg;
 
     view! {
@@ -183,7 +188,7 @@ impl Component for ImageViewer {
     fn update_cmd(
         &mut self,
         message: Self::CommandOutput,
-        _sender: ComponentSender<Self>,
+        sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
         match message {
@@ -200,18 +205,23 @@ impl Component for ImageViewer {
                         .iter()
                         .find(|f| f.file_name == selected_image_name)
                     {
-                        println!("Selected file: {:?}", selected_file);
                         let temp_output_dir = &self.settings.temp_output_dir;
                         let image_path = temp_output_dir.join(&selected_file.file_name);
 
                         self.selected_image = image_path;
                     } else {
-                        eprintln!("Selected file not found in the file set.");
+                        tracing::error!("Selected file not found in the file set.");
                     }
                 }
             }
             ImageViewerCommandMsg::HandleDownloadResult(Err(e)) => {
-                eprintln!("Failed to download fileset: {}", e);
+                let message = format!("Failed to download fileset: {}", e);
+                tracing::error!(message);
+                sender
+                    .output(ImageViewerOutputMsg::ShowError(message))
+                    .unwrap_or_else(|err| {
+                        tracing::error!("Failed to send output message: {:?}", err);
+                    });
             }
         }
     }
