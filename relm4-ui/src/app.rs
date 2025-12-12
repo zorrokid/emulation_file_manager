@@ -34,7 +34,7 @@ use crate::{
 };
 
 #[derive(Debug)]
-struct InitResult {
+pub struct InitResult {
     repository_manager: Arc<RepositoryManager>,
     view_model_service: Arc<ViewModelService>,
     settings: Arc<Settings>,
