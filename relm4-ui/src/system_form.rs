@@ -176,15 +176,14 @@ impl Component for SystemFormModel {
                         })
                     })
                     .unwrap_or_else(|res| {
-                        println!("Failed to send output message: {:?}", res);
+                        tracing::error!("Failed to send output message: {:?}", res);
                     });
                 root.close();
             }
             SystemFormCommandMsg::SystemSubmitted(Err(e)) => {
-                show_error_dialog(
-                    format!("An error occurred while submitting the system: {}", e),
-                    root,
-                );
+                let message = format!("Failed to submit system: {}", e);
+                tracing::error!(message);
+                show_error_dialog(message, root);
             }
         }
     }
