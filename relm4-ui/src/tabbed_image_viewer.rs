@@ -82,10 +82,7 @@ impl Component for TabbedImageViewer {
 
                 for file_type in IMAGE_FILE_TYPES {
                     // NOTE: currentely only the first file set of each type is used
-                    if let Some(file_set) = file_sets
-                        .iter()
-                        .find(|fs| fs.file_type == (*file_type).into())
-                    {
+                    if let Some(file_set) = file_sets.iter().find(|fs| fs.file_type == *file_type) {
                         if file_set.files.is_empty() {
                             continue; // Skip empty file sets
                         }
