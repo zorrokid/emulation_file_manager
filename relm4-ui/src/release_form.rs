@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use database::{database_error::Error, repository_manager::RepositoryManager};
 use relm4::{
-    Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
+    Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
         self, glib,
         prelude::{

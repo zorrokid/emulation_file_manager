@@ -3,7 +3,11 @@ use std::sync::Arc;
 use database::{database_error::DatabaseError, repository_manager::RepositoryManager};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
-    gtk::{self, glib::clone, prelude::*},
+    gtk::{
+        self,
+        glib::clone,
+        prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt},
+    },
     typed_view::list::TypedListView,
 };
 use service::{
@@ -20,7 +24,7 @@ use crate::{
 #[derive(Debug)]
 pub enum ReleasesMsg {
     SoftwareTitleSelected { id: i64 },
-    ReleaseSelected { index: u32 },
+    ReleaseSelected,
     StartAddRelease,
     AddRelease(ReleaseListModel),
     FetchReleases,
@@ -41,7 +45,6 @@ pub enum CommandMsg {
 pub struct ReleasesModel {
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
-    settings: Arc<Settings>,
     release_form: Controller<ReleaseFormModel>,
     releases_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     selected_software_title_id: Option<i64>,
@@ -64,6 +67,7 @@ pub enum ReleasesOutputMsg {
     ReleaseSelected {
         id: i64,
     },
+    ShowError(String),
 }
 
 #[relm4::component(pub)]
@@ -124,15 +128,15 @@ impl Component for ReleasesModel {
             .launch(release_form_init_model)
             .forward(sender.input_sender(), |msg| match msg {
                 ReleaseFormOutputMsg::ReleaseCreatedOrUpdated { id } => {
-                    println!("Release created or updated with ID: {}", id);
+                    tracing::info!("Release created or updated with ID: {}", id);
                     ReleasesMsg::ReleaseCreatedOrUpdated { id }
                 }
                 ReleaseFormOutputMsg::SoftwareTitleCreated(software_title_list_model) => {
-                    println!("Software title created: {:?}", software_title_list_model);
+                    tracing::info!("Software title created: {:?}", software_title_list_model);
                     ReleasesMsg::SofwareTitleCreated(software_title_list_model)
                 }
                 ReleaseFormOutputMsg::SoftwareTitleUpdated(software_title_list_model) => {
-                    println!("Software title updated: {:?}", software_title_list_model);
+                    tracing::info!("Software title updated: {:?}", software_title_list_model);
                     ReleasesMsg::SofwareTitleUpdated(software_title_list_model)
                 }
             });
@@ -140,7 +144,6 @@ impl Component for ReleasesModel {
         let model = ReleasesModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
-            settings: init_model.settings,
             release_form,
             releases_list_view_wrapper: TypedListView::new(),
             selected_software_title_id: None,
@@ -150,10 +153,8 @@ impl Component for ReleasesModel {
         selection_model.connect_selected_notify(clone!(
             #[strong]
             sender,
-            move |selection| {
-                sender.input(ReleasesMsg::ReleaseSelected {
-                    index: selection.selected(),
-                });
+            move |_| {
+                sender.input(ReleasesMsg::ReleaseSelected);
             }
         ));
 
@@ -186,23 +187,15 @@ impl Component for ReleasesModel {
                             .await;
                         CommandMsg::FetchedReleases(releases_result)
                     });
-                } else {
-                    eprintln!("No software title selected to fetch releases.");
                 }
             }
-            ReleasesMsg::ReleaseSelected { index } => {
-                println!("Release selected with index: {}", index);
-
-                let selected = self.releases_list_view_wrapper.get(index);
-                if let Some(item) = selected {
-                    println!("Selected item: {:?}", item);
-                    let selected_id = item.borrow().id;
-                    let res = sender.output(ReleasesOutputMsg::ReleaseSelected { id: selected_id });
-                    if let Err(err) = res {
-                        eprintln!("Error sending ReleaseSelected message: {:?}", err);
-                    }
-                } else {
-                    println!("No item found at index: {}", index);
+            ReleasesMsg::ReleaseSelected => {
+                if let Some(selected_id) = self.get_selected_release_id() {
+                    sender
+                        .output(ReleasesOutputMsg::ReleaseSelected { id: selected_id })
+                        .unwrap_or_else(|err| {
+                            tracing::info!("Error sending ReleaseSelected message: {:?}", err);
+                        });
                 }
             }
 
@@ -211,37 +204,38 @@ impl Component for ReleasesModel {
                     .emit(ReleaseFormMsg::Show { release_id: None });
             }
             ReleasesMsg::AddRelease(release_list_model) => {
-                println!("Release added: {:?}", release_list_model);
+                tracing::info!("Release with id {} added", release_list_model.id);
                 self.releases_list_view_wrapper.append(ListItem {
                     id: release_list_model.id,
                     name: release_list_model.name,
                 });
             }
             ReleasesMsg::ReleaseCreatedOrUpdated { id } => {
-                println!("Release created or updated with ID: {}", id);
-                // TODO fetch only the created of rupdated release
+                tracing::info!("Release created or updated with ID: {}", id);
+                // TODO fetch only the created of rupdated release, or maybe the message would
+                // include the required data to update the list
                 sender.input(ReleasesMsg::FetchReleases);
             }
             ReleasesMsg::SofwareTitleCreated(software_title_list_model) => {
-                let res = sender.output(ReleasesOutputMsg::SoftwareTitleCreated {
-                    software_title_list_model,
-                });
-                if let Err(err) = res {
-                    eprintln!("Error sending SoftwareTitleCreated message: {:?}", err);
-                }
+                sender
+                    .output(ReleasesOutputMsg::SoftwareTitleCreated {
+                        software_title_list_model,
+                    })
+                    .unwrap_or_else(|err| {
+                        tracing::error!("Error sending SoftwareTitleCreated message: {:?}", err);
+                    });
             }
             ReleasesMsg::SofwareTitleUpdated(software_title_list_model) => {
-                let res = sender.output(ReleasesOutputMsg::SoftwareTitleUpdated {
-                    software_title_list_model,
-                });
-                if let Err(err) = res {
-                    eprintln!("Error sending SoftwareTitleUpdated message: {:?}", err);
-                }
+                sender
+                    .output(ReleasesOutputMsg::SoftwareTitleUpdated {
+                        software_title_list_model,
+                    })
+                    .unwrap_or_else(|res| {
+                        tracing::error!("Error sending SoftwareTitleUpdated message: {:?}", res);
+                    });
             }
             ReleasesMsg::RemoveRelease => {
-                let selected_index = self.releases_list_view_wrapper.selection_model.selected();
-                if let Some(item) = self.releases_list_view_wrapper.get_visible(selected_index) {
-                    let release_id = item.borrow().id;
+                if let Some(release_id) = self.get_selected_release_id() {
                     let repository_manager = Arc::clone(&self.repository_manager);
                     sender.oneshot_command(async move {
                         let result = repository_manager
@@ -253,9 +247,7 @@ impl Component for ReleasesModel {
                 }
             }
             ReleasesMsg::EditRelease => {
-                let selected_index = self.releases_list_view_wrapper.selection_model.selected();
-                if let Some(item) = self.releases_list_view_wrapper.get_visible(selected_index) {
-                    let release_id = item.borrow().id;
+                if let Some(release_id) = self.get_selected_release_id() {
                     self.release_form.emit(ReleaseFormMsg::Show {
                         release_id: Some(release_id),
                     });
@@ -270,50 +262,66 @@ impl Component for ReleasesModel {
         _: &Self::Root,
     ) {
         match message {
-            CommandMsg::FetchedReleases(releases_result) => {
-                match releases_result {
-                    Ok(releases) => {
-                        tracing::info!("Releases fetched successfully.");
-                        let items: Vec<ListItem> = releases
+            CommandMsg::FetchedReleases(releases_result) => match releases_result {
+                Ok(releases) => {
+                    tracing::info!("Releases fetched successfully.");
+                    let items: Vec<ListItem> = releases
+                        .into_iter()
+                        .map(|release| {
+                            let parts: Vec<String> = vec![
+                                release.name.clone(),
+                                release.system_names.join(", "),
+                                release.media_file_types.join(", "),
+                            ]
                             .into_iter()
-                            .map(|release| {
-                                let parts: Vec<String> = vec![
-                                    release.name.clone(),
-                                    release.system_names.join(", "),
-                                    release.media_file_types.join(", "),
-                                ]
-                                .into_iter()
-                                .filter(|s| !s.is_empty())
-                                .collect();
-                                let name = parts.join(" ");
-
-                                ListItem {
-                                    id: release.id,
-                                    name,
-                                }
-                            })
+                            .filter(|s| !s.is_empty())
                             .collect();
-                        self.releases_list_view_wrapper.clear();
-                        self.releases_list_view_wrapper.extend_from_iter(items);
-                        let index = self.releases_list_view_wrapper.selection_model.selected();
-                        println!("Selected index after fetching releases: {}", index);
-                        sender.input(ReleasesMsg::ReleaseSelected { index });
-                    }
-                    Err(err) => {
-                        eprintln!("Error fetching releases: {:?}", err);
-                        // TODO: show error to user
-                    }
+                            let name = parts.join(" ");
+
+                            ListItem {
+                                id: release.id,
+                                name,
+                            }
+                        })
+                        .collect();
+                    self.releases_list_view_wrapper.clear();
+                    self.releases_list_view_wrapper.extend_from_iter(items);
+                    sender.input(ReleasesMsg::ReleaseSelected);
                 }
-            }
+                Err(err) => {
+                    let message = format!("Error fetching releases: {}", err);
+                    tracing::error!(message);
+                    sender
+                        .output(ReleasesOutputMsg::ShowError(message))
+                        .unwrap_or_else(|e| {
+                            tracing::error!("Error sending ShowError message: {:?}", e);
+                        });
+                }
+            },
             CommandMsg::ReleaseDeleted(result) => match result {
                 Ok(deleted_id) => {
                     println!("Release deleted successfully with ID: {}", deleted_id);
                     sender.input(ReleasesMsg::FetchReleases);
                 }
                 Err(err) => {
-                    eprintln!("Error deleting release: {:?}", err);
+                    let message = format!("Error deleting release: {}", err);
+                    tracing::error!("{}", message);
+                    sender
+                        .output(ReleasesOutputMsg::ShowError(message))
+                        .unwrap_or_else(|e| {
+                            tracing::error!("Error sending ShowError message: {:?}", e);
+                        });
                 }
             },
         }
+    }
+}
+
+impl ReleasesModel {
+    fn get_selected_release_id(&self) -> Option<i64> {
+        let selected_index = self.releases_list_view_wrapper.selection_model.selected();
+        self.releases_list_view_wrapper
+            .get_visible(selected_index)
+            .map_or_else(|| None, |item| Some(item.borrow().id))
     }
 }

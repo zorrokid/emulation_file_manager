@@ -631,6 +631,7 @@ impl AppModel {
                         software_title_list_model,
                     } => AppMsg::SoftwareTitleUpdated(software_title_list_model),
                     ReleasesOutputMsg::ReleaseSelected { id } => AppMsg::ReleaseSelected { id },
+                    ReleasesOutputMsg::ShowError(err_msg) => AppMsg::ShowError(err_msg),
                 });
 
         self.releases_view.append(software_titles_list.widget());
