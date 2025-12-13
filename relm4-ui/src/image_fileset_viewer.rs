@@ -87,6 +87,11 @@ pub enum ImageFileSetViewerCommandMsg {
     HandleDownloadResult(Result<DownloadResult, ServiceError>),
 }
 
+#[derive(Debug)]
+pub enum ImageFileSetViewerOutputMsg {
+    ShowError(String),
+}
+
 pub struct ImageFileSetViewerInit {
     pub download_service: Arc<DownloadService>,
 }
@@ -105,7 +110,7 @@ pub struct ImageFilesetViewer {
 impl Component for ImageFilesetViewer {
     type Init = ImageFileSetViewerInit;
     type Input = ImageFilesetViewerMsg;
-    type Output = ();
+    type Output = ImageFileSetViewerOutputMsg;
     type CommandOutput = ImageFileSetViewerCommandMsg;
 
     view! {
@@ -201,8 +206,6 @@ impl Component for ImageFilesetViewer {
 
                     self.selected_image = path;
                     self.image_dimensions = image_size;
-                } else {
-                    println!("No item found at index {}", index);
                 }
             }
             ImageFilesetViewerMsg::ZoomIn => {}
@@ -230,7 +233,7 @@ impl Component for ImageFilesetViewer {
     fn update_cmd(
         &mut self,
         message: Self::CommandOutput,
-        _sender: ComponentSender<Self>,
+        sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
         match message {
@@ -248,7 +251,15 @@ impl Component for ImageFilesetViewer {
                 self.thumbnails_mapping = thumbnails_mapping;
             }
             ImageFileSetViewerCommandMsg::HandleDownloadResult(Err(e)) => {
-                eprintln!("Failed to download fileset: {}", e);
+                tracing::error!(error = ?e, "Failed to download fileset");
+                sender
+                    .output(ImageFileSetViewerOutputMsg::ShowError(format!(
+                        "Failed to download file set {:?}",
+                        e
+                    )))
+                    .unwrap_or_else(
+                        |err| tracing::error!(error = ?err, "Failed sending output message"),
+                    );
             }
         }
     }

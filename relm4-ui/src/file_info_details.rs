@@ -33,11 +33,16 @@ pub struct FileInfoDetailsInit {
     pub view_model_service: Arc<ViewModelService>,
 }
 
+#[derive(Debug)]
+pub enum FileInfoDetailsOutputMsg {
+    ShowError(String),
+}
+
 #[relm4::component(pub)]
 impl relm4::Component for FileInfoDetails {
     type Init = FileInfoDetailsInit;
     type Input = FileInfoDetailsMsg;
-    type Output = ();
+    type Output = FileInfoDetailsOutputMsg;
     type CommandOutput = FileInfoDetailsCmdMsg;
 
     view! {
@@ -94,7 +99,7 @@ impl relm4::Component for FileInfoDetails {
     fn update_cmd(
         &mut self,
         message: Self::CommandOutput,
-        _sender: ComponentSender<Self>,
+        sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
         match message {
@@ -113,7 +118,21 @@ impl relm4::Component for FileInfoDetails {
                     .extend_from_iter(file_sets_as_list_items);
             }
             FileInfoDetailsCmdMsg::FileInfoLoaded(Err(err)) => {
-                eprintln!("Error loading file info: {}", err);
+                tracing::error!(
+                    error = ?err,
+                    "Error loading file info"
+                );
+                sender
+                    .output(FileInfoDetailsOutputMsg::ShowError(format!(
+                        "Error loading file info: {}",
+                        err
+                    )))
+                    .unwrap_or_else(|err| {
+                        tracing::error!(
+                            error = ?err,
+                            "Error sending FileInfoDetailsOutputMsg::ShowError"
+                        )
+                    });
             }
         }
     }

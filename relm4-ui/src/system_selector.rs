@@ -206,7 +206,7 @@ impl Component for SystemSelectModel {
                     sender
                         .output(SystemSelectOutputMsg::SystemSelected(system.clone()))
                         .unwrap_or_else(|e| {
-                            tracing::error!("Failed to send system selection output: {:?}", e)
+                            tracing::error!(error = ?e, "Failed to send system selection output")
                         });
                     root.close();
                 }
@@ -237,7 +237,7 @@ impl Component for SystemSelectModel {
                 let repository_manager = Arc::clone(&self.repository_manager);
                 if let Some(id) = self.get_selected_system_list_model().map(|item| item.id) {
                     sender.oneshot_command(async move {
-                        tracing::info!("Deleting system with ID {}", id);
+                        tracing::info!(id = id, "Deleting system");
                         let result = repository_manager
                             .get_system_repository()
                             .delete_system(id)
@@ -252,7 +252,7 @@ impl Component for SystemSelectModel {
                 }
             }
             SystemSelectMsg::SystemUpdated(system_list_model) => {
-                tracing::info!("Updating system list item ID {}", system_list_model.id);
+                tracing::info!(id = system_list_model.id, "Updating system list item");
                 self.remove_from_list(system_list_model.id);
                 self.add_to_list(&system_list_model);
             }
@@ -271,10 +271,11 @@ impl Component for SystemSelectModel {
     ) {
         match message {
             CommandMsg::SystemsFetched(Ok(systems)) => {
-                tracing::info!("Fetched {} systems", systems.len());
+                tracing::info!(len = systems.len(), "Fetched systems");
                 self.populate_list(systems);
             }
             CommandMsg::SystemsFetched(Err(e)) => {
+                tracing::error!(error = ?e, "Error fetching systems");
                 show_error_dialog(format!("Error fetching systems: {:?}", e), root);
             }
             CommandMsg::Deleted { result, id } => match result {
@@ -283,7 +284,8 @@ impl Component for SystemSelectModel {
                     self.remove_from_list(id);
                 }
                 Err(e) => {
-                    show_error_dialog(format!("Error deleting system: {:?}", e), root);
+                    tracing::error!(error = ?e, "Error deleting system");
+                    show_error_dialog(format!("Error deleting system ID {}: {:?}", id, e), root);
                 }
             },
         }
@@ -296,7 +298,7 @@ impl SystemSelectModel {
             if let Some(item) = self.list_view_wrapper.get(i)
                 && item.borrow().id == id
             {
-                tracing::info!("Removing list item ID {} from list", id);
+                tracing::info!(id = id, "Removing list item from list");
                 self.list_view_wrapper.remove(i);
                 break;
             }
@@ -316,9 +318,8 @@ impl SystemSelectModel {
                 && item.borrow().id == system_list_model.id
             {
                 tracing::info!(
-                    "Selecting newly added system list item ID {} at index {}",
-                    system_list_model.id,
-                    i
+                    id = system_list_model.id,
+                    "Selecting newly added system list item"
                 );
                 self.list_view_wrapper.selection_model.set_selected(i);
                 break;

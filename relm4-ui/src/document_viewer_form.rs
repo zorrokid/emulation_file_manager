@@ -18,7 +18,10 @@ use ui_components::{
     drop_down::{DocumentTypeDropDown, DocumentTypeSelectedMsg},
 };
 
-use crate::argument_list::{ArgumentList, ArgumentListMsg, ArgumentListOutputMsg};
+use crate::{
+    argument_list::{ArgumentList, ArgumentListMsg, ArgumentListOutputMsg},
+    utils::dialog_utils::show_error_dialog,
+};
 
 #[derive(Debug)]
 pub enum DocumentViewerFormMsg {
@@ -281,43 +284,49 @@ impl Component for DocumentViewerFormModel {
         match message {
             DocumentViewerFormCommandMsg::DocumentViewerSubmitted(Ok(id)) => {
                 let name = self.name.clone();
-                let res = sender.output(DocumentViewerFormOutputMsg::DocumentViewerAdded(
-                    DocumentViewerListModel { id, name },
-                ));
+                sender
+                    .output(DocumentViewerFormOutputMsg::DocumentViewerAdded(
+                        DocumentViewerListModel { id, name },
+                    ))
+                    .unwrap_or_else(|error| {
+                        tracing::error!(
+                        error = ?error,
+                        "Sending message failed");
+                    });
 
-                match res {
-                    Ok(()) => {
-                        root.close();
-                    }
-                    Err(error) => {
-                        eprintln!("Sending message failed: {:?}", error);
-                    }
-                }
+                root.close();
             }
             DocumentViewerFormCommandMsg::DocumentViewerSubmitted(Err(error)) => {
-                eprintln!("Error in submitting document_viewer: {}", error);
-                // TODO: show error to user
+                tracing::error!(
+                    error = ?error,
+                    "Error in submitting document_viewer");
+                show_error_dialog(
+                    format!("Error in submitting document_viewer: {}", error),
+                    root,
+                );
             }
             DocumentViewerFormCommandMsg::DocumentViewerUpdated(Ok(id)) => {
                 let name = self.name.clone();
-                let res = sender.output(DocumentViewerFormOutputMsg::DocumentViewerUpdated(
-                    DocumentViewerListModel { id, name },
-                ));
+                sender
+                    .output(DocumentViewerFormOutputMsg::DocumentViewerUpdated(
+                        DocumentViewerListModel { id, name },
+                    ))
+                    .unwrap_or_else(|error| {
+                        tracing::error!(
+                    error = ?error,
+                    "Sending message failed");
+                    });
 
-                match res {
-                    Ok(()) => {
-                        root.close();
-                    }
-                    Err(error) => {
-                        eprintln!("Sending message failed: {:?}", error);
-                    }
-                }
+                root.close();
             }
             DocumentViewerFormCommandMsg::DocumentViewerUpdated(Err(error)) => {
-                eprintln!("Error in updating document_viewer: {}", error);
-            }
-            _ => {
-                // Handle command outputs if necessary
+                tracing::error!(
+                    error = ?error,
+                    "Error in updating document_viewer");
+                show_error_dialog(
+                    format!("Error in updating document_viewer: {}", error),
+                    root,
+                );
             }
         }
     }
