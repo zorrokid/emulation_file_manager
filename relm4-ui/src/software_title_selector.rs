@@ -206,18 +206,16 @@ impl Component for SoftwareTitleSelectModel {
             }
             SoftwareTitleSelectMsg::SelectClicked => {
                 if let Some(software_title) = self.get_selected_software_title_list_model() {
-                    let res = sender.output(SoftwareTitleSelectOutputMsg::Selected(software_title));
-                    match res {
-                        Ok(_) => {
-                            sender.input(SoftwareTitleSelectMsg::Hide);
-                        }
-                        Err(e) => {
+                    sender
+                        .output(SoftwareTitleSelectOutputMsg::Selected(software_title))
+                        .unwrap_or_else(|e| {
                             tracing::error!(
                                 "Failed to send software_title selection output: {:?}",
                                 e
                             );
-                        }
-                    }
+                        });
+
+                    sender.input(SoftwareTitleSelectMsg::Hide);
                 }
             }
             SoftwareTitleSelectMsg::AddClicked => {
@@ -309,14 +307,18 @@ impl Component for SoftwareTitleSelectModel {
                 self.populate_list(self.software_titles.clone());
             }
             CommandMsg::SoftwareTitlesFetched(Err(e)) => {
-                show_error_dialog(format!("Failed to fetch software titles: {}", e), root);
+                let message = format!("Error fetching software titles: {}", e);
+                tracing::error!(message);
+                show_error_dialog(message, root);
             }
             CommandMsg::Deleted(Ok(_id)) => {
                 tracing::info!("Software title deleted successfully.");
                 sender.input(SoftwareTitleSelectMsg::FetchSoftwareTitles);
             }
             CommandMsg::Deleted(Err(e)) => {
-                show_error_dialog(format!("Failed to delete software title: {}", e), root);
+                let message = format!("Error deleting software title: {}", e);
+                tracing::error!(message);
+                show_error_dialog(message, root);
             }
         }
     }
