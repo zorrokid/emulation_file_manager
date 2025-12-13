@@ -81,7 +81,7 @@ impl Component for TabbedImageViewer {
                 self.page_numbers.clear();
 
                 for file_type in IMAGE_FILE_TYPES {
-                    // NOTE: currentely only the first file set of each type is used
+                    // NOTE: currently only the first file set of each type is used
                     if let Some(file_set) = file_sets.iter().find(|fs| fs.file_type == *file_type) {
                         if file_set.files.is_empty() {
                             continue; // Skip empty file sets
@@ -124,7 +124,7 @@ impl Component for TabbedImageViewer {
                 sender
                     .output(TabbedImageViewerOutputMsg::ShowError(error_msg))
                     .unwrap_or_else(|e| {
-                        tracing::error!("Failed to send output message: {:?}", e);
+                        tracing::error!(error = ?e, "Failed to send output message");
                     });
             }
         }

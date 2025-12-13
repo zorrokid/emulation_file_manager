@@ -210,8 +210,8 @@ impl Component for SoftwareTitleSelectModel {
                         .output(SoftwareTitleSelectOutputMsg::Selected(software_title))
                         .unwrap_or_else(|e| {
                             tracing::error!(
-                                "Failed to send software_title selection output: {:?}",
-                                e
+                                error = ?e,
+                                "Failed to send software_title selection output"
                             );
                         });
 
@@ -242,7 +242,7 @@ impl Component for SoftwareTitleSelectModel {
                 let repository_manager = Arc::clone(&self.repository_manager);
                 if let Some(id) = self.get_selected_list_item().map(|item| item.id) {
                     sender.oneshot_command(async move {
-                        tracing::info!("Deleting software_title with ID {}", id);
+                        tracing::info!(id = id, "Deleting software_title");
                         let result = repository_manager
                             .get_software_title_repository()
                             .delete_software_title(id)
@@ -252,7 +252,7 @@ impl Component for SoftwareTitleSelectModel {
                 }
             }
             SoftwareTitleSelectMsg::SoftwareTitleAdded(software_title_list_model) => {
-                tracing::info!("Added software_title: {:?}", software_title_list_model.name);
+                tracing::info!(id = software_title_list_model.id, "Added software_title");
                 if !self
                     .selected_software_title_ids
                     .contains(&software_title_list_model.id)
@@ -265,7 +265,7 @@ impl Component for SoftwareTitleSelectModel {
                         software_title_list_model,
                     ))
                     .unwrap_or_else(|e| {
-                        tracing::error!("Failed to send software_title creation output: {:?}", e);
+                        tracing::error!(error = ?e, "Failed to send software_title creation output");
                     });
             }
             SoftwareTitleSelectMsg::SoftwareTitleUpdated(software_title_list_model) => {
@@ -316,9 +316,8 @@ impl Component for SoftwareTitleSelectModel {
                 sender.input(SoftwareTitleSelectMsg::FetchSoftwareTitles);
             }
             CommandMsg::Deleted(Err(e)) => {
-                let message = format!("Error deleting software title: {}", e);
-                tracing::error!(message);
-                show_error_dialog(message, root);
+                tracing::error!(error = ?e, "Error deleting software title");
+                show_error_dialog(format!("Error deleting software title: {}", e), root);
             }
         }
     }
@@ -330,7 +329,7 @@ impl SoftwareTitleSelectModel {
             if let Some(item) = self.list_view_wrapper.get(i)
                 && item.borrow().id == id
             {
-                tracing::info!("Removing list item ID {} from list", id);
+                tracing::info!(id = id, "Removing list item from list");
                 self.list_view_wrapper.remove(i);
                 break;
             }
@@ -349,11 +348,7 @@ impl SoftwareTitleSelectModel {
             if let Some(item) = self.list_view_wrapper.get_visible(i)
                 && item.borrow().id == list_model.id
             {
-                tracing::info!(
-                    "Selecting newly added list item ID {} at index {}",
-                    list_model.id,
-                    i
-                );
+                tracing::info!(id = list_model.id, "Selecting newly added list item");
                 self.list_view_wrapper.selection_model.set_selected(i);
                 break;
             }

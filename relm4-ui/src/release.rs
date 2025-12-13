@@ -45,7 +45,6 @@ pub struct ReleaseModel {
     selected_image_file_set: Option<FileSetViewModel>,
     selected_document_file_set: Option<FileSetViewModel>,
     emulator_runner: Controller<EmulatorRunnerModel>,
-    image_file_set_viewer: Controller<ImageFilesetViewer>,
     document_file_set_viewer: Controller<DocumentViewer>,
     tabbed_image_viewer: Controller<TabbedImageViewer>,
 }
@@ -210,14 +209,6 @@ impl Component for ReleaseModel {
             .launch(document_viewer_init_model)
             .detach();
 
-        let image_file_set_viewer_init_model = ImageFileSetViewerInit {
-            download_service: Arc::clone(&download_service),
-        };
-        let image_file_set_viewer = ImageFilesetViewer::builder()
-            .transient_for(&root)
-            .launch(image_file_set_viewer_init_model)
-            .detach();
-
         let model = ReleaseModel {
             view_model_service: init_model.view_model_service,
 
@@ -231,7 +222,6 @@ impl Component for ReleaseModel {
             selected_image_file_set: None,
             selected_document_file_set: None,
             emulator_runner,
-            image_file_set_viewer,
             tabbed_image_viewer,
             document_file_set_viewer,
         };
@@ -294,7 +284,7 @@ impl Component for ReleaseModel {
             }
             ReleaseMsg::StartDocumentFileSetViewer => {
                 if let Some(file_set) = &self.selected_document_file_set {
-                    tracing::info!("Starting document viewer for file set: {:?}", file_set.id);
+                    tracing::info!(id = file_set.id, "Starting document viewer for file set");
                     self.document_file_set_viewer.emit(DocumentViewerMsg::Show {
                         file_set: file_set.clone(),
                     });
@@ -322,7 +312,7 @@ impl Component for ReleaseModel {
                 self.selected_document_file_set = self.get_selected_document_file_set();
             }
             ReleaseMsg::ReleaseCreatedOrUpdated { id } => {
-                tracing::info!("Release created or updated with ID: {}", id);
+                tracing::info!(id = id, "Release created or updated");
                 sender.input(ReleaseMsg::FetchRelease { id });
             }
             ReleaseMsg::SoftwareTitleCreated {
@@ -332,15 +322,15 @@ impl Component for ReleaseModel {
                     .output(ReleaseOutputMsg::SoftwareTitleCreated(
                         software_title_list_model,
                     ))
-                    .unwrap_or_else(|res| {
-                        tracing::error!("Error sending SoftwareTitleCreated output: {:?}", res);
+                    .unwrap_or_else(|err| {
+                        tracing::error!(error = ?err, "Error sending SoftwareTitleCreated output");
                     });
             }
             ReleaseMsg::ShowError(err_msg) => {
                 sender
                     .output(ReleaseOutputMsg::ShowError(err_msg))
-                    .unwrap_or_else(|res| {
-                        tracing::error!("Error sending ShowError output: {:?}", res);
+                    .unwrap_or_else(|err| {
+                        tracing::error!(error = ?err, "Error sending ShowError output");
                     });
             }
             ReleaseMsg::SoftwareTitleUpdated {
@@ -362,12 +352,14 @@ impl Component for ReleaseModel {
                 self.process_release(release);
             }
             ReleaseCommandMsg::FetchedRelease(Err(err)) => {
-                let message = format!("Error fetching release: {:?}", err);
-                tracing::error!(message);
+                tracing::error!(error = ?err, "Error fetching release");
                 sender
-                    .output(ReleaseOutputMsg::ShowError(message))
+                    .output(ReleaseOutputMsg::ShowError(format!(
+                        "Error fetching release: {:?}",
+                        err
+                    )))
                     .unwrap_or_else(|e| {
-                        tracing::error!("Failed to send ShowError output message: {:?}", e);
+                        tracing::error!(error = ?e, "Failed to send ShowError output message");
                     });
             }
         }
@@ -376,7 +368,7 @@ impl Component for ReleaseModel {
 
 impl ReleaseModel {
     fn process_release(&mut self, release: ReleaseViewModel) {
-        tracing::info!("Fetched release with id: {}", release.id);
+        tracing::info!(id = release.id, "Fetched release");
         self.selected_release_system_names = release
             .systems
             .iter()

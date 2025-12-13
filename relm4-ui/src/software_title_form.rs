@@ -117,11 +117,7 @@ impl Component for SoftwareTitleFormModel {
                 let edit_id = self.edit_software_title_id;
                 sender.oneshot_command(async move {
                     if let Some(edit_id) = edit_id {
-                        tracing::info!(
-                            "Submitting update for software title ID {}: {}",
-                            edit_id,
-                            name
-                        );
+                        tracing::info!(id = edit_id, "Submitting update for software title");
                         let update_software_title = SoftwareTitle {
                             id: edit_id,
                             name: name.clone(),
@@ -133,7 +129,7 @@ impl Component for SoftwareTitleFormModel {
                             .await;
                         SoftwareTitleFormCommandMsg::SoftwareTitleSubmitted(result)
                     } else {
-                        tracing::info!("Adding new software title: {}", name);
+                        tracing::info!(name = name, "Adding new software title");
                         let result = repository_manager
                             .get_software_title_repository()
                             .add_software_title(&name, None)
@@ -189,14 +185,13 @@ impl Component for SoftwareTitleFormModel {
                         })
                     })
                     .unwrap_or_else(|e| {
-                        tracing::error!("Failed to send output message: {:?}", e);
+                        tracing::error!(error = ?e, "Failed to send output message");
                     });
                 root.close();
             }
             SoftwareTitleFormCommandMsg::SoftwareTitleSubmitted(Err(e)) => {
-                let message = format!("Failed to submit software title: {}", e);
-                tracing::error!(message);
-                show_error_dialog(message, root);
+                tracing::error!(error = ?e, "Failed to submit software title");
+                show_error_dialog(format!("Failed to submit software title: {}", e), root);
             }
         }
     }

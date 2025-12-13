@@ -203,7 +203,11 @@ impl ArgumentList {
         let arguments = self.collect_arguments();
         sender
             .output(ArgumentListOutputMsg::ArgumentsChanged(arguments))
-            .unwrap_or_else(|e| eprintln!("Failed to send output message: {:?}", e));
+            .unwrap_or_else(|e| {
+                tracing::error!(
+                    error = ?e,
+                    "Failed to send output message")
+            });
     }
     pub fn clear(&mut self) {
         self.list_view_wrapper.clear();

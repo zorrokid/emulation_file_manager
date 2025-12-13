@@ -205,7 +205,9 @@ impl Component for EmulatorFormModel {
             }
             EmulatorFormMsg::Submit => {
                 if let Some(system) = &self.selected_system {
-                    tracing::info!("Submitting emulator {}", self.executable);
+                    tracing::info!(
+                        executable = %self.executable,
+                        "Submitting emulator executable");
                     let repository_manager = Arc::clone(&self.repository_manager);
                     let executable = self.executable.clone();
                     let name = self.name.clone();
@@ -253,8 +255,8 @@ impl Component for EmulatorFormModel {
             EmulatorFormMsg::Show { editable_emulator } => {
                 if let Some(editable_emulator) = editable_emulator {
                     tracing::info!(
-                        "Showing emulator form for editing, with emulator id: {}",
-                        editable_emulator.id
+                        id = editable_emulator.id,
+                        "Showing emulator form for editing"
                     );
                     self.editable_emulator_id = Some(editable_emulator.id);
 

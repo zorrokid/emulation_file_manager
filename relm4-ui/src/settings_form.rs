@@ -276,7 +276,7 @@ impl Component for SettingsForm {
                 sender.oneshot_command(async move {
                     if let Err(e) = settings_service.delete_credentials().await {
                         // TODO: emit message to show error to user
-                        tracing::error!("Error deleting credentials: {}", e);
+                        tracing::error!(error = ?e, "Error deleting credentials");
                     }
                     SettingsFormCommandMsg::SettingsSaved(Ok(()))
                 });
@@ -322,14 +322,14 @@ impl Component for SettingsForm {
                 sender
                     .output(SettingsFormOutputMsg::SettingsChanged)
                     .unwrap_or_else(|e| {
-                        eprintln!("Error sending SettingsChanged message: {:?}", e);
+                        tracing::error!(error = ?e,
+                        "Error sending SettingsChanged message")
                     });
                 root.hide();
             }
             SettingsFormCommandMsg::SettingsSaved(Err(e)) => {
-                let message = format!("Error saving settings: {}", e);
-                tracing::error!(message);
-                show_error_dialog(message, root);
+                tracing::error!(error = ?e, "Error saving settings");
+                show_error_dialog(format!("Error saving settings: {}", e), root);
             }
         }
     }

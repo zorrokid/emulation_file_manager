@@ -186,7 +186,6 @@ impl Component for FileSetEditor {
                 self.file_set_file_name = file_name;
             }
             FileSetEditorMsg::FileSetNameChanged(name) => {
-                tracing::info!("File set name changed to: {}", name);
                 self.file_set_name = name;
             }
             FileSetEditorMsg::SourceChanged(source) => {
@@ -200,14 +199,7 @@ impl Component for FileSetEditor {
                 if let (Some(file_set_id), Some(file_type)) =
                     (self.file_set_id, self.selected_file_type)
                 {
-                    tracing::info!(
-                        "Updating file set ID {} with name: {}, file name: {}, source: {}, file type: {:?}",
-                        file_set_id,
-                        self.file_set_name,
-                        self.file_set_file_name,
-                        self.source,
-                        file_type
-                    );
+                    tracing::info!(id = file_set_id, "Updating file set",);
                     let repository_manager = Arc::clone(&self.repository_manager);
                     let file_set_name = self.file_set_name.clone();
                     let file_set_file_name = self.file_set_file_name.clone();
@@ -261,6 +253,7 @@ impl Component for FileSetEditor {
                 sender.input(FileSetEditorMsg::UpdateFormFields);
             }
             CommandMsg::FileSetFetched(Err(e)) => {
+                tracing::error!( error = ?e, "Error fetching file set");
                 show_error_dialog(format!("Error fetching file set: {:?}", e), root);
             }
             CommandMsg::FileSetUpdated(Ok(_), file_set_list_model) => {
@@ -268,12 +261,15 @@ impl Component for FileSetEditor {
                 sender
                     .output(FileSetEditorOutputMsg::FileSetUpdated(file_set_list_model))
                     .unwrap_or_else(|e| {
-                        eprintln!("Error sending FileSetUpdated output message: {:?}", e);
+                        tracing::error!(
+                            error = ?e,
+                            "Error sending FileSetUpdated output message");
                     });
 
                 root.close();
             }
             CommandMsg::FileSetUpdated(Err(e), _) => {
+                tracing::error!(error = ?e, "Error updating file set");
                 show_error_dialog(format!("Error updating file set: {:?}", e), root);
             }
         }

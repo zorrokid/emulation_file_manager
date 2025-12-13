@@ -128,15 +128,15 @@ impl Component for ReleasesModel {
             .launch(release_form_init_model)
             .forward(sender.input_sender(), |msg| match msg {
                 ReleaseFormOutputMsg::ReleaseCreatedOrUpdated { id } => {
-                    tracing::info!("Release created or updated with ID: {}", id);
+                    tracing::info!(id = id, "Release created or updated");
                     ReleasesMsg::ReleaseCreatedOrUpdated { id }
                 }
                 ReleaseFormOutputMsg::SoftwareTitleCreated(software_title_list_model) => {
-                    tracing::info!("Software title created: {:?}", software_title_list_model);
+                    tracing::info!(id = software_title_list_model.id, "Software title created");
                     ReleasesMsg::SofwareTitleCreated(software_title_list_model)
                 }
                 ReleaseFormOutputMsg::SoftwareTitleUpdated(software_title_list_model) => {
-                    tracing::info!("Software title updated: {:?}", software_title_list_model);
+                    tracing::info!(id = software_title_list_model.id, "Software title updated");
                     ReleasesMsg::SofwareTitleUpdated(software_title_list_model)
                 }
             });
@@ -165,15 +165,15 @@ impl Component for ReleasesModel {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match msg {
             ReleasesMsg::SoftwareTitleSelected { id } => {
-                tracing::info!("Software title selected with ID: {}", id);
+                tracing::info!(id = id, "Software title selected");
                 self.selected_software_title_id = Some(id);
                 sender.input(ReleasesMsg::FetchReleases);
             }
             ReleasesMsg::FetchReleases => {
                 if let Some(software_title_id) = self.selected_software_title_id {
                     tracing::info!(
-                        "Fetching releases for software title ID: {}",
-                        software_title_id
+                        id = software_title_id,
+                        "Fetching releases for software title",
                     );
 
                     let view_model_service = Arc::clone(&self.view_model_service);
@@ -194,7 +194,9 @@ impl Component for ReleasesModel {
                     sender
                         .output(ReleasesOutputMsg::ReleaseSelected { id: selected_id })
                         .unwrap_or_else(|err| {
-                            tracing::info!("Error sending ReleaseSelected message: {:?}", err);
+                            tracing::error!(
+                                error = ?err,
+                                "Error sending ReleaseSelected message");
                         });
                 }
             }
@@ -204,15 +206,15 @@ impl Component for ReleasesModel {
                     .emit(ReleaseFormMsg::Show { release_id: None });
             }
             ReleasesMsg::AddRelease(release_list_model) => {
-                tracing::info!("Release with id {} added", release_list_model.id);
+                tracing::info!(id = release_list_model.id, "Release added");
                 self.releases_list_view_wrapper.append(ListItem {
                     id: release_list_model.id,
                     name: release_list_model.name,
                 });
             }
             ReleasesMsg::ReleaseCreatedOrUpdated { id } => {
-                tracing::info!("Release created or updated with ID: {}", id);
-                // TODO fetch only the created of rupdated release, or maybe the message would
+                tracing::info!(id = id, "Release created or updated");
+                // TODO fetch only the created of updated release, or maybe the message would
                 // include the required data to update the list
                 sender.input(ReleasesMsg::FetchReleases);
             }
@@ -222,7 +224,10 @@ impl Component for ReleasesModel {
                         software_title_list_model,
                     })
                     .unwrap_or_else(|err| {
-                        tracing::error!("Error sending SoftwareTitleCreated message: {:?}", err);
+                        tracing::error!(
+                            error = ?err,
+                            "Error sending SoftwareTitleCreated message",
+                        );
                     });
             }
             ReleasesMsg::SofwareTitleUpdated(software_title_list_model) => {
@@ -230,8 +235,10 @@ impl Component for ReleasesModel {
                     .output(ReleasesOutputMsg::SoftwareTitleUpdated {
                         software_title_list_model,
                     })
-                    .unwrap_or_else(|res| {
-                        tracing::error!("Error sending SoftwareTitleUpdated message: {:?}", res);
+                    .unwrap_or_else(|err| {
+                        tracing::error!(
+                            error = ?err,
+                            "Error sending SoftwareTitleUpdated message");
                     });
             }
             ReleasesMsg::RemoveRelease => {
@@ -289,12 +296,14 @@ impl Component for ReleasesModel {
                     sender.input(ReleasesMsg::ReleaseSelected);
                 }
                 Err(err) => {
-                    let message = format!("Error fetching releases: {}", err);
-                    tracing::error!(message);
+                    tracing::error!(error = ?err, "Error fetching releases");
                     sender
-                        .output(ReleasesOutputMsg::ShowError(message))
+                        .output(ReleasesOutputMsg::ShowError(format!(
+                            "Error fetching releases: {}",
+                            err
+                        )))
                         .unwrap_or_else(|e| {
-                            tracing::error!("Error sending ShowError message: {:?}", e);
+                            tracing::error!(error = ?e, "Error sending ShowError message");
                         });
                 }
             },
@@ -304,12 +313,16 @@ impl Component for ReleasesModel {
                     sender.input(ReleasesMsg::FetchReleases);
                 }
                 Err(err) => {
-                    let message = format!("Error deleting release: {}", err);
-                    tracing::error!("{}", message);
+                    tracing::error!(error = ?err, "Error deleting release");
                     sender
-                        .output(ReleasesOutputMsg::ShowError(message))
+                        .output(ReleasesOutputMsg::ShowError(format!(
+                            "Error deleting release: {}",
+                            err
+                        )))
                         .unwrap_or_else(|e| {
-                            tracing::error!("Error sending ShowError message: {:?}", e);
+                            tracing::error!(
+                                error = ?e,
+                                "Error sending ShowError message");
                         });
                 }
             },
