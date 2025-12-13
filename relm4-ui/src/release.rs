@@ -66,19 +66,12 @@ pub enum ReleaseMsg {
         id: i64,
     },
     StartEmulatorRunner,
-    StartImageFileSetViewer,
     StartDocumentFileSetViewer,
     UpdateRelease(ReleaseListModel),
     Clear,
-    FileSetSelected {
-        index: u32,
-    },
-    ImageFileSetSelected {
-        index: u32,
-    },
-    DocumentFileSetSelected {
-        index: u32,
-    },
+    FileSetSelected,
+    ImageFileSetSelected,
+    DocumentFileSetSelected,
     ReleaseCreatedOrUpdated {
         id: i64,
     },
@@ -248,10 +241,8 @@ impl Component for ReleaseModel {
         selection_model.connect_selected_notify(clone!(
             #[strong]
             sender,
-            move |s| {
-                let index = s.selected();
-                println!("Selected index: {}", index);
-                sender.input(ReleaseMsg::FileSetSelected { index });
+            move |_| {
+                sender.input(ReleaseMsg::FileSetSelected);
             }
         ));
 
@@ -259,10 +250,8 @@ impl Component for ReleaseModel {
         image_selection_model.connect_selected_notify(clone!(
             #[strong]
             sender,
-            move |s| {
-                let index = s.selected();
-                println!("Selected index: {}", index);
-                sender.input(ReleaseMsg::ImageFileSetSelected { index });
+            move |_| {
+                sender.input(ReleaseMsg::ImageFileSetSelected);
             }
         ));
 
@@ -271,10 +260,8 @@ impl Component for ReleaseModel {
         document_selection_model.connect_selected_notify(clone!(
             #[strong]
             sender,
-            move |s| {
-                let index = s.selected();
-                println!("Selected index: {}", index);
-                sender.input(ReleaseMsg::DocumentFileSetSelected { index });
+            move |_| {
+                sender.input(ReleaseMsg::DocumentFileSetSelected);
             }
         ));
 
@@ -292,7 +279,6 @@ impl Component for ReleaseModel {
 
                 sender.oneshot_command(async move {
                     let release = view_model_service.get_release_view_model(id).await;
-                    println!("Fetched release: {:?}", release);
                     ReleaseCommandMsg::FetchedRelease(release)
                 });
             }
@@ -306,31 +292,18 @@ impl Component for ReleaseModel {
                     });
                 }
             }
-            ReleaseMsg::StartImageFileSetViewer => {
-                if let Some(file_set) = &self.selected_image_file_set {
-                    self.image_file_set_viewer
-                        .emit(ImageFilesetViewerMsg::Show {
-                            file_set: file_set.clone(),
-                        });
-                }
-            }
             ReleaseMsg::StartDocumentFileSetViewer => {
                 if let Some(file_set) = &self.selected_document_file_set {
-                    println!(
-                        "Starting document file set viewer with file set: {:?}",
-                        file_set
-                    );
+                    tracing::info!("Starting document viewer for file set: {:?}", file_set.id);
                     self.document_file_set_viewer.emit(DocumentViewerMsg::Show {
                         file_set: file_set.clone(),
                     });
                 }
             }
-            ReleaseMsg::UpdateRelease(release_list_model) => {
-                println!("Updating release with model: {:?}", release_list_model);
+            ReleaseMsg::UpdateRelease(_) => {
                 // TODO
             }
             ReleaseMsg::Clear => {
-                println!("Clearing release model");
                 self.selected_release = None;
                 self.selected_release_system_names.clear();
                 self.emulator_file_set_list_view_wrapper.clear();
@@ -339,75 +312,29 @@ impl Component for ReleaseModel {
                 self.selected_file_set = None;
                 self.tabbed_image_viewer.emit(TabbedImageViewerMsg::Clear);
             }
-            ReleaseMsg::FileSetSelected { index } => {
-                println!("File set selected with index: {}", index);
-                let selected = self.emulator_file_set_list_view_wrapper.get(index);
-                if let Some(file_set_list_item) = selected {
-                    let file_set_id = file_set_list_item.borrow().id;
-                    let file_set = self.selected_release.as_ref().and_then(|release| {
-                        release
-                            .file_sets
-                            .iter()
-                            .find(|fs| fs.id == file_set_id)
-                            .cloned()
-                    });
-                    self.selected_file_set = file_set;
-                    println!("Selected file set: {:?}", self.selected_file_set);
-                } else {
-                    println!("No file set found at index: {}", index);
-                }
+            ReleaseMsg::FileSetSelected => {
+                self.selected_file_set = self.get_selected_file_set();
             }
-            ReleaseMsg::ImageFileSetSelected { index } => {
-                println!("Image file set selected with index: {}", index);
-                let selected = self.image_file_set_list_view_wrapper.get(index);
-                if let Some(file_set_list_item) = selected {
-                    let file_set_id = file_set_list_item.borrow().id;
-                    let file_set = self.selected_release.as_ref().and_then(|release| {
-                        release
-                            .file_sets
-                            .iter()
-                            .find(|fs| fs.id == file_set_id)
-                            .cloned()
-                    });
-
-                    self.selected_image_file_set = file_set;
-                    println!("Selected image file set: {:?}", self.selected_file_set);
-                } else {
-                    println!("No image file set found at index: {}", index);
-                }
+            ReleaseMsg::ImageFileSetSelected => {
+                self.selected_image_file_set = self.get_selected_image_file_set();
             }
-            ReleaseMsg::DocumentFileSetSelected { index } => {
-                println!("Document file set selected with index: {}", index);
-                let selected = self.document_file_set_list_view_wrapper.get(index);
-                if let Some(file_set_list_item) = selected {
-                    let file_set_id = file_set_list_item.borrow().id;
-                    let file_set = self.selected_release.as_ref().and_then(|release| {
-                        release
-                            .file_sets
-                            .iter()
-                            .find(|fs| fs.id == file_set_id)
-                            .cloned()
-                    });
-
-                    self.selected_document_file_set = file_set;
-                    println!("Selected document file set: {:?}", self.selected_file_set);
-                } else {
-                    println!("No document file set found at index: {}", index);
-                }
+            ReleaseMsg::DocumentFileSetSelected => {
+                self.selected_document_file_set = self.get_selected_document_file_set();
             }
             ReleaseMsg::ReleaseCreatedOrUpdated { id } => {
-                println!("Release created or updated with ID: {}", id);
+                tracing::info!("Release created or updated with ID: {}", id);
                 sender.input(ReleaseMsg::FetchRelease { id });
             }
             ReleaseMsg::SoftwareTitleCreated {
                 software_title_list_model,
             } => {
-                let res = sender.output(ReleaseOutputMsg::SoftwareTitleCreated(
-                    software_title_list_model,
-                ));
-                if let Err(err) = res {
-                    eprintln!("Error sending SoftwareTitleCreated output: {:?}", err);
-                }
+                sender
+                    .output(ReleaseOutputMsg::SoftwareTitleCreated(
+                        software_title_list_model,
+                    ))
+                    .unwrap_or_else(|res| {
+                        tracing::error!("Error sending SoftwareTitleCreated output: {:?}", res);
+                    });
             }
             ReleaseMsg::ShowError(err_msg) => {
                 sender
@@ -427,141 +354,196 @@ impl Component for ReleaseModel {
     fn update_cmd(
         &mut self,
         message: Self::CommandOutput,
-        _sender: ComponentSender<Self>,
+        sender: ComponentSender<Self>,
         _: &Self::Root,
     ) {
         match message {
             ReleaseCommandMsg::FetchedRelease(Ok(release)) => {
-                println!("Release fetched successfully: {:?}", release);
-                self.selected_release_system_names = release
-                    .systems
-                    .iter()
-                    .map(|s| s.name.clone())
-                    .collect::<Vec<_>>()
-                    .join(", ");
-
-                let image_file_sets = release
-                    .file_sets
-                    .iter()
-                    .filter(|fs| IMAGE_FILE_TYPES.contains(&fs.file_type))
-                    .cloned()
-                    .collect::<Vec<_>>();
-
-                self.tabbed_image_viewer
-                    .emit(TabbedImageViewerMsg::SetFileSets {
-                        file_sets: image_file_sets,
-                    });
-
-                // emulator file sets
-
-                let emulator_file_sets = release
-                    .file_sets
-                    .iter()
-                    .filter(|fs| EMULATOR_FILE_TYPES.contains(&fs.file_type))
-                    .cloned()
-                    .collect::<Vec<_>>();
-
-                let emulator_file_set_list_items = emulator_file_sets.iter().map(|fs| ListItem {
-                    id: fs.id,
-                    name: fs.file_set_name.clone(),
-                });
-
-                self.emulator_file_set_list_view_wrapper.clear();
-                self.emulator_file_set_list_view_wrapper
-                    .extend_from_iter(emulator_file_set_list_items);
-
-                let selected_index = self
-                    .emulator_file_set_list_view_wrapper
-                    .selection_model
-                    .selected();
-
-                let selected_file_set_list_item =
-                    self.emulator_file_set_list_view_wrapper.get(selected_index);
-                if let Some(file_set_list_item) = selected_file_set_list_item {
-                    let file_set = emulator_file_sets
-                        .iter()
-                        .find(|fs| fs.id == file_set_list_item.borrow().id);
-                    self.selected_file_set = file_set.cloned();
-                } else {
-                    self.selected_file_set = None;
-                }
-
-                // image file sets
-
-                let image_file_sets = release
-                    .file_sets
-                    .iter()
-                    .filter(|fs| IMAGE_FILE_TYPES.contains(&fs.file_type))
-                    .cloned()
-                    .collect::<Vec<_>>();
-
-                let image_file_set_list_items = image_file_sets.iter().map(|fs| ListItem {
-                    id: fs.id,
-                    name: fs.file_set_name.clone(),
-                });
-
-                self.image_file_set_list_view_wrapper.clear();
-                self.image_file_set_list_view_wrapper
-                    .extend_from_iter(image_file_set_list_items);
-
-                let selected_index = self
-                    .image_file_set_list_view_wrapper
-                    .selection_model
-                    .selected();
-
-                let selected_image_file_set_list_item =
-                    self.image_file_set_list_view_wrapper.get(selected_index);
-                if let Some(file_set_list_item) = selected_image_file_set_list_item {
-                    let file_set = image_file_sets
-                        .iter()
-                        .find(|fs| fs.id == file_set_list_item.borrow().id);
-                    self.selected_image_file_set = file_set.cloned();
-                } else {
-                    self.selected_image_file_set = None;
-                }
-
-                // document file sets
-
-                let document_file_sets = release
-                    .file_sets
-                    .iter()
-                    .filter(|fs| DOCUMENT_FILE_TYPES.contains(&fs.file_type))
-                    .cloned()
-                    .collect::<Vec<_>>();
-
-                let document_file_set_list_items = document_file_sets.iter().map(|fs| ListItem {
-                    id: fs.id,
-                    name: fs.file_set_name.clone(),
-                });
-
-                self.document_file_set_list_view_wrapper.clear();
-                self.document_file_set_list_view_wrapper
-                    .extend_from_iter(document_file_set_list_items);
-
-                let selected_index = self
-                    .document_file_set_list_view_wrapper
-                    .selection_model
-                    .selected();
-
-                let selected_document_file_set_list_item =
-                    self.document_file_set_list_view_wrapper.get(selected_index);
-                if let Some(file_set_list_item) = selected_document_file_set_list_item {
-                    let file_set = document_file_sets
-                        .iter()
-                        .find(|fs| fs.id == file_set_list_item.borrow().id);
-                    self.selected_document_file_set = file_set.cloned();
-                } else {
-                    self.selected_document_file_set = None;
-                }
-
-                // Update the selected release
-
-                self.selected_release = Some(release);
+                self.process_release(release);
             }
             ReleaseCommandMsg::FetchedRelease(Err(err)) => {
-                eprintln!("Error fetching release: {:?}", err);
-                // TODO: show error to user
+                let message = format!("Error fetching release: {:?}", err);
+                tracing::error!(message);
+                sender
+                    .output(ReleaseOutputMsg::ShowError(message))
+                    .unwrap_or_else(|e| {
+                        tracing::error!("Failed to send ShowError output message: {:?}", e);
+                    });
             }
         }
+    }
+}
+
+impl ReleaseModel {
+    fn process_release(&mut self, release: ReleaseViewModel) {
+        tracing::info!("Fetched release with id: {}", release.id);
+        self.selected_release_system_names = release
+            .systems
+            .iter()
+            .map(|s| s.name.clone())
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        let image_file_sets = release
+            .file_sets
+            .iter()
+            .filter(|fs| IMAGE_FILE_TYPES.contains(&fs.file_type))
+            .cloned()
+            .collect::<Vec<_>>();
+
+        self.tabbed_image_viewer
+            .emit(TabbedImageViewerMsg::SetFileSets {
+                file_sets: image_file_sets,
+            });
+
+        // emulator file sets
+
+        let emulator_file_sets = release
+            .file_sets
+            .iter()
+            .filter(|fs| EMULATOR_FILE_TYPES.contains(&fs.file_type))
+            .cloned()
+            .collect::<Vec<_>>();
+
+        let emulator_file_set_list_items = emulator_file_sets.iter().map(|fs| ListItem {
+            id: fs.id,
+            name: fs.file_set_name.clone(),
+        });
+
+        self.emulator_file_set_list_view_wrapper.clear();
+        self.emulator_file_set_list_view_wrapper
+            .extend_from_iter(emulator_file_set_list_items);
+
+        let selected_index = self
+            .emulator_file_set_list_view_wrapper
+            .selection_model
+            .selected();
+
+        let selected_file_set_list_item =
+            self.emulator_file_set_list_view_wrapper.get(selected_index);
+        if let Some(file_set_list_item) = selected_file_set_list_item {
+            let file_set = emulator_file_sets
+                .iter()
+                .find(|fs| fs.id == file_set_list_item.borrow().id);
+            self.selected_file_set = file_set.cloned();
+        } else {
+            self.selected_file_set = None;
+        }
+
+        // image file sets
+
+        let image_file_sets = release
+            .file_sets
+            .iter()
+            .filter(|fs| IMAGE_FILE_TYPES.contains(&fs.file_type))
+            .cloned()
+            .collect::<Vec<_>>();
+
+        let image_file_set_list_items = image_file_sets.iter().map(|fs| ListItem {
+            id: fs.id,
+            name: fs.file_set_name.clone(),
+        });
+
+        self.image_file_set_list_view_wrapper.clear();
+        self.image_file_set_list_view_wrapper
+            .extend_from_iter(image_file_set_list_items);
+
+        let selected_index = self
+            .image_file_set_list_view_wrapper
+            .selection_model
+            .selected();
+
+        let selected_image_file_set_list_item =
+            self.image_file_set_list_view_wrapper.get(selected_index);
+        if let Some(file_set_list_item) = selected_image_file_set_list_item {
+            let file_set = image_file_sets
+                .iter()
+                .find(|fs| fs.id == file_set_list_item.borrow().id);
+            self.selected_image_file_set = file_set.cloned();
+        } else {
+            self.selected_image_file_set = None;
+        }
+
+        // document file sets
+
+        let document_file_sets = release
+            .file_sets
+            .iter()
+            .filter(|fs| DOCUMENT_FILE_TYPES.contains(&fs.file_type))
+            .cloned()
+            .collect::<Vec<_>>();
+
+        let document_file_set_list_items = document_file_sets.iter().map(|fs| ListItem {
+            id: fs.id,
+            name: fs.file_set_name.clone(),
+        });
+
+        self.document_file_set_list_view_wrapper.clear();
+        self.document_file_set_list_view_wrapper
+            .extend_from_iter(document_file_set_list_items);
+
+        let selected_index = self
+            .document_file_set_list_view_wrapper
+            .selection_model
+            .selected();
+
+        let selected_document_file_set_list_item =
+            self.document_file_set_list_view_wrapper.get(selected_index);
+        if let Some(file_set_list_item) = selected_document_file_set_list_item {
+            let file_set = document_file_sets
+                .iter()
+                .find(|fs| fs.id == file_set_list_item.borrow().id);
+            self.selected_document_file_set = file_set.cloned();
+        } else {
+            self.selected_document_file_set = None;
+        }
+
+        self.selected_release = Some(release);
+    }
+
+    fn get_selected_file_set(&self) -> Option<FileSetViewModel> {
+        let selection = &self.emulator_file_set_list_view_wrapper.selection_model;
+        if let Some(file_set_list_item) = self
+            .emulator_file_set_list_view_wrapper
+            .get_visible(selection.selected())
+        {
+            self.get_file_set_by_id(file_set_list_item.borrow().id)
+        } else {
+            None
+        }
+    }
+
+    fn get_selected_image_file_set(&self) -> Option<FileSetViewModel> {
+        let selection = &self.image_file_set_list_view_wrapper.selection_model;
+        if let Some(file_set_list_item) = self
+            .image_file_set_list_view_wrapper
+            .get_visible(selection.selected())
+        {
+            self.get_file_set_by_id(file_set_list_item.borrow().id)
+        } else {
+            None
+        }
+    }
+
+    fn get_selected_document_file_set(&self) -> Option<FileSetViewModel> {
+        let selection = &self.document_file_set_list_view_wrapper.selection_model;
+        if let Some(file_set_list_item) = self
+            .document_file_set_list_view_wrapper
+            .get_visible(selection.selected())
+        {
+            self.get_file_set_by_id(file_set_list_item.borrow().id)
+        } else {
+            None
+        }
+    }
+
+    fn get_file_set_by_id(&self, file_set_id: i64) -> Option<FileSetViewModel> {
+        self.selected_release.as_ref().and_then(|release| {
+            release
+                .file_sets
+                .iter()
+                .find(|fs| fs.id == file_set_id)
+                .cloned()
+        })
     }
 }
