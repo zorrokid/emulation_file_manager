@@ -160,7 +160,7 @@ impl ReleaseFormModel {
                     }
                 });
             if let Err(e) = self.file_set_editor.set(file_set_editor) {
-                tracing::error!("Failed to set file set editor: {:?}", e);
+                tracing::error!(error = ?e, "Failed to set file set editor");
             }
         }
     }
@@ -467,11 +467,7 @@ impl Component for ReleaseFormModel {
                     sender.oneshot_command(async move {
                         let res = match release_id {
                             Some(id) => {
-                                tracing::info!(
-                                    "Editing existing release {} with id: {}",
-                                    release_name,
-                                    id
-                                );
+                                tracing::info!(id = id, "Editing existing release");
                                 repository_manager
                                     .get_release_repository()
                                     .update_release_full(
@@ -484,7 +480,7 @@ impl Component for ReleaseFormModel {
                                     .await
                             }
                             _ => {
-                                tracing::info!("Creating new release with name: {}", release_name);
+                                tracing::info!(name = release_name, "Creating new release");
                                 repository_manager
                                     .get_release_repository()
                                     .add_release_full(
@@ -501,18 +497,20 @@ impl Component for ReleaseFormModel {
                 }
             }
             ReleaseFormMsg::SoftwareTitleCreated(software_title) => {
-                tracing::info!("Software title created: {:?}", &software_title);
-                let res = sender.output(ReleaseFormOutputMsg::SoftwareTitleCreated(software_title));
-                if let Err(msg) = res {
-                    tracing::error!("Error in sending message {:?}", msg);
-                }
+                tracing::info!(id = software_title.id, "Software title created");
+                sender
+                    .output(ReleaseFormOutputMsg::SoftwareTitleCreated(software_title))
+                    .unwrap_or_else(
+                        |err| tracing::error!(error = ?err, "Error in sending message"),
+                    );
             }
             ReleaseFormMsg::SoftwareTitleUpdated(software_title) => {
-                tracing::info!("Software title updated: {:?}", &software_title);
-                let res = sender.output(ReleaseFormOutputMsg::SoftwareTitleUpdated(software_title));
-                if let Err(msg) = res {
-                    tracing::error!("Error in sending message {:?}", msg);
-                }
+                tracing::info!(id = software_title.id, "Software title updated");
+                sender
+                    .output(ReleaseFormOutputMsg::SoftwareTitleUpdated(software_title))
+                    .unwrap_or_else(
+                        |err| tracing::error!(error = ?err, "Error in sending message"),
+                    );
             }
             ReleaseFormMsg::UnlinkSoftwareTitle => {
                 remove_selected(&mut self.selected_software_titles_list_view_wrapper);
@@ -591,7 +589,7 @@ impl Component for ReleaseFormModel {
             }
             ReleaseFormMsg::Show { release_id } => {
                 if let Some(id) = release_id {
-                    tracing::info!("Loading release with ID: {}", id);
+                    tracing::info!(id = id, "Loading release");
                     let view_model_service = Arc::clone(&self.view_model_service);
                     sender.oneshot_command(async move {
                         let release_result = view_model_service.get_release_view_model(id).await;
@@ -650,13 +648,13 @@ impl Component for ReleaseFormModel {
     ) {
         match message {
             CommandMsg::ReleaseCreatedOrUpdated(Ok(id)) => {
-                tracing::info!("Release created or updated with ID: {}", id);
-                let res = sender.output(ReleaseFormOutputMsg::ReleaseCreatedOrUpdated { id });
-                if let Err(e) = res {
-                    tracing::error!("Error sending output message: {:?}", e);
-                } else {
-                    root.close();
-                }
+                tracing::info!(id = id, "Release created or updated");
+                sender
+                    .output(ReleaseFormOutputMsg::ReleaseCreatedOrUpdated { id })
+                    .unwrap_or_else(
+                        |err| tracing::error!(error = ?err, "Error sending output message"),
+                    );
+                root.close();
             }
             CommandMsg::ReleaseCreatedOrUpdated(Err(err)) => {
                 show_error_dialog(
@@ -665,11 +663,12 @@ impl Component for ReleaseFormModel {
                 );
             }
             CommandMsg::ReleaseFetched(Ok(release)) => {
-                tracing::info!("Release fetched: {:?}", &release);
+                tracing::info!(id = release.id, "Release fetched");
                 self.release = Some(release);
                 sender.input(ReleaseFormMsg::UpdateEditFields);
             }
             CommandMsg::ReleaseFetched(Err(err)) => {
+                tracing::error!(error = ?err, "Failed to fetch release");
                 show_error_dialog(format!("Failed to fetch release: {:?}", err), root);
             }
         }

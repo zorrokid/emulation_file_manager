@@ -358,6 +358,10 @@ impl Component for DocumentViewer {
                     .extend_from_iter(viewer_list_items);
             }
             DocumentViewerCommandMsg::ViewersFetched(Err(error)) => {
+                tracing::error!(
+                    error = ?error,
+                    "Error fetching document viewers"
+                );
                 show_error_dialog(
                     format!(
                         "An error occurred while fetching document viewers: {}",

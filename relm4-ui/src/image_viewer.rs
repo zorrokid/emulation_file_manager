@@ -14,7 +14,7 @@ use service::{
 };
 
 use crate::image_fileset_viewer::{
-    ImageFileSetViewerInit, ImageFilesetViewer, ImageFilesetViewerMsg,
+    ImageFileSetViewerInit, ImageFileSetViewerOutputMsg, ImageFilesetViewer, ImageFilesetViewerMsg,
 };
 
 #[derive(Debug)]
@@ -24,6 +24,7 @@ pub enum ImageViewerMsg {
     SetFileSet { file_set: FileSetViewModel },
     Clear,
     View,
+    ShowError(String),
 }
 
 #[derive(Debug)]
@@ -109,7 +110,9 @@ impl Component for ImageViewer {
         let image_file_set_viewer = ImageFilesetViewer::builder()
             .transient_for(&root)
             .launch(init_model)
-            .detach();
+            .forward(sender.input_sender(), |msg| match msg {
+                ImageFileSetViewerOutputMsg::ShowError(msg) => ImageViewerMsg::ShowError(msg),
+            });
 
         let model = ImageViewer {
             file_set: None,
@@ -181,6 +184,15 @@ impl Component for ImageViewer {
                             file_set: file_set.clone(),
                         });
                 }
+            }
+            ImageViewerMsg::ShowError(msg) => {
+                sender
+                    .output(ImageViewerOutputMsg::ShowError(msg))
+                    .unwrap_or_else(|err| {
+                        tracing::error!(
+                            error = ?err,
+                            "Failed sending output message ImageViewerOutputMsg::ShowError");
+                    });
             }
         }
     }

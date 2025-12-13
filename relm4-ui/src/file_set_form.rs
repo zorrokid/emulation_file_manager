@@ -71,7 +71,7 @@ impl FactoryComponent for File {
                         sha1_checksum,
                         selected: checkbox.is_active(),
                     }).unwrap_or_else(|e| {
-                        tracing::error!("Error sending output: {:?}", e);
+                        tracing::error!(error = ?e, "Error sending output");
                     });
                 }
             },
@@ -528,8 +528,8 @@ impl Component for FileSetFormModel {
                                 ui_sender.send(FileSetFormMsg::ProcessDownloadEvent(event))
                             {
                                 tracing::error!(
-                                    "Error sending download event to UI, stopping handling events: {:?}",
-                                    e
+                                    error = ?e,
+                                    "Error sending download event to UI, stopping handling events",
                                 );
                                 break;
                             }
@@ -649,7 +649,7 @@ impl Component for FileSetFormModel {
                 if let Some(cancel_tx) = self.download_cancel_tx.take() {
                     // Send cancellation signal
                     if let Err(e) = cancel_tx.try_send(()) {
-                        tracing::error!("Failed to send cancel signal: {:?}", e);
+                        tracing::error!(error = ?e, "Failed to send cancel signal");
                     }
                 }
             }
@@ -658,7 +658,7 @@ impl Component for FileSetFormModel {
                     self.download_in_progress = true;
                     self.download_total_size = total_size;
                     self.download_bytes = 0;
-                    tracing::info!("Download started (size: {:?})", total_size);
+                    tracing::info!(total_size = total_size, "Download started");
                 }
                 HttpDownloadEvent::Progress { bytes_downloaded } => {
                     self.download_bytes = bytes_downloaded;
@@ -668,14 +668,14 @@ impl Component for FileSetFormModel {
                     self.download_bytes = 0;
                     self.download_total_size = None;
                     self.download_cancel_tx = None;
-                    tracing::info!("Download completed: {:?}", file_path);
+                    tracing::info!(file_path = ?file_path, "Download completed");
                 }
                 HttpDownloadEvent::Failed { error } => {
                     self.download_in_progress = false;
                     self.download_bytes = 0;
                     self.download_total_size = None;
                     self.download_cancel_tx = None;
-                    tracing::error!("Download failed: {}", error);
+                    tracing::error!(error = ?error, "Download failed");
                 }
             },
         }
@@ -724,7 +724,9 @@ impl Component for FileSetFormModel {
                     sender
                         .output(FileSetFormOutputMsg::FileSetCreated(file_set_list_model))
                         .unwrap_or_else(|err| {
-                            tracing::error!("Error sending output message: {:?}", err);
+                            tracing::error!(
+                                error = ?err,
+                                "Error sending output message");
                         });
 
                     root.close();
@@ -732,10 +734,12 @@ impl Component for FileSetFormModel {
             }
             CommandMsg::FileImportDone(Err(e)) => {
                 self.processing = false;
+                tracing::error!(error = ?e, "File set import failed");
                 show_error_dialog(format!("File set import failed: {:?}", e), root);
             }
             CommandMsg::FileImportPrepared(Err(e)) => {
                 self.processing = false;
+                tracing::error!(error = ?e, "Preparing file import failed");
                 show_error_dialog(format!("Preparing file import failed: {:?}", e), root);
             }
         }

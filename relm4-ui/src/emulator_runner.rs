@@ -286,7 +286,7 @@ impl Component for EmulatorRunnerModel {
             }
             EmulatorRunnerMsg::StartEditEmulator => {
                 if let Some(selected_emulator) = &self.selected_emulator {
-                    tracing::info!("Starting edit for emulator ID {}", selected_emulator.id);
+                    tracing::info!(id = selected_emulator.id, "Starting edit emulator");
                     sender.input(EmulatorRunnerMsg::OpenEmulatorForm {
                         editable_emulator: self.selected_emulator.clone(),
                     });
@@ -371,6 +371,10 @@ impl Component for EmulatorRunnerModel {
                     .extend_from_iter(emulator_list_items);
             }
             EmulatorRunnerCommandMsg::EmulatorsFetched(Err(error)) => {
+                tracing::error!(
+                    error = ?error,
+                    "Error fetching emulators"
+                );
                 show_error_dialog(format!("Error Fetching Emulators {:?}", error), root);
             }
             EmulatorRunnerCommandMsg::FinishedRunningEmulator(Ok(())) => {
@@ -381,7 +385,7 @@ impl Component for EmulatorRunnerModel {
                 show_error_dialog(format!("Error running emulator: {:?}", error), root);
             }
             EmulatorRunnerCommandMsg::EmulatorDeleted(Ok(deleted_id)) => {
-                tracing::info!("Emulator with ID {} deleted successfully", deleted_id);
+                tracing::info!(id = deleted_id, "Emulator deleted successfully");
                 // TODO: instead of fetching maybe just remove from the list
                 if let Some(system) = &self.selected_system {
                     sender.input(EmulatorRunnerMsg::FetchEmulators {

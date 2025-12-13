@@ -16,7 +16,9 @@ use service::{
 };
 
 use crate::{
-    file_info_details::{FileInfoDetails, FileInfoDetailsInit, FileInfoDetailsMsg},
+    file_info_details::{
+        FileInfoDetails, FileInfoDetailsInit, FileInfoDetailsMsg, FileInfoDetailsOutputMsg,
+    },
     list_item::ListItem,
 };
 
@@ -33,6 +35,7 @@ pub struct FileSetDetailsView {
 pub enum FileSetDetailsMsg {
     LoadFileSet(i64),
     FileSelected { index: u32 },
+    ShowError(String),
 }
 
 #[derive(Debug)]
@@ -40,6 +43,11 @@ pub enum FileSetDetailsCmdMsg {
     FileSetLoaded(Result<FileSetViewModel, Error>),
     ReleasesLoaded(Result<Vec<ReleaseListModel>, Error>),
     FileSetSystemsLoaded(Result<Vec<SystemListModel>, Error>),
+}
+
+#[derive(Debug)]
+pub enum FileSetDetailsOutputMsg {
+    ShowError(String),
 }
 
 #[derive(Debug)]
@@ -51,7 +59,7 @@ pub struct FileSetDetailsInit {
 impl relm4::Component for FileSetDetailsView {
     type Init = FileSetDetailsInit;
     type Input = FileSetDetailsMsg;
-    type Output = ();
+    type Output = FileSetDetailsOutputMsg;
     type CommandOutput = FileSetDetailsCmdMsg;
 
     view! {
@@ -118,7 +126,11 @@ impl relm4::Component for FileSetDetailsView {
         };
         let file_info_details = FileInfoDetails::builder()
             .launch(file_info_details_init)
-            .detach();
+            .forward(sender.input_sender(), |msg| match msg {
+                FileInfoDetailsOutputMsg::ShowError(error_msg) => {
+                    FileSetDetailsMsg::ShowError(error_msg)
+                }
+            });
 
         let model = FileSetDetailsView {
             view_model_service: init.view_model_service,
@@ -186,6 +198,15 @@ impl relm4::Component for FileSetDetailsView {
                     self.file_info_details
                         .emit(FileInfoDetailsMsg::LoadFileInfo(id));
                 }
+            }
+            FileSetDetailsMsg::ShowError(msg) => {
+                sender
+                    .output(FileSetDetailsOutputMsg::ShowError(msg))
+                    .unwrap_or_else(|err| {
+                        tracing::error!(
+                        error = ?err,
+                        "Failed sending FileSetDetailsOutputMsg::ShowError")
+                    });
             }
         }
     }

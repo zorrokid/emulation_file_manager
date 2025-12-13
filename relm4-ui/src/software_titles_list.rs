@@ -143,12 +143,16 @@ impl Component for SoftwareTitlesList {
                 self.list_view_wrapper.extend_from_iter(items);
             }
             SoftwareTitleListCmdMsg::SoftwareTitlesFetched(Err(err)) => {
-                let message = format!("Failed to fetch software titles: {:?}", err);
-                tracing::error!(message);
+                tracing::error!(error = ?err, "Failed to fetch software titles");
                 sender
-                    .output(SoftwareTitleListOutMsg::ShowError(message))
+                    .output(SoftwareTitleListOutMsg::ShowError(format!(
+                        "Failed to fetch software titles: {:?}",
+                        err
+                    )))
                     .unwrap_or_else(|e| {
-                        eprintln!("Failed to send ShowError message: {:?}", e);
+                        tracing::error!(
+                        error = ?e, "Failed to send ShowError message"
+                        )
                     });
             }
         }

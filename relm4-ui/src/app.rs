@@ -572,7 +572,9 @@ impl AppModel {
                             // Sync is still running - send cancel signal
                             if let Some(cancel_tx) = &cancel_tx {
                                 if let Err(e) = cancel_tx.try_send(()) {
-                                    tracing::warn!("Failed to send cancel signal: {:?}", e);
+                                    tracing::warn!(
+                                        error = ?e,
+                                        "Failed to send cancel signal");
                                 } else {
                                     tracing::info!("Sync cancellation requested");
                                 }
