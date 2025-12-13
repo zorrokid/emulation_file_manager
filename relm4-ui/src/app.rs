@@ -610,6 +610,7 @@ impl AppModel {
                 SoftwareTitleListOutMsg::SoftwareTitleSelected { id } => {
                     AppMsg::SoftwareTitleSelected { id }
                 }
+                SoftwareTitleListOutMsg::ShowError(err_msg) => AppMsg::ShowError(err_msg),
             });
 
         let view_model_service = Arc::clone(&init_result.view_model_service);

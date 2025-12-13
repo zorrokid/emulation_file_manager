@@ -36,6 +36,7 @@ pub enum SoftwareTitleListCmdMsg {
 #[derive(Debug)]
 pub enum SoftwareTitleListOutMsg {
     SoftwareTitleSelected { id: i64 },
+    ShowError(String),
 }
 
 #[derive(Debug)]
@@ -107,10 +108,11 @@ impl Component for SoftwareTitlesList {
                 let item = self.list_view_wrapper.get_visible(index);
                 if let Some(item) = item {
                     let id = item.borrow().id;
-                    let res = sender.output(SoftwareTitleListOutMsg::SoftwareTitleSelected { id });
-                    if res.is_err() {
-                        eprintln!("Failed to send SoftwareTitleSelected message");
-                    }
+                    sender
+                        .output(SoftwareTitleListOutMsg::SoftwareTitleSelected { id })
+                        .unwrap_or_else(|res| {
+                            eprintln!("Failed to send SoftwareTitleSelected message: {:?}", res);
+                        });
                 }
             }
             SoftwareTitleListMsg::AddSoftwareTitle(software_title) => {
@@ -125,7 +127,7 @@ impl Component for SoftwareTitlesList {
     fn update_cmd(
         &mut self,
         message: Self::CommandOutput,
-        _sender: ComponentSender<Self>,
+        sender: ComponentSender<Self>,
         _: &Self::Root,
     ) {
         match message {
@@ -141,7 +143,13 @@ impl Component for SoftwareTitlesList {
                 self.list_view_wrapper.extend_from_iter(items);
             }
             SoftwareTitleListCmdMsg::SoftwareTitlesFetched(Err(err)) => {
-                eprintln!("Error fetching software titles: {:?}", err);
+                let message = format!("Failed to fetch software titles: {:?}", err);
+                tracing::error!(message);
+                sender
+                    .output(SoftwareTitleListOutMsg::ShowError(message))
+                    .unwrap_or_else(|e| {
+                        eprintln!("Failed to send ShowError message: {:?}", e);
+                    });
             }
         }
     }
