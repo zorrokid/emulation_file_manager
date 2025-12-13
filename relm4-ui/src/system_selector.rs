@@ -275,7 +275,9 @@ impl Component for SystemSelectModel {
                 self.populate_list(systems);
             }
             CommandMsg::SystemsFetched(Err(e)) => {
-                show_error_dialog(format!("Error fetching systems: {:?}", e), root);
+                let message = format!("Error fetching systems: {:?}", e);
+                tracing::error!(message);
+                show_error_dialog(message, root);
             }
             CommandMsg::Deleted { result, id } => match result {
                 Ok(_) => {
@@ -283,7 +285,9 @@ impl Component for SystemSelectModel {
                     self.remove_from_list(id);
                 }
                 Err(e) => {
-                    show_error_dialog(format!("Error deleting system: {:?}", e), root);
+                    let message = format!("Error deleting system ID {}: {:?}", id, e);
+                    tracing::error!(message);
+                    show_error_dialog(message, root);
                 }
             },
         }
