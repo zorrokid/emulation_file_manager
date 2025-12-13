@@ -570,32 +570,34 @@ impl Component for FileSetFormModel {
                 {
                     self.processing = true;
 
-                    let import_files: Vec<FileImportModel> = self
-                        .picked_files
-                        .iter()
-                        .map(|f| FileImportModel {
-                            path: f.path.clone(),
-                            content: f
-                                .content
-                                .iter()
-                                .map(|(k, v)| {
-                                    let existing_file_info_id = v.existing_file_info_id;
-                                    let existing_archive_file_name =
-                                        v.existing_archive_file_name.clone();
-                                    (
-                                        *k,
-                                        ImportFileContent {
-                                            file_name: v.file_name.clone(),
-                                            sha1_checksum: *k,
-                                            file_size: v.file_size,
-                                            existing_file_info_id,
-                                            existing_archive_file_name,
-                                        },
-                                    )
-                                })
-                                .collect(),
-                        })
-                        .collect();
+                    // Is this needed?
+                    // picked_files are already FileImportModel type
+                    /*let import_files: Vec<FileImportModel> = self
+                    .picked_files
+                    .iter()
+                    .map(|f| FileImportModel {
+                        path: f.path.clone(),
+                        content: f
+                            .content
+                            .iter()
+                            .map(|(k, v)| {
+                                let existing_file_info_id = v.existing_file_info_id;
+                                let existing_archive_file_name =
+                                    v.existing_archive_file_name.clone();
+                                (
+                                    *k,
+                                    ImportFileContent {
+                                        file_name: v.file_name.clone(),
+                                        sha1_checksum: *k,
+                                        file_size: v.file_size,
+                                        existing_file_info_id,
+                                        existing_archive_file_name,
+                                    },
+                                )
+                            })
+                            .collect(),
+                    })
+                    .collect();*/
 
                     let file_import_model = FileSetImportModel {
                         file_set_name: self.file_set_name.clone(),
@@ -604,7 +606,7 @@ impl Component for FileSetFormModel {
                         file_type,
                         system_ids: self.selected_system_ids.clone(),
                         selected_files: self.selected_files_in_picked_files.clone(),
-                        import_files,
+                        import_files: self.picked_files.clone(),
                     };
 
                     let file_import_service = Arc::clone(&self.file_import_service);
@@ -690,9 +692,9 @@ impl Component for FileSetFormModel {
         match message {
             CommandMsg::FileImportPrepared(Ok(prepare_result)) => {
                 self.processing = false;
-                let import_file = prepare_result.import_model;
+                let import_model = prepare_result.import_model;
                 let import_metadata = prepare_result.import_metadata;
-                for file in import_file.content.values() {
+                for file in import_model.content.values() {
                     self.files.guard().push_back(ReadFile {
                         file_name: file.file_name.clone(),
                         sha1_checksum: file.sha1_checksum,
@@ -708,7 +710,7 @@ impl Component for FileSetFormModel {
                 if self.file_set_file_name.is_empty() {
                     self.file_set_file_name = import_metadata.file_set_file_name.clone();
                 }
-                self.picked_files.push(import_file);
+                self.picked_files.push(import_model);
             }
             CommandMsg::FileImportDone(Ok(id)) => {
                 self.processing = false;

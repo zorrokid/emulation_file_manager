@@ -105,12 +105,12 @@ impl PipelineStep<PrepareFileImportContext> for CollectFileContentStep {
     }
 }
 
-pub struct ProcessFileContentStep;
+pub struct CheckExistingFilesStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<PrepareFileImportContext> for ProcessFileContentStep {
+impl PipelineStep<PrepareFileImportContext> for CheckExistingFilesStep {
     fn name(&self) -> &'static str {
-        "process_file_content"
+        "check_existing_files"
     }
 
     fn should_execute(&self, context: &PrepareFileImportContext) -> bool {
@@ -234,7 +234,7 @@ mod tests {
             },
         );
 
-        let step = super::ProcessFileContentStep;
+        let step = super::CheckExistingFilesStep;
         let action = step.execute(&mut context).await;
 
         assert!(matches!(action, super::StepAction::Continue));
@@ -276,7 +276,7 @@ mod tests {
             },
         );
 
-        let step = super::ProcessFileContentStep;
+        let step = super::CheckExistingFilesStep;
         let action = step.execute(&mut context).await;
 
         assert!(matches!(action, super::StepAction::Continue));

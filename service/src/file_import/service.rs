@@ -8,7 +8,7 @@ use crate::{
     error::Error,
     file_import::{
         import::context::FileImportContext,
-        model::{FileImportModel, FileImportPrepareResult, FileSetImportModel},
+        model::{FileImportPrepareResult, FileSetImportModel},
         prepare::context::PrepareFileImportContext,
     },
     file_system_ops::{FileSystemOps, StdFileSystemOps},

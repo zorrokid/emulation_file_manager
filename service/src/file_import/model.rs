@@ -11,7 +11,7 @@ pub struct FileImportMetadata {
 
 /// Content of a file to be imported. If there is already an existing file with the same
 /// checksum, the existing file info will be provided.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ImportFileContent {
     pub file_name: String,
     pub sha1_checksum: Sha1Checksum,
@@ -21,7 +21,7 @@ pub struct ImportFileContent {
     pub existing_archive_file_name: Option<String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FileImportModel {
     /// Path to the file to be imported (e.g., zip archive)
     pub path: PathBuf,

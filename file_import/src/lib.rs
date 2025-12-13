@@ -1,11 +1,11 @@
 pub mod file_import_ops;
 pub mod file_outputter;
 use core_types::{FileSize, FileType, ImportedFile, ReadFile, Sha1Checksum};
-pub use file_import_ops::{mock, FileImportOps, StdFileImportOps};
-use file_outputter::{output_zstd_compressed, CompressionLevel};
+pub use file_import_ops::{FileImportOps, StdFileImportOps, mock};
+use file_outputter::{CompressionLevel, output_zstd_compressed};
 use sha1::{
-    digest::{consts::U20, generic_array::GenericArray},
     Digest, Sha1,
+    digest::{consts::U20, generic_array::GenericArray},
 };
 use std::{
     collections::{HashMap, HashSet},
@@ -65,14 +65,16 @@ pub fn import(
     for file_path in &file_import_model.file_path {
         println!(
             "Importing file: {} with file type: {} from path: {} to output directory: {} with filter: {:?}",
-            file_import_model.file_name, file_import_model.file_type, 
+            file_import_model.file_name,
+            file_import_model.file_type,
             file_path.display(),
             file_import_model.output_dir.display(),
             file_import_model.new_files_file_name_filter
         );
 
-        let is_zip = file_util::is_zip_file(file_path)
-            .map_err(|e| FileImportError::FileIoError(format!("Failed checking if file is zip: {}", e)))?;
+        let is_zip = file_util::is_zip_file(file_path).map_err(|e| {
+            FileImportError::FileIoError(format!("Failed checking if file is zip: {}", e))
+        })?;
 
         if is_zip {
             let res = import_files_from_zip(
@@ -93,8 +95,8 @@ pub fn import(
                 &file_import_model.file_type,
             )?;
             imported_files_map.extend(res);
-        }   
-    } 
+        }
+    }
     Ok(imported_files_map)
 }
 
@@ -142,7 +144,7 @@ pub fn import_file(
 /// * `file_path` - The path to the zip file.
 /// * `output_dir` - The directory where the files will be extracted.
 /// * `compression_type` - The compression method to use for the output files.
-/// * `file_name_filter` - A hash set of file names to be imported from archive.
+/// * `file_name_filter` - A hash set of file names to be imported from archive. Only these files will be processed
 ///
 /// # Returns
 ///

@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use crate::{
     error::Error,
     file_import::import::context::FileImportContext,
@@ -12,6 +10,11 @@ impl PipelineStep<FileImportContext> for ImportFilesStep {
     fn name(&self) -> &'static str {
         "import_files"
     }
+
+    fn should_execute(&self, context: &FileImportContext) -> bool {
+        context.is_new_files_to_be_imported()
+    }
+
     async fn execute(&self, context: &mut FileImportContext) -> StepAction {
         match context
             .file_import_ops
@@ -110,9 +113,7 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::Arc;
 
-    async fn create_test_context(
-        file_import_ops: Arc<MockFileImportOps>,
-    ) -> FileImportContext {
+    async fn create_test_context(file_import_ops: Arc<MockFileImportOps>) -> FileImportContext {
         let pool = Arc::new(setup_test_db().await);
         let repository_manager = Arc::new(RepositoryManager::new(pool));
         let settings = Arc::new(crate::view_models::Settings::default());
@@ -136,9 +137,31 @@ mod tests {
     }
 
     #[async_std::test]
+    async fn test_import_files_step_skipped() {
+        let mock_ops = Arc::new(MockFileImportOps::new());
+        let mut context = create_test_context(mock_ops).await;
+        let checksum: Sha1Checksum = [1u8; 20];
+        context.selected_files = vec![checksum];
+        let mut content = HashMap::new();
+        content.insert(
+            checksum,
+            ImportFileContent {
+                file_name: "game.rom".to_string(),
+                sha1_checksum: checksum,
+                file_size: 1024,
+                existing_file_info_id: Some(123),
+                existing_archive_file_name: Some("some_file_name".to_string()),
+            },
+        );
+
+        let step = ImportFilesStep;
+        assert!(!step.should_execute(&context));
+    }
+
+    #[async_std::test]
     async fn test_import_files_step_success() {
         let checksum: Sha1Checksum = [1u8; 20];
-        
+
         // Setup mock before creating context
         let mock_ops = Arc::new(MockFileImportOps::new());
         mock_ops.add_imported_file(
@@ -150,7 +173,7 @@ mod tests {
                 archive_file_name: "archive123.zst".to_string(),
             },
         );
-        
+
         let mut context = create_test_context(mock_ops).await;
         context.selected_files = vec![checksum];
 
@@ -185,11 +208,11 @@ mod tests {
     #[async_std::test]
     async fn test_import_files_step_failure() {
         let checksum: Sha1Checksum = [1u8; 20];
-        
+
         // Setup mock to fail
         let mock_ops = Arc::new(MockFileImportOps::new());
         mock_ops.set_should_fail(true);
-        
+
         let mut context = create_test_context(mock_ops).await;
         context.selected_files = vec![checksum];
 
@@ -313,7 +336,4 @@ mod tests {
         let file_set_id = context.file_set_id.unwrap();
         assert!(file_set_id > 0);
     }
-
-    // Test removed: Can't easily trigger database failure without mocking database itself
-    // The cleanup logic is still in place in UpdateDatabaseStep
 }

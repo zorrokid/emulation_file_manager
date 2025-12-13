@@ -16,6 +16,7 @@ use crate::{
 pub struct FileImportContext {
     pub repository_manager: Arc<RepositoryManager>,
     pub settings: Arc<Settings>,
+    /// These are selected files from the file set that should be imported.
     pub selected_files: Vec<Sha1Checksum>,
     pub file_type: FileType,
     // It is possible to create a file set from multiple sets of import files.
@@ -78,6 +79,10 @@ impl FileImportContext {
         });
 
         files_in_file_set
+    }
+
+    pub fn is_new_files_to_be_imported(&self) -> bool {
+        !self.get_new_selected_file_names().is_empty()
     }
 
     pub fn get_file_import_model(&self) -> FileImportModel {
