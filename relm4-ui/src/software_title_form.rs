@@ -189,12 +189,14 @@ impl Component for SoftwareTitleFormModel {
                         })
                     })
                     .unwrap_or_else(|e| {
-                        eprintln!("Failed to send output message: {:?}", e);
+                        tracing::error!("Failed to send output message: {:?}", e);
                     });
                 root.close();
             }
             SoftwareTitleFormCommandMsg::SoftwareTitleSubmitted(Err(e)) => {
-                show_error_dialog(format!("Error submitting software title: {}", e), root);
+                let message = format!("Failed to submit software title: {}", e);
+                tracing::error!(message);
+                show_error_dialog(message, root);
             }
         }
     }
