@@ -51,7 +51,7 @@ impl SimpleComponent for StatusBarModel {
         }
     }
 
-    fn init(_init: (), root: Self::Root, sender: ComponentSender<Self>) -> ComponentParts<Self> {
+    fn init(_init: (), root: Self::Root, _sender: ComponentSender<Self>) -> ComponentParts<Self> {
         let model = StatusBarModel {
             status_text: "Ready.".into(),
             total: 0,
