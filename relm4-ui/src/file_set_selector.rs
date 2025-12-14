@@ -20,7 +20,9 @@ use service::{
 use ui_components::{DropDownOutputMsg, FileTypeDropDown, FileTypeSelectedMsg};
 
 use crate::{
-    file_set_details_view::{FileSetDetailsInit, FileSetDetailsMsg, FileSetDetailsView},
+    file_set_details_view::{
+        FileSetDetailsInit, FileSetDetailsMsg, FileSetDetailsOutputMsg, FileSetDetailsView,
+    },
     file_set_form::{FileSetFormInit, FileSetFormModel, FileSetFormMsg, FileSetFormOutputMsg},
     list_item::FileSetListItem,
     utils::dialog_utils::{show_error_dialog, show_info_dialog},
@@ -41,6 +43,7 @@ pub enum FileSetSelectorMsg {
     },
     Hide,
     Ignore,
+    ShowError(String),
 }
 
 #[derive(Debug)]
@@ -197,10 +200,11 @@ impl Component for FileSetSelector {
             view_model_service: Arc::clone(&init_model.view_model_service),
         };
 
-        // TODO: is this needed to be Controller?
         let file_set_details_view = FileSetDetailsView::builder()
             .launch(file_set_details_view_init)
-            .forward(sender.input_sender(), |_| FileSetSelectorMsg::Ignore);
+            .forward(sender.input_sender(), |msg| match msg {
+                FileSetDetailsOutputMsg::ShowError(msg) => FileSetSelectorMsg::ShowError(msg),
+            });
 
         let file_set_deletion_service = Arc::new(FileSetDeletionService::new(
             Arc::clone(&init_model.repository_manager),
@@ -249,7 +253,7 @@ impl Component for FileSetSelector {
                 }
             }
             FileSetSelectorMsg::FileSetCreated(file_set_list_model) => {
-                tracing::info!("File set created with id: {}", file_set_list_model.id);
+                tracing::info!(id = file_set_list_model.id, "File set created");
                 self.add_to_list(&file_set_list_model);
             }
             FileSetSelectorMsg::SelectClicked => {
@@ -260,8 +264,8 @@ impl Component for FileSetSelector {
                         ))
                         .unwrap_or_else(|e| {
                             tracing::error!(
-                                "Failed to send FileSetSelected output message: {:?}",
-                                e
+                                error = ?e,
+                                "Failed to send FileSetSelected output message"
                             );
                         });
                     root.close();
@@ -269,14 +273,13 @@ impl Component for FileSetSelector {
             }
             FileSetSelectorMsg::FileSetSelected => {
                 if let Some(file_set) = self.get_selected_list_model() {
-                    tracing::info!("File set selected with id: {}", file_set.id);
+                    tracing::info!(id = file_set.id, "File set selected");
                     self.file_set_details_view
                         .emit(FileSetDetailsMsg::LoadFileSet(file_set.id));
                     self.selected_file_set = Some(file_set);
                 }
             }
             FileSetSelectorMsg::FileTypeChanged(file_type) => {
-                tracing::info!("File type changed to: {:?}", file_type);
                 self.selected_file_type = Some(file_type);
                 sender.input(FileSetSelectorMsg::FetchFiles);
             }
@@ -311,7 +314,7 @@ impl Component for FileSetSelector {
             }
             FileSetSelectorMsg::DeleteClicked => {
                 if let Some(selected_file_set) = &self.selected_file_set {
-                    tracing::info!("Deleting file set with id: {}", selected_file_set.id);
+                    tracing::info!(id = selected_file_set.id, "Deleting file set");
                     let file_set_deletion_service = self.file_set_deletion_service.clone();
                     let file_set_id = selected_file_set.id;
 
@@ -328,6 +331,7 @@ impl Component for FileSetSelector {
                     ));
                 }
             }
+            FileSetSelectorMsg::ShowError(msg) => show_error_dialog(msg, root),
             FileSetSelectorMsg::Ignore => {}
         }
     }
@@ -340,7 +344,7 @@ impl Component for FileSetSelector {
     ) {
         match message {
             CommandMsg::FilesFetched(Ok(file_sets)) => {
-                tracing::info!("{} file sets fetched", file_sets.len());
+                tracing::info!("File sets fetched");
                 self.file_sets = file_sets;
                 self.list_view_wrapper.clear();
                 let list_items = self
@@ -373,7 +377,7 @@ impl FileSetSelector {
                 && item.borrow().id == file_set_id
             {
                 self.list_view_wrapper.remove(i);
-                tracing::info!("Removed file set with ID: {} from the list", file_set_id);
+                tracing::info!(id = file_set_id, "Removed file set from the list");
                 break;
             }
         }
@@ -391,7 +395,7 @@ impl FileSetSelector {
             if let Some(item) = self.list_view_wrapper.get_visible(i)
                 && item.borrow().id == file_set.id
             {
-                tracing::info!("Selecting newly added file set with ID: {}", file_set.id);
+                tracing::info!(id = file_set.id, "Selecting newly added file set");
                 self.list_view_wrapper.selection_model.set_selected(i);
                 break;
             }
@@ -444,10 +448,10 @@ impl FileSetSelector {
             .collect::<Vec<_>>();
 
         tracing::info!(
-            "File set deletion complete for id {}: {} successful, {} failed",
-            id,
-            successful_deletions.len(),
-            failed_deletions.len()
+            id = id,
+            succesful = successful_deletions.len(),
+            failed = failed_deletions.len(),
+            "File set deletion complete"
         );
 
         // TODO: create better summary dialog
