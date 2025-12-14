@@ -115,14 +115,14 @@ impl Component for SystemFormModel {
                 let edit_id = self.edit_system_id;
                 sender.oneshot_command(async move {
                     if let Some(edit_id) = edit_id {
-                        tracing::info!("Updating system with ID {}: {}", edit_id, name);
+                        tracing::info!(id = edit_id, "Updating system with ID");
                         let result = repository_manager
                             .get_system_repository()
                             .update_system(edit_id, &name)
                             .await;
                         SystemFormCommandMsg::SystemSubmitted(result)
                     } else {
-                        tracing::info!("Adding new software title: {}", name);
+                        tracing::info!(name = name, "Adding new software title");
                         let result = repository_manager
                             .get_system_repository()
                             .add_system(&name)
@@ -175,16 +175,14 @@ impl Component for SystemFormModel {
                             can_delete: self.can_delete,
                         })
                     })
-                    .unwrap_or_else(|res| {
-                        println!("Failed to send output message: {:?}", res);
+                    .unwrap_or_else(|err| {
+                        tracing::error!(error = ?err, "Failed to send output message");
                     });
                 root.close();
             }
             SystemFormCommandMsg::SystemSubmitted(Err(e)) => {
-                show_error_dialog(
-                    format!("An error occurred while submitting the system: {}", e),
-                    root,
-                );
+                tracing::error!(error = ?e, "Failed to submit system");
+                show_error_dialog(format!("Failed to submit system: {}", e), root);
             }
         }
     }

@@ -14,7 +14,7 @@ use service::{
 };
 
 use crate::image_fileset_viewer::{
-    ImageFileSetViewerInit, ImageFilesetViewer, ImageFilesetViewerMsg,
+    ImageFileSetViewerInit, ImageFileSetViewerOutputMsg, ImageFilesetViewer, ImageFilesetViewerMsg,
 };
 
 #[derive(Debug)]
@@ -24,11 +24,17 @@ pub enum ImageViewerMsg {
     SetFileSet { file_set: FileSetViewModel },
     Clear,
     View,
+    ShowError(String),
 }
 
 #[derive(Debug)]
 pub enum ImageViewerCommandMsg {
     HandleDownloadResult(Result<DownloadResult, ServiceError>),
+}
+
+#[derive(Debug)]
+pub enum ImageViewerOutputMsg {
+    ShowError(String),
 }
 
 #[derive(Debug, Clone)]
@@ -52,7 +58,7 @@ pub struct ImageViewer {
 impl Component for ImageViewer {
     type Init = ImageViewerInit;
     type Input = ImageViewerMsg;
-    type Output = ();
+    type Output = ImageViewerOutputMsg;
     type CommandOutput = ImageViewerCommandMsg;
 
     view! {
@@ -104,7 +110,9 @@ impl Component for ImageViewer {
         let image_file_set_viewer = ImageFilesetViewer::builder()
             .transient_for(&root)
             .launch(init_model)
-            .detach();
+            .forward(sender.input_sender(), |msg| match msg {
+                ImageFileSetViewerOutputMsg::ShowError(msg) => ImageViewerMsg::ShowError(msg),
+            });
 
         let model = ImageViewer {
             file_set: None,
@@ -177,13 +185,22 @@ impl Component for ImageViewer {
                         });
                 }
             }
+            ImageViewerMsg::ShowError(msg) => {
+                sender
+                    .output(ImageViewerOutputMsg::ShowError(msg))
+                    .unwrap_or_else(|err| {
+                        tracing::error!(
+                            error = ?err,
+                            "Failed sending output message ImageViewerOutputMsg::ShowError");
+                    });
+            }
         }
     }
 
     fn update_cmd(
         &mut self,
         message: Self::CommandOutput,
-        _sender: ComponentSender<Self>,
+        sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
         match message {
@@ -200,18 +217,23 @@ impl Component for ImageViewer {
                         .iter()
                         .find(|f| f.file_name == selected_image_name)
                     {
-                        println!("Selected file: {:?}", selected_file);
                         let temp_output_dir = &self.settings.temp_output_dir;
                         let image_path = temp_output_dir.join(&selected_file.file_name);
 
                         self.selected_image = image_path;
                     } else {
-                        eprintln!("Selected file not found in the file set.");
+                        tracing::error!("Selected file not found in the file set.");
                     }
                 }
             }
             ImageViewerCommandMsg::HandleDownloadResult(Err(e)) => {
-                eprintln!("Failed to download fileset: {}", e);
+                let message = format!("Failed to download fileset: {}", e);
+                tracing::error!(message);
+                sender
+                    .output(ImageViewerOutputMsg::ShowError(message))
+                    .unwrap_or_else(|err| {
+                        tracing::error!("Failed to send output message: {:?}", err);
+                    });
             }
         }
     }

@@ -17,11 +17,10 @@ use service::{
     view_models::Settings,
 };
 
+use crate::utils::dialog_utils::show_error_dialog;
+
 #[derive(Debug)]
 pub struct SettingsForm {
-    pub repository_manager: Arc<RepositoryManager>,
-    pub settings: Arc<Settings>,
-
     // settings fields (we are not modifying directly the settings object)
     // once changed settings have been saved, we emit a SettingsChanged message
     // so that the main application can reload settings and update components accordingly
@@ -234,8 +233,6 @@ impl Component for SettingsForm {
             s3_access_key_id: String::new(),
             s3_secret_access_key: String::new(),
             s3_sync_enabled: init.settings.s3_sync_enabled,
-            repository_manager: init.repository_manager,
-            settings: init.settings,
             settings_service,
         };
         let widgets = view_output!();
@@ -273,12 +270,13 @@ impl Component for SettingsForm {
                 // Clear the form fields
                 self.s3_access_key_id.clear();
                 self.s3_secret_access_key.clear();
-                
+
                 // Delete from keyring
                 let settings_service = Arc::clone(&self.settings_service);
                 sender.oneshot_command(async move {
                     if let Err(e) = settings_service.delete_credentials().await {
-                        eprintln!("Error deleting credentials: {}", e);
+                        // TODO: emit message to show error to user
+                        tracing::error!(error = ?e, "Error deleting credentials");
                     }
                     SettingsFormCommandMsg::SettingsSaved(Ok(()))
                 });
@@ -321,14 +319,17 @@ impl Component for SettingsForm {
         match msg {
             SettingsFormCommandMsg::SettingsSaved(Ok(())) => {
                 // notify main application that settings have changed
-                let res = sender.output(SettingsFormOutputMsg::SettingsChanged);
-                if res.is_err() {
-                    eprintln!("Error sending SettingsChanged message");
-                }
+                sender
+                    .output(SettingsFormOutputMsg::SettingsChanged)
+                    .unwrap_or_else(|e| {
+                        tracing::error!(error = ?e,
+                        "Error sending SettingsChanged message")
+                    });
                 root.hide();
             }
             SettingsFormCommandMsg::SettingsSaved(Err(e)) => {
-                eprintln!("Error saving settings: {}", e);
+                tracing::error!(error = ?e, "Error saving settings");
+                show_error_dialog(format!("Error saving settings: {}", e), root);
             }
         }
     }

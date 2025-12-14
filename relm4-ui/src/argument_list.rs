@@ -201,10 +201,13 @@ impl ArgumentList {
 
     fn emit_arguments_changed(&self, sender: &ComponentSender<Self>) {
         let arguments = self.collect_arguments();
-        let res = sender.output(ArgumentListOutputMsg::ArgumentsChanged(arguments));
-        if let Err(e) = res {
-            eprintln!("Failed to send output message: {:?}", e);
-        }
+        sender
+            .output(ArgumentListOutputMsg::ArgumentsChanged(arguments))
+            .unwrap_or_else(|e| {
+                tracing::error!(
+                    error = ?e,
+                    "Failed to send output message")
+            });
     }
     pub fn clear(&mut self) {
         self.list_view_wrapper.clear();
@@ -218,35 +221,35 @@ impl ArgumentList {
     }
 
     pub fn move_up(&mut self, index: u32) -> u32 {
-        if index > 0 {
-            if let Some(item) = self.list_view_wrapper.get(index) {
-                let new_index = index - 1;
-                let argument = item.borrow().argument.clone();
-                self.list_view_wrapper.remove(index);
-                self.list_view_wrapper
-                    .insert(new_index, ArgumentListItem { argument });
-                self.list_view_wrapper
-                    .selection_model
-                    .set_selected(new_index);
-                return new_index;
-            }
+        if index > 0
+            && let Some(item) = self.list_view_wrapper.get(index)
+        {
+            let new_index = index - 1;
+            let argument = item.borrow().argument.clone();
+            self.list_view_wrapper.remove(index);
+            self.list_view_wrapper
+                .insert(new_index, ArgumentListItem { argument });
+            self.list_view_wrapper
+                .selection_model
+                .set_selected(new_index);
+            return new_index;
         }
         index
     }
 
     pub fn move_down(&mut self, index: u32) -> u32 {
-        if index < self.list_view_wrapper.len() - 1 {
-            if let Some(item) = self.list_view_wrapper.get(index) {
-                let new_index = index + 1;
-                let argument = item.borrow().argument.clone();
-                self.list_view_wrapper.remove(index);
-                self.list_view_wrapper
-                    .insert(new_index, ArgumentListItem { argument });
-                self.list_view_wrapper
-                    .selection_model
-                    .set_selected(new_index);
-                return new_index;
-            }
+        if index < self.list_view_wrapper.len() - 1
+            && let Some(item) = self.list_view_wrapper.get(index)
+        {
+            let new_index = index + 1;
+            let argument = item.borrow().argument.clone();
+            self.list_view_wrapper.remove(index);
+            self.list_view_wrapper
+                .insert(new_index, ArgumentListItem { argument });
+            self.list_view_wrapper
+                .selection_model
+                .set_selected(new_index);
+            return new_index;
         }
         index
     }
