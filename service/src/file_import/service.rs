@@ -8,7 +8,7 @@ use crate::{
     error::Error,
     file_import::{
         import::context::FileImportContext,
-        model::{FileImportPrepareResult, FileSetImportModel},
+        model::{FileImportData, FileImportPrepareResult, FileSetImportModel},
         prepare::context::PrepareFileImportContext,
     },
     file_system_ops::{FileSystemOps, StdFileSystemOps},
@@ -85,12 +85,19 @@ impl FileImportService {
     }
 
     pub async fn import(&self, import_model: FileSetImportModel) -> Result<i64, Error> {
+        let file_type = import_model.file_type;
+        let output_dir = self.settings.collection_root_dir.clone();
+        let file_import_data = FileImportData {
+            output_dir,
+            file_type,
+            selected_files: import_model.selected_files,
+            import_files: import_model.import_files,
+        };
+
         let mut context = FileImportContext {
             repository_manager: self.repository_manager.clone(),
             settings: self.settings.clone(),
-            selected_files: import_model.selected_files,
-            file_type: import_model.file_type,
-            import_files: import_model.import_files,
+            file_import_data,
             system_ids: import_model.system_ids,
             source: import_model.source,
             file_set_name: import_model.file_set_name,

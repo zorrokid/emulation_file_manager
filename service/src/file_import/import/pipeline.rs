@@ -1,7 +1,7 @@
 use crate::{
-    file_import::import::{
-        context::FileImportContext,
-        steps::{ImportFilesStep, UpdateDatabaseStep},
+    file_import::{
+        common_steps::import::ImportFilesStep,
+        import::{context::FileImportContext, steps::UpdateDatabaseStep},
     },
     pipeline::generic_pipeline::Pipeline,
 };
@@ -9,7 +9,7 @@ use crate::{
 impl Pipeline<FileImportContext> {
     pub fn new() -> Self {
         Self::with_steps(vec![
-            Box::new(ImportFilesStep),
+            Box::new(ImportFilesStep::<FileImportContext>::new()),
             Box::new(UpdateDatabaseStep),
         ])
     }

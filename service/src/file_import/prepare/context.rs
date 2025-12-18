@@ -9,7 +9,10 @@ use database::{models::FileInfo, repository_manager::RepositoryManager};
 use file_import::FileImportOps;
 
 use crate::{
-    file_import::model::{FileImportMetadata, FileImportModel, ImportFileContent},
+    file_import::{
+        common_steps::check_existing_files::CheckExistingFilesContext,
+        model::{FileImportMetadata, FileImportSource, ImportFileContent},
+    },
     file_system_ops::FileSystemOps,
 };
 
@@ -44,7 +47,7 @@ impl PrepareFileImportContext {
         }
     }
 
-    pub fn get_imported_file_info(&self) -> FileImportModel {
+    pub fn get_imported_file_info(&self) -> FileImportSource {
         let import_content = self
             .file_info
             .iter()
@@ -66,9 +69,27 @@ impl PrepareFileImportContext {
             })
             .collect::<HashMap<_, _>>();
 
-        FileImportModel {
+        FileImportSource {
             path: self.file_path.clone(),
             content: import_content,
         }
+    }
+}
+
+impl CheckExistingFilesContext for PrepareFileImportContext {
+    fn file_info(&self) -> &HashMap<Sha1Checksum, ReadFile> {
+        &self.file_info
+    }
+
+    fn file_type(&self) -> FileType {
+        self.file_type
+    }
+
+    fn repository_manager(&self) -> Arc<RepositoryManager> {
+        self.repository_manager.clone()
+    }
+
+    fn set_existing_files(&mut self, existing_files: Vec<FileInfo>) {
+        self.existing_files = existing_files;
     }
 }

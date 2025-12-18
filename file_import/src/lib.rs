@@ -29,8 +29,8 @@ pub enum FileImportError {
 pub struct FileImportModel {
     pub file_path: Vec<PathBuf>,
     pub output_dir: PathBuf,
-    pub file_name: String,
-    pub file_set_name: String,
+    //pub file_name: String,
+    //pub file_set_name: String,
     pub file_type: FileType,
     pub new_files_file_name_filter: HashSet<String>,
 }
@@ -64,8 +64,8 @@ pub fn import(
     let mut imported_files_map: HashMap<Sha1Checksum, ImportedFile> = HashMap::new();
     for file_path in &file_import_model.file_path {
         println!(
-            "Importing file: {} with file type: {} from path: {} to output directory: {} with filter: {:?}",
-            file_import_model.file_name,
+            "Importing file with file type: {} from path: {} to output directory: {} with filter: {:?}",
+            //file_import_model.file_name,
             file_import_model.file_type,
             file_path.display(),
             file_import_model.output_dir.display(),
@@ -86,8 +86,8 @@ pub fn import(
             imported_files_map.extend(res);
         } else {
             println!(
-                "Importing file: {} with file type: {}",
-                file_import_model.file_name, file_import_model.file_type
+                "Importing file with file type: {}",
+                file_import_model.file_type
             );
             let res = import_file(
                 file_path,

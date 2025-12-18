@@ -1,39 +1,8 @@
 use crate::{
     error::Error,
-    file_import::import::context::FileImportContext,
+    file_import::{common_steps::import::FileImportContextOps, import::context::FileImportContext},
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
-
-pub struct ImportFilesStep;
-#[async_trait::async_trait]
-impl PipelineStep<FileImportContext> for ImportFilesStep {
-    fn name(&self) -> &'static str {
-        "import_files"
-    }
-
-    fn should_execute(&self, context: &FileImportContext) -> bool {
-        context.is_new_files_to_be_imported()
-    }
-
-    async fn execute(&self, context: &mut FileImportContext) -> StepAction {
-        match context
-            .file_import_ops
-            .import(&context.get_file_import_model())
-        {
-            Ok(imported_files) => {
-                context.imported_files = imported_files;
-            }
-            Err(err) => {
-                tracing::error!("Error importing files: {}", err);
-                return StepAction::Abort(Error::FileImportError(format!(
-                    "Error importing files: {}",
-                    err
-                )));
-            }
-        }
-        StepAction::Continue
-    }
-}
 
 pub struct UpdateDatabaseStep;
 
@@ -43,13 +12,14 @@ impl PipelineStep<FileImportContext> for UpdateDatabaseStep {
         "update_database"
     }
     async fn execute(&self, context: &mut FileImportContext) -> StepAction {
+        let file_type = context.get_file_import_data().file_type;
         match context
             .repository_manager
             .get_file_set_repository()
             .add_file_set(
                 &context.file_set_name,
                 &context.file_set_file_name,
-                &context.file_type,
+                &file_type,
                 &context.source,
                 &context.get_files_in_file_set(),
                 &context.system_ids,
@@ -74,7 +44,7 @@ impl PipelineStep<FileImportContext> for UpdateDatabaseStep {
                 for imported_file in context.imported_files.values() {
                     let file_path = context
                         .settings
-                        .get_file_path(&context.file_type, &imported_file.archive_file_name);
+                        .get_file_path(&file_type, &imported_file.archive_file_name);
                     if let Err(e) = context.file_system_ops.remove_file(&file_path) {
                         tracing::error!(
                             "Error deleting imported file '{}' after database failure: {}",
@@ -104,7 +74,7 @@ impl PipelineStep<FileImportContext> for UpdateDatabaseStep {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::file_import::model::{FileImportModel as ServiceFileImportModel, ImportFileContent};
+    use crate::file_import::model::{FileImportData, FileImportSource, ImportFileContent};
     use crate::file_system_ops::mock::MockFileSystemOps;
     use core_types::{FileType, ImportedFile, Sha1Checksum};
     use database::{repository_manager::RepositoryManager, setup_test_db};
@@ -113,7 +83,10 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::Arc;
 
-    async fn create_test_context(file_import_ops: Arc<MockFileImportOps>) -> FileImportContext {
+    async fn create_test_context(
+        file_import_ops: Arc<MockFileImportOps>,
+        file_import_data: FileImportData,
+    ) -> FileImportContext {
         let pool = Arc::new(setup_test_db().await);
         let repository_manager = Arc::new(RepositoryManager::new(pool));
         let settings = Arc::new(crate::view_models::Settings::default());
@@ -122,9 +95,7 @@ mod tests {
         FileImportContext {
             repository_manager,
             settings,
-            selected_files: vec![],
-            file_type: FileType::Rom,
-            import_files: vec![],
+            file_import_data,
             system_ids: vec![],
             source: "test_source".to_string(),
             file_set_name: "Test Game".to_string(),
@@ -136,115 +107,24 @@ mod tests {
         }
     }
 
-    #[async_std::test]
-    async fn test_import_files_step_skipped() {
-        let mock_ops = Arc::new(MockFileImportOps::new());
-        let mut context = create_test_context(mock_ops).await;
-        let checksum: Sha1Checksum = [1u8; 20];
-        context.selected_files = vec![checksum];
-        let mut content = HashMap::new();
-        content.insert(
-            checksum,
-            ImportFileContent {
-                file_name: "game.rom".to_string(),
-                sha1_checksum: checksum,
-                file_size: 1024,
-                existing_file_info_id: Some(123),
-                existing_archive_file_name: Some("some_file_name".to_string()),
-            },
-        );
-
-        let step = ImportFilesStep;
-        assert!(!step.should_execute(&context));
-    }
-
-    #[async_std::test]
-    async fn test_import_files_step_success() {
-        let checksum: Sha1Checksum = [1u8; 20];
-
-        // Setup mock before creating context
-        let mock_ops = Arc::new(MockFileImportOps::new());
-        mock_ops.add_imported_file(
-            checksum,
-            ImportedFile {
-                original_file_name: "game.rom".to_string(),
-                sha1_checksum: checksum,
-                file_size: 1024,
-                archive_file_name: "archive123.zst".to_string(),
-            },
-        );
-
-        let mut context = create_test_context(mock_ops).await;
-        context.selected_files = vec![checksum];
-
-        let mut content = HashMap::new();
-        content.insert(
-            checksum,
-            ImportFileContent {
-                file_name: "game.rom".to_string(),
-                sha1_checksum: checksum,
-                file_size: 1024,
-                existing_file_info_id: None,
-                existing_archive_file_name: None,
-            },
-        );
-
-        context.import_files = vec![ServiceFileImportModel {
-            path: PathBuf::from("/test/games.zip"),
-            content,
-        }];
-
-        let step = ImportFilesStep;
-        let result = step.execute(&mut context).await;
-
-        assert!(matches!(result, StepAction::Continue));
-        assert_eq!(context.imported_files.len(), 1);
-        assert!(context.imported_files.contains_key(&checksum));
-        let imported = context.imported_files.get(&checksum).unwrap();
-        assert_eq!(imported.original_file_name, "game.rom");
-        assert_eq!(imported.archive_file_name, "archive123.zst");
-    }
-
-    #[async_std::test]
-    async fn test_import_files_step_failure() {
-        let checksum: Sha1Checksum = [1u8; 20];
-
-        // Setup mock to fail
-        let mock_ops = Arc::new(MockFileImportOps::new());
-        mock_ops.set_should_fail(true);
-
-        let mut context = create_test_context(mock_ops).await;
-        context.selected_files = vec![checksum];
-
-        let mut content = HashMap::new();
-        content.insert(
-            checksum,
-            ImportFileContent {
-                file_name: "game.rom".to_string(),
-                sha1_checksum: checksum,
-                file_size: 1024,
-                existing_file_info_id: None,
-                existing_archive_file_name: None,
-            },
-        );
-
-        context.import_files = vec![ServiceFileImportModel {
-            path: PathBuf::from("/test/games.zip"),
-            content,
-        }];
-
-        let step = ImportFilesStep;
-        let result = step.execute(&mut context).await;
-
-        assert!(matches!(result, StepAction::Abort(_)));
-        assert!(context.imported_files.is_empty());
+    fn create_file_import_data(
+        selected_files: Vec<Sha1Checksum>,
+        import_files: Vec<FileImportSource>,
+    ) -> FileImportData {
+        FileImportData {
+            file_type: FileType::Rom,
+            selected_files,
+            output_dir: PathBuf::from("/imported/files"),
+            import_files,
+        }
     }
 
     #[async_std::test]
     async fn test_update_database_step_success() {
         let mock_ops = Arc::new(MockFileImportOps::new());
-        let mut context = create_test_context(mock_ops).await;
         let checksum: Sha1Checksum = [1u8; 20];
+        let file_import_data = create_file_import_data(vec![checksum], vec![]);
+        let mut context = create_test_context(mock_ops, file_import_data).await;
 
         // Add system to database first
         let system_id = context
@@ -254,7 +134,6 @@ mod tests {
             .await
             .unwrap();
 
-        context.selected_files = vec![checksum];
         context.system_ids = vec![system_id];
 
         context.imported_files.insert(
@@ -280,31 +159,8 @@ mod tests {
     #[async_std::test]
     async fn test_update_database_step_with_existing_files() {
         let mock_ops = Arc::new(MockFileImportOps::new());
-        let mut context = create_test_context(mock_ops).await;
         let checksum1: Sha1Checksum = [1u8; 20];
         let checksum2: Sha1Checksum = [2u8; 20];
-
-        // Add system to database first
-        let system_id = context
-            .repository_manager
-            .get_system_repository()
-            .add_system("Test System")
-            .await
-            .unwrap();
-
-        context.selected_files = vec![checksum1, checksum2];
-        context.system_ids = vec![system_id];
-
-        // Add one newly imported file
-        context.imported_files.insert(
-            checksum1,
-            ImportedFile {
-                original_file_name: "new_game.rom".to_string(),
-                sha1_checksum: checksum1,
-                file_size: 1024,
-                archive_file_name: "new_archive.zst".to_string(),
-            },
-        );
 
         // Add one existing file in import_files
         let mut content = HashMap::new();
@@ -319,10 +175,35 @@ mod tests {
             },
         );
 
-        context.import_files = vec![ServiceFileImportModel {
-            path: PathBuf::from("/test/games.zip"),
-            content,
-        }];
+        let file_import_data = create_file_import_data(
+            vec![checksum1, checksum2],
+            vec![FileImportSource {
+                path: PathBuf::from("/test/games.zip"),
+                content,
+            }],
+        );
+
+        let mut context = create_test_context(mock_ops, file_import_data).await;
+        // Add system to database first
+        let system_id = context
+            .repository_manager
+            .get_system_repository()
+            .add_system("Test System")
+            .await
+            .unwrap();
+
+        context.system_ids = vec![system_id];
+
+        // Add one newly imported file
+        context.imported_files.insert(
+            checksum1,
+            ImportedFile {
+                original_file_name: "new_game.rom".to_string(),
+                sha1_checksum: checksum1,
+                file_size: 1024,
+                archive_file_name: "new_archive.zst".to_string(),
+            },
+        );
 
         let step = UpdateDatabaseStep;
         let result = step.execute(&mut context).await;

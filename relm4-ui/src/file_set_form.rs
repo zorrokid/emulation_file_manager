@@ -21,7 +21,7 @@ use service::{
     download_service::DownloadService,
     error::Error,
     file_import::{
-        model::{FileImportModel, FileImportPrepareResult, FileSetImportModel, ImportFileContent},
+        model::{FileImportPrepareResult, FileImportSource, FileSetImportModel, ImportFileContent},
         service::FileImportService,
     },
     view_models::{FileSetListModel, Settings},
@@ -163,7 +163,7 @@ pub struct FileSetFormModel {
     settings: Arc<Settings>,
     selected_file_type: Option<FileType>,
     selected_files_in_picked_files: Vec<Sha1Checksum>,
-    picked_files: Vec<FileImportModel>,
+    picked_files: Vec<FileImportSource>,
     // Download progress tracking
     download_in_progress: bool,
     download_total_size: Option<u64>,
