@@ -19,6 +19,12 @@ pub struct CheckExistingFilesStep<T: CheckExistingFilesContext> {
     _phantom: std::marker::PhantomData<T>,
 }
 
+impl<T: CheckExistingFilesContext> Default for CheckExistingFilesStep<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T: CheckExistingFilesContext> CheckExistingFilesStep<T> {
     pub fn new() -> Self {
         Self {

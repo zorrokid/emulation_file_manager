@@ -10,7 +10,10 @@ use file_import::FileImportOps;
 
 use crate::{
     file_import::{
-        common_steps::check_existing_files::CheckExistingFilesContext,
+        common_steps::{
+            check_existing_files::CheckExistingFilesContext,
+            collect_file_info::CollectFileInfoContext,
+        },
         model::{FileImportMetadata, FileImportSource, ImportFileContent},
     },
     file_system_ops::FileSystemOps,
@@ -91,5 +94,25 @@ impl CheckExistingFilesContext for PrepareFileImportContext {
 
     fn set_existing_files(&mut self, existing_files: Vec<FileInfo>) {
         self.existing_files = existing_files;
+    }
+}
+
+impl CollectFileInfoContext for PrepareFileImportContext {
+    fn is_zip_archive(&self) -> Option<bool> {
+        self.import_metadata
+            .as_ref()
+            .map(|meta| meta.is_zip_archive)
+    }
+
+    fn file_import_ops(&self) -> Arc<dyn FileImportOps> {
+        self.file_import_ops.clone()
+    }
+
+    fn set_file_info(&mut self, file_info: HashMap<Sha1Checksum, ReadFile>) {
+        self.file_info = file_info;
+    }
+
+    fn file_path(&self) -> &PathBuf {
+        &self.file_path
     }
 }
