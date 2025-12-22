@@ -21,6 +21,7 @@ pub struct ImportFileContent {
     pub sha1_checksum: Sha1Checksum,
     pub file_size: FileSize,
 
+    // TODO: Can these be removed / moved?
     pub existing_file_info_id: Option<i64>,
     pub existing_archive_file_name: Option<String>,
 }

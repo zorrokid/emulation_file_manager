@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use core_types::{FileType, Sha1Checksum};
-use sqlx::{prelude::FromRow, sqlite::SqliteRow, Pool, QueryBuilder, Row, Sqlite};
+use sqlx::{Pool, QueryBuilder, Row, Sqlite, prelude::FromRow, sqlite::SqliteRow};
 
 use crate::{database_error::Error, models::FileInfo};
 
