@@ -6,7 +6,9 @@ use file_import::FileImportOps;
 
 use crate::{
     file_import::{
-        common_steps::import::FileImportContextOps,
+        common_steps::{
+            check_existing_files::CheckExistingFilesContext, import::FileImportContextOps,
+        },
         model::{FileImportData, ImportFileContent},
     },
     file_system_ops::FileSystemOps,
@@ -79,6 +81,21 @@ impl FileImportContextOps for FileImportContext {
     fn is_new_files_to_be_imported(&self) -> bool {
         self.file_import_data
             .is_new_files_to_be_imported(&self.existing_files)
+    }
+}
+
+impl CheckExistingFilesContext for FileImportContext {
+    fn get_sha1_checksums(&self) -> Vec<Sha1Checksum> {
+        self.file_import_data.selected_files.clone()
+    }
+    fn file_type(&self) -> core_types::FileType {
+        self.file_import_data.file_type
+    }
+    fn repository_manager(&self) -> Arc<RepositoryManager> {
+        self.repository_manager.clone()
+    }
+    fn set_existing_files(&mut self, existing_files: Vec<FileInfo>) {
+        self.existing_files = existing_files;
     }
 }
 

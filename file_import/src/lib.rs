@@ -29,8 +29,6 @@ pub enum FileImportError {
 pub struct FileImportModel {
     pub file_path: Vec<PathBuf>,
     pub output_dir: PathBuf,
-    //pub file_name: String,
-    //pub file_set_name: String,
     pub file_type: FileType,
     pub new_files_file_name_filter: HashSet<String>,
 }

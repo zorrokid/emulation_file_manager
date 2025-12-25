@@ -171,8 +171,6 @@ mod tests {
                 file_name: "existing_game.rom".to_string(),
                 sha1_checksum: checksum2,
                 file_size: 2048,
-                //existing_file_info_id: Some(123),
-                //existing_archive_file_name: Some("existing_archive.zst".to_string()),
             },
         );
 

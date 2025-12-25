@@ -13,7 +13,9 @@ impl Pipeline<PrepareFileImportContext> {
         Self::with_steps(vec![
             Box::new(CollectFileMetadataStep),
             Box::new(CollectFileInfoStep::<PrepareFileImportContext>::new()),
-            Box::new(CheckExistingFilesStep::<PrepareFileImportContext>::new()),
+            // TODO: maybe move this to import pipeline? we don't need this info in UI before
+            // import?
+            //Box::new(CheckExistingFilesStep::<PrepareFileImportContext>::new()),
         ])
     }
 }

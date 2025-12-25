@@ -21,7 +21,7 @@ use service::{
     download_service::DownloadService,
     error::Error,
     file_import::{
-        model::{FileImportPrepareResult, FileImportSource, FileSetImportModel, ImportFileContent},
+        model::{FileImportPrepareResult, FileImportSource, FileSetImportModel},
         service::FileImportService,
     },
     view_models::{FileSetListModel, Settings},

@@ -14,16 +14,12 @@ pub struct FileImportMetadata {
     pub is_zip_archive: bool,
 }
 
-/// Content of a file to be imported. If there is already an existing file with the same
-/// checksum, the existing file info will be provided.
+/// Content of a file to be imported.
 #[derive(Debug, Clone)]
 pub struct ImportFileContent {
     pub file_name: String,
     pub sha1_checksum: Sha1Checksum,
     pub file_size: FileSize,
-    // TODO: Can these be removed / moved?
-    //pub existing_file_info_id: Option<i64>,
-    //pub existing_archive_file_name: Option<String>,
 }
 
 /// Single file import source model including path and content info.
@@ -33,6 +29,21 @@ pub struct FileImportSource {
     pub path: PathBuf,
     /// Mapping of SHA1 checksum to file content info
     pub content: HashMap<Sha1Checksum, ImportFileContent>,
+}
+
+impl FileImportSource {
+    pub fn new(path: PathBuf) -> Self {
+        Self {
+            path,
+            content: HashMap::new(),
+        }
+    }
+
+    pub fn with_content(mut self, import_content: ImportFileContent) -> Self {
+        self.content
+            .insert(import_content.sha1_checksum, import_content);
+        self
+    }
 }
 
 #[derive(Debug)]
@@ -54,6 +65,25 @@ pub struct FileImportData {
 }
 
 impl FileImportData {
+    pub fn new(file_type: FileType, output_dir: PathBuf) -> Self {
+        Self {
+            file_type,
+            output_dir,
+            selected_files: Vec::new(),
+            import_files: Vec::new(),
+        }
+    }
+
+    pub fn with_selected_file(mut self, selected_file: Sha1Checksum) -> Self {
+        self.selected_files.push(selected_file);
+        self
+    }
+
+    pub fn with_file_import_source(mut self, import_source: FileImportSource) -> Self {
+        self.import_files.push(import_source);
+        self
+    }
+
     pub fn get_file_import_model(&self, existing_files: &[FileInfo]) -> FileImportModel {
         FileImportModel {
             file_path: self
@@ -67,21 +97,6 @@ impl FileImportData {
         }
     }
 }
-
-/*impl From<&FileImportData> for FileImportModel {
-    fn from(val: &FileImportData) -> Self {
-        FileImportModel {
-            file_path: val
-                .import_files
-                .iter()
-                .map(|f| f.path.clone())
-                .collect::<Vec<PathBuf>>(),
-            output_dir: val.output_dir.clone(),
-            file_type: val.file_type,
-            new_files_file_name_filter: val.get_new_selected_file_names(),
-        }
-    }
-}*/
 
 impl FileImportData {
     pub fn get_new_selected_file_names(&self, existing_files: &[FileInfo]) -> HashSet<String> {
@@ -121,9 +136,19 @@ pub struct FileSetImportModel {
     pub import_files: Vec<FileImportSource>,
     pub selected_files: Vec<Sha1Checksum>,
     pub system_ids: Vec<i64>,
-    pub source: String,
+    pub source: String, // TODO: this should be for each import source
+
     pub file_set_name: String,
     pub file_set_file_name: String,
+    pub file_type: FileType,
+}
+
+#[derive(Debug)]
+pub struct AddToFileSetImportModel {
+    pub import_files: Vec<FileImportSource>,
+    pub selected_files: Vec<Sha1Checksum>,
+    pub source: String, // TODO: this should be for each import source
+    pub file_set_id: i64,
     pub file_type: FileType,
 }
 
@@ -164,8 +189,6 @@ mod tests {
                 file_name: "game1.rom".to_string(),
                 sha1_checksum: checksum1,
                 file_size: 1024,
-                //existing_file_info_id: None,
-                //existing_archive_file_name: None,
             },
         );
         content.insert(
@@ -174,8 +197,6 @@ mod tests {
                 file_name: "game2.rom".to_string(),
                 sha1_checksum: checksum2,
                 file_size: 2048,
-                //existing_file_info_id: Some(123),
-                //existing_archive_file_name: Some("existing_archive.zst".to_string()),
             },
         );
         content.insert(
@@ -184,8 +205,6 @@ mod tests {
                 file_name: "game3.rom".to_string(),
                 sha1_checksum: checksum3,
                 file_size: 4096,
-                //existing_file_info_id: None,
-                ////existing_archive_file_name: None,
             },
         );
 
@@ -225,8 +244,6 @@ mod tests {
                 file_name: "game.rom".to_string(),
                 sha1_checksum: checksum,
                 file_size: 1024,
-                //existing_file_info_id: None,
-                //existing_archive_file_name: None,
             },
         );
 
@@ -258,8 +275,6 @@ mod tests {
                 file_name: "game.rom".to_string(),
                 sha1_checksum: checksum,
                 file_size: 1024,
-                //existing_file_info_id: None,
-                //existing_archive_file_name: None,
             },
         );
 

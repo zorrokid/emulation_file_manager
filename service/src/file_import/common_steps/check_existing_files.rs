@@ -1,6 +1,6 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
-use core_types::{FileType, ReadFile, Sha1Checksum};
+use core_types::{FileType, Sha1Checksum};
 use database::{models::FileInfo, repository_manager::RepositoryManager};
 
 use crate::{
@@ -9,7 +9,7 @@ use crate::{
 };
 
 pub trait CheckExistingFilesContext {
-    fn file_info(&self) -> &HashMap<Sha1Checksum, ReadFile>;
+    fn get_sha1_checksums(&self) -> Vec<Sha1Checksum>;
     fn file_type(&self) -> FileType;
     fn repository_manager(&self) -> Arc<RepositoryManager>;
     fn set_existing_files(&mut self, existing_files: Vec<FileInfo>);
@@ -40,15 +40,10 @@ impl<T: CheckExistingFilesContext + Send + Sync> PipelineStep<T> for CheckExisti
     }
 
     fn should_execute(&self, context: &T) -> bool {
-        !context.file_info().is_empty()
+        !context.get_sha1_checksums().is_empty()
     }
     async fn execute(&self, context: &mut T) -> StepAction {
-        let file_checksums = context
-            .file_info()
-            .keys()
-            .cloned()
-            .collect::<Vec<Sha1Checksum>>();
-
+        let file_checksums = context.get_sha1_checksums();
         let existing_files_res = context
             .repository_manager()
             .get_file_info_repository()
@@ -97,8 +92,8 @@ mod tests {
     }
 
     impl CheckExistingFilesContext for TestContext {
-        fn file_info(&self) -> &HashMap<Sha1Checksum, ReadFile> {
-            &self.file_info
+        fn get_sha1_checksums(&self) -> Vec<Sha1Checksum> {
+            self.file_info.keys().cloned().collect()
         }
         fn file_type(&self) -> FileType {
             self.file_type

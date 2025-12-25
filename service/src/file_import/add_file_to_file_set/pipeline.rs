@@ -7,10 +7,7 @@ use crate::{
                 ValidateFileStep,
             },
         },
-        common_steps::{
-            check_existing_files::CheckExistingFilesStep, collect_file_info::CollectFileInfoStep,
-            import::ImportFilesStep,
-        },
+        common_steps::{check_existing_files::CheckExistingFilesStep, import::ImportFilesStep},
     },
     pipeline::generic_pipeline::Pipeline,
 };
@@ -19,7 +16,6 @@ impl Pipeline<AddFileToFileSetContext> {
     pub fn new() -> Self {
         Self::with_steps(vec![
             Box::new(ValidateFileStep),
-            Box::new(CollectFileInfoStep::<AddFileToFileSetContext>::new()),
             Box::new(CheckExistingFilesStep::<AddFileToFileSetContext>::new()),
             Box::new(ImportFilesStep::<AddFileToFileSetContext>::new()),
             Box::new(AddFileInfoToDatabaseStep),

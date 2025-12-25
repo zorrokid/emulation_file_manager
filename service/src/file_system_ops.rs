@@ -141,13 +141,16 @@ pub mod mock {
         }
 
         fn is_zip_archive(&self, path: &Path) -> Result<bool, Error> {
+            println!("Checking if path is zip archive: {}", path.display());
             let path_str = path.to_string_lossy();
+            println!("Path string: {}", path_str);
             if !self
                 .existing_files
                 .lock()
                 .unwrap()
                 .contains(path_str.as_ref())
             {
+                println!("File does not exist in mock file system: {}", path_str,);
                 Err(Error::IoError(format!("File does not exist: {}", path_str)))
             } else {
                 Ok(path_str.ends_with(".zip"))

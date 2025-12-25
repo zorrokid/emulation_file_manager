@@ -1,12 +1,12 @@
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use crate::file_import::{
-    common_steps::{
-        check_existing_files::CheckExistingFilesContext, collect_file_info::CollectFileInfoContext,
-    },
-    model::FileImportData,
+    common_steps::check_existing_files::CheckExistingFilesContext, model::FileImportData,
 };
-use core_types::{ImportedFile, ReadFile, Sha1Checksum};
+use core_types::{FileType, ImportedFile, Sha1Checksum};
 use database::{
     models::{FileInfo, FileSet},
     repository_manager::RepositoryManager,
@@ -27,11 +27,8 @@ pub struct AddFileToFileSetContext {
 
     pub file_set: Option<FileSet>,
     pub file_import_data: FileImportData,
-    pub file_path: PathBuf,
     pub existing_files: Vec<FileInfo>,
     pub new_files: Vec<FileInfo>,
-    pub file_info: HashMap<Sha1Checksum, ReadFile>,
-    pub is_zip_archive: Option<bool>,
     pub imported_files: HashMap<Sha1Checksum, ImportedFile>,
 }
 
@@ -43,7 +40,6 @@ impl AddFileToFileSetContext {
         fs_ops: Arc<dyn FileSystemOps>,
         file_set_id: i64,
         file_import_data: FileImportData,
-        file_path: &PathBuf,
     ) -> Self {
         Self {
             repository_manager,
@@ -53,10 +49,7 @@ impl AddFileToFileSetContext {
             file_set_id,
             file_set: None,
             file_import_data,
-            file_path: file_path.clone(),
             existing_files: vec![],
-            file_info: HashMap::new(),
-            is_zip_archive: None,
             imported_files: HashMap::new(),
             new_files: vec![],
         }
@@ -65,39 +58,61 @@ impl AddFileToFileSetContext {
     pub fn get_file_info_ids_with_file_names(&self) -> Vec<(i64, String)> {
         let mut file_info_ids_with_names = Vec::new();
 
-        let import_files = self.file_import_data.import_files.iter();
+        for file in self
+            .file_import_data
+            .import_files
+            .iter()
+            .flat_map(|source| source.content.values())
+        {
+            let sha1_checksum = file.sha1_checksum;
 
-        for import_file in import_files {
-            for (sha1_checksum, file_content) in &import_file.content {
-                // file has to be selected for import
-                if self.file_import_data.selected_files.contains(sha1_checksum) {
-                    // file info for file is either in existing files or new files
-                    let file_info_id = if let Some(existing_file) = self
-                        .existing_files
-                        .iter()
-                        .find(|f| f.sha1_checksum == *sha1_checksum)
-                    {
-                        existing_file.id
-                    } else if let Some(new_file) = self
-                        .new_files
-                        .iter()
-                        .find(|f| f.sha1_checksum == *sha1_checksum)
-                    {
-                        new_file.id
-                    } else {
-                        // this should never happen
-                        panic!(
-                            "File info not found for selected file with checksum: {:?}",
-                            sha1_checksum
-                        );
-                    };
+            // file has to be selected for import
+            if self
+                .file_import_data
+                .selected_files
+                .contains(&sha1_checksum)
+            {
+                // file info for file is either in existing files or new files
+                let file_info_id = if let Some(existing_file) = self
+                    .existing_files
+                    .iter()
+                    .find(|f| f.sha1_checksum == sha1_checksum)
+                {
+                    existing_file.id
+                } else if let Some(new_file) = self
+                    .new_files
+                    .iter()
+                    .find(|f| f.sha1_checksum == sha1_checksum)
+                {
+                    new_file.id
+                } else {
+                    // this should never happen
+                    panic!(
+                        "File info not found for selected file with checksum: {:?}",
+                        sha1_checksum
+                    );
+                };
 
-                    file_info_ids_with_names.push((file_info_id, file_content.file_name.clone()));
-                }
+                file_info_ids_with_names.push((file_info_id, file.file_name.clone()));
             }
         }
 
         file_info_ids_with_names
+    }
+}
+
+impl CheckExistingFilesContext for AddFileToFileSetContext {
+    fn get_sha1_checksums(&self) -> Vec<Sha1Checksum> {
+        self.file_import_data.selected_files.clone()
+    }
+    fn file_type(&self) -> FileType {
+        self.file_import_data.file_type
+    }
+    fn repository_manager(&self) -> Arc<RepositoryManager> {
+        self.repository_manager.clone()
+    }
+    fn set_existing_files(&mut self, existing_files: Vec<FileInfo>) {
+        self.existing_files = existing_files;
     }
 }
 
@@ -112,42 +127,17 @@ impl FileImportContextOps for AddFileToFileSetContext {
         self.file_import_data
             .get_file_import_model(&self.existing_files)
     }
+
     fn is_new_files_to_be_imported(&self) -> bool {
         self.file_import_data
-            .is_new_files_to_be_imported(&self.existing_files)
-    }
-}
-
-impl CollectFileInfoContext for AddFileToFileSetContext {
-    fn is_zip_archive(&self) -> Option<bool> {
-        self.is_zip_archive
-    }
-
-    fn file_import_ops(&self) -> Arc<dyn FileImportOps> {
-        self.file_import_ops.clone()
-    }
-
-    fn set_file_info(&mut self, file_info: HashMap<Sha1Checksum, ReadFile>) {
-        self.file_info = file_info;
-    }
-
-    fn file_path(&self) -> &PathBuf {
-        &self.file_path
-    }
-}
-
-impl CheckExistingFilesContext for AddFileToFileSetContext {
-    fn file_info(&self) -> &HashMap<Sha1Checksum, ReadFile> {
-        &self.file_info
-    }
-    fn file_type(&self) -> core_types::FileType {
-        self.file_import_data.file_type
-    }
-    fn repository_manager(&self) -> Arc<RepositoryManager> {
-        self.repository_manager.clone()
-    }
-    fn set_existing_files(&mut self, existing_files: Vec<FileInfo>) {
-        self.existing_files = existing_files;
+            .selected_files
+            .iter()
+            .any(|sha1_checksum| {
+                !self
+                    .existing_files
+                    .iter()
+                    .any(|file_info| file_info.sha1_checksum == sha1_checksum)
+            })
     }
 }
 
@@ -179,7 +169,6 @@ mod tests {
             Arc::new(MockFileSystemOps::new()),
             1,
             file_import_data,
-            &std::path::PathBuf::from("/path/to/file.zip"),
         )
     }
 
@@ -200,11 +189,6 @@ mod tests {
                             file_name: "file1.rom".to_string(),
                             sha1_checksum: file_1_checksum,
                             file_size: 2048,
-                            // TODO: in this context we don't use these fields, maybe the model should
-                            // be different?
-                            // Maybe existing file info was out of place here in the first place?
-                            //existing_file_info_id: None,
-                            //existing_archive_file_name: None,
                         },
                     ),
                     (
@@ -213,11 +197,6 @@ mod tests {
                             file_name: "file2.rom".to_string(),
                             sha1_checksum: file_2_checksum,
                             file_size: 4096,
-                            // TODO: in this context we don't use these fields, maybe the model should
-                            // be different?
-                            // Maybe existing file info was out of place here in the first place?
-                            //existing_file_info_id: None,
-                            //existing_archive_file_name: None,
                         },
                     ),
                 ]
@@ -262,11 +241,6 @@ mod tests {
                         file_name: "file1.rom".to_string(),
                         sha1_checksum: file_1_checksum,
                         file_size: 2048,
-                        // TODO: in this context we don't use these fields, maybe the model should
-                        // be different?
-                        // Maybe existing file info was out of place here in the first place?
-                        //existing_file_info_id: None,
-                        //existing_archive_file_name: None,
                     },
                 )]
                 .into_iter()

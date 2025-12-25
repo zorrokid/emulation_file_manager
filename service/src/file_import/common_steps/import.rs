@@ -1,7 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
 use core_types::{ImportedFile, Sha1Checksum};
-use database::models::FileInfo;
 use file_import::{FileImportModel, FileImportOps};
 
 use crate::{
@@ -146,8 +145,6 @@ mod tests {
                 file_name: "game.rom".to_string(),
                 sha1_checksum: checksum,
                 file_size: 1024,
-                //existing_file_info_id: Some(123),
-                //existing_archive_file_name: Some("some_file_name".to_string()),
             },
         );
 
@@ -178,8 +175,6 @@ mod tests {
                 file_name: "game.rom".to_string(),
                 sha1_checksum: checksum,
                 file_size: 1024,
-                //existing_file_info_id: None,
-                //existing_archive_file_name: None,
             },
         );
 
@@ -218,8 +213,6 @@ mod tests {
                 file_name: "game.rom".to_string(),
                 sha1_checksum: checksum,
                 file_size: 1024,
-                //existing_file_info_id: None,
-                //existing_archive_file_name: None,
             },
         );
 

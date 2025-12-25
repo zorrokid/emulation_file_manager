@@ -7,8 +7,11 @@ use file_import::FileImportOps;
 use crate::{
     error::Error,
     file_import::{
+        add_file_to_file_set::context::AddFileToFileSetContext,
         import::context::FileImportContext,
-        model::{FileImportData, FileImportPrepareResult, FileSetImportModel},
+        model::{
+            AddToFileSetImportModel, FileImportData, FileImportPrepareResult, FileSetImportModel,
+        },
         prepare::context::PrepareFileImportContext,
     },
     file_system_ops::{FileSystemOps, StdFileSystemOps},
@@ -117,5 +120,28 @@ impl FileImportService {
                 "File set ID not set after import".to_string(),
             )),
         }
+    }
+
+    pub async fn import_and_add_files_to_file_set(
+        &self,
+        import_model: AddToFileSetImportModel,
+    ) -> Result<(), Error> {
+        let file_import_data = FileImportData {
+            output_dir: self.settings.collection_root_dir.clone(),
+            file_type: import_model.file_type, // TODO make this optional? this is required only
+            // when adding new file set
+            selected_files: import_model.selected_files,
+            import_files: import_model.import_files,
+        };
+        let mut context = AddFileToFileSetContext::new(
+            self.repository_manager.clone(),
+            self.settings.clone(),
+            self.file_import_ops.clone(),
+            self.fs_ops.clone(),
+            import_model.file_set_id,
+            file_import_data,
+        );
+        let pipeline = Pipeline::<AddFileToFileSetContext>::new();
+        pipeline.execute(&mut context).await
     }
 }
