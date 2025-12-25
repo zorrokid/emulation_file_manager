@@ -1,18 +1,19 @@
 use std::{collections::HashMap, sync::Arc};
 
 use core_types::{ImportedFile, Sha1Checksum};
-use file_import::FileImportOps;
+use database::models::FileInfo;
+use file_import::{FileImportModel, FileImportOps};
 
 use crate::{
     error::Error,
-    file_import::model::FileImportData,
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
 
 pub trait FileImportContextOps {
     fn set_imported_files(&mut self, imported_files: HashMap<Sha1Checksum, ImportedFile>);
     fn file_import_ops(&self) -> &Arc<dyn FileImportOps>;
-    fn get_file_import_data(&self) -> &FileImportData;
+    fn get_file_import_model(&self) -> FileImportModel;
+    fn is_new_files_to_be_imported(&self) -> bool;
 }
 
 pub struct ImportFilesStep<T: FileImportContextOps> {
@@ -40,13 +41,13 @@ impl<T: FileImportContextOps + Send + Sync> PipelineStep<T> for ImportFilesStep<
     }
 
     fn should_execute(&self, context: &T) -> bool {
-        context.get_file_import_data().is_new_files_to_be_imported()
+        context.is_new_files_to_be_imported()
     }
 
     async fn execute(&self, context: &mut T) -> StepAction {
         match context
             .file_import_ops()
-            .import(&context.get_file_import_data().into())
+            .import(&context.get_file_import_model())
         {
             Ok(imported_files) => {
                 context.set_imported_files(imported_files);
@@ -68,6 +69,7 @@ mod tests {
     use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
     use core_types::{FileType, ImportedFile, Sha1Checksum};
+    use database::models::FileInfo;
     use file_import::mock::MockFileImportOps;
 
     use crate::{
@@ -82,6 +84,7 @@ mod tests {
         file_import_data: FileImportData,
         file_import_ops: Arc<dyn file_import::FileImportOps>,
         imported_files: HashMap<Sha1Checksum, ImportedFile>,
+        existing_files: Vec<FileInfo>,
     }
 
     impl FileImportContextOps for TestContext {
@@ -96,8 +99,13 @@ mod tests {
             &self.file_import_ops
         }
 
-        fn get_file_import_data(&self) -> &FileImportData {
-            &self.file_import_data
+        fn get_file_import_model(&self) -> file_import::FileImportModel {
+            self.file_import_data
+                .get_file_import_model(&self.existing_files)
+        }
+        fn is_new_files_to_be_imported(&self) -> bool {
+            self.file_import_data
+                .is_new_files_to_be_imported(&self.existing_files)
         }
     }
 
@@ -121,6 +129,7 @@ mod tests {
             file_import_data,
             file_import_ops,
             imported_files: HashMap::new(),
+            existing_files: Vec::new(),
         }
     }
 
@@ -137,8 +146,8 @@ mod tests {
                 file_name: "game.rom".to_string(),
                 sha1_checksum: checksum,
                 file_size: 1024,
-                existing_file_info_id: Some(123),
-                existing_archive_file_name: Some("some_file_name".to_string()),
+                //existing_file_info_id: Some(123),
+                //existing_archive_file_name: Some("some_file_name".to_string()),
             },
         );
 
@@ -169,8 +178,8 @@ mod tests {
                 file_name: "game.rom".to_string(),
                 sha1_checksum: checksum,
                 file_size: 1024,
-                existing_file_info_id: None,
-                existing_archive_file_name: None,
+                //existing_file_info_id: None,
+                //existing_archive_file_name: None,
             },
         );
 
@@ -209,8 +218,8 @@ mod tests {
                 file_name: "game.rom".to_string(),
                 sha1_checksum: checksum,
                 file_size: 1024,
-                existing_file_info_id: None,
-                existing_archive_file_name: None,
+                //existing_file_info_id: None,
+                //existing_archive_file_name: None,
             },
         );
 

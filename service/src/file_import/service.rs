@@ -106,6 +106,7 @@ impl FileImportService {
             file_set_id: None,
             file_import_ops: self.file_import_ops.clone(),
             file_system_ops: self.fs_ops.clone(),
+            existing_files: vec![],
         };
         let pipeline = Pipeline::<FileImportContext>::new();
         let result = pipeline.execute(&mut context).await;

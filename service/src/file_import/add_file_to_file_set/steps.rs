@@ -74,7 +74,9 @@ impl PipelineStep<AddFileToFileSetContext> for AddFileInfoToDatabaseStep {
     }
 
     fn should_execute(&self, context: &AddFileToFileSetContext) -> bool {
-        !context.file_import_data.is_new_files_to_be_imported()
+        !context
+            .file_import_data
+            .is_new_files_to_be_imported(&context.existing_files)
             && !context.imported_files.is_empty()
             && context.file_set.is_some()
     }

@@ -1,11 +1,14 @@
 use std::{collections::HashMap, sync::Arc};
 
 use core_types::{ImportedFile, Sha1Checksum};
-use database::repository_manager::RepositoryManager;
+use database::{models::FileInfo, repository_manager::RepositoryManager};
 use file_import::FileImportOps;
 
 use crate::{
-    file_import::{common_steps::import::FileImportContextOps, model::FileImportData},
+    file_import::{
+        common_steps::import::FileImportContextOps,
+        model::{FileImportData, ImportFileContent},
+    },
     file_system_ops::FileSystemOps,
     view_models::Settings,
 };
@@ -23,33 +26,41 @@ pub struct FileImportContext {
     pub file_set_id: Option<i64>,
     pub file_import_ops: Arc<dyn FileImportOps>,
     pub file_system_ops: Arc<dyn FileSystemOps>,
+    pub existing_files: Vec<FileInfo>,
 }
 
 impl FileImportContext {
     pub fn get_files_in_file_set(&self) -> Vec<ImportedFile> {
-        let mut files_in_file_set: Vec<ImportedFile> =
-            self.imported_files.values().cloned().collect();
+        self.imported_files
+            .values()
+            .cloned()
+            .chain(self.existing_files.iter().map(|file_info| {
+                // TODO: simplify this lookup by storing a mapping in the context?
+                let import_files: HashMap<Sha1Checksum, ImportFileContent> = self
+                    .file_import_data
+                    .import_files
+                    .iter()
+                    .flat_map(|import_file| import_file.content.clone())
+                    .collect();
 
-        // add existing files that were selected
-        self.file_import_data.import_files.iter().for_each(|file| {
-            file.content
-                .iter()
-                .for_each(|(sha1_checksum, file_content)| {
-                    if self.file_import_data.selected_files.contains(sha1_checksum)
-                        && let Some(existing_archive_file_name) =
-                            &file_content.existing_archive_file_name
-                    {
-                        files_in_file_set.push(ImportedFile {
-                            original_file_name: file_content.file_name.clone(),
-                            sha1_checksum: *sha1_checksum,
-                            file_size: file_content.file_size,
-                            archive_file_name: existing_archive_file_name.clone(),
-                        });
-                    }
-                });
-        });
+                let sha1_checksum: Sha1Checksum = file_info
+                    .sha1_checksum
+                    .clone()
+                    .try_into()
+                    .expect("Was expecting checksum to be 20 bytes for SHA1");
+                let original_file_name = import_files
+                    .get(&sha1_checksum)
+                    .map(|content| content.file_name.clone())
+                    .expect("FileInfo sha1_checksum not found in import files");
 
-        files_in_file_set
+                ImportedFile {
+                    original_file_name,
+                    sha1_checksum,
+                    file_size: file_info.file_size,
+                    archive_file_name: file_info.archive_file_name.clone(),
+                }
+            }))
+            .collect()
     }
 }
 
@@ -61,9 +72,13 @@ impl FileImportContextOps for FileImportContext {
     fn file_import_ops(&self) -> &Arc<dyn FileImportOps> {
         &self.file_import_ops
     }
-
-    fn get_file_import_data(&self) -> &FileImportData {
-        &self.file_import_data
+    fn get_file_import_model(&self) -> file_import::FileImportModel {
+        self.file_import_data
+            .get_file_import_model(&self.existing_files)
+    }
+    fn is_new_files_to_be_imported(&self) -> bool {
+        self.file_import_data
+            .is_new_files_to_be_imported(&self.existing_files)
     }
 }
 
@@ -111,6 +126,7 @@ mod tests {
             file_set_id: None,
             file_import_ops,
             file_system_ops,
+            existing_files: vec![],
         }
     }
 
@@ -155,8 +171,6 @@ mod tests {
                 file_name: "existing_game.rom".to_string(),
                 sha1_checksum: checksum1,
                 file_size: 2048,
-                existing_file_info_id: Some(456),
-                existing_archive_file_name: Some("existing_archive.zst".to_string()),
             },
         );
         content.insert(
@@ -165,29 +179,39 @@ mod tests {
                 file_name: "not_selected.rom".to_string(),
                 sha1_checksum: checksum2,
                 file_size: 3072,
-                existing_file_info_id: Some(789),
-                existing_archive_file_name: Some("not_selected_archive.zst".to_string()),
             },
         );
 
         let file_import_data = create_file_import_data(
-            vec![checksum1, checksum2],
+            vec![checksum1],
             vec![FileImportSource {
                 path: PathBuf::from("/test/games.zip"),
                 content,
             }],
         );
         let mut context = create_test_context(file_import_data);
+        context.existing_files.push(FileInfo {
+            id: 1,
+            sha1_checksum: checksum1.to_vec(),
+            file_size: 2048,
+            archive_file_name: "existing_archive_file".to_string(),
+            file_type: FileType::Rom,
+        });
 
         let result = context.get_files_in_file_set();
-        assert_eq!(result.len(), 2);
+        assert_eq!(result.len(), 1);
 
         let existing_file = result
             .iter()
             .find(|f| f.original_file_name == "existing_game.rom")
             .unwrap();
-        assert_eq!(existing_file.archive_file_name, "existing_archive.zst");
+        assert_eq!(existing_file.archive_file_name, "existing_archive_file");
         assert_eq!(existing_file.file_size, 2048);
+        assert_eq!(existing_file.sha1_checksum, checksum1);
+        let not_selected_file = result
+            .iter()
+            .find(|f| f.original_file_name == "not_selected.rom");
+        assert!(not_selected_file.is_none());
     }
 
     #[test]
@@ -203,8 +227,6 @@ mod tests {
                 file_name: "existing_game.rom".to_string(),
                 sha1_checksum: checksum2,
                 file_size: 2048,
-                existing_file_info_id: Some(456),
-                existing_archive_file_name: Some("existing_archive.zst".to_string()),
             },
         );
 
@@ -216,6 +238,13 @@ mod tests {
             }],
         );
         let mut context = create_test_context(file_import_data);
+        context.existing_files.push(FileInfo {
+            id: 1,
+            sha1_checksum: checksum2.to_vec(),
+            file_size: 2048,
+            archive_file_name: "existing_archive_file_name".to_string(),
+            file_type: FileType::Rom,
+        });
         // Add a newly imported file
         context.imported_files.insert(
             checksum1,
@@ -223,7 +252,7 @@ mod tests {
                 original_file_name: "new_game.rom".to_string(),
                 sha1_checksum: checksum1,
                 file_size: 1024,
-                archive_file_name: "new_archive123.zst".to_string(),
+                archive_file_name: "new_archive_file_name".to_string(),
             },
         );
 
@@ -234,12 +263,15 @@ mod tests {
             .iter()
             .find(|f| f.original_file_name == "new_game.rom")
             .unwrap();
-        assert_eq!(new_file.archive_file_name, "new_archive123.zst");
+        assert_eq!(new_file.archive_file_name, "new_archive_file_name");
 
         let existing_file = result
             .iter()
             .find(|f| f.original_file_name == "existing_game.rom")
             .unwrap();
-        assert_eq!(existing_file.archive_file_name, "existing_archive.zst");
+        assert_eq!(
+            existing_file.archive_file_name,
+            "existing_archive_file_name"
+        );
     }
 }

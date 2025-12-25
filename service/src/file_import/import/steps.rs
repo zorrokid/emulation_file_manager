@@ -12,7 +12,7 @@ impl PipelineStep<FileImportContext> for UpdateDatabaseStep {
         "update_database"
     }
     async fn execute(&self, context: &mut FileImportContext) -> StepAction {
-        let file_type = context.get_file_import_data().file_type;
+        let file_type = context.get_file_import_model().file_type;
         match context
             .repository_manager
             .get_file_set_repository()
@@ -104,6 +104,7 @@ mod tests {
             file_set_id: None,
             file_import_ops,
             file_system_ops,
+            existing_files: vec![],
         }
     }
 
@@ -170,8 +171,8 @@ mod tests {
                 file_name: "existing_game.rom".to_string(),
                 sha1_checksum: checksum2,
                 file_size: 2048,
-                existing_file_info_id: Some(123),
-                existing_archive_file_name: Some("existing_archive.zst".to_string()),
+                //existing_file_info_id: Some(123),
+                //existing_archive_file_name: Some("existing_archive.zst".to_string()),
             },
         );
 

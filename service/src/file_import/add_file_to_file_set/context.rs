@@ -108,8 +108,13 @@ impl FileImportContextOps for AddFileToFileSetContext {
     fn file_import_ops(&self) -> &Arc<dyn FileImportOps> {
         &self.file_import_ops
     }
-    fn get_file_import_data(&self) -> &FileImportData {
-        &self.file_import_data
+    fn get_file_import_model(&self) -> file_import::FileImportModel {
+        self.file_import_data
+            .get_file_import_model(&self.existing_files)
+    }
+    fn is_new_files_to_be_imported(&self) -> bool {
+        self.file_import_data
+            .is_new_files_to_be_imported(&self.existing_files)
     }
 }
 
@@ -184,35 +189,35 @@ mod tests {
         let file_2_checksum: Sha1Checksum = [2u8; 20];
         let file_import_data = FileImportData {
             file_type: core_types::FileType::Rom,
-            selected_files: vec![file_1_checksum.into(), file_2_checksum.into()],
+            selected_files: vec![file_1_checksum, file_2_checksum],
             output_dir: std::path::PathBuf::from("/imported/files"),
             import_files: vec![FileImportSource {
                 path: PathBuf::from("/tmmp/source1"),
                 content: vec![
                     (
-                        file_1_checksum.into(),
+                        file_1_checksum,
                         ImportFileContent {
                             file_name: "file1.rom".to_string(),
-                            sha1_checksum: file_1_checksum.into(),
+                            sha1_checksum: file_1_checksum,
                             file_size: 2048,
                             // TODO: in this context we don't use these fields, maybe the model should
                             // be different?
                             // Maybe existing file info was out of place here in the first place?
-                            existing_file_info_id: None,
-                            existing_archive_file_name: None,
+                            //existing_file_info_id: None,
+                            //existing_archive_file_name: None,
                         },
                     ),
                     (
-                        file_2_checksum.into(),
+                        file_2_checksum,
                         ImportFileContent {
                             file_name: "file2.rom".to_string(),
-                            sha1_checksum: file_2_checksum.into(),
+                            sha1_checksum: file_2_checksum,
                             file_size: 4096,
                             // TODO: in this context we don't use these fields, maybe the model should
                             // be different?
                             // Maybe existing file info was out of place here in the first place?
-                            existing_file_info_id: None,
-                            existing_archive_file_name: None,
+                            //existing_file_info_id: None,
+                            //existing_archive_file_name: None,
                         },
                     ),
                 ]
@@ -252,16 +257,16 @@ mod tests {
             import_files: vec![FileImportSource {
                 path: PathBuf::from("/tmmp/source1"),
                 content: vec![(
-                    file_1_checksum.into(),
+                    file_1_checksum,
                     ImportFileContent {
                         file_name: "file1.rom".to_string(),
-                        sha1_checksum: file_1_checksum.into(),
+                        sha1_checksum: file_1_checksum,
                         file_size: 2048,
                         // TODO: in this context we don't use these fields, maybe the model should
                         // be different?
                         // Maybe existing file info was out of place here in the first place?
-                        existing_file_info_id: None,
-                        existing_archive_file_name: None,
+                        //existing_file_info_id: None,
+                        //existing_archive_file_name: None,
                     },
                 )]
                 .into_iter()
