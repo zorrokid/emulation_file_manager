@@ -12,6 +12,12 @@ impl PipelineStep<FileImportContext> for UpdateDatabaseStep {
         "update_database"
     }
     async fn execute(&self, context: &mut FileImportContext) -> StepAction {
+        let files_in_file_set = context.get_files_in_file_set();
+        if files_in_file_set.is_empty() {
+            tracing::error!("No files in file set.");
+            return StepAction::Abort(Error::FileImportError("No files in file set.".to_string()));
+        }
+
         let file_type = context.get_file_import_model().file_type;
         match context
             .repository_manager

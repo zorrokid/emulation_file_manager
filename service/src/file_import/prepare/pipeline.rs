@@ -1,8 +1,6 @@
 use crate::{
     file_import::{
-        common_steps::{
-            check_existing_files::CheckExistingFilesStep, collect_file_info::CollectFileInfoStep,
-        },
+        common_steps::collect_file_info::CollectFileInfoStep,
         prepare::{context::PrepareFileImportContext, steps::CollectFileMetadataStep},
     },
     pipeline::generic_pipeline::Pipeline,
@@ -13,9 +11,6 @@ impl Pipeline<PrepareFileImportContext> {
         Self::with_steps(vec![
             Box::new(CollectFileMetadataStep),
             Box::new(CollectFileInfoStep::<PrepareFileImportContext>::new()),
-            // TODO: maybe move this to import pipeline? we don't need this info in UI before
-            // import?
-            //Box::new(CheckExistingFilesStep::<PrepareFileImportContext>::new()),
         ])
     }
 }

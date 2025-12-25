@@ -33,6 +33,11 @@ pub struct FileImportContext {
 
 impl FileImportContext {
     pub fn get_files_in_file_set(&self) -> Vec<ImportedFile> {
+        println!(
+            "Getting files in file set. Imported files count: {}, Existing files count: {}",
+            self.imported_files.len(),
+            self.existing_files.len()
+        );
         self.imported_files
             .values()
             .cloned()

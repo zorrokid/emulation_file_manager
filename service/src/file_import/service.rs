@@ -145,3 +145,98 @@ impl FileImportService {
         pipeline.execute(&mut context).await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use core_types::{ImportedFile, ReadFile};
+    use database::setup_test_db;
+    use file_import::mock::MockFileImportOps;
+
+    use crate::{
+        file_import::model::{FileImportSource, ImportFileContent},
+        file_system_ops::mock::MockFileSystemOps,
+    };
+
+    use super::*;
+
+    #[async_std::test]
+    async fn test_import() {
+        let test_db = setup_test_db().await;
+        let repository_manager = Arc::new(RepositoryManager::new(Arc::new(test_db)));
+
+        let system_id = repository_manager
+            .get_system_repository()
+            .add_system("Atari ST")
+            .await
+            .unwrap();
+
+        let settings = Arc::new(Settings {
+            collection_root_dir: std::path::PathBuf::from("/tmp/collection"),
+            ..Default::default()
+        });
+
+        let sha1_checksum = [0u8; 20];
+        let file_name = "test_game.st".to_string();
+        let file_size = 2048;
+        let path_str = "/path/to/test_game.zip";
+        let file_set_name = "Test Game".to_string();
+
+        let file_import_ops = Arc::new(MockFileImportOps::new());
+        file_import_ops.add_imported_file(
+            sha1_checksum,
+            ImportedFile {
+                original_file_name: file_name.clone(),
+                sha1_checksum,
+                file_size,
+                archive_file_name: "archive_file_name".to_string(),
+            },
+        );
+
+        let fs_ops = Arc::new(MockFileSystemOps::new());
+        fs_ops.add_file(path_str);
+
+        let service = FileImportService {
+            repository_manager: repository_manager.clone(),
+            fs_ops,
+            file_import_ops,
+            settings,
+        };
+
+        let file_import_source =
+            FileImportSource::new(path_str.into()).with_content(ImportFileContent {
+                file_name,
+                sha1_checksum,
+                file_size,
+            });
+
+        let file_set_import_model = FileSetImportModel {
+            file_type: FileType::Rom,
+            selected_files: vec![sha1_checksum],
+            import_files: vec![file_import_source],
+            system_ids: vec![system_id],
+            source: "test_source".to_string(),
+            file_set_name: file_set_name.clone(),
+            file_set_file_name: "test_game.zip".to_string(),
+        };
+
+        let result = service.import(file_set_import_model).await;
+        assert!(result.is_ok());
+
+        let file_set = repository_manager
+            .get_file_set_repository()
+            .get_file_set(result.unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(file_set.name, file_set_name);
+
+        let file_set_files = repository_manager
+            .get_file_info_repository()
+            .get_file_infos_by_file_set(file_set.id)
+            .await
+            .unwrap();
+
+        assert_eq!(file_set_files.len(), 1);
+        assert_eq!(file_set_files[0].sha1_checksum, sha1_checksum);
+    }
+}

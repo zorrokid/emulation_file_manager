@@ -52,17 +52,10 @@ impl PrepareFileImportContext {
             .file_info
             .iter()
             .map(|(sha1, file_info)| {
-                /*let existing_file = self
-                .existing_files
-                .iter()
-                .find(|f| f.sha1_checksum == *sha1);*/
-
                 let file = ImportFileContent {
                     file_name: file_info.file_name.clone(),
                     sha1_checksum: *sha1,
                     file_size: file_info.file_size,
-                    //existing_file_info_id: existing_file.map(|f| f.id),
-                    //existing_archive_file_name: existing_file.map(|f| f.archive_file_name.clone()),
                 };
 
                 (*sha1, file)
