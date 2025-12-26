@@ -172,7 +172,9 @@ impl FileImportService {
 
 #[cfg(test)]
 mod tests {
-    use core_types::ImportedFile;
+    use std::path::PathBuf;
+
+    use core_types::{ImportedFile, ReadFile};
     use database::setup_test_db;
     use file_import::mock::MockFileImportOps;
 
@@ -183,21 +185,31 @@ mod tests {
 
     use super::*;
 
-    #[async_std::test]
-    async fn test_import() {
+    async fn create_repository_manager() -> Arc<RepositoryManager> {
         let test_db = setup_test_db().await;
-        let repository_manager = Arc::new(RepositoryManager::new(Arc::new(test_db)));
+        Arc::new(RepositoryManager::new(Arc::new(test_db)))
+    }
 
-        let system_id = repository_manager
-            .get_system_repository()
-            .add_system("Atari ST")
-            .await
-            .unwrap();
-
-        let settings = Arc::new(Settings {
+    fn create_settings() -> Arc<Settings> {
+        Arc::new(Settings {
             collection_root_dir: std::path::PathBuf::from("/tmp/collection"),
             ..Default::default()
-        });
+        })
+    }
+
+    async fn create_system(repository_manager: &Arc<RepositoryManager>) -> i64 {
+        repository_manager
+            .get_system_repository()
+            .add_system("system_name")
+            .await
+            .unwrap()
+    }
+
+    #[async_std::test]
+    async fn test_import() {
+        let repository_manager = create_repository_manager().await;
+        let system_id = create_system(&repository_manager).await;
+        let settings = create_settings();
 
         let sha1_checksum = [0u8; 20];
         let file_name = "test_game.st".to_string();
@@ -271,19 +283,9 @@ mod tests {
 
     #[async_std::test]
     async fn test_add_file_to_file_set() {
-        let test_db = setup_test_db().await;
-        let repository_manager = Arc::new(RepositoryManager::new(Arc::new(test_db)));
-
-        let system_id = repository_manager
-            .get_system_repository()
-            .add_system("Atari ST")
-            .await
-            .unwrap();
-
-        let settings = Arc::new(Settings {
-            collection_root_dir: std::path::PathBuf::from("/tmp/collection"),
-            ..Default::default()
-        });
+        let repository_manager = create_repository_manager().await;
+        let system_id = create_system(&repository_manager).await;
+        let settings = create_settings();
 
         // First, create an existing file set with one file, to which we will add another file
         let existing_file_checksum = [1u8; 20];
@@ -376,5 +378,56 @@ mod tests {
             .iter()
             .any(|file_info| file_info.sha1_checksum == new_file_sha1_checksum);
         assert!(new_file_found);
+    }
+
+    #[async_std::test]
+    async fn test_prepare_import() {
+        let repository_manager = create_repository_manager().await;
+        let settings = create_settings();
+
+        let sha1_checksum = [0u8; 20];
+
+        let file_in_zip_archive = ReadFile {
+            file_name: "test_game.rom".to_string(),
+            sha1_checksum,
+            file_size: 4096,
+        };
+
+        let file_path_str = "/path/to/test_game.zip";
+        let fs_ops = Arc::new(MockFileSystemOps::new());
+        fs_ops.add_file(file_path_str);
+        let file_import_ops = Arc::new(MockFileImportOps::new());
+        file_import_ops.add_zip_file(file_in_zip_archive.sha1_checksum, file_in_zip_archive);
+
+        let service = FileImportService {
+            repository_manager,
+            fs_ops,
+            file_import_ops,
+            settings,
+        };
+        let result = service
+            .prepare_import(Path::new(file_path_str), FileType::Rom)
+            .await;
+
+        assert!(result.is_ok());
+        let prepare_result = result.unwrap();
+        assert_eq!(
+            prepare_result.import_model.path,
+            PathBuf::from(file_path_str)
+        );
+        assert_eq!(
+            prepare_result.import_metadata.file_set_name,
+            "test_game".to_string()
+        );
+        assert_eq!(
+            prepare_result.import_metadata.file_set_file_name,
+            "test_game.zip".to_string()
+        );
+        assert!(prepare_result.import_metadata.is_zip_archive);
+
+        let import_model_content = prepare_result.import_model.content;
+        let imported_file = import_model_content.get(&sha1_checksum).unwrap();
+        assert_eq!(imported_file.file_name, "test_game.rom");
+        assert_eq!(imported_file.sha1_checksum, sha1_checksum);
     }
 }

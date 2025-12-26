@@ -41,7 +41,8 @@ impl<T: CollectFileInfoContext + Send + Sync> PipelineStep<T> for CollectFileInf
     }
 
     fn should_execute(&self, context: &T) -> bool {
-        context.file_path().exists()
+        let exists = context.fs_ops().exists(context.file_path());
+        exists
     }
 
     async fn execute(&self, context: &mut T) -> StepAction {
