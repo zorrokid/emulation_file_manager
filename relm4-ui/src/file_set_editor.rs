@@ -164,6 +164,25 @@ impl Component for FileSetEditor {
                     files_list -> gtk::ListView {}
                 },
 
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    set_spacing: 5,
+                    gtk::Button {
+                        set_label: "Remove file from set",
+                        connect_clicked[sender, root] => move |_| {
+                            // TODO
+                            println!("Remove file from set clicked");
+                        }
+                    },
+                    gtk::Button {
+                        set_label: "Add file to set",
+                        connect_clicked[sender, root] => move |_| {
+                            // TODO
+                            println!("Add file to set clicked");
+                        }
+                    },
+                },
+
                gtk::Button {
                     set_label: "Update File Set",
                     connect_clicked => FileSetEditorMsg::SaveChanges,
