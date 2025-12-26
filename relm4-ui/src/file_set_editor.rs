@@ -5,12 +5,14 @@ use database::{database_error::DatabaseError, repository_manager::RepositoryMana
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
-        self, glib,
+        self,
+        glib::{self, clone},
         prelude::{
             BoxExt, ButtonExt, EditableExt, EntryBufferExtManual, EntryExt, GtkWindowExt,
             OrientableExt, WidgetExt,
         },
     },
+    typed_view::list::TypedListView,
 };
 use service::{
     view_model_service::ViewModelService,
@@ -18,7 +20,7 @@ use service::{
 };
 use ui_components::{DropDownMsg, DropDownOutputMsg, FileTypeDropDown, FileTypeSelectedMsg};
 
-use crate::utils::dialog_utils::show_error_dialog;
+use crate::{list_item::ListItem, utils::dialog_utils::show_error_dialog};
 
 #[derive(Debug)]
 pub struct FileSetEditor {
@@ -30,6 +32,7 @@ pub struct FileSetEditor {
     file_set_file_name: String,
     source: String,
     dropdown: Controller<FileTypeDropDown>,
+    files_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
 }
 
 #[derive(Debug)]
@@ -42,6 +45,7 @@ pub enum FileSetEditorMsg {
     FileTypeChanged(FileType),
     Hide,
     UpdateFormFields,
+    FileSelected,
 }
 
 #[derive(Debug)]
@@ -150,6 +154,16 @@ impl Component for FileSetEditor {
                     }
                 },
 
+                gtk::Label {
+                    set_label: "Files in file set:",
+                },
+
+                gtk::ScrolledWindow {
+                    set_vexpand: true,
+                    #[local_ref]
+                    files_list -> gtk::ListView {}
+                },
+
                gtk::Button {
                     set_label: "Update File Set",
                     connect_clicked => FileSetEditorMsg::SaveChanges,
@@ -231,6 +245,9 @@ impl Component for FileSetEditor {
                 widgets.name_entry.set_text(&self.file_set_name);
                 widgets.source_entry.set_text(&self.source);
             }
+            FileSetEditorMsg::FileSelected => {
+                // TODO
+            }
         }
         // This is essential with update_with_view:
         self.update_view(widgets, sender);
@@ -250,6 +267,14 @@ impl Component for FileSetEditor {
                 self.selected_file_type = Some(file_set.file_type);
                 self.dropdown
                     .emit(DropDownMsg::SetSelected(file_set.file_type));
+
+                let items = file_set.files.into_iter().map(|file| ListItem {
+                    id: file.file_info_id,
+                    name: file.file_name.clone(),
+                });
+                self.files_list_view_wrapper.clear();
+                self.files_list_view_wrapper.extend_from_iter(items);
+
                 sender.input(FileSetEditorMsg::UpdateFormFields);
             }
             CommandMsg::FileSetFetched(Err(e)) => {
@@ -281,6 +306,7 @@ impl Component for FileSetEditor {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let dropdown = Self::create_dropdown(None, &sender);
+        let files_list_view_wrapper = TypedListView::<ListItem, gtk::SingleSelection>::new();
 
         let model = FileSetEditor {
             file_set_id: None,
@@ -291,8 +317,20 @@ impl Component for FileSetEditor {
             repository_manager: init.repository_manager,
             view_model_service: init.view_model_service,
             dropdown,
+            files_list_view_wrapper,
         };
         let file_types_dropdown = model.dropdown.widget();
+        let files_list = &model.files_list_view_wrapper.view;
+        model
+            .files_list_view_wrapper
+            .selection_model
+            .connect_selected_notify(clone!(
+                #[strong]
+                sender,
+                move |_| {
+                    sender.input(FileSetEditorMsg::FileSelected);
+                }
+            ));
 
         let widgets = view_output!();
 
