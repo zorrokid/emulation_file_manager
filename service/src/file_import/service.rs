@@ -1,6 +1,6 @@
 use std::{path::Path, sync::Arc};
 
-use core_types::FileType;
+use core_types::{FileType, ImportedFile};
 use database::repository_manager::RepositoryManager;
 use file_import::FileImportOps;
 
@@ -10,7 +10,8 @@ use crate::{
         add_file_to_file_set::context::AddFileToFileSetContext,
         import::context::FileImportContext,
         model::{
-            AddToFileSetImportModel, FileImportData, FileImportPrepareResult, FileSetImportModel,
+            AddToFileSetImportModel, FileImportData, FileImportPrepareResult, FileImportResult,
+            FileSetImportModel,
         },
         prepare::context::PrepareFileImportContext,
     },
@@ -87,7 +88,10 @@ impl FileImportService {
         }
     }
 
-    pub async fn import(&self, import_model: FileSetImportModel) -> Result<i64, Error> {
+    pub async fn import(
+        &self,
+        import_model: FileSetImportModel,
+    ) -> Result<FileImportResult, Error> {
         let file_type = import_model.file_type;
         let output_dir = self.settings.collection_root_dir.clone();
         let file_import_data = FileImportData {
@@ -100,21 +104,30 @@ impl FileImportService {
         let mut context = FileImportContext {
             repository_manager: self.repository_manager.clone(),
             settings: self.settings.clone(),
+            file_import_ops: self.file_import_ops.clone(),
+            file_system_ops: self.fs_ops.clone(),
+
             file_import_data,
             system_ids: import_model.system_ids,
             source: import_model.source,
             file_set_name: import_model.file_set_name,
             file_set_file_name: import_model.file_set_file_name,
+
             imported_files: std::collections::HashMap::new(),
             file_set_id: None,
-            file_import_ops: self.file_import_ops.clone(),
-            file_system_ops: self.fs_ops.clone(),
             existing_files: vec![],
         };
         let pipeline = Pipeline::<FileImportContext>::new();
         let result = pipeline.execute(&mut context).await;
         match (result, context.file_set_id) {
-            (Ok(_), Some(id)) => Ok(id),
+            (Ok(_), Some(id)) => Ok(FileImportResult {
+                file_set_id: id,
+                imported_new_files: context
+                    .imported_files
+                    .values()
+                    .cloned()
+                    .collect::<Vec<ImportedFile>>(),
+            }),
             (Err(err), _) => Err(err),
             (_, None) => Err(Error::FileImportError(
                 "File set ID not set after import".to_string(),
@@ -148,7 +161,7 @@ impl FileImportService {
 
 #[cfg(test)]
 mod tests {
-    use core_types::{ImportedFile, ReadFile};
+    use core_types::ImportedFile;
     use database::setup_test_db;
     use file_import::mock::MockFileImportOps;
 
@@ -222,9 +235,14 @@ mod tests {
         let result = service.import(file_set_import_model).await;
         assert!(result.is_ok());
 
+        let result = result.unwrap();
+
+        assert_eq!(result.imported_new_files.len(), 1);
+        assert_eq!(result.imported_new_files[0].sha1_checksum, sha1_checksum);
+
         let file_set = repository_manager
             .get_file_set_repository()
-            .get_file_set(result.unwrap())
+            .get_file_set(result.file_set_id)
             .await
             .unwrap();
 

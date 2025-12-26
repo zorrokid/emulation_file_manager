@@ -21,7 +21,7 @@ use service::{
     download_service::DownloadService,
     error::Error,
     file_import::{
-        model::{FileImportPrepareResult, FileImportSource, FileSetImportModel},
+        model::{FileImportPrepareResult, FileImportResult, FileImportSource, FileSetImportModel},
         service::FileImportService,
     },
     view_models::{FileSetListModel, Settings},
@@ -141,7 +141,7 @@ pub enum FileSetFormOutputMsg {
 #[derive(Debug)]
 pub enum CommandMsg {
     FileImportPrepared(Result<FileImportPrepareResult, Error>),
-    FileImportDone(Result<i64, Error>),
+    FileImportDone(Result<FileImportResult, Error>),
 }
 
 pub struct FileSetFormInit {
@@ -712,11 +712,11 @@ impl Component for FileSetFormModel {
                 }
                 self.picked_files.push(import_model);
             }
-            CommandMsg::FileImportDone(Ok(id)) => {
+            CommandMsg::FileImportDone(Ok(import_result)) => {
                 self.processing = false;
                 if let Some(file_type) = self.selected_file_type {
                     let file_set_list_model = FileSetListModel {
-                        id,
+                        id: import_result.file_set_id,
                         file_set_name: self.file_set_name.clone(),
                         file_type,
                         file_name: self.file_set_file_name.clone(),

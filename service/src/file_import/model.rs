@@ -3,7 +3,7 @@ use std::{
     path::PathBuf,
 };
 
-use core_types::{FileSize, FileType, Sha1Checksum};
+use core_types::{FileSize, FileType, ImportedFile, Sha1Checksum};
 use database::models::FileInfo;
 use file_import::FileImportModel;
 
@@ -129,6 +129,12 @@ impl FileImportData {
 pub struct FileImportPrepareResult {
     pub import_model: FileImportSource,
     pub import_metadata: FileImportMetadata,
+}
+
+#[derive(Debug)]
+pub struct FileImportResult {
+    pub file_set_id: i64,
+    pub imported_new_files: Vec<ImportedFile>,
 }
 
 #[derive(Debug)]
