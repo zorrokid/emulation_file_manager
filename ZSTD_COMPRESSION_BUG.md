@@ -53,15 +53,89 @@ File at `/home/mikko/.local/share/efm/files/manual/61392fe1-3cb6-45ed-9b94-b5d14
 
 This causes "Unknown frame descriptor" error when trying to decompress because zstd sees XML instead of the magic number `28 b5 2f fd`.
 
-### Root Cause
-The cloud download code doesn't:
-1. Check HTTP response status codes before saving
-2. Validate downloaded content is actually zstd data
-3. Verify zstd magic number after download
-4. Fail appropriately when credentials are invalid
+### Root Cause Analysis
+
+**Why credentials aren't validated during "connect_to_cloud" step:**
+- `Bucket::new()` in the S3 library just creates a configuration object (line 49 in `cloud_storage/src/lib.rs`)
+- **No network call is made** during bucket creation
+- Authentication only happens on the first actual API call (like `get_object_stream()`)
+
+**Why XML error responses get saved as files:**
+- Location: `cloud_storage/src/lib.rs`, `download_file()` function, lines 76-99
+- Line 82: `bucket.get_object_stream(key).await?` returns a stream object
+- The S3 library doesn't fail here - it returns a stream that contains the error response body
+- Line 83: File is created **before validating stream content**
+- Lines 85-96: The code blindly writes all bytes from the stream to the file
+- Result: XML error response is written as if it were valid file data
+
+**The bug:** The download code doesn't:
+1. Check HTTP response status codes before writing
+2. Validate the response is actually file data (not an error response)
+3. Check for zstd magic number (`28 b5 2f fd`) before writing
+4. Handle S3 API errors properly - they come as response bodies, not Rust errors
 
 ### Fix Required
-Must validate HTTP responses and content before saving files.
+
+**Location:** `cloud_storage/src/lib.rs`, `download_file()` function (lines 76-99)
+
+**Options to fix:**
+
+**Option 1: Check HTTP status before streaming** (Recommended)
+```rust
+async fn download_file(...) -> Result<(), CloudStorageError> {
+    let response = bucket.get_object(key).await?;  // Get full response, not stream
+    
+    // Check HTTP status
+    if response.status_code() != 200 {
+        return Err(CloudStorageError::Other(format!(
+            "Download failed with status {}: {}", 
+            response.status_code(),
+            String::from_utf8_lossy(&response.bytes)
+        )));
+    }
+    
+    // Validate zstd magic number
+    let bytes = response.bytes();
+    if !bytes.starts_with(&[0x28, 0xB5, 0x2F, 0xFD]) {
+        return Err(CloudStorageError::Other("Invalid zstd file format".to_string()));
+    }
+    
+    // Now write to file
+    let mut file = async_std::fs::File::create(local_path).await?;
+    file.write_all(&bytes).await?;
+    Ok(())
+}
+```
+
+**Option 2: Validate first bytes from stream**
+```rust
+async fn download_file(...) -> Result<(), CloudStorageError> {
+    let mut response_stream = bucket.get_object_stream(key).await?;
+    let mut file = async_std::fs::File::create(local_path).await?;
+    
+    let mut first_chunk = true;
+    while let Some(chunk_res) = response_stream.bytes.next().await {
+        let chunk = chunk_res?;
+        
+        // Validate first chunk is zstd data
+        if first_chunk {
+            if chunk.len() >= 4 && !chunk.starts_with(&[0x28, 0xB5, 0x2F, 0xFD]) {
+                return Err(CloudStorageError::Other(
+                    format!("Invalid file format. Got: {:?}", &chunk[..4.min(chunk.len())])
+                ));
+            }
+            first_chunk = false;
+        }
+        
+        file.write_all(&chunk).await?;
+        // ... progress reporting ...
+    }
+    Ok(())
+}
+```
+
+**Option 3: Test connection with a lightweight API call**
+Add a `test_connection()` method that makes a simple API call (like `list_objects` with limit=1) during the connect step to validate credentials early.
 
 ---
 

@@ -11,8 +11,12 @@ use file_export::{OutputFile, file_export_ops::FileExportOps};
 use thumbnails::{ThumbnailOps, ThumbnailPathMap};
 
 use crate::{
-    file_system_ops::FileSystemOps, pipeline::cloud_connection::CloudConnectionContext,
-    settings_service::SettingsService, view_models::Settings,
+    file_system_ops::FileSystemOps,
+    pipeline::{
+        cloud_connection::CloudConnectionContext, test_cloud_connection::TestCloudConnectionContext,
+    },
+    settings_service::SettingsService,
+    view_models::Settings,
 };
 
 // TODO: FileSystemOps generic parameter might not be needed here, use dyn instead?
@@ -125,5 +129,15 @@ impl CloudConnectionContext for DownloadContext {
 
     fn should_connect(&self) -> bool {
         !self.files_to_download.is_empty()
+    }
+}
+
+impl TestCloudConnectionContext for DownloadContext {
+    fn should_connect(&self) -> bool {
+        !self.files_to_download.is_empty()
+    }
+
+    fn cloud_ops(&self) -> Option<Arc<dyn CloudStorageOps>> {
+        self.cloud_ops.clone()
     }
 }

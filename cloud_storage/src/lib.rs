@@ -31,7 +31,9 @@ pub enum CloudStorageError {
     Other(String),
 }
 
-pub async fn connect_bucket(
+/// Note, this doesn't actually establish a persistent connection,
+/// but prepares the Bucket object for further operations.
+pub fn prepare_bucket(
     endpoint: &str,
     region: &str,
     bucket: &str,
@@ -176,15 +178,15 @@ pub struct S3CloudStorage {
 }
 
 impl S3CloudStorage {
-    /// Connect to an S3-compatible storage bucket
-    pub async fn connect(
+    /// Prepare an S3-compatible storage bucket
+    pub fn get_bucket(
         endpoint: &str,
         region: &str,
         bucket_name: &str,
         key_id: &str,
         secret_key: &str,
     ) -> Result<Self, CloudStorageError> {
-        let bucket = connect_bucket(endpoint, region, bucket_name, key_id, secret_key).await?;
+        let bucket = prepare_bucket(endpoint, region, bucket_name, key_id, secret_key)?;
         Ok(Self { bucket })
     }
 
@@ -224,5 +226,17 @@ impl CloudStorageOps for S3CloudStorage {
         progress_tx: Option<&Sender<DownloadEvent>>,
     ) -> Result<(), CloudStorageError> {
         download_file(&self.bucket, destination_path, cloud_key, progress_tx).await
+    }
+
+    async fn test_connection(&self) -> Result<(), CloudStorageError> {
+        // Attempt to list objects in the bucket root level as a connectivity test
+        match self
+            .bucket
+            .list("".to_string(), Some("/".to_string()))
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(e) => Err(CloudStorageError::S3(e)),
+        }
     }
 }
