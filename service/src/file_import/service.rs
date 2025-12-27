@@ -88,12 +88,16 @@ impl FileImportService {
         }
     }
 
+    fn get_output_dir_for_file_type(&self, file_type: &FileType) -> std::path::PathBuf {
+        self.settings.get_file_type_path(file_type)
+    }
+
     pub async fn import(
         &self,
         import_model: FileSetImportModel,
     ) -> Result<FileImportResult, Error> {
         let file_type = import_model.file_type;
-        let output_dir = self.settings.collection_root_dir.clone();
+        let output_dir = self.get_output_dir_for_file_type(&file_type);
         let file_import_data = FileImportData {
             output_dir,
             file_type,
@@ -140,9 +144,8 @@ impl FileImportService {
         import_model: AddToFileSetImportModel,
     ) -> Result<FileImportResult, Error> {
         let file_import_data = FileImportData {
-            output_dir: self.settings.collection_root_dir.clone(),
-            file_type: import_model.file_type, // TODO make this optional? this is required only
-            // when adding new file set
+            output_dir: self.get_output_dir_for_file_type(&import_model.file_type),
+            file_type: import_model.file_type,
             selected_files: import_model.selected_files,
             import_files: import_model.import_files,
         };

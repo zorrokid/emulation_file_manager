@@ -7,19 +7,32 @@
 
 ### Bug #1: Cloud Download Saves Error Responses as Data Files
 **Severity:** CRITICAL  
-**Impact:** Files become corrupted with XML error messages
+**Impact:** Files become corrupted with XML error messages  
+**Status:** ⚠️ ACTIVE - Needs fixing
 
 ### Bug #2: CloudFileWriter Double-Compresses Files
-**Severity:** CRITICAL  
-**Impact:** Files cannot be decompressed
+**Severity:** ~~CRITICAL~~ N/A  
+**Impact:** ~~Files cannot be decompressed~~ Dead code, never used  
+**Status:** ✅ RESOLVED - Dead code removed (Dec 27, 2025)
 
 ### Bug #3: Files Saved to Wrong Directory Path
-**Severity:** HIGH  
-**Impact:** File organization broken, files in wrong locations
+**Severity:** ~~HIGH~~ FIXED  
+**Impact:** ~~File organization broken~~ Fixed  
+**Status:** ✅ FIXED - Helper method implemented (Dec 27, 2025)
 
 ### Bug #4: Credentials Not Persisted Between Sessions
 **Severity:** HIGH  
-**Impact:** Users must re-enter credentials every application restart
+**Impact:** Users must re-enter credentials every application restart  
+**Status:** ⚠️ ACTIVE - Needs investigation
+
+---
+
+## Status Summary (as of December 27, 2025)
+
+- ✅ **Bug #3: FIXED** - File path issue resolved with `get_output_dir_for_file_type()` helper
+- ✅ **Bug #2: RESOLVED** - CloudFileWriter dead code removed
+- ⚠️ **Bug #1: ACTIVE** - Cloud download error response issue still needs fixing
+- ⚠️ **Bug #4: ACTIVE** - Credential persistence issue still needs investigation
 
 ---
 
@@ -54,7 +67,11 @@ Must validate HTTP responses and content before saving files.
 
 ## Bug #2: CloudFileWriter Double-Compression Bug
 
-### Problem
+### **STATUS: RESOLVED** ✅
+**Resolution Date:** December 27, 2025  
+**Resolution:** CloudFileWriter was dead code that was never actually used in the application. The dead code has been removed.
+
+### Original Problem
 Files compressed using `CloudFileWriter::output_zstd_compressed` are **corrupted and cannot be decompressed**. This causes "Unknown frame descriptor" errors when attempting to decompress these files.
 
 ## Root Cause
@@ -164,6 +181,8 @@ cp /home/mikko/.local/share/efm/files/61392fe1-3cb6-45ed-9b94-b5d149c428c5.zst \
 
 ## Bug #3: Files Saved to Wrong Directory
 
+Status: Fixed, nned to test
+
 ### Problem
 Files are being saved to the wrong directory path. 
 
@@ -179,20 +198,25 @@ The correct file is in the root `files/` directory when it should be in the `fil
 - May cause duplicate files (one in correct location, one in wrong location)
 - Makes file management and cleanup difficult
 
-### Investigation Needed
+### Investigation Needed → Fix Applied
 
-**FOUND THE BUG!**
+**✅ BUG FIXED!**
 
-**Location:** `service/src/file_import/service.rs`, line 96
+**Location:** `service/src/file_import/service.rs`, lines 88-96, 140-148
 
-**Current buggy code:**
+**Fix Applied:**
 ```rust
-let output_dir = self.settings.collection_root_dir.clone();
+fn get_output_dir_for_file_type(&self, file_type: &FileType) -> std::path::PathBuf {
+    self.settings.get_file_type_path(file_type)
+}
+
+// Then used in both import methods:
+let output_dir = self.get_output_dir_for_file_type(&file_type);
 ```
 
-**Should be:**
+**Previous buggy code:**
 ```rust
-let output_dir = self.settings.get_file_type_path(&file_type);
+let output_dir = self.settings.collection_root_dir.clone();
 ```
 
 **Explanation:**
@@ -213,6 +237,7 @@ let output_dir = self.settings.get_file_type_path(&file_type);
 - All imported files go to wrong location
 - Export expects files in subdirectories, import puts them in root
 - Creates mismatches between database paths and actual file locations
+
 
 ---
 
@@ -264,23 +289,23 @@ Two possible causes:
 ## Recommended Actions
 
 ### Immediate
-1. **Fix Bug #1:** Add HTTP response validation to cloud download code
-2. **Fix Bug #2:** Fix CloudFileWriter double-compression
-3. **Fix Bug #3:** Fix file path construction during import (one-line fix at `service/src/file_import/service.rs:96`)
-4. **Fix Bug #4:** Investigate and fix credential persistence
+1. ⚠️ **Fix Bug #1:** Add HTTP response validation to cloud download code
+2. ✅ **~~Fix Bug #2~~:** ~~Fix CloudFileWriter double-compression~~ - RESOLVED: Dead code removed
+3. ✅ **~~Fix Bug #3~~:** ~~Fix file path construction during import~~ - FIXED: December 27, 2025
+4. ⚠️ **Fix Bug #4:** Investigate and fix credential persistence
 
 ### Validation
-4. **Add integration tests** that:
+5. **Add integration tests** that:
    - Upload AND download files to catch compression issues
    - Verify files are in correct directories
    - Validate downloaded content before saving
    - Test with invalid credentials to ensure proper error handling
 
 ### Cleanup
-5. **Identify all corrupted files** saved with XML error responses
-6. **Identify all double-compressed files** uploaded with buggy CloudFileWriter
-7. **Identify all misplaced files** in wrong directories
-8. **Re-import/re-download** all affected files
+6. ⚠️ **Identify all corrupted files** saved with XML error responses
+7. ✅ **~~Identify all double-compressed files~~** - Not applicable, CloudFileWriter was unused (dead code removed)
+8. **Re-import files** that were placed in wrong directories (before Bug #3 fix)
+9. **Re-download corrupted files** affected by Bug #1
 
 ## Related Files
 - `file_import/src/file_writer.rs` - Bug #2: CloudFileWriter double-compression (lines 78-175)
