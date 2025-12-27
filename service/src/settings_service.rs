@@ -177,6 +177,9 @@ mod tests {
 
     #[async_std::test]
     async fn test_save_and_load_settings() {
+        // Clean up any test credentials before starting
+        credentials_storage::delete_credentials().ok();
+
         let pool = Arc::new(setup_test_db().await);
         let repo_manager = Arc::new(RepositoryManager::new(pool));
         let service = SettingsService::new(repo_manager);
@@ -204,6 +207,9 @@ mod tests {
         );
         assert_eq!(settings.s3_settings.as_ref().unwrap().region, "us-east-1");
         assert_eq!(settings.s3_settings.as_ref().unwrap().bucket, "my-bucket");
+
+        // Clean up test credentials after test
+        credentials_storage::delete_credentials().ok();
     }
 
     #[async_std::test]

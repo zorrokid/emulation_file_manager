@@ -29,6 +29,9 @@ pub enum CloudStorageError {
 
     #[error("Other error: {0}")]
     Other(String),
+
+    #[error("Invalid credentials: {0}")]
+    InvalidCredentials(String),
 }
 
 /// Note, this doesn't actually establish a persistent connection,
@@ -226,17 +229,5 @@ impl CloudStorageOps for S3CloudStorage {
         progress_tx: Option<&Sender<DownloadEvent>>,
     ) -> Result<(), CloudStorageError> {
         download_file(&self.bucket, destination_path, cloud_key, progress_tx).await
-    }
-
-    async fn test_connection(&self) -> Result<(), CloudStorageError> {
-        // Attempt to list objects in the bucket root level as a connectivity test
-        match self
-            .bucket
-            .list("".to_string(), Some("/".to_string()))
-            .await
-        {
-            Ok(_) => Ok(()),
-            Err(e) => Err(CloudStorageError::S3(e)),
-        }
     }
 }

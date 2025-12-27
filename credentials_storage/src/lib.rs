@@ -1,8 +1,25 @@
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
 
+#[cfg(not(test))]
 const SERVICE_NAME: &str = "efm-cloud-sync";
 const USERNAME: &str = "s3-credentials"; // Fixed username for all credentials
+
+// Test-specific service name to avoid polluting production keyring
+#[cfg(test)]
+const TEST_SERVICE_NAME: &str = "efm-cloud-sync-test";
+
+/// Get the appropriate service name based on build configuration
+fn get_service_name() -> &'static str {
+    #[cfg(test)]
+    {
+        TEST_SERVICE_NAME
+    }
+    #[cfg(not(test))]
+    {
+        SERVICE_NAME
+    }
+}
 
 /// Cloud storage credentials (S3-compatible)
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -46,7 +63,7 @@ pub enum CredentialsError {
 /// store_credentials(&creds)?;
 /// ```
 pub fn store_credentials(credentials: &CloudCredentials) -> Result<(), CredentialsError> {
-    let entry = Entry::new(SERVICE_NAME, USERNAME)?;
+    let entry = Entry::new(get_service_name(), USERNAME)?;
     let json = serde_json::to_string(credentials)?;
     entry.set_password(&json)?;
     Ok(())
@@ -69,7 +86,7 @@ pub fn store_credentials(credentials: &CloudCredentials) -> Result<(), Credentia
 /// }
 /// ```
 pub fn load_credentials() -> Result<CloudCredentials, CredentialsError> {
-    let entry = Entry::new(SERVICE_NAME, USERNAME)?;
+    let entry = Entry::new(get_service_name(), USERNAME)?;
     match entry.get_password() {
         Ok(json) => {
             let credentials = serde_json::from_str(&json)?;
@@ -137,7 +154,7 @@ pub fn load_credentials_with_fallback() -> Result<CloudCredentials, CredentialsE
 /// println!("Credentials removed");
 /// ```
 pub fn delete_credentials() -> Result<(), CredentialsError> {
-    let entry = Entry::new(SERVICE_NAME, USERNAME)?;
+    let entry = Entry::new(get_service_name(), USERNAME)?;
     match entry.delete_credential() {
         Ok(_) => Ok(()),
         Err(keyring::Error::NoEntry) => Ok(()), // Already deleted
@@ -174,6 +191,20 @@ pub fn has_credentials() -> Result<bool, CredentialsError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
+
+    // Tests that access the keyring must run sequentially because:
+    // 1. All tests share the same test keyring entry ("efm-cloud-sync-test")
+    // 2. Running in parallel causes race conditions where tests interfere with each other
+    // 3. The #[serial] attribute ensures these tests run one at a time
+    //
+    // Note: test_credentials_serialization doesn't need #[serial] because it doesn't
+    // access the keyring - it only tests JSON serialization.
+
+    // Helper to clean up test credentials after each test
+    fn cleanup_test_credentials() {
+        delete_credentials().ok(); // Ignore errors - might not exist
+    }
 
     #[test]
     fn test_credentials_serialization() {
@@ -186,5 +217,44 @@ mod tests {
         let deserialized: CloudCredentials = serde_json::from_str(&json).unwrap();
 
         assert_eq!(creds, deserialized);
+    }
+
+    #[test]
+    #[serial]
+    fn test_store_and_load() {
+        cleanup_test_credentials();
+
+        let creds = CloudCredentials {
+            access_key_id: "test-store-key".to_string(),
+            secret_access_key: "test-store-secret".to_string(),
+        };
+
+        // Store
+        store_credentials(&creds).expect("Failed to store credentials");
+
+        // Load
+        let loaded = load_credentials().expect("Failed to load credentials");
+        assert_eq!(creds, loaded);
+
+        cleanup_test_credentials();
+    }
+
+    #[test]
+    #[serial]
+    fn test_delete() {
+        cleanup_test_credentials();
+
+        let creds = CloudCredentials {
+            access_key_id: "test-delete-key".to_string(),
+            secret_access_key: "test-delete-secret".to_string(),
+        };
+
+        store_credentials(&creds).unwrap();
+        assert!(has_credentials().unwrap());
+
+        delete_credentials().unwrap();
+        assert!(!has_credentials().unwrap());
+
+        cleanup_test_credentials();
     }
 }

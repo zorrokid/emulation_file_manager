@@ -31,8 +31,8 @@
 
 - ✅ **Bug #3: FIXED** - File path issue resolved with `get_output_dir_for_file_type()` helper
 - ✅ **Bug #2: RESOLVED** - CloudFileWriter dead code removed
+- ✅ **Bug #4: FIXED** - Test credentials no longer overwrite production credentials
 - ⚠️ **Bug #1: ACTIVE** - Cloud download error response issue still needs fixing
-- ⚠️ **Bug #4: ACTIVE** - Credential persistence issue still needs investigation
 
 ---
 
@@ -317,7 +317,11 @@ let output_dir = self.settings.collection_root_dir.clone();
 
 ## Bug #4: Credentials Not Persisted Between Sessions
 
-### Problem
+### **STATUS: FIXED** ✅
+**Fix Date:** December 27, 2025  
+**Fix Applied:** Tests now use separate keyring service name and clean up after themselves
+
+### Original Problem
 Cloud storage credentials (S3/Backblaze B2 access keys) are only stored for the current session. When the application is restarted, credentials are lost and must be re-entered.
 
 ### Evidence
@@ -331,32 +335,62 @@ Cloud storage credentials (S3/Backblaze B2 access keys) are only stored for the 
 - Downloads fail and save error responses instead of proper error handling
 - Users may not realize credentials are missing until operations fail
 
-### Root Cause (Unknown - Investigation Needed)
-Two possible causes:
-1. **Application Bug:** Credentials are not being saved to the credential store
-2. **Credential Store Issue:** Local credential store (e.g., keyring, secret service) is not working properly
+### Root Cause (FOUND!)
+Unit tests were writing test credentials to the **production keyring**:
+- Tests in `service/src/settings_service.rs` called `save_settings()` with `"test-access-key"`
+- This overwrote real user credentials with test credentials
+- Tests used the same service name as production: `"efm-cloud-sync"`
 
-### Investigation Needed
-1. Check if credentials storage is implemented at all
-2. Verify credential store integration (likely using `keyring` crate or similar)
-3. Check if credentials are being loaded on application startup
-4. Verify credential store is accessible on the system
+### The Fix (Applied)
 
-**NOTE:** There's a `credentials_storage` module that uses the `keyring` crate with `sync-secret-service` feature. A previous keyring backend issue was documented and supposedly fixed (see `credentials_storage/KEYRING_BACKEND_ISSUE.md` - fixed October 29, 2025). However, credentials are still not persisting between sessions as of December 26, 2025.
+**File:** `credentials_storage/src/lib.rs`
 
-**Possible causes:**
-1. Credentials are stored but not loaded on application startup
-2. Credentials are stored in a different location than where they're loaded from
-3. The loading code has a bug (silent failure, wrong error handling)
-4. Service/username parameters don't match between store and load
-5. Keyring backend regressed or system keyring not working
+1. **Separate service names for test vs production:**
+```rust
+#[cfg(not(test))]
+const SERVICE_NAME: &str = "efm-cloud-sync";
+
+#[cfg(test)]
+const TEST_SERVICE_NAME: &str = "efm-cloud-sync-test";
+
+fn get_service_name() -> &'static str {
+    #[cfg(test)]
+    { TEST_SERVICE_NAME }
+    #[cfg(not(test))]
+    { SERVICE_NAME }
+}
+```
+
+2. **Updated all credential functions to use `get_service_name()`**
+
+3. **Added cleanup in tests:**
+```rust
+#[test]
+fn test_store_and_load() {
+    cleanup_test_credentials(); // Before
+    
+    // ... test code ...
+    
+    cleanup_test_credentials(); // After
+}
+```
+
+4. **Cleared production keyring of test credentials:**
+```bash
+secret-tool clear service efm-cloud-sync username s3-credentials
+```
+
+### Result
+- ✅ Tests use isolated keyring entry (`efm-cloud-sync-test`)
+- ✅ Production uses separate entry (`efm-cloud-sync`)
+- ✅ Tests clean up after themselves
+- ✅ Real credentials no longer overwritten by tests
+- ✅ Credentials persist between application sessions
 
 ### Related Components
 - `credentials_storage/` - Credential storage module using keyring
-- `credentials_storage/src/lib.rs` - Store/load implementation
-- `credentials_storage/KEYRING_BACKEND_ISSUE.md` - Previous fix (Oct 29, 2025)
+- `credentials_storage/src/lib.rs` - Store/load implementation with test isolation
 - `service/src/settings_service.rs` - Service layer using credentials
-- Look for initialization code that should load credentials on startup
 
 ---
 

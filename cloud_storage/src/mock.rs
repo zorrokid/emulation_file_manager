@@ -231,11 +231,6 @@ impl CloudStorageOps for MockCloudStorage {
             )))
         }
     }
-
-    async fn test_connection(&self) -> Result<(), CloudStorageError> {
-        // TODO: could simulate failure if needed
-        Ok(())
-    }
 }
 
 #[cfg(test)]

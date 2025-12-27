@@ -6,10 +6,7 @@ use crate::{
             PrepareFilesForUploadStep, UploadPendingFilesStep,
         },
     },
-    pipeline::{
-        cloud_connection::ConnectToCloudStep, generic_pipeline::Pipeline,
-        test_cloud_connection::TestConnectToCloudStep,
-    },
+    pipeline::{cloud_connection::ConnectToCloudStep, generic_pipeline::Pipeline},
 };
 
 impl Default for Pipeline<SyncContext> {
@@ -24,7 +21,6 @@ impl Pipeline<SyncContext> {
             Box::new(PrepareFilesForUploadStep),
             Box::new(GetSyncFileCountsStep),
             Box::new(ConnectToCloudStep::<SyncContext>::new()),
-            Box::new(TestConnectToCloudStep::<SyncContext>::new()),
             Box::new(UploadPendingFilesStep),
             Box::new(DeleteMarkedFilesStep),
             Box::new(CleanupOrphanedSyncLogsStep),

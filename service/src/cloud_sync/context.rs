@@ -6,9 +6,7 @@ use core_types::events::SyncEvent;
 use database::repository_manager::RepositoryManager;
 
 use crate::{
-    pipeline::{
-        cloud_connection::CloudConnectionContext, test_cloud_connection::TestCloudConnectionContext,
-    },
+    pipeline::cloud_connection::CloudConnectionContext,
     settings_service::SettingsService,
     view_models::Settings,
 };
@@ -158,16 +156,5 @@ impl CloudConnectionContext for SyncContext {
     fn should_connect(&self) -> bool {
         self.cloud_ops.is_none()
             && (self.files_prepared_for_upload > 0 || self.files_prepared_for_deletion > 0)
-    }
-}
-
-impl TestCloudConnectionContext for SyncContext {
-    fn should_connect(&self) -> bool {
-        self.cloud_ops.is_some()
-            && (self.files_prepared_for_upload > 0 || self.files_prepared_for_deletion > 0)
-    }
-
-    fn cloud_ops(&self) -> Option<Arc<dyn CloudStorageOps>> {
-        self.cloud_ops.clone()
     }
 }

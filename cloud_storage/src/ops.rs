@@ -33,6 +33,4 @@ pub trait CloudStorageOps: Send + Sync {
         destination_path: &Path,
         progress_tx: Option<&Sender<DownloadEvent>>,
     ) -> Result<(), CloudStorageError>;
-
-    async fn test_connection(&self) -> Result<(), CloudStorageError>;
 }
