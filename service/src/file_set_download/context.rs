@@ -11,12 +11,8 @@ use file_export::{OutputFile, file_export_ops::FileExportOps};
 use thumbnails::{ThumbnailOps, ThumbnailPathMap};
 
 use crate::{
-    file_system_ops::FileSystemOps,
-    pipeline::{
-        cloud_connection::CloudConnectionContext, 
-    },
-    settings_service::SettingsService,
-    view_models::Settings,
+    file_system_ops::FileSystemOps, pipeline::cloud_connection::CloudConnectionContext,
+    settings_service::SettingsService, view_models::Settings,
 };
 
 // TODO: FileSystemOps generic parameter might not be needed here, use dyn instead?
@@ -57,8 +53,7 @@ pub struct FileDownloadResult {
     pub cloud_operation_success: bool,
     pub file_write_success: bool,
 
-    pub cloud_error: Option<String>,
-    pub file_io_error: Option<String>,
+    pub error: Option<String>,
 }
 
 pub struct DownloadContextSettings {

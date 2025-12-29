@@ -93,6 +93,7 @@ impl DownloadService {
                     failed_downloads,
                     thumbnail_path_map: context.thumbnail_path_map,
                     output_file_names: context.output_file_names,
+                    errors: vec![],
                 })
             }
             Err(e) => Err(e),
@@ -102,8 +103,13 @@ impl DownloadService {
 
 #[derive(Debug)]
 pub struct DownloadResult {
+    // TODO: this doesn't serve the purpose. When one of the downloads fail, the operation is
+    // aborted with an error listing all the error messages. So currently when we have a
+    // DownloadResult, all the downloads were successful. Maybe There could be separate
+    // SuccessResult and FailureResult structs?
     pub successful_downloads: usize,
     pub failed_downloads: usize,
     pub thumbnail_path_map: ThumbnailPathMap,
     pub output_file_names: Vec<String>,
+    pub errors: Vec<String>,
 }

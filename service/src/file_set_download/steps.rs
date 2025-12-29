@@ -108,6 +108,10 @@ impl PipelineStep<DownloadContext> for PrepareFileForDownloadStep {
     }
 }
 
+/// This step downloads the files that were identified as needing download in the previous step.
+/// It reports progress via the progress_tx channel if available, and records the results of
+/// each download attempt.
+/// If any downloads fail, the step aborts the pipeline with an error.
 pub struct DownloadFilesStep;
 #[async_trait::async_trait]
 impl PipelineStep<DownloadContext> for DownloadFilesStep {
@@ -183,8 +187,7 @@ impl PipelineStep<DownloadContext> for DownloadFilesStep {
                         cloud_key: cloud_key.clone(),
                         cloud_operation_success: true,
                         file_write_success: true,
-                        cloud_error: None,
-                        file_io_error: None,
+                        error: None,
                     });
                 }
                 Err(e) => {
@@ -209,8 +212,7 @@ impl PipelineStep<DownloadContext> for DownloadFilesStep {
                         cloud_key: cloud_key.clone(),
                         cloud_operation_success: false,
                         file_write_success: false,
-                        cloud_error: Some(format!("{}", e)),
-                        file_io_error: None,
+                        error: Some(e.to_string()),
                     });
                 }
             }
@@ -221,9 +223,23 @@ impl PipelineStep<DownloadContext> for DownloadFilesStep {
 
         if failed > 0 {
             tracing::warn!(successful, failed, "Some downloads failed");
+            // TODO: parse errors, example message:
+            // <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+            // <Error>
+            //     <Code>NoSuchKey</Code>
+            //     <Message>Key not found</Message>
+            // </Error>
+            let errors = context
+                .file_download_results
+                .iter()
+                .filter_map(|result| result.error.clone())
+                .collect::<Vec<String>>();
+
             StepAction::Abort(crate::error::Error::DownloadError(format!(
-                "{} files failed to download",
+                "{} files failed to download out of {} attempted. Errors: {:?}",
                 failed,
+                successful + failed,
+                errors
             )))
         } else {
             tracing::info!(successful, "All downloads completed successfully");
