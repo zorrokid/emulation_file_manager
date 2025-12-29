@@ -43,6 +43,10 @@ pub fn prepare_bucket(
     key_id: &str,
     secret_key: &str,
 ) -> Result<Box<Bucket>, CloudStorageError> {
+    println!(
+        "Preparing S3 bucket connection: endpoint={}, region={}, bucket={}",
+        endpoint, region, bucket
+    );
     let region = Region::Custom {
         region: region.to_string(),
         endpoint: endpoint.to_string(),
@@ -168,6 +172,9 @@ pub async fn multipart_upload(
             }
         };
     }
+    bucket
+        .complete_multipart_upload(key, &response.upload_id, parts)
+        .await?;
     Ok(())
 }
 
