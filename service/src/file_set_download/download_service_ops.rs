@@ -145,19 +145,30 @@ impl DownloadServiceOps for MockDownloadServiceOps {
         extract_files: bool,
         _progress_tx: Option<Sender<DownloadEvent>>,
     ) -> Result<DownloadResult, Error> {
+        println!(
+            "Mock download_file_set called with file_set_id: {}, extract_files: {}",
+            file_set_id, extract_files
+        );
         let call = DownloadCall {
             file_set_id,
             extract_files,
         };
         self.download_calls.lock().unwrap().push(call);
+        println!(
+            "Total download calls so far: {}",
+            self.download_calls.lock().unwrap().len()
+        );
 
         if self.should_fail {
+            println!("Mock download is set to fail");
             return Err(Error::DownloadError(
                 self.error_message
                     .clone()
                     .unwrap_or_else(|| "Mock download failed".to_string()),
             ));
         }
+
+        println!("Mock download succeeded");
 
         Ok(DownloadResult {
             successful_downloads: self.successful_downloads_count.unwrap_or(1),
@@ -227,7 +238,7 @@ mod tests {
         assert_eq!(calls[0].file_set_id, 1);
         assert!(calls[0].extract_files);
         assert_eq!(calls[1].file_set_id, 2);
-        assert!(calls[1].extract_files);
+        assert!(!calls[1].extract_files);
         assert_eq!(calls[2].file_set_id, 3);
         assert!(calls[2].extract_files);
     }

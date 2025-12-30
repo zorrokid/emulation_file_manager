@@ -23,7 +23,9 @@ use service::{
     error::Error as ServiceError,
     external_executable_runner::service::{ExecutableRunnerModel, ExternalExecutableRunnerService},
     view_model_service::ViewModelService,
-    view_models::{EmulatorListModel, EmulatorViewModel, FileSetViewModel, Settings},
+    view_models::{
+        EmulatorListModel, EmulatorViewModel, FileSetFileInfoViewModel, FileSetViewModel, Settings,
+    },
 };
 use ui_components::confirm_dialog::{
     ConfirmDialog, ConfirmDialogInit, ConfirmDialogMsg, ConfirmDialogOutputMsg,
@@ -100,7 +102,7 @@ pub struct EmulatorRunnerModel {
 
     // needed for running the emulator:
     file_set: Option<FileSetViewModel>,
-    selected_file: Option<FileSetFileInfo>,
+    selected_file: Option<FileSetFileInfoViewModel>,
     selected_system: Option<System>,
     selected_emulator: Option<EmulatorViewModel>,
 }

@@ -185,6 +185,7 @@ impl Component for FileSetSelector {
         let file_set_form_init_model = FileSetFormInit {
             repository_manager: Arc::clone(&init_model.repository_manager),
             settings: Arc::clone(&init_model.settings),
+            view_model_service: Arc::clone(&init_model.view_model_service),
         };
 
         let file_set_form = FileSetFormModel::builder()

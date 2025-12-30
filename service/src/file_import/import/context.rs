@@ -38,6 +38,8 @@ impl FileImportContext {
             self.imported_files.len(),
             self.existing_files.len()
         );
+
+        // conbine newly imported files and existing files that were selected for import
         self.imported_files
             .values()
             .cloned()
@@ -50,6 +52,8 @@ impl FileImportContext {
                     .flat_map(|import_file| import_file.content.clone())
                     .collect();
 
+                dbg!(&import_files);
+
                 let sha1_checksum: Sha1Checksum = file_info
                     .sha1_checksum
                     .clone()
@@ -57,6 +61,21 @@ impl FileImportContext {
                     .expect("Was expecting checksum to be 20 bytes for SHA1");
                 let original_file_name = import_files
                     .get(&sha1_checksum)
+                    // TODO: fix this
+                    // - I was importing a single file, it shouldn't be in both imported and
+                    // existing files?
+                    // - Another thing is that when file is in existing files, it's checksum should
+                    // be in import_files as well
+                    // - Yet another thing is that tokio runtime was used instead of async-std (I
+                    // was expecting async-std because I explicitly use async-std in this project)
+                    // - I wonder if the error occured when I added a source field entry with the
+                    // following string: https://archive.org/details/trivialcrosswords1986fowlerh.
+                    // Because this doesn't happen always.
+                    //
+                    //Getting files in file set. Imported files count: 1, Existing files count: 1
+                    //
+                    //thread 'tokio-runtime-worker' panicked at service/src/file_import/import/context.rs:61:22:
+                    //FileInfo sha1_checksum not found in import files
                     .map(|content| content.file_name.clone())
                     .expect("FileInfo sha1_checksum not found in import files");
 

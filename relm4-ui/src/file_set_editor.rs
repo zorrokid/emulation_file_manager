@@ -77,7 +77,7 @@ impl Component for FileSetEditor {
             set_default_width: 800,
             set_default_height: 600,
             set_margin_all: 10,
-            set_title: Some("Edit File Set names"),
+            set_title: Some("Edit File Set"),
 
             connect_close_request[sender] => move |_| {
                 sender.input(FileSetEditorMsg::Hide);

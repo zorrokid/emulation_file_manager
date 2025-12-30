@@ -24,7 +24,10 @@ use service::{
     error::Error as ServiceError,
     external_executable_runner::service::{ExecutableRunnerModel, ExternalExecutableRunnerService},
     view_model_service::ViewModelService,
-    view_models::{DocumentViewerListModel, DocumentViewerViewModel, FileSetViewModel, Settings},
+    view_models::{
+        DocumentViewerListModel, DocumentViewerViewModel, FileSetFileInfoViewModel,
+        FileSetViewModel, Settings,
+    },
 };
 use ui_components::confirm_dialog::{
     ConfirmDialog, ConfirmDialogInit, ConfirmDialogMsg, ConfirmDialogOutputMsg,
@@ -87,7 +90,7 @@ pub struct DocumentViewer {
 
     // needed for running the viewer:
     file_set: Option<FileSetViewModel>,
-    selected_file: Option<FileSetFileInfo>,
+    selected_file: Option<FileSetFileInfoViewModel>,
     selected_viewer: Option<DocumentViewerViewModel>,
 }
 
@@ -396,7 +399,7 @@ impl Component for DocumentViewer {
 }
 
 impl DocumentViewer {
-    fn get_selected_file_info(&self) -> Option<FileSetFileInfo> {
+    fn get_selected_file_info(&self) -> Option<FileSetFileInfoViewModel> {
         let selected_index = self.file_list_view_wrapper.selection_model.selected();
         let file_list_item = self.file_list_view_wrapper.get_visible(selected_index);
         if let (Some(item), Some(file_set)) = (file_list_item, &self.file_set) {

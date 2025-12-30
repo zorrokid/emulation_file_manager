@@ -24,7 +24,8 @@ use service::{
         model::{FileImportPrepareResult, FileImportResult, FileImportSource, FileSetImportModel},
         service::FileImportService,
     },
-    view_models::{FileSetListModel, Settings},
+    view_model_service::ViewModelService,
+    view_models::{FileSetListModel, FileSetViewModel, Settings},
 };
 use ui_components::{DropDownMsg, DropDownOutputMsg, FileTypeDropDown, FileTypeSelectedMsg};
 
@@ -128,6 +129,9 @@ pub enum FileSetFormMsg {
         selected_system_ids: Vec<i64>,
         selected_file_type: FileType,
     },
+    ShowEdit {
+        file_set_id: i64,
+    },
     Hide,
     ProcessDownloadEvent(HttpDownloadEvent),
     CancelDownload,
@@ -142,11 +146,13 @@ pub enum FileSetFormOutputMsg {
 pub enum CommandMsg {
     FileImportPrepared(Result<FileImportPrepareResult, Error>),
     FileImportDone(Result<FileImportResult, Error>),
+    ProcessFileSetResponse(Result<FileSetViewModel, Error>),
 }
 
 pub struct FileSetFormInit {
     pub repository_manager: Arc<RepositoryManager>,
     pub settings: Arc<Settings>,
+    pub view_model_service: Arc<ViewModelService>,
 }
 
 #[derive(Debug)]
@@ -156,10 +162,13 @@ pub struct FileSetFormModel {
     file_set_name: String,
     file_set_file_name: String,
     source: String,
+    file_set_id: Option<i64>,
+
     dropdown: Controller<FileTypeDropDown>,
     processing: bool,
     file_import_service: Arc<FileImportService>,
     download_service: Arc<DownloadService>,
+    view_model_service: Arc<ViewModelService>,
     settings: Arc<Settings>,
     selected_file_type: Option<FileType>,
     selected_files_in_picked_files: Vec<Sha1Checksum>,
@@ -406,6 +415,7 @@ impl Component for FileSetFormModel {
             processing: false,
             file_import_service,
             download_service,
+            view_model_service: init_model.view_model_service,
             settings: Arc::clone(&init_model.settings),
             selected_file_type: None,
             selected_files_in_picked_files: Vec::new(),
@@ -414,7 +424,9 @@ impl Component for FileSetFormModel {
             download_total_size: None,
             download_bytes: 0,
             download_cancel_tx: None,
+            file_set_id: None,
         };
+
         let file_types_dropdown = model.dropdown.widget();
 
         let files_list_box = model.files.widget();
@@ -570,35 +582,6 @@ impl Component for FileSetFormModel {
                 {
                     self.processing = true;
 
-                    // Is this needed?
-                    // picked_files are already FileImportModel type
-                    /*let import_files: Vec<FileImportModel> = self
-                    .picked_files
-                    .iter()
-                    .map(|f| FileImportModel {
-                        path: f.path.clone(),
-                        content: f
-                            .content
-                            .iter()
-                            .map(|(k, v)| {
-                                let existing_file_info_id = v.existing_file_info_id;
-                                let existing_archive_file_name =
-                                    v.existing_archive_file_name.clone();
-                                (
-                                    *k,
-                                    ImportFileContent {
-                                        file_name: v.file_name.clone(),
-                                        sha1_checksum: *k,
-                                        file_size: v.file_size,
-                                        existing_file_info_id,
-                                        existing_archive_file_name,
-                                    },
-                                )
-                            })
-                            .collect(),
-                    })
-                    .collect();*/
-
                     let file_import_model = FileSetImportModel {
                         file_set_name: self.file_set_name.clone(),
                         file_set_file_name: self.file_set_file_name.clone(),
@@ -643,6 +626,15 @@ impl Component for FileSetFormModel {
                 self.dropdown
                     .emit(DropDownMsg::SetSelected(selected_file_type));
                 root.show();
+            }
+            FileSetFormMsg::ShowEdit { file_set_id } => {
+                let view_model_service = Arc::clone(&self.view_model_service);
+                sender.oneshot_command(async move {
+                    let res = view_model_service
+                        .get_file_set_view_model(file_set_id)
+                        .await;
+                    CommandMsg::ProcessFileSetResponse(res)
+                });
             }
             FileSetFormMsg::Hide => {
                 root.hide();
@@ -743,6 +735,33 @@ impl Component for FileSetFormModel {
                 self.processing = false;
                 tracing::error!(error = ?e, "Preparing file import failed");
                 show_error_dialog(format!("Preparing file import failed: {:?}", e), root);
+            }
+            CommandMsg::ProcessFileSetResponse(Ok(file_set_view_model)) => {
+                self.file_set_id = Some(file_set_view_model.id);
+                self.selected_file_type = Some(file_set_view_model.file_type);
+                // TODO: set system ids - why system ids are not included in FileSetViewModel?
+                // Maybe they should be? Then there could be file sets without releases? Is that
+                // needed?
+                self.file_set_name = file_set_view_model.file_set_name.clone();
+                self.file_set_file_name = file_set_view_model.file_name.clone();
+                self.source = file_set_view_model.source.clone();
+                // TODO: populate files and selected files
+                for file in file_set_view_model.files.iter() {
+                    self.files.guard().push_back(ReadFile {
+                        file_name: file.file_name.clone(),
+                        sha1_checksum: file.sha1_checksum.clone(),
+                        file_size: file.file_size,
+                    });
+                    // pre-select all files initially
+                    self.selected_files_in_picked_files.push(file.sha1_checksum);
+                }
+            }
+            CommandMsg::ProcessFileSetResponse(Err(e)) => {
+                tracing::error!(error = ?e, "Failed to load file set for editing");
+                show_error_dialog(
+                    format!("Failed to load file set for editing: {:?}", e),
+                    root,
+                );
             }
         }
     }

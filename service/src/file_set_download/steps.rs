@@ -168,7 +168,7 @@ impl PipelineStep<DownloadContext> for DownloadFilesStep {
                 )
                 .await;
             match download_res {
-                Ok(_) => {
+                Ok(()) => {
                     tracing::debug!(
                         cloud_key = %cloud_key,
                         "File downloaded successfully"
