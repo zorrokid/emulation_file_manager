@@ -3,8 +3,8 @@ use database::models::FileInfo;
 use crate::{
     error::Error,
     file_import::{
-        add_file_to_file_set::context::AddFileToFileSetContext,
         common_steps::import::FileImportContextOps,
+        update_file_set::context::AddFileToFileSetContext,
     },
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
@@ -201,8 +201,8 @@ mod tests {
 
     use crate::{
         file_import::{
-            add_file_to_file_set::context::AddFileToFileSetContext,
             model::{FileImportData, FileImportSource, ImportFileContent},
+            update_file_set::context::AddFileToFileSetContext,
         },
         file_system_ops::mock::MockFileSystemOps,
         pipeline::pipeline_step::{PipelineStep, StepAction},

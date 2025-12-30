@@ -7,13 +7,13 @@ use file_import::FileImportOps;
 use crate::{
     error::Error,
     file_import::{
-        add_file_to_file_set::context::AddFileToFileSetContext,
         import::context::FileImportContext,
         model::{
-            AddToFileSetImportModel, FileImportData, FileImportPrepareResult, FileImportResult,
-            FileSetImportModel,
+            FileImportData, FileImportPrepareResult, FileImportResult, FileSetImportModel,
+            UpdateFileSetModel,
         },
         prepare::context::PrepareFileImportContext,
+        update_file_set::context::AddFileToFileSetContext,
     },
     file_system_ops::{FileSystemOps, StdFileSystemOps},
     pipeline::generic_pipeline::Pipeline,
@@ -92,7 +92,7 @@ impl FileImportService {
         self.settings.get_file_type_path(file_type)
     }
 
-    pub async fn import(
+    pub async fn create_file_set(
         &self,
         import_model: FileSetImportModel,
     ) -> Result<FileImportResult, Error> {
@@ -139,9 +139,9 @@ impl FileImportService {
         }
     }
 
-    pub async fn import_and_add_files_to_file_set(
+    pub async fn update_file_set(
         &self,
-        import_model: AddToFileSetImportModel,
+        import_model: UpdateFileSetModel,
     ) -> Result<FileImportResult, Error> {
         let file_import_data = FileImportData {
             output_dir: self.get_output_dir_for_file_type(&import_model.file_type),
@@ -258,7 +258,7 @@ mod tests {
             file_set_file_name: "test_game.zip".to_string(),
         };
 
-        let result = service.import(file_set_import_model).await;
+        let result = service.create_file_set(file_set_import_model).await;
         assert!(result.is_ok());
 
         let result = result.unwrap();
@@ -347,19 +347,20 @@ mod tests {
                 file_size: new_file_size,
             });
 
-        let add_to_file_set_import_model = AddToFileSetImportModel {
+        let add_to_file_set_import_model = UpdateFileSetModel {
             file_set_id,
             selected_files: vec![new_file_sha1_checksum],
             import_files: vec![file_import_source],
             file_type: FileType::DiskImage, // TODO this shouldn't be required
             source: "test_source".to_string(), // TODO: source should be file specific, not file
-                                            // sest specific
+            // sest specific
+            file_set_name: "".to_string(),
+            file_set_file_name: "".to_string(),
+            removed_files: vec![],
         };
 
         // Perform the addition
-        let result = service
-            .import_and_add_files_to_file_set(add_to_file_set_import_model)
-            .await;
+        let result = service.update_file_set(add_to_file_set_import_model).await;
         assert!(result.is_ok());
 
         let result = result.unwrap();

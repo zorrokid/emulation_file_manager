@@ -595,7 +595,8 @@ impl Component for FileSetFormModel {
                     let file_import_service = Arc::clone(&self.file_import_service);
 
                     sender.oneshot_command(async move {
-                        let import_result = file_import_service.import(file_import_model).await;
+                        let import_result =
+                            file_import_service.create_file_set(file_import_model).await;
                         CommandMsg::FileImportDone(import_result)
                     });
                 }

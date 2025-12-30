@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
+use std::{collections::HashMap, sync::Arc};
 
 use crate::file_import::{
     common_steps::check_existing_files::CheckExistingFilesContext, model::FileImportData,
@@ -151,8 +148,8 @@ mod tests {
 
     use crate::{
         file_import::{
-            add_file_to_file_set::context::AddFileToFileSetContext,
             model::{FileImportData, FileImportSource, ImportFileContent},
+            update_file_set::context::AddFileToFileSetContext,
         },
         file_system_ops::mock::MockFileSystemOps,
     };

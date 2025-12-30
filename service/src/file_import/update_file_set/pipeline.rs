@@ -1,6 +1,6 @@
 use crate::{
     file_import::{
-        add_file_to_file_set::{
+        update_file_set::{
             context::AddFileToFileSetContext,
             steps::{
                 AddFileInfoToDatabaseStep, MarkFilesForCloudSyncStep, UpdateFileSetStep,
