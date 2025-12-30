@@ -11,7 +11,7 @@ use database::{
 use file_import::FileImportOps;
 
 use crate::{
-    file_import::common_steps::import::FileImportContextOps, file_system_ops::FileSystemOps,
+    file_import::common_steps::import::AddFileSetContextOps, file_system_ops::FileSystemOps,
     view_models::Settings,
 };
 
@@ -113,7 +113,7 @@ impl CheckExistingFilesContext for AddFileToFileSetContext {
     }
 }
 
-impl FileImportContextOps for AddFileToFileSetContext {
+impl AddFileSetContextOps for AddFileToFileSetContext {
     fn set_imported_files(&mut self, imported_files: HashMap<Sha1Checksum, ImportedFile>) {
         self.imported_files = imported_files;
     }

@@ -7,7 +7,7 @@ use file_import::FileImportOps;
 use crate::{
     error::Error,
     file_import::{
-        import::context::FileImportContext,
+        add_file_set::context::AddFileSetContext,
         model::{
             FileImportData, FileImportPrepareResult, FileImportResult, FileSetImportModel,
             UpdateFileSetModel,
@@ -105,7 +105,7 @@ impl FileImportService {
             import_files: import_model.import_files,
         };
 
-        let mut context = FileImportContext {
+        let mut context = AddFileSetContext {
             repository_manager: self.repository_manager.clone(),
             settings: self.settings.clone(),
             file_import_ops: self.file_import_ops.clone(),
@@ -121,7 +121,7 @@ impl FileImportService {
             file_set_id: None,
             existing_files: vec![],
         };
-        let pipeline = Pipeline::<FileImportContext>::new();
+        let pipeline = Pipeline::<AddFileSetContext>::new();
         let result = pipeline.execute(&mut context).await;
         match (result, context.file_set_id) {
             (Ok(_), Some(id)) => Ok(FileImportResult {

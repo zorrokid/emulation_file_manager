@@ -8,18 +8,18 @@ use crate::{
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
 
-pub trait FileImportContextOps {
+pub trait AddFileSetContextOps {
     fn set_imported_files(&mut self, imported_files: HashMap<Sha1Checksum, ImportedFile>);
     fn file_import_ops(&self) -> &Arc<dyn FileImportOps>;
     fn get_file_import_model(&self) -> FileImportModel;
     fn is_new_files_to_be_imported(&self) -> bool;
 }
 
-pub struct ImportFilesStep<T: FileImportContextOps> {
+pub struct ImportFilesStep<T: AddFileSetContextOps> {
     _phantom: std::marker::PhantomData<T>,
 }
 
-impl<T: FileImportContextOps> ImportFilesStep<T> {
+impl<T: AddFileSetContextOps> ImportFilesStep<T> {
     pub fn new() -> Self {
         Self {
             _phantom: std::marker::PhantomData,
@@ -27,14 +27,14 @@ impl<T: FileImportContextOps> ImportFilesStep<T> {
     }
 }
 
-impl<T: FileImportContextOps> Default for ImportFilesStep<T> {
+impl<T: AddFileSetContextOps> Default for ImportFilesStep<T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
 #[async_trait::async_trait]
-impl<T: FileImportContextOps + Send + Sync> PipelineStep<T> for ImportFilesStep<T> {
+impl<T: AddFileSetContextOps + Send + Sync> PipelineStep<T> for ImportFilesStep<T> {
     fn name(&self) -> &'static str {
         "import_files"
     }
@@ -71,7 +71,7 @@ mod tests {
 
     use crate::{
         file_import::{
-            common_steps::import::{FileImportContextOps, ImportFilesStep},
+            common_steps::import::{AddFileSetContextOps, ImportFilesStep},
             model::{FileImportData, FileImportSource, ImportFileContent},
         },
         pipeline::pipeline_step::{PipelineStep, StepAction},
@@ -84,7 +84,7 @@ mod tests {
         existing_files: Vec<FileInfo>,
     }
 
-    impl FileImportContextOps for TestContext {
+    impl AddFileSetContextOps for TestContext {
         fn set_imported_files(
             &mut self,
             imported_files: HashMap<Sha1Checksum, core_types::ImportedFile>,

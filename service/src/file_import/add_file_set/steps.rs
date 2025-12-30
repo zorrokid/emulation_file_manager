@@ -1,17 +1,19 @@
 use crate::{
     error::Error,
-    file_import::{common_steps::import::FileImportContextOps, import::context::FileImportContext},
+    file_import::{
+        add_file_set::context::AddFileSetContext, common_steps::import::AddFileSetContextOps,
+    },
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
 
 pub struct UpdateDatabaseStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<FileImportContext> for UpdateDatabaseStep {
+impl PipelineStep<AddFileSetContext> for UpdateDatabaseStep {
     fn name(&self) -> &'static str {
         "update_database"
     }
-    async fn execute(&self, context: &mut FileImportContext) -> StepAction {
+    async fn execute(&self, context: &mut AddFileSetContext) -> StepAction {
         let files_in_file_set = context.get_files_in_file_set();
         if files_in_file_set.is_empty() {
             tracing::error!("No files in file set.");
@@ -92,13 +94,13 @@ mod tests {
     async fn create_test_context(
         file_import_ops: Arc<MockFileImportOps>,
         file_import_data: FileImportData,
-    ) -> FileImportContext {
+    ) -> AddFileSetContext {
         let pool = Arc::new(setup_test_db().await);
         let repository_manager = Arc::new(RepositoryManager::new(pool));
         let settings = Arc::new(crate::view_models::Settings::default());
         let file_system_ops = Arc::new(MockFileSystemOps::new());
 
-        FileImportContext {
+        AddFileSetContext {
             repository_manager,
             settings,
             file_import_data,

@@ -3,7 +3,7 @@ use database::models::FileInfo;
 use crate::{
     error::Error,
     file_import::{
-        common_steps::import::FileImportContextOps,
+        common_steps::import::AddFileSetContextOps,
         update_file_set::context::AddFileToFileSetContext,
     },
     pipeline::pipeline_step::{PipelineStep, StepAction},

@@ -7,7 +7,7 @@ use file_import::FileImportOps;
 use crate::{
     file_import::{
         common_steps::{
-            check_existing_files::CheckExistingFilesContext, import::FileImportContextOps,
+            check_existing_files::CheckExistingFilesContext, import::AddFileSetContextOps,
         },
         model::{FileImportData, ImportFileContent},
     },
@@ -15,7 +15,7 @@ use crate::{
     view_models::Settings,
 };
 
-pub struct FileImportContext {
+pub struct AddFileSetContext {
     pub repository_manager: Arc<RepositoryManager>,
     pub settings: Arc<Settings>,
     pub system_ids: Vec<i64>,
@@ -31,7 +31,7 @@ pub struct FileImportContext {
     pub existing_files: Vec<FileInfo>,
 }
 
-impl FileImportContext {
+impl AddFileSetContext {
     pub fn get_files_in_file_set(&self) -> Vec<ImportedFile> {
         println!(
             "Getting files in file set. Imported files count: {}, Existing files count: {}",
@@ -90,7 +90,7 @@ impl FileImportContext {
     }
 }
 
-impl FileImportContextOps for FileImportContext {
+impl AddFileSetContextOps for AddFileSetContext {
     fn set_imported_files(&mut self, imported_files: HashMap<Sha1Checksum, ImportedFile>) {
         self.imported_files = imported_files;
     }
@@ -108,7 +108,7 @@ impl FileImportContextOps for FileImportContext {
     }
 }
 
-impl CheckExistingFilesContext for FileImportContext {
+impl CheckExistingFilesContext for AddFileSetContext {
     fn get_sha1_checksums(&self) -> Vec<Sha1Checksum> {
         self.file_import_data.selected_files.clone()
     }
@@ -148,14 +148,14 @@ mod tests {
         }
     }
 
-    fn create_test_context(file_import_data: FileImportData) -> FileImportContext {
+    fn create_test_context(file_import_data: FileImportData) -> AddFileSetContext {
         let pool = async_std::task::block_on(setup_test_db());
         let repository_manager = Arc::new(RepositoryManager::new(Arc::new(pool)));
         let settings = Arc::new(Settings::default());
         let file_import_ops = Arc::new(MockFileImportOps::new());
         let file_system_ops = Arc::new(MockFileSystemOps::new());
 
-        FileImportContext {
+        AddFileSetContext {
             repository_manager,
             settings,
             file_import_data,

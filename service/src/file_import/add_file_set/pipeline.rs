@@ -1,16 +1,16 @@
 use crate::{
     file_import::{
+        add_file_set::{context::AddFileSetContext, steps::UpdateDatabaseStep},
         common_steps::{check_existing_files::CheckExistingFilesStep, import::ImportFilesStep},
-        import::{context::FileImportContext, steps::UpdateDatabaseStep},
     },
     pipeline::generic_pipeline::Pipeline,
 };
 
-impl Pipeline<FileImportContext> {
+impl Pipeline<AddFileSetContext> {
     pub fn new() -> Self {
         Self::with_steps(vec![
-            Box::new(CheckExistingFilesStep::<FileImportContext>::new()),
-            Box::new(ImportFilesStep::<FileImportContext>::new()),
+            Box::new(CheckExistingFilesStep::<AddFileSetContext>::new()),
+            Box::new(ImportFilesStep::<AddFileSetContext>::new()),
             Box::new(UpdateDatabaseStep),
         ])
     }
