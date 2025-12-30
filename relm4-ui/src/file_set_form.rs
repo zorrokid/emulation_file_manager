@@ -21,7 +21,10 @@ use service::{
     download_service::DownloadService,
     error::Error,
     file_import::{
-        model::{FileImportPrepareResult, FileImportResult, FileImportSource, FileSetImportModel},
+        model::{
+            FileImportPrepareResult, FileImportResult, FileImportSource, FileSetImportModel,
+            UpdateFileSetModel,
+        },
         service::FileImportService,
     },
     view_model_service::ViewModelService,
@@ -116,7 +119,7 @@ pub enum FileSetFormMsg {
     FileSelected(PathBuf),
     OpenDownloadDialog,
     DownloadFromUrl(String),
-    CreateFileSetFromSelectedFiles,
+    CreateOrUpdateFileSet,
     SetFileSelected {
         sha1_checksum: Sha1Checksum,
         selected: bool,
@@ -210,7 +213,11 @@ impl Component for FileSetFormModel {
             set_default_width: 800,
             set_default_height: 600,
             set_margin_all: 10,
-            set_title: Some("Create File Set"),
+            set_title: if model.file_set_id.is_some() {
+                Some("Edit File Set")
+            } else {
+                Some("Create File Set")
+            },
 
             connect_close_request[sender] => move |_| {
                 sender.input(FileSetFormMsg::Hide);
@@ -367,8 +374,12 @@ impl Component for FileSetFormModel {
                 },
 
                gtk::Button {
-                    set_label: "Create File Set",
-                    connect_clicked => FileSetFormMsg::CreateFileSetFromSelectedFiles,
+                    set_label: if model.file_set_id.is_some() {
+                        "Edit File Set"
+                    } else {
+                        "Create File Set"
+                    },
+                    connect_clicked => FileSetFormMsg::CreateOrUpdateFileSet,
                     #[watch]
                     set_sensitive: !model.selected_files_in_picked_files.is_empty() && !model.processing,
                 },
@@ -576,30 +587,18 @@ impl Component for FileSetFormModel {
                         .retain(|s| *s != sha1_checksum);
                 }
             }
-            FileSetFormMsg::CreateFileSetFromSelectedFiles => {
+            FileSetFormMsg::CreateOrUpdateFileSet => {
                 if !self.selected_files_in_picked_files.is_empty()
                     && !self.processing
                     && let Some(file_type) = self.selected_file_type
                 {
                     self.processing = true;
 
-                    let file_import_model = FileSetImportModel {
-                        file_set_name: self.file_set_name.clone(),
-                        file_set_file_name: self.file_set_file_name.clone(),
-                        source: self.source.clone(),
-                        file_type,
-                        system_ids: self.selected_system_ids.clone(),
-                        selected_files: self.selected_files_in_picked_files.clone(),
-                        import_files: self.picked_files.clone(),
-                    };
-
-                    let file_import_service = Arc::clone(&self.file_import_service);
-
-                    sender.oneshot_command(async move {
-                        let import_result =
-                            file_import_service.create_file_set(file_import_model).await;
-                        CommandMsg::FileImportDone(import_result)
-                    });
+                    if let Some(file_set_id) = self.file_set_id {
+                        self.update_file_set(sender, file_type, file_set_id);
+                    } else {
+                        self.create_file_set(sender, file_type);
+                    }
                 }
             }
             FileSetFormMsg::FileSetNameChanged(name) => {
@@ -747,11 +746,10 @@ impl Component for FileSetFormModel {
                 self.file_set_name = file_set_view_model.file_set_name.clone();
                 self.file_set_file_name = file_set_view_model.file_name.clone();
                 self.source = file_set_view_model.source.clone();
-                // TODO: populate files and selected files
                 for file in file_set_view_model.files.iter() {
                     self.files.guard().push_back(ReadFile {
                         file_name: file.file_name.clone(),
-                        sha1_checksum: file.sha1_checksum.clone(),
+                        sha1_checksum: file.sha1_checksum,
                         file_size: file.file_size,
                     });
                     // pre-select all files initially
@@ -766,5 +764,50 @@ impl Component for FileSetFormModel {
                 );
             }
         }
+    }
+}
+
+impl FileSetFormModel {
+    fn create_file_set(&self, sender: ComponentSender<Self>, file_type: FileType) {
+        let file_import_model = FileSetImportModel {
+            file_set_name: self.file_set_name.clone(),
+            file_set_file_name: self.file_set_file_name.clone(),
+            source: self.source.clone(),
+            file_type,
+            system_ids: self.selected_system_ids.clone(),
+            selected_files: self.selected_files_in_picked_files.clone(),
+            import_files: self.picked_files.clone(),
+        };
+
+        let file_import_service = Arc::clone(&self.file_import_service);
+
+        sender.oneshot_command(async move {
+            let import_result = file_import_service.create_file_set(file_import_model).await;
+            CommandMsg::FileImportDone(import_result)
+        });
+    }
+
+    fn update_file_set(
+        &self,
+        sender: ComponentSender<Self>,
+        file_type: FileType,
+        file_set_id: i64,
+    ) {
+        let update_model = UpdateFileSetModel {
+            file_set_name: self.file_set_name.clone(),
+            file_set_file_name: self.file_set_file_name.clone(),
+            source: self.source.clone(),
+            file_type,
+            selected_files: self.selected_files_in_picked_files.clone(),
+            import_files: self.picked_files.clone(),
+            file_set_id,
+        };
+
+        let file_import_service = Arc::clone(&self.file_import_service);
+
+        sender.oneshot_command(async move {
+            let import_result = file_import_service.update_file_set(update_model).await;
+            CommandMsg::FileImportDone(import_result)
+        });
     }
 }

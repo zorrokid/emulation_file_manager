@@ -153,7 +153,9 @@ pub struct FileSetImportModel {
 pub struct UpdateFileSetModel {
     pub import_files: Vec<FileImportSource>,
     pub selected_files: Vec<Sha1Checksum>,
-    pub removed_files: Vec<Sha1Checksum>,
+    // TODO: maybe removed files is not needed, we can determine it by comparing selected_files and
+    // files already in the file set
+    //pub removed_files: Vec<Sha1Checksum>,
     pub source: String, // TODO: this should be for each import source
     pub file_set_id: i64,
     pub file_set_name: String,

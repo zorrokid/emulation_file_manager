@@ -351,12 +351,11 @@ mod tests {
             file_set_id,
             selected_files: vec![new_file_sha1_checksum],
             import_files: vec![file_import_source],
-            file_type: FileType::DiskImage, // TODO this shouldn't be required
-            source: "test_source".to_string(), // TODO: source should be file specific, not file
-            // sest specific
+            file_type: FileType::DiskImage,
+            // TODO: source should be file specific, not file set specific
+            source: "test_source".to_string(),
             file_set_name: "".to_string(),
             file_set_file_name: "".to_string(),
-            removed_files: vec![],
         };
 
         // Perform the addition
