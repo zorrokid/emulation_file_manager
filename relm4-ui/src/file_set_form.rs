@@ -140,6 +140,7 @@ pub enum FileSetFormMsg {
 #[derive(Debug)]
 pub enum FileSetFormOutputMsg {
     FileSetCreated(FileSetListModel),
+    FileSetUpdated(FileSetListModel),
 }
 
 #[derive(Debug)]

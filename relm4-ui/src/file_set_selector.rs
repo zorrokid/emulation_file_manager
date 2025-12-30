@@ -195,6 +195,7 @@ impl Component for FileSetSelector {
                 FileSetFormOutputMsg::FileSetCreated(file_set_list_model) => {
                     FileSetSelectorMsg::FileSetCreated(file_set_list_model)
                 }
+                FileSetFormOutputMsg::FileSetUpdated(_) => FileSetSelectorMsg::Ignore, // TODO
             });
 
         let file_set_details_view_init = FileSetDetailsInit {

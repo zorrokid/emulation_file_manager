@@ -23,6 +23,7 @@ use service::{
 
 use crate::{
     file_set_editor::{FileSetEditor, FileSetEditorInit, FileSetEditorMsg, FileSetEditorOutputMsg},
+    file_set_form::{FileSetFormInit, FileSetFormModel, FileSetFormMsg, FileSetFormOutputMsg},
     file_set_selector::{
         FileSetSelector, FileSetSelectorInit, FileSetSelectorMsg, FileSetSelectorOutputMsg,
     },
@@ -127,6 +128,8 @@ pub enum CommandMsg {
 pub struct ReleaseFormModel {
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
+    settings: Arc<Settings>,
+
     system_selector: Controller<SystemSelectModel>,
     file_selector: Controller<FileSetSelector>,
     software_title_selector: Controller<SoftwareTitleSelectModel>,
@@ -135,6 +138,7 @@ pub struct ReleaseFormModel {
     selected_file_sets_list_view_wrapper: TypedListView<FileSetListItem, gtk::SingleSelection>,
     release: Option<ReleaseViewModel>,
     file_set_editor: OnceCell<Controller<FileSetEditor>>,
+    file_set_form: OnceCell<Controller<FileSetFormModel>>,
     release_name: String,
 }
 
@@ -160,6 +164,30 @@ impl ReleaseFormModel {
                     }
                 });
             if let Err(e) = self.file_set_editor.set(file_set_editor) {
+                tracing::error!(error = ?e, "Failed to set file set editor");
+            }
+        }
+    }
+
+    fn ensure_file_set_form(&mut self, root: &gtk::Window, sender: &ComponentSender<Self>) {
+        if self.file_set_form.get().is_none() {
+            let file_set_form_init = FileSetFormInit {
+                view_model_service: Arc::clone(&self.view_model_service),
+                repository_manager: Arc::clone(&self.repository_manager),
+                settings: Arc::clone(&self.settings),
+            };
+            let file_set_form = FileSetFormModel::builder()
+                .transient_for(root)
+                .launch(file_set_form_init)
+                .forward(sender.input_sender(), |msg| match msg {
+                    FileSetFormOutputMsg::FileSetUpdated(file_set) => {
+                        ReleaseFormMsg::FileSetUpdated(file_set)
+                    }
+                    FileSetFormOutputMsg::FileSetCreated(file_set) => {
+                        ReleaseFormMsg::FileSetSelected(file_set)
+                    }
+                });
+            if let Err(e) = self.file_set_form.set(file_set_form) {
                 tracing::error!(error = ?e, "Failed to set file set editor");
             }
         }
@@ -368,6 +396,7 @@ impl Component for ReleaseFormModel {
         let model = ReleaseFormModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
+            settings: init_model.settings,
             release: None,
             system_selector,
             file_selector,
@@ -376,6 +405,7 @@ impl Component for ReleaseFormModel {
             selected_systems_list_view_wrapper,
             selected_file_sets_list_view_wrapper,
             file_set_editor: OnceCell::new(),
+            file_set_form: OnceCell::new(),
             release_name: String::new(),
         };
 
@@ -615,11 +645,18 @@ impl Component for ReleaseFormModel {
                     .get_visible(selected)
                 {
                     let file_set_id = file_set.borrow().id;
-                    self.ensure_file_set_editor(root, &sender);
+
+                    /*self.ensure_file_set_editor(root, &sender);
                     self.file_set_editor
                         .get()
                         .expect("File set editor should be initialized")
-                        .emit(FileSetEditorMsg::Show { file_set_id });
+                        .emit(FileSetEditorMsg::Show { file_set_id });*/
+
+                    self.ensure_file_set_form(root, &sender);
+                    self.file_set_form
+                        .get()
+                        .expect("File set form should be initialized")
+                        .emit(FileSetFormMsg::ShowEdit { file_set_id });
                 }
             }
             ReleaseFormMsg::FileSetUpdated(file_set) => {
