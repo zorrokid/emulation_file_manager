@@ -151,6 +151,7 @@ pub struct FileSetImportModel {
 
 #[derive(Debug)]
 pub struct UpdateFileSetModel {
+    // This contains only new import files to be added to the file set
     pub import_files: Vec<FileImportSource>,
     pub selected_files: Vec<Sha1Checksum>,
     // TODO: maybe removed files is not needed, we can determine it by comparing selected_files and

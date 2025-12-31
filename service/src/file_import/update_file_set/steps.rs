@@ -3,27 +3,29 @@ use database::models::FileInfo;
 use crate::{
     error::Error,
     file_import::{
-        common_steps::import::AddFileSetContextOps,
-        update_file_set::context::AddFileToFileSetContext,
+        common_steps::import::AddFileSetContextOps, update_file_set::context::UpdateFileSetContext,
     },
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
 
-pub struct ValidateFileStep;
+pub struct FetchFileSetStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<AddFileToFileSetContext> for ValidateFileStep {
+impl PipelineStep<UpdateFileSetContext> for FetchFileSetStep {
     fn name(&self) -> &'static str {
-        "validate_file"
+        "fetch_file_set"
     }
 
-    async fn execute(&self, context: &mut AddFileToFileSetContext) -> StepAction {
+    async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
         // TODO: add test with non existing file set
         let file_set_result = context
             .repository_manager
             .get_file_set_repository()
             .get_file_set(context.file_set_id)
             .await;
+
+        // TODO: fetch also files in file set, that is needed to determine the files that should be
+        // removed
 
         match file_set_result {
             Ok(file_set) => {
@@ -50,21 +52,70 @@ impl PipelineStep<AddFileToFileSetContext> for ValidateFileStep {
     }
 }
 
-pub struct AddFileInfoToDatabaseStep;
+pub struct FetchFilesInFileSetStep;
+#[async_trait::async_trait]
+impl PipelineStep<UpdateFileSetContext> for FetchFilesInFileSetStep {
+    fn name(&self) -> &'static str {
+        "fetch_files_in_file_set"
+    }
+
+    async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
+        let file_set = context.file_set.as_ref().unwrap();
+        let files_result = context
+            .repository_manager
+            .get_file_info_repository()
+            .get_file_infos_by_file_set(file_set.id)
+            .await;
+
+        match files_result {
+            Ok(files) => {
+                tracing::info!(
+                    file_set_id = %file_set.id,
+                    file_count = files.len(),
+                    "Fetched files in file set from database"
+                );
+                context.files_in_file_set = files
+                    .iter()
+                    .map(|file| {
+                        file.sha1_checksum
+                            .clone()
+                            .try_into()
+                            .expect("Invalid SHA1 checksum length")
+                    })
+                    .collect();
+            }
+            Err(err) => {
+                tracing::error!(
+                    error = %err,
+                    file_set_id = %file_set.id,
+                    "Error fetching files in file set from database"
+                );
+                return StepAction::Abort(Error::DbError(format!(
+                    "Error fetching files in file set: {}",
+                    err,
+                )));
+            }
+        }
+
+        StepAction::Continue
+    }
+}
+
+pub struct UpdateFileInfoToDatabaseStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<AddFileToFileSetContext> for AddFileInfoToDatabaseStep {
+impl PipelineStep<UpdateFileSetContext> for UpdateFileInfoToDatabaseStep {
     fn name(&self) -> &'static str {
         "add_file_info_to_database"
     }
 
-    fn should_execute(&self, context: &AddFileToFileSetContext) -> bool {
+    fn should_execute(&self, context: &UpdateFileSetContext) -> bool {
         context.is_new_files_to_be_imported()
             && !context.imported_files.is_empty()
             && context.file_set.is_some()
     }
 
-    async fn execute(&self, context: &mut AddFileToFileSetContext) -> StepAction {
+    async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
         let file_type = context.file_set.as_ref().unwrap().file_type;
         for imported_file in context.imported_files.values() {
             let add_file_info_result = context
@@ -104,15 +155,39 @@ impl PipelineStep<AddFileToFileSetContext> for AddFileInfoToDatabaseStep {
     }
 }
 
+pub struct RemovedFilesStep;
+
+#[async_trait::async_trait]
+impl PipelineStep<UpdateFileSetContext> for RemovedFilesStep {
+    fn name(&self) -> &'static str {
+        "removed_files"
+    }
+
+    fn should_execute(&self, context: &UpdateFileSetContext) -> bool {
+        context.has_removed_files()
+    }
+
+    async fn execute(&self, _context: &mut UpdateFileSetContext) -> StepAction {
+        // TODO: check if there are files to be deleted
+        // - if file is not part of any other file set, the actual file should be deleted too and
+        // if cloud sync is enabled, the file should be marked to be deleted from cloud storage too
+        // - file_info should be unlinked from file_set
+        // - file_info entry should be deleted from database
+        // - maybe deletion could bne done in a separate step
+        //
+        StepAction::Continue
+    }
+}
+
 pub struct UpdateFileSetStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<AddFileToFileSetContext> for UpdateFileSetStep {
+impl PipelineStep<UpdateFileSetContext> for UpdateFileSetStep {
     fn name(&self) -> &'static str {
         "update_file_set"
     }
 
-    async fn execute(&self, context: &mut AddFileToFileSetContext) -> StepAction {
+    async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
         let file_info_ids_with_file_names = context.get_file_info_ids_with_file_names();
         let result = context
             .repository_manager
@@ -148,15 +223,15 @@ impl PipelineStep<AddFileToFileSetContext> for UpdateFileSetStep {
 pub struct MarkFilesForCloudSyncStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<AddFileToFileSetContext> for MarkFilesForCloudSyncStep {
+impl PipelineStep<UpdateFileSetContext> for MarkFilesForCloudSyncStep {
     fn name(&self) -> &'static str {
         "mark_files_for_cloud_sync"
     }
 
-    fn should_execute(&self, context: &AddFileToFileSetContext) -> bool {
+    fn should_execute(&self, context: &UpdateFileSetContext) -> bool {
         context.settings.s3_sync_enabled && !context.imported_files.is_empty()
     }
-    async fn execute(&self, context: &mut AddFileToFileSetContext) -> StepAction {
+    async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
         let file_info_ids: Vec<(i64, String)> = context
             .new_files
             .iter()
@@ -202,7 +277,7 @@ mod tests {
     use crate::{
         file_import::{
             model::{FileImportData, FileImportSource, ImportFileContent},
-            update_file_set::context::AddFileToFileSetContext,
+            update_file_set::context::UpdateFileSetContext,
         },
         file_system_ops::mock::MockFileSystemOps,
         pipeline::pipeline_step::{PipelineStep, StepAction},
@@ -222,7 +297,7 @@ mod tests {
 
     async fn create_test_context(
         file_system_ops: Option<Arc<MockFileSystemOps>>,
-    ) -> AddFileToFileSetContext {
+    ) -> UpdateFileSetContext {
         let pool = Arc::new(setup_test_db().await);
         let repository_manager = Arc::new(RepositoryManager::new(pool));
         let settings = Arc::new(crate::view_models::Settings::default());
@@ -230,7 +305,7 @@ mod tests {
         let file_import_ops = Arc::new(MockFileImportOps::new());
         let file_import_data = create_file_import_data(vec![], vec![]);
 
-        AddFileToFileSetContext {
+        UpdateFileSetContext {
             repository_manager,
             settings,
             fs_ops: file_system_ops,
@@ -241,6 +316,7 @@ mod tests {
             existing_files: Vec::new(),
             new_files: Vec::new(),
             file_set: None,
+            files_in_file_set: Vec::new(),
         }
     }
 
@@ -298,7 +374,7 @@ mod tests {
             ));
 
         context.file_import_data = file_import_data;
-        let step = super::ValidateFileStep;
+        let step = super::FetchFileSetStep;
         let action = step.execute(&mut context).await;
         assert!(matches!(action, StepAction::Continue));
         assert!(context.file_set.is_some());

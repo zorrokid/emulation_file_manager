@@ -1,7 +1,10 @@
 use std::{collections::HashMap, sync::Arc};
 
-use crate::file_import::{
-    common_steps::check_existing_files::CheckExistingFilesContext, model::FileImportData,
+use crate::{
+    file_import::{
+        common_steps::check_existing_files::CheckExistingFilesContext, model::FileImportData,
+    },
+    view_models::FileInfoViewModel,
 };
 use core_types::{FileType, ImportedFile, Sha1Checksum};
 use database::{
@@ -15,7 +18,7 @@ use crate::{
     view_models::Settings,
 };
 
-pub struct AddFileToFileSetContext {
+pub struct UpdateFileSetContext {
     pub repository_manager: Arc<RepositoryManager>,
     pub settings: Arc<Settings>,
     pub file_import_ops: Arc<dyn FileImportOps>,
@@ -23,13 +26,17 @@ pub struct AddFileToFileSetContext {
     pub file_set_id: i64,
 
     pub file_set: Option<FileSet>,
+    // files currently associated with the file set
+    pub files_in_file_set: Vec<Sha1Checksum>,
+
     pub file_import_data: FileImportData,
+    // existing files found in the database, not yet associated with the file set
     pub existing_files: Vec<FileInfo>,
     pub new_files: Vec<FileInfo>,
     pub imported_files: HashMap<Sha1Checksum, ImportedFile>,
 }
 
-impl AddFileToFileSetContext {
+impl UpdateFileSetContext {
     pub fn new(
         repository_manager: Arc<RepositoryManager>,
         settings: Arc<Settings>,
@@ -49,7 +56,24 @@ impl AddFileToFileSetContext {
             existing_files: vec![],
             imported_files: HashMap::new(),
             new_files: vec![],
+            files_in_file_set: vec![],
         }
+    }
+
+    pub fn has_removed_files(&self) -> bool {
+        // Check if there are files that were in the file set but are not in the selected files
+        // anymore
+        self.files_in_file_set
+            .iter()
+            .any(|sha1| !self.file_import_data.selected_files.contains(&sha1))
+    }
+
+    pub fn get_removed_files(&self) -> Vec<Sha1Checksum> {
+        self.files_in_file_set
+            .iter()
+            .filter(|sha1| !self.file_import_data.selected_files.contains(&sha1))
+            .cloned()
+            .collect()
     }
 
     pub fn get_file_info_ids_with_file_names(&self) -> Vec<(i64, String)> {
@@ -98,7 +122,7 @@ impl AddFileToFileSetContext {
     }
 }
 
-impl CheckExistingFilesContext for AddFileToFileSetContext {
+impl CheckExistingFilesContext for UpdateFileSetContext {
     fn get_sha1_checksums(&self) -> Vec<Sha1Checksum> {
         self.file_import_data.selected_files.clone()
     }
@@ -113,7 +137,7 @@ impl CheckExistingFilesContext for AddFileToFileSetContext {
     }
 }
 
-impl AddFileSetContextOps for AddFileToFileSetContext {
+impl AddFileSetContextOps for UpdateFileSetContext {
     fn set_imported_files(&mut self, imported_files: HashMap<Sha1Checksum, ImportedFile>) {
         self.imported_files = imported_files;
     }
@@ -149,17 +173,17 @@ mod tests {
     use crate::{
         file_import::{
             model::{FileImportData, FileImportSource, ImportFileContent},
-            update_file_set::context::AddFileToFileSetContext,
+            update_file_set::context::UpdateFileSetContext,
         },
         file_system_ops::mock::MockFileSystemOps,
     };
 
-    async fn create_test_context(file_import_data: FileImportData) -> AddFileToFileSetContext {
+    async fn create_test_context(file_import_data: FileImportData) -> UpdateFileSetContext {
         let pool = Arc::new(setup_test_db().await);
         let repository_manager = Arc::new(RepositoryManager::new(pool));
         let settings = Arc::new(crate::view_models::Settings::default());
 
-        AddFileToFileSetContext::new(
+        UpdateFileSetContext::new(
             repository_manager,
             settings,
             Arc::new(MockFileImportOps::new()),

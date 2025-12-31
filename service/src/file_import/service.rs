@@ -13,7 +13,7 @@ use crate::{
             UpdateFileSetModel,
         },
         prepare::context::PrepareFileImportContext,
-        update_file_set::context::AddFileToFileSetContext,
+        update_file_set::context::UpdateFileSetContext,
     },
     file_system_ops::{FileSystemOps, StdFileSystemOps},
     pipeline::generic_pipeline::Pipeline,
@@ -149,7 +149,7 @@ impl FileImportService {
             selected_files: import_model.selected_files,
             import_files: import_model.import_files,
         };
-        let mut context = AddFileToFileSetContext::new(
+        let mut context = UpdateFileSetContext::new(
             self.repository_manager.clone(),
             self.settings.clone(),
             self.file_import_ops.clone(),
@@ -157,7 +157,7 @@ impl FileImportService {
             import_model.file_set_id,
             file_import_data,
         );
-        let pipeline = Pipeline::<AddFileToFileSetContext>::new();
+        let pipeline = Pipeline::<UpdateFileSetContext>::new();
         let res = pipeline.execute(&mut context).await;
         match res {
             Ok(_) => Ok(FileImportResult {

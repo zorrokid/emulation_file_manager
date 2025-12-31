@@ -176,6 +176,7 @@ pub struct FileSetFormModel {
     settings: Arc<Settings>,
     selected_file_type: Option<FileType>,
     selected_files_in_picked_files: Vec<Sha1Checksum>,
+    /// This contains newly picked files for import
     picked_files: Vec<FileImportSource>,
     // Download progress tracking
     download_in_progress: bool,

@@ -1,24 +1,25 @@
 use crate::{
     file_import::{
+        common_steps::{check_existing_files::CheckExistingFilesStep, import::ImportFilesStep},
         update_file_set::{
-            context::AddFileToFileSetContext,
+            context::UpdateFileSetContext,
             steps::{
-                AddFileInfoToDatabaseStep, MarkFilesForCloudSyncStep, UpdateFileSetStep,
-                ValidateFileStep,
+                FetchFileSetStep, MarkFilesForCloudSyncStep, RemovedFilesStep,
+                UpdateFileInfoToDatabaseStep, UpdateFileSetStep,
             },
         },
-        common_steps::{check_existing_files::CheckExistingFilesStep, import::ImportFilesStep},
     },
     pipeline::generic_pipeline::Pipeline,
 };
 
-impl Pipeline<AddFileToFileSetContext> {
+impl Pipeline<UpdateFileSetContext> {
     pub fn new() -> Self {
         Self::with_steps(vec![
-            Box::new(ValidateFileStep),
-            Box::new(CheckExistingFilesStep::<AddFileToFileSetContext>::new()),
-            Box::new(ImportFilesStep::<AddFileToFileSetContext>::new()),
-            Box::new(AddFileInfoToDatabaseStep),
+            Box::new(FetchFileSetStep),
+            Box::new(CheckExistingFilesStep::<UpdateFileSetContext>::new()),
+            Box::new(ImportFilesStep::<UpdateFileSetContext>::new()),
+            Box::new(UpdateFileInfoToDatabaseStep),
+            Box::new(RemovedFilesStep),
             Box::new(UpdateFileSetStep),
             Box::new(MarkFilesForCloudSyncStep),
         ])
