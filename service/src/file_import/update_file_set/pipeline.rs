@@ -4,8 +4,8 @@ use crate::{
         update_file_set::{
             context::UpdateFileSetContext,
             steps::{
-                FetchFileSetStep, MarkFilesForCloudSyncStep, RemovedFilesStep,
-                UpdateFileInfoToDatabaseStep, UpdateFileSetStep,
+                FetchFileSetStep, FetchFilesInFileSetStep, MarkFilesForCloudSyncStep,
+                RemovedFilesStep, UpdateFileInfoToDatabaseStep, UpdateFileSetStep,
             },
         },
     },
@@ -16,6 +16,7 @@ impl Pipeline<UpdateFileSetContext> {
     pub fn new() -> Self {
         Self::with_steps(vec![
             Box::new(FetchFileSetStep),
+            Box::new(FetchFilesInFileSetStep),
             Box::new(CheckExistingFilesStep::<UpdateFileSetContext>::new()),
             Box::new(ImportFilesStep::<UpdateFileSetContext>::new()),
             Box::new(UpdateFileInfoToDatabaseStep),

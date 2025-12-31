@@ -24,9 +24,6 @@ impl PipelineStep<UpdateFileSetContext> for FetchFileSetStep {
             .get_file_set(context.file_set_id)
             .await;
 
-        // TODO: fetch also files in file set, that is needed to determine the files that should be
-        // removed
-
         match file_set_result {
             Ok(file_set) => {
                 tracing::info!(
@@ -60,17 +57,16 @@ impl PipelineStep<UpdateFileSetContext> for FetchFilesInFileSetStep {
     }
 
     async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
-        let file_set = context.file_set.as_ref().unwrap();
         let files_result = context
             .repository_manager
             .get_file_info_repository()
-            .get_file_infos_by_file_set(file_set.id)
+            .get_file_infos_by_file_set(context.file_set_id)
             .await;
 
         match files_result {
             Ok(files) => {
                 tracing::info!(
-                    file_set_id = %file_set.id,
+                    file_set_id = %context.file_set_id,
                     file_count = files.len(),
                     "Fetched files in file set from database"
                 );
@@ -87,7 +83,7 @@ impl PipelineStep<UpdateFileSetContext> for FetchFilesInFileSetStep {
             Err(err) => {
                 tracing::error!(
                     error = %err,
-                    file_set_id = %file_set.id,
+                    file_set_id = %context.file_set_id,
                     "Error fetching files in file set from database"
                 );
                 return StepAction::Abort(Error::DbError(format!(
@@ -321,7 +317,7 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn test_validate_file_step() {
+    async fn test_fetch_file_set_step() {
         let file_1_checksum: Sha1Checksum = [1u8; 20];
         // Add file to test db
         let file_system_ops = Arc::new(MockFileSystemOps::new());
@@ -378,5 +374,65 @@ mod tests {
         let action = step.execute(&mut context).await;
         assert!(matches!(action, StepAction::Continue));
         assert!(context.file_set.is_some());
+    }
+
+    #[async_std::test]
+    async fn test_fetch_files_in_file_set_step() {
+        let file_1_checksum: Sha1Checksum = [1u8; 20];
+        // Add file to test db
+        let file_system_ops = Arc::new(MockFileSystemOps::new());
+        let path = "/test/games.zip".to_string();
+        file_system_ops.add_file(path.clone());
+        let mut context = create_test_context(Some(file_system_ops)).await;
+        let repository_manager = context.repository_manager.clone();
+        let file_info_1_id = repository_manager
+            .get_file_info_repository()
+            .add_file_info(&file_1_checksum, 1024, "test_archive_name_1", FileType::Rom)
+            .await
+            .unwrap();
+
+        let system_id = repository_manager
+            .get_system_repository()
+            .add_system("Test System")
+            .await
+            .unwrap();
+
+        let files_in_file_set = vec![ImportedFile {
+            original_file_name: "original file name".to_string(),
+            archive_file_name: "archive_file_name".to_string(),
+            sha1_checksum: file_1_checksum,
+            file_size: 1024,
+        }];
+
+        let file_set_id = repository_manager
+            .get_file_set_repository()
+            .add_file_set(
+                "Test File Set",
+                "test_game",
+                &FileType::Rom,
+                "test_source",
+                &files_in_file_set,
+                &[system_id],
+            )
+            .await
+            .unwrap();
+
+        context.file_set_id = file_set_id;
+
+        let file_import_data = FileImportData::new(FileType::Rom, PathBuf::from("/imported/files"))
+            .with_selected_file(file_1_checksum)
+            .with_file_import_source(FileImportSource::new(PathBuf::from(path)).with_content(
+                ImportFileContent {
+                    file_name: "game1.rom".to_string(),
+                    sha1_checksum: file_1_checksum,
+                    file_size: 1024,
+                },
+            ));
+
+        context.file_import_data = file_import_data;
+        let step = super::FetchFilesInFileSetStep;
+        let action = step.execute(&mut context).await;
+        assert!(matches!(action, StepAction::Continue));
+        assert!(context.files_in_file_set.contains(&file_1_checksum));
     }
 }

@@ -1,10 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
-use crate::{
-    file_import::{
-        common_steps::check_existing_files::CheckExistingFilesContext, model::FileImportData,
-    },
-    view_models::FileInfoViewModel,
+use crate::file_import::{
+    common_steps::check_existing_files::CheckExistingFilesContext, model::FileImportData,
 };
 use core_types::{FileType, ImportedFile, Sha1Checksum};
 use database::{
@@ -65,13 +62,13 @@ impl UpdateFileSetContext {
         // anymore
         self.files_in_file_set
             .iter()
-            .any(|sha1| !self.file_import_data.selected_files.contains(&sha1))
+            .any(|sha1| !self.file_import_data.selected_files.contains(sha1))
     }
 
     pub fn get_removed_files(&self) -> Vec<Sha1Checksum> {
         self.files_in_file_set
             .iter()
-            .filter(|sha1| !self.file_import_data.selected_files.contains(&sha1))
+            .filter(|sha1| !self.file_import_data.selected_files.contains(sha1))
             .cloned()
             .collect()
     }
