@@ -316,8 +316,7 @@ mod tests {
         }
     }
 
-    #[async_std::test]
-    async fn test_fetch_file_set_step() {
+    async fn create_context_and_test_file_set() -> (UpdateFileSetContext, Sha1Checksum) {
         let file_1_checksum: Sha1Checksum = [1u8; 20];
         // Add file to test db
         let file_system_ops = Arc::new(MockFileSystemOps::new());
@@ -370,6 +369,12 @@ mod tests {
             ));
 
         context.file_import_data = file_import_data;
+        (context, file_1_checksum)
+    }
+
+    #[async_std::test]
+    async fn test_fetch_file_set_step() {
+        let (mut context, _) = create_context_and_test_file_set().await;
         let step = super::FetchFileSetStep;
         let action = step.execute(&mut context).await;
         assert!(matches!(action, StepAction::Continue));
@@ -378,58 +383,7 @@ mod tests {
 
     #[async_std::test]
     async fn test_fetch_files_in_file_set_step() {
-        let file_1_checksum: Sha1Checksum = [1u8; 20];
-        // Add file to test db
-        let file_system_ops = Arc::new(MockFileSystemOps::new());
-        let path = "/test/games.zip".to_string();
-        file_system_ops.add_file(path.clone());
-        let mut context = create_test_context(Some(file_system_ops)).await;
-        let repository_manager = context.repository_manager.clone();
-        let file_info_1_id = repository_manager
-            .get_file_info_repository()
-            .add_file_info(&file_1_checksum, 1024, "test_archive_name_1", FileType::Rom)
-            .await
-            .unwrap();
-
-        let system_id = repository_manager
-            .get_system_repository()
-            .add_system("Test System")
-            .await
-            .unwrap();
-
-        let files_in_file_set = vec![ImportedFile {
-            original_file_name: "original file name".to_string(),
-            archive_file_name: "archive_file_name".to_string(),
-            sha1_checksum: file_1_checksum,
-            file_size: 1024,
-        }];
-
-        let file_set_id = repository_manager
-            .get_file_set_repository()
-            .add_file_set(
-                "Test File Set",
-                "test_game",
-                &FileType::Rom,
-                "test_source",
-                &files_in_file_set,
-                &[system_id],
-            )
-            .await
-            .unwrap();
-
-        context.file_set_id = file_set_id;
-
-        let file_import_data = FileImportData::new(FileType::Rom, PathBuf::from("/imported/files"))
-            .with_selected_file(file_1_checksum)
-            .with_file_import_source(FileImportSource::new(PathBuf::from(path)).with_content(
-                ImportFileContent {
-                    file_name: "game1.rom".to_string(),
-                    sha1_checksum: file_1_checksum,
-                    file_size: 1024,
-                },
-            ));
-
-        context.file_import_data = file_import_data;
+        let (mut context, file_1_checksum) = create_context_and_test_file_set().await;
         let step = super::FetchFilesInFileSetStep;
         let action = step.execute(&mut context).await;
         assert!(matches!(action, StepAction::Continue));
