@@ -324,7 +324,7 @@ mod tests {
         file_system_ops.add_file(path.clone());
         let mut context = create_test_context(Some(file_system_ops)).await;
         let repository_manager = context.repository_manager.clone();
-        let file_info_1_id = repository_manager
+        let _file_info_1_id = repository_manager
             .get_file_info_repository()
             .add_file_info(&file_1_checksum, 1024, "test_archive_name_1", FileType::Rom)
             .await

@@ -171,6 +171,7 @@ impl ReleaseFormModel {
 
     fn ensure_file_set_form(&mut self, root: &gtk::Window, sender: &ComponentSender<Self>) {
         if self.file_set_form.get().is_none() {
+            tracing::info!("Initializing file set form");
             let file_set_form_init = FileSetFormInit {
                 view_model_service: Arc::clone(&self.view_model_service),
                 repository_manager: Arc::clone(&self.repository_manager),
@@ -645,6 +646,7 @@ impl Component for ReleaseFormModel {
                     .get_visible(selected)
                 {
                     let file_set_id = file_set.borrow().id;
+                    tracing::info!(file_set_id = file_set_id, "Editing file set");
 
                     /*self.ensure_file_set_editor(root, &sender);
                     self.file_set_editor

@@ -149,7 +149,7 @@ pub enum FileSetFormOutputMsg {
 #[derive(Debug)]
 pub enum CommandMsg {
     FileImportPrepared(Result<FileImportPrepareResult, Error>),
-    FileImportDone(Result<FileImportResult, Error>),
+    ProcessCreateOrUpdateFileSetResult(Result<FileImportResult, Error>),
     ProcessFileSetResponse(Result<FileSetViewModel, Error>),
 }
 
@@ -214,6 +214,7 @@ impl Component for FileSetFormModel {
             set_default_width: 800,
             set_default_height: 600,
             set_margin_all: 10,
+            #[watch]
             set_title: if model.file_set_id.is_some() {
                 Some("Edit File Set")
             } else {
@@ -375,6 +376,7 @@ impl Component for FileSetFormModel {
                 },
 
                gtk::Button {
+                    #[watch]
                     set_label: if model.file_set_id.is_some() {
                         "Edit File Set"
                     } else {
@@ -630,6 +632,7 @@ impl Component for FileSetFormModel {
                 root.show();
             }
             FileSetFormMsg::ShowEdit { file_set_id } => {
+                tracing::info!(file_set_id = file_set_id, "Showing file set for editing");
                 let view_model_service = Arc::clone(&self.view_model_service);
                 sender.oneshot_command(async move {
                     let res = view_model_service
@@ -637,6 +640,7 @@ impl Component for FileSetFormModel {
                         .await;
                     CommandMsg::ProcessFileSetResponse(res)
                 });
+                root.show();
             }
             FileSetFormMsg::Hide => {
                 root.hide();
@@ -706,7 +710,7 @@ impl Component for FileSetFormModel {
                 }
                 self.picked_files.push(import_model);
             }
-            CommandMsg::FileImportDone(Ok(import_result)) => {
+            CommandMsg::ProcessCreateOrUpdateFileSetResult(Ok(import_result)) => {
                 self.processing = false;
                 if let Some(file_type) = self.selected_file_type {
                     let file_set_list_model = FileSetListModel {
@@ -717,18 +721,22 @@ impl Component for FileSetFormModel {
                         can_delete: true,
                     };
 
-                    sender
-                        .output(FileSetFormOutputMsg::FileSetCreated(file_set_list_model))
-                        .unwrap_or_else(|err| {
-                            tracing::error!(
+                    let message = if self.file_set_id.is_some() {
+                        FileSetFormOutputMsg::FileSetUpdated(file_set_list_model.clone())
+                    } else {
+                        FileSetFormOutputMsg::FileSetCreated(file_set_list_model.clone())
+                    };
+
+                    sender.output(message).unwrap_or_else(|err| {
+                        tracing::error!(
                                 error = ?err,
                                 "Error sending output message");
-                        });
+                    });
 
                     root.close();
                 }
             }
-            CommandMsg::FileImportDone(Err(e)) => {
+            CommandMsg::ProcessCreateOrUpdateFileSetResult(Err(e)) => {
                 self.processing = false;
                 tracing::error!(error = ?e, "File set import failed");
                 show_error_dialog(format!("File set import failed: {:?}", e), root);
@@ -739,6 +747,10 @@ impl Component for FileSetFormModel {
                 show_error_dialog(format!("Preparing file import failed: {:?}", e), root);
             }
             CommandMsg::ProcessFileSetResponse(Ok(file_set_view_model)) => {
+                tracing::info!(
+                    file_set_id = file_set_view_model.id,
+                    "Loaded file set for editing",
+                );
                 self.file_set_id = Some(file_set_view_model.id);
                 self.selected_file_type = Some(file_set_view_model.file_type);
                 // TODO: set system ids - why system ids are not included in FileSetViewModel?
@@ -747,6 +759,7 @@ impl Component for FileSetFormModel {
                 self.file_set_name = file_set_view_model.file_set_name.clone();
                 self.file_set_file_name = file_set_view_model.file_name.clone();
                 self.source = file_set_view_model.source.clone();
+                self.files.guard().clear();
                 for file in file_set_view_model.files.iter() {
                     self.files.guard().push_back(ReadFile {
                         file_name: file.file_name.clone(),
@@ -770,6 +783,7 @@ impl Component for FileSetFormModel {
 
 impl FileSetFormModel {
     fn create_file_set(&self, sender: ComponentSender<Self>, file_type: FileType) {
+        tracing::info!("Creating new file set");
         let file_import_model = FileSetImportModel {
             file_set_name: self.file_set_name.clone(),
             file_set_file_name: self.file_set_file_name.clone(),
@@ -784,7 +798,7 @@ impl FileSetFormModel {
 
         sender.oneshot_command(async move {
             let import_result = file_import_service.create_file_set(file_import_model).await;
-            CommandMsg::FileImportDone(import_result)
+            CommandMsg::ProcessCreateOrUpdateFileSetResult(import_result)
         });
     }
 
@@ -794,6 +808,7 @@ impl FileSetFormModel {
         file_type: FileType,
         file_set_id: i64,
     ) {
+        tracing::info!(file_set_id = file_set_id, "Updating file set");
         let update_model = UpdateFileSetModel {
             file_set_name: self.file_set_name.clone(),
             file_set_file_name: self.file_set_file_name.clone(),
@@ -808,7 +823,7 @@ impl FileSetFormModel {
 
         sender.oneshot_command(async move {
             let import_result = file_import_service.update_file_set(update_model).await;
-            CommandMsg::FileImportDone(import_result)
+            CommandMsg::ProcessCreateOrUpdateFileSetResult(import_result)
         });
     }
 }
