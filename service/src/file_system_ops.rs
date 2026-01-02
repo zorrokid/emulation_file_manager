@@ -93,6 +93,10 @@ pub mod mock {
         /// Add a file to the mock file system
         pub fn add_file(&self, path: impl Into<String>) {
             self.existing_files.lock().unwrap().insert(path.into());
+            println!(
+                "Current existing files: {:?}",
+                self.existing_files.lock().unwrap()
+            );
         }
 
         /// Make deletion fail with a specific error message
@@ -115,6 +119,7 @@ pub mod mock {
 
         /// Clear all state (useful between tests)
         pub fn clear(&self) {
+            println!("Clearing mock file system state");
             self.existing_files.lock().unwrap().clear();
             self.deleted_files.lock().unwrap().clear();
             *self.fail_on_delete.lock().unwrap() = None;
@@ -123,6 +128,11 @@ pub mod mock {
 
     impl FileSystemOps for MockFileSystemOps {
         fn exists(&self, path: &Path) -> bool {
+            println!("Checking existence of path: {}", path.display());
+            println!(
+                "Existing files in mock file system: {:?}",
+                self.existing_files.lock().unwrap()
+            );
             self.existing_files
                 .lock()
                 .unwrap()

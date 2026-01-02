@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
+use std::{collections::HashSet, sync::Arc};
 
 use core_types::{FileType, ImportedFile};
 use sqlx::{FromRow, Pool, Row, Sqlite, sqlite::SqliteRow};
@@ -387,6 +384,28 @@ impl FileSetRepository {
         Ok(())
     }
 
+    pub async fn remove_files_from_file_set(
+        &self,
+        file_set_id: i64,
+        file_info_ids: &[i64],
+    ) -> Result<(), DatabaseError> {
+        let mut transaction = self.pool.begin().await?;
+
+        for file_info_id in file_info_ids {
+            sqlx::query!(
+                "DELETE FROM file_set_file_info 
+                 WHERE file_set_id = ? AND file_info_id = ?",
+                file_set_id,
+                file_info_id
+            )
+            .execute(&mut *transaction)
+            .await?;
+        }
+
+        transaction.commit().await?;
+        Ok(())
+    }
+
     pub async fn update_file_set(
         &self,
         id: i64,
@@ -434,10 +453,9 @@ impl FileSetRepository {
 
         let mut transaction = self.pool.begin().await?;
 
-        // NOTE: we don't delete file_info, because it can be used in other file sets
-        // TODO: maybe check if file_info is used in other file sets and delete it if not?
-        // NOTE: file info is dependent on physical file, so we delete it only in those case when
-        // the actual file is deleted
+        // NOTE: we don't delete file_info, because it can be used in other file sets and
+        // file info is dependent on physical file, so we delete it only in those case when
+        // the actual file is deleted.
         sqlx::query!("DELETE FROM file_set_file_info WHERE file_set_id = ?", id)
             .execute(&mut *transaction)
             .await?;

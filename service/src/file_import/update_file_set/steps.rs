@@ -1,3 +1,4 @@
+use core_types::Sha1Checksum;
 use database::models::FileInfo;
 
 use crate::{
@@ -5,6 +6,7 @@ use crate::{
     file_import::{
         common_steps::import::AddFileSetContextOps, update_file_set::context::UpdateFileSetContext,
     },
+    file_set_deletion::model::FileDeletionResult,
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
 
@@ -17,6 +19,7 @@ impl PipelineStep<UpdateFileSetContext> for FetchFileSetStep {
     }
 
     async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
+        println!("Fetching file set with id {}", context.file_set_id);
         // TODO: add test with non existing file set
         let file_set_result = context
             .repository_manager
@@ -57,6 +60,7 @@ impl PipelineStep<UpdateFileSetContext> for FetchFilesInFileSetStep {
     }
 
     async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
+        println!("Fetching files in file set with id {}", context.file_set_id);
         let files_result = context
             .repository_manager
             .get_file_info_repository()
@@ -70,15 +74,7 @@ impl PipelineStep<UpdateFileSetContext> for FetchFilesInFileSetStep {
                     file_count = files.len(),
                     "Fetched files in file set from database"
                 );
-                context.files_in_file_set = files
-                    .iter()
-                    .map(|file| {
-                        file.sha1_checksum
-                            .clone()
-                            .try_into()
-                            .expect("Invalid SHA1 checksum length")
-                    })
-                    .collect();
+                context.files_in_file_set = files;
             }
             Err(err) => {
                 tracing::error!(
@@ -112,6 +108,7 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileInfoToDatabaseStep {
     }
 
     async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
+        println!("Adding file info records to database...");
         let file_type = context.file_set.as_ref().unwrap().file_type;
         for imported_file in context.imported_files.values() {
             let add_file_info_result = context
@@ -151,39 +148,16 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileInfoToDatabaseStep {
     }
 }
 
-pub struct RemovedFilesStep;
+pub struct UpdateFileSetFilesStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<UpdateFileSetContext> for RemovedFilesStep {
+impl PipelineStep<UpdateFileSetContext> for UpdateFileSetFilesStep {
     fn name(&self) -> &'static str {
-        "removed_files"
-    }
-
-    fn should_execute(&self, context: &UpdateFileSetContext) -> bool {
-        context.has_removed_files()
-    }
-
-    async fn execute(&self, _context: &mut UpdateFileSetContext) -> StepAction {
-        // TODO: check if there are files to be deleted
-        // - if file is not part of any other file set, the actual file should be deleted too and
-        // if cloud sync is enabled, the file should be marked to be deleted from cloud storage too
-        // - file_info should be unlinked from file_set
-        // - file_info entry should be deleted from database
-        // - maybe deletion could bne done in a separate step
-        //
-        StepAction::Continue
-    }
-}
-
-pub struct UpdateFileSetStep;
-
-#[async_trait::async_trait]
-impl PipelineStep<UpdateFileSetContext> for UpdateFileSetStep {
-    fn name(&self) -> &'static str {
-        "update_file_set"
+        "update_file_set_files"
     }
 
     async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
+        println!("Adding files to file set with id {}", context.file_set_id);
         let file_info_ids_with_file_names = context.get_file_info_ids_with_file_names();
         let result = context
             .repository_manager
@@ -193,26 +167,181 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileSetStep {
 
         match result {
             Ok(_) => {
+                println!(
+                    "Added {} files to file set in database",
+                    file_info_ids_with_file_names.len()
+                );
                 tracing::info!(
                     file_set_id = %context.file_set_id,
                     added_file_count = file_info_ids_with_file_names.len(),
                     "Added files to file set in database"
                 );
+
+                StepAction::Continue
             }
             Err(err) => {
+                println!("Error adding files to file set in database: {}", err);
                 tracing::error!(
                     error = %err,
                     file_set_id = %context.file_set_id,
                     "Error adding files to file set in database"
                 );
                 // TODO: should files and file infos be removed?
-                return StepAction::Abort(Error::DbError(format!(
+                StepAction::Abort(Error::DbError(format!(
                     "Error adding files to file set: {}",
+                    err,
+                )))
+            }
+        }
+    }
+}
+
+pub struct CollectDeletionCandidatesStep;
+
+#[async_trait::async_trait]
+impl PipelineStep<UpdateFileSetContext> for CollectDeletionCandidatesStep {
+    fn name(&self) -> &'static str {
+        "collect_deletion_candidates"
+    }
+
+    fn should_execute(&self, context: &UpdateFileSetContext) -> bool {
+        context.has_removed_files()
+    }
+
+    async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
+        println!(
+            "Collecting files unlinked from file set with id {} for deletion candidates",
+            context.file_set_id
+        );
+        let removed_files = context
+            .get_removed_files()
+            .iter()
+            .map(|file| file.sha1_checksum.clone().try_into().unwrap())
+            .collect::<Vec<Sha1Checksum>>();
+
+        let repository = context.repository_manager.get_file_info_repository();
+        let result = repository
+            .get_file_infos_by_sha1_checksums(
+                &removed_files,
+                context.file_set.as_ref().unwrap().file_type,
+            )
+            .await;
+        match result {
+            Ok(files) => {
+                tracing::info!(
+                    file_set_id = %context.file_set_id,
+                    removed_file_count = files.len(),
+                    "Collected files unlinked from file set for deletion candidates"
+                );
+                context.deletion_results = files
+                    .into_iter()
+                    .map(|file| (file.sha1_checksum.clone(), FileDeletionResult::new(file)))
+                    .collect();
+            }
+            Err(err) => {
+                tracing::error!(
+                    error = %err,
+                    file_set_id = %context.file_set_id,
+                    "Error collecting files unlinked from file set for deletion candidates"
+                );
+                return StepAction::Abort(Error::DbError(format!(
+                    "Error collecting files unlinked from file set for deletion candidates: {}",
                     err,
                 )));
             }
         }
         StepAction::Continue
+    }
+}
+
+pub struct UnlinkFilesFromFileSetStep;
+
+#[async_trait::async_trait]
+impl PipelineStep<UpdateFileSetContext> for UnlinkFilesFromFileSetStep {
+    fn name(&self) -> &'static str {
+        "unlink_files_from_file_set"
+    }
+
+    fn should_execute(&self, context: &UpdateFileSetContext) -> bool {
+        context.has_removed_files()
+    }
+
+    async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
+        println!(
+            "Unlinking files from file set with id {}",
+            context.file_set_id
+        );
+        let removed_files = context
+            .get_removed_files()
+            .iter()
+            .map(|file| file.id)
+            .collect::<Vec<i64>>();
+
+        let result = context
+            .repository_manager
+            .get_file_set_repository()
+            .remove_files_from_file_set(context.file_set_id, &removed_files)
+            .await;
+
+        match result {
+            Ok(_) => {
+                tracing::info!(
+                    file_set_id = %context.file_set_id,
+                    removed_file_count = removed_files.len(),
+                    "Unlinked files from file set in database"
+                );
+                StepAction::Continue
+            }
+            Err(err) => {
+                tracing::error!(
+                    error = %err,
+                    file_set_id = %context.file_set_id,
+                    "Error unlinking files from file set in database"
+                );
+                StepAction::Abort(Error::DbError(format!(
+                    "Error unlinking files from file set: {}",
+                    err,
+                )))
+            }
+        }
+    }
+}
+
+pub struct UpdateFileSetStep;
+#[async_trait::async_trait]
+impl PipelineStep<UpdateFileSetContext> for UpdateFileSetStep {
+    fn name(&self) -> &'static str {
+        "update_file_set"
+    }
+
+    async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
+        let repository = context.repository_manager.get_file_set_repository();
+        let result = repository
+            .update_file_set(
+                context.file_set_id,
+                &context.file_set_name,
+                &context.file_set_file_name,
+                &context.source,
+                &context.file_import_data.file_type,
+            )
+            .await;
+        match result {
+            Ok(_) => {
+                tracing::info!(
+                    file_set_id = %context.file_set_id,
+                    "Updated file set metadata in database"
+                );
+                StepAction::Continue
+            }
+            Err(err) => {
+                tracing::error!(
+                    error = %err,
+                    file_set_id = %context.file_set_id,
+                    "Error updating file set metadata in database"
+                );
+                StepAction::Abort(Error::DbError(format!("Error updating file set: {}", err,)))
+            }
+        }
     }
 }
 
@@ -228,6 +357,7 @@ impl PipelineStep<UpdateFileSetContext> for MarkFilesForCloudSyncStep {
         context.settings.s3_sync_enabled && !context.imported_files.is_empty()
     }
     async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
+        println!("Marking new files for cloud sync...");
         let file_info_ids: Vec<(i64, String)> = context
             .new_files
             .iter()
@@ -313,6 +443,10 @@ mod tests {
             new_files: Vec::new(),
             file_set: None,
             files_in_file_set: Vec::new(),
+            file_set_name: "Test File Set".to_string(),
+            file_set_file_name: "test_game".to_string(),
+            source: "test_source".to_string(),
+            deletion_results: HashMap::new(),
         }
     }
 
@@ -387,6 +521,11 @@ mod tests {
         let step = super::FetchFilesInFileSetStep;
         let action = step.execute(&mut context).await;
         assert!(matches!(action, StepAction::Continue));
-        assert!(context.files_in_file_set.contains(&file_1_checksum));
+        assert!(
+            context
+                .files_in_file_set
+                .iter()
+                .any(|f| f.sha1_checksum == file_1_checksum)
+        );
     }
 }

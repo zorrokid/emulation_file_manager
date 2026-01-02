@@ -19,11 +19,13 @@ pub struct AddFileSetContext {
     pub repository_manager: Arc<RepositoryManager>,
     pub settings: Arc<Settings>,
     pub system_ids: Vec<i64>,
-    pub source: String,
     pub file_import_data: FileImportData,
-    // File set name and file name that will be created from the set of import files.
+
+    // File set name and file name for file set that will be created from the set of import files.
     pub file_set_name: String,
     pub file_set_file_name: String,
+    pub source: String,
+
     pub imported_files: HashMap<Sha1Checksum, ImportedFile>,
     pub file_set_id: Option<i64>,
     pub file_import_ops: Arc<dyn FileImportOps>,

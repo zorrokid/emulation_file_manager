@@ -1,7 +1,14 @@
 use std::{collections::HashMap, sync::Arc};
 
-use crate::file_import::{
-    common_steps::check_existing_files::CheckExistingFilesContext, model::FileImportData,
+use crate::{
+    file_import::{
+        common_steps::{
+            check_existing_files::CheckExistingFilesContext,
+            file_deletion_steps::FileDeletionStepsContext,
+        },
+        model::FileImportData,
+    },
+    file_set_deletion::model::FileDeletionResult,
 };
 use core_types::{FileType, ImportedFile, Sha1Checksum};
 use database::{
@@ -21,16 +28,21 @@ pub struct UpdateFileSetContext {
     pub file_import_ops: Arc<dyn FileImportOps>,
     pub fs_ops: Arc<dyn FileSystemOps>,
     pub file_set_id: i64,
+    pub file_set_name: String,
+    pub file_set_file_name: String,
+    pub source: String,
 
     pub file_set: Option<FileSet>,
     // files currently associated with the file set
-    pub files_in_file_set: Vec<Sha1Checksum>,
+    pub files_in_file_set: Vec<FileInfo>,
 
     pub file_import_data: FileImportData,
     // existing files found in the database, not yet associated with the file set
     pub existing_files: Vec<FileInfo>,
     pub new_files: Vec<FileInfo>,
     pub imported_files: HashMap<Sha1Checksum, ImportedFile>,
+    /// To collect deletion results for files removed from the file set
+    pub deletion_results: HashMap<Vec<u8>, FileDeletionResult>,
 }
 
 impl UpdateFileSetContext {
@@ -41,6 +53,9 @@ impl UpdateFileSetContext {
         fs_ops: Arc<dyn FileSystemOps>,
         file_set_id: i64,
         file_import_data: FileImportData,
+        file_set_name: String,
+        file_set_file_name: String,
+        source: String,
     ) -> Self {
         Self {
             repository_manager,
@@ -54,21 +69,38 @@ impl UpdateFileSetContext {
             imported_files: HashMap::new(),
             new_files: vec![],
             files_in_file_set: vec![],
+            file_set_name,
+            file_set_file_name,
+            source,
+            deletion_results: HashMap::new(),
         }
     }
 
     pub fn has_removed_files(&self) -> bool {
         // Check if there are files that were in the file set but are not in the selected files
         // anymore
-        self.files_in_file_set
-            .iter()
-            .any(|sha1| !self.file_import_data.selected_files.contains(sha1))
+        self.files_in_file_set.iter().any(|file| {
+            let sha1: Sha1Checksum = file
+                .sha1_checksum
+                .clone()
+                .try_into()
+                .expect("Invalid SHA1 checksum length");
+
+            !self.file_import_data.selected_files.contains(&sha1)
+        })
     }
 
-    pub fn get_removed_files(&self) -> Vec<Sha1Checksum> {
+    pub fn get_removed_files(&self) -> Vec<FileInfo> {
         self.files_in_file_set
             .iter()
-            .filter(|sha1| !self.file_import_data.selected_files.contains(sha1))
+            .filter(|file| {
+                let sha1: Sha1Checksum = file
+                    .sha1_checksum
+                    .clone()
+                    .try_into()
+                    .expect("Invalid SHA1 checksum length");
+                !self.file_import_data.selected_files.contains(&sha1)
+            })
             .cloned()
             .collect()
     }
@@ -159,6 +191,36 @@ impl AddFileSetContextOps for UpdateFileSetContext {
     }
 }
 
+impl FileDeletionStepsContext for UpdateFileSetContext {
+    fn repository_manager(&self) -> Arc<RepositoryManager> {
+        self.repository_manager.clone()
+    }
+
+    fn file_set_id(&self) -> i64 {
+        self.file_set_id
+    }
+
+    fn has_deletion_candidates(&self) -> bool {
+        !self.deletion_results.is_empty()
+    }
+
+    fn deletion_results_mut(&mut self) -> &mut HashMap<Vec<u8>, FileDeletionResult> {
+        &mut self.deletion_results
+    }
+
+    fn deletion_results(&self) -> &HashMap<Vec<u8>, FileDeletionResult> {
+        &self.deletion_results
+    }
+
+    fn fs_ops(&self) -> Arc<dyn FileSystemOps> {
+        self.fs_ops.clone()
+    }
+
+    fn settings(&self) -> Arc<Settings> {
+        self.settings.clone()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::{path::PathBuf, sync::Arc};
@@ -187,6 +249,9 @@ mod tests {
             Arc::new(MockFileSystemOps::new()),
             1,
             file_import_data,
+            "Test File Set".to_string(),
+            "test_file_set".to_string(),
+            "TMMP".to_string(),
         )
     }
 

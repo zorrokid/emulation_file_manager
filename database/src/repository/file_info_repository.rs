@@ -65,7 +65,7 @@ impl FileInfoRepository {
 
     pub async fn get_file_infos_by_sha1_checksums(
         &self,
-        checksums: Vec<Sha1Checksum>,
+        checksums: &[Sha1Checksum],
         file_type: FileType,
     ) -> Result<Vec<FileInfo>, Error> {
         let mut query_builder = QueryBuilder::<Sqlite>::new(
@@ -75,7 +75,7 @@ impl FileInfoRepository {
         query_builder.push_bind(file_type.to_db_int());
         query_builder.push(" AND sha1_checksum IN (");
         let mut separated = query_builder.separated(", ");
-        for checksum in &checksums {
+        for checksum in checksums {
             separated.push_bind(checksum.to_vec());
         }
         separated.push_unseparated(")");
@@ -173,7 +173,7 @@ mod tests {
 
         let checksums: Vec<Sha1Checksum> = vec![checksum_1, checksum_2];
         let file_infos = file_info_repository
-            .get_file_infos_by_sha1_checksums(checksums, FileType::Rom)
+            .get_file_infos_by_sha1_checksums(&checksums, FileType::Rom)
             .await
             .unwrap();
 

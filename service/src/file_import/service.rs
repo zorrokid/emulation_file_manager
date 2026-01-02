@@ -156,6 +156,9 @@ impl FileImportService {
             self.fs_ops.clone(),
             import_model.file_set_id,
             file_import_data,
+            import_model.file_set_name,
+            import_model.file_set_file_name,
+            import_model.source,
         );
         let pipeline = Pipeline::<UpdateFileSetContext>::new();
         let res = pipeline.execute(&mut context).await;
@@ -349,7 +352,9 @@ mod tests {
 
         let add_to_file_set_import_model = UpdateFileSetModel {
             file_set_id,
-            selected_files: vec![new_file_sha1_checksum],
+            // Also the existing file has to be selected, otherwise it would be removed from the
+            // set
+            selected_files: vec![new_file_sha1_checksum, existing_file_checksum],
             import_files: vec![file_import_source],
             file_type: FileType::DiskImage,
             // TODO: source should be file specific, not file set specific

@@ -44,6 +44,7 @@ impl<T: AddFileSetContextOps + Send + Sync> PipelineStep<T> for ImportFilesStep<
     }
 
     async fn execute(&self, context: &mut T) -> StepAction {
+        println!("Importing files...");
         let file_import_model = context.get_file_import_model();
         match context.file_import_ops().import(&file_import_model) {
             Ok(imported_files) => {
