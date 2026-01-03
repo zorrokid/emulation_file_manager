@@ -7,9 +7,11 @@ license = "GPL-3.0-or-later"
 [dependencies]
 async-std = { version = "1.13.2", features = ["attributes"] }
 async-trait = "0.1.89"
+#rust-s3 = { path = "/home/mikko/development/rust-s3/s3", default-features = false, features = ["with-async-std", "async-std-native-tls", "fail-on-err"] }
 rust-s3 = { version = "0.37.0", default-features = false, features = [
     "with-async-std",
-    "async-std-rustls-tls"
+    "async-std-rustls-tls",
+    "fail-on-err"
 ] }
 thiserror = "2.0.17"
 uuid = { version="1.17.0", features = ["v4"] }

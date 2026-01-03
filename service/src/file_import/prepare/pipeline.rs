@@ -1,7 +1,7 @@
 use crate::{
-    file_import::prepare::{
-        context::PrepareFileImportContext,
-        steps::{CollectFileContentStep, CollectFileMetadataStep, ProcessFileContentStep},
+    file_import::{
+        common_steps::collect_file_info::CollectFileInfoStep,
+        prepare::{context::PrepareFileImportContext, steps::CollectFileMetadataStep},
     },
     pipeline::generic_pipeline::Pipeline,
 };
@@ -10,8 +10,7 @@ impl Pipeline<PrepareFileImportContext> {
     pub fn new() -> Self {
         Self::with_steps(vec![
             Box::new(CollectFileMetadataStep),
-            Box::new(CollectFileContentStep),
-            Box::new(ProcessFileContentStep),
+            Box::new(CollectFileInfoStep::<PrepareFileImportContext>::new()),
         ])
     }
 }

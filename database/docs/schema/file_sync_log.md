@@ -12,8 +12,7 @@ CREATE TABLE file_sync_log (
     sync_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     status INTEGER NOT NULL,
     message TEXT NOT NULL DEFAULT '',
-    cloud_key TEXT NOT NULL,
-    FOREIGN KEY (file_info_id) REFERENCES file_info(id)
+    cloud_key TEXT NOT NULL
 )
 ```
 
@@ -24,7 +23,7 @@ CREATE TABLE file_sync_log (
 | Name | Type | Default | Nullable | Children | Parents | Comment |
 | ---- | ---- | ------- | -------- | -------- | ------- | ------- |
 | id | INTEGER |  | false |  |  |  |
-| file_info_id | INTEGER |  | false |  | [file_info](file_info.md) |  |
+| file_info_id | INTEGER |  | false |  |  |  |
 | sync_time | TIMESTAMP | CURRENT_TIMESTAMP | false |  |  |  |
 | status | INTEGER |  | false |  |  |  |
 | message | TEXT | '' | false |  |  |  |
@@ -35,7 +34,6 @@ CREATE TABLE file_sync_log (
 | Name | Type | Definition |
 | ---- | ---- | ---------- |
 | id | PRIMARY KEY | PRIMARY KEY (id) |
-| - (Foreign key ID: 0) | FOREIGN KEY | FOREIGN KEY (file_info_id) REFERENCES file_info (id) ON UPDATE NO ACTION ON DELETE NO ACTION MATCH NONE |
 
 ## Relations
 

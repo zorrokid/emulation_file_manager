@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT file_name \n             FROM file_set_file_info \n             WHERE file_set_id = ? AND file_info_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "file_name",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "1579b4d13b8f4fe0ba80f87e47c4154d85de16bd286cc19b71203afedde480f3"
+}

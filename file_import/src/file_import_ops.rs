@@ -139,8 +139,9 @@ pub mod mock {
 
         fn import(
             &self,
-            _file_import_model: &FileImportModel,
+            file_import_model: &FileImportModel,
         ) -> Result<HashMap<Sha1Checksum, ImportedFile>, FileImportError> {
+            println!("Mock import called with model: {:?}", file_import_model);
             if *self.should_fail.lock().unwrap() {
                 return Err(FileImportError::FileIoError(
                     "Mock import error".to_string(),

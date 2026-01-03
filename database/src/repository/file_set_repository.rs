@@ -1,7 +1,7 @@
 use std::{collections::HashSet, sync::Arc};
 
-use core_types::{FileType, ImportedFile};
-use sqlx::{sqlite::SqliteRow, FromRow, Pool, Row, Sqlite};
+use core_types::{FileType, ImportedFile, Sha1Checksum};
+use sqlx::{FromRow, Pool, Row, Sqlite, sqlite::SqliteRow};
 
 use crate::{
     database_error::{DatabaseError, Error},
@@ -36,6 +36,10 @@ impl FromRow<'_, SqliteRow> for FileSet {
 impl FromRow<'_, SqliteRow> for FileSetFileInfo {
     fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
         let file_type_int: u8 = row.try_get("file_type")?;
+        let sha1_checksum: Vec<u8> = row.try_get("sha1_checksum")?;
+        let sha1_checksum: Sha1Checksum = sha1_checksum
+            .try_into()
+            .expect("Invalid SHA1 checksum length in DB");
         let file_type: FileType =
             FileType::from_db_int(file_type_int).expect("Invalid file type in DB");
         Ok(Self {
@@ -43,7 +47,7 @@ impl FromRow<'_, SqliteRow> for FileSetFileInfo {
             file_info_id: row.try_get("file_info_id")?,
             file_name: row.try_get("file_name")?,
             file_type,
-            sha1_checksum: row.try_get("sha1_checksum")?,
+            sha1_checksum,
             file_size: row.try_get("file_size")?,
             archive_file_name: row.try_get("archive_file_name")?,
         })
@@ -205,12 +209,14 @@ impl FileSetRepository {
 
         let mut transaction = self.pool.begin().await?;
 
+        // First create the file set
+
         let result = sqlx::query!(
             "INSERT INTO file_set(
                 file_name, 
                 file_type,
                 name,
-                source) 
+               source) 
              VALUES (?, ?, ?, ?)",
             file_set_file_name,
             file_type,
@@ -272,6 +278,7 @@ impl FileSetRepository {
 
             // insert new systems for file_info
 
+            // for newly inserted file_info, there are no systems yet
             let file_info_systems = sqlx::query!(
                 "SELECT system_id FROM file_info_system 
                  WHERE file_info_id = ?",
@@ -331,6 +338,78 @@ impl FileSetRepository {
         Ok(file_set_id)
     }
 
+    pub async fn add_files_to_file_set(
+        &self,
+        file_set_id: i64,
+        file_info_ids_and_names: &[(i64, String)],
+    ) -> Result<(), Error> {
+        let mut transaction = self.pool.begin().await?;
+
+        // get systems linked to file set
+        let system_ids = sqlx::query!(
+            "SELECT DISTINCT fis.system_id
+             FROM file_set_file_info fsfi
+             JOIN file_info_system fis ON fsfi.file_info_id = fis.file_info_id
+             WHERE fsfi.file_set_id = ?",
+            file_set_id
+        )
+        .fetch_all(&mut *transaction)
+        .await?;
+
+        for (file_info_id, file_name) in file_info_ids_and_names {
+            sqlx::query!(
+                "INSERT INTO file_set_file_info (
+                    file_set_id, 
+                    file_info_id, 
+                    file_name
+                 ) VALUES (?, ?, ?)",
+                file_set_id,
+                file_info_id,
+                file_name
+            )
+            .execute(&mut *transaction)
+            .await?;
+
+            for system in &system_ids {
+                sqlx::query!(
+                    "INSERT OR IGNORE INTO file_info_system (
+                        file_info_id, 
+                        system_id
+                    ) VALUES (?, ?)",
+                    file_info_id,
+                    system.system_id
+                )
+                .execute(&mut *transaction)
+                .await?;
+            }
+        }
+
+        transaction.commit().await?;
+        Ok(())
+    }
+
+    pub async fn remove_files_from_file_set(
+        &self,
+        file_set_id: i64,
+        file_info_ids: &[i64],
+    ) -> Result<(), DatabaseError> {
+        let mut transaction = self.pool.begin().await?;
+
+        for file_info_id in file_info_ids {
+            sqlx::query!(
+                "DELETE FROM file_set_file_info 
+                 WHERE file_set_id = ? AND file_info_id = ?",
+                file_set_id,
+                file_info_id
+            )
+            .execute(&mut *transaction)
+            .await?;
+        }
+
+        transaction.commit().await?;
+        Ok(())
+    }
+
     pub async fn update_file_set(
         &self,
         id: i64,
@@ -378,10 +457,9 @@ impl FileSetRepository {
 
         let mut transaction = self.pool.begin().await?;
 
-        // NOTE: we don't delete file_info, because it can be used in other file sets
-        // TODO: maybe check if file_info is used in other file sets and delete it if not?
-        // NOTE: file info is dependent on physical file, so we delete it only in those case when
-        // the actual file is deleted
+        // NOTE: we don't delete file_info, because it can be used in other file sets and
+        // file info is dependent on physical file, so we delete it only in those case when
+        // the actual file is deleted.
         sqlx::query!("DELETE FROM file_set_file_info WHERE file_set_id = ?", id)
             .execute(&mut *transaction)
             .await?;
@@ -420,7 +498,12 @@ impl FileSetRepository {
 
 #[cfg(test)]
 mod tests {
-    use crate::{repository::system_repository::SystemRepository, setup_test_db};
+    use crate::{
+        repository::{
+            file_info_repository::FileInfoRepository, system_repository::SystemRepository,
+        },
+        setup_test_db,
+    };
 
     use super::*;
     use sqlx::{query, query_scalar};
@@ -875,5 +958,268 @@ mod tests {
         .await
         .unwrap();
         result.last_insert_rowid()
+    }
+
+    #[async_std::test]
+    async fn test_add_files_to_file_set() {
+        let pool = Arc::new(setup_test_db().await);
+        let file_set_file_name = "test file set".to_string();
+        let file_type = FileType::Rom;
+
+        let files = vec![ImportedFile {
+            sha1_checksum: [0; 20],
+            file_size: 123,
+            original_file_name: "test.rom".to_string(),
+            archive_file_name: "archive_file_name_1".to_string(),
+        }];
+
+        let system_id = SystemRepository::new(pool.clone())
+            .add_system("Test System")
+            .await
+            .unwrap();
+
+        let file_set_repository = FileSetRepository { pool: pool.clone() };
+
+        let file_set_id = file_set_repository
+            .add_file_set(
+                "Test File Set",
+                &file_set_file_name,
+                &file_type,
+                "",
+                &files,
+                &[system_id],
+            )
+            .await
+            .unwrap();
+
+        let new_file_info = ImportedFile {
+            sha1_checksum: [2; 20],
+            file_size: 456,
+            original_file_name: "test2.rom".to_string(),
+            archive_file_name: "archive_file_name_2".to_string(),
+        };
+
+        let file_info_repo = FileInfoRepository::new(pool.clone());
+        let new_file_info_id = file_info_repo
+            .add_file_info(
+                &new_file_info.sha1_checksum,
+                new_file_info.file_size as i64,
+                &new_file_info.archive_file_name,
+                file_type,
+            )
+            .await
+            .unwrap();
+
+        file_set_repository
+            .add_files_to_file_set(
+                file_set_id,
+                &[(new_file_info_id, new_file_info.original_file_name.clone())],
+            )
+            .await
+            .unwrap();
+
+        // assert that the file_set_file_info entry exists
+
+        let count = query_scalar!(
+            "SELECT COUNT(*) 
+             FROM file_set_file_info 
+             WHERE file_set_id = ? AND file_info_id = ?",
+            file_set_id,
+            new_file_info_id
+        )
+        .fetch_one(&*pool)
+        .await
+        .unwrap();
+
+        assert_eq!(count, 1);
+
+        // assert that the name inside file set is correct
+        let result = query!(
+            "SELECT file_name 
+             FROM file_set_file_info 
+             WHERE file_set_id = ? AND file_info_id = ?",
+            file_set_id,
+            new_file_info_id
+        )
+        .fetch_one(&*pool)
+        .await
+        .unwrap();
+        assert_eq!(result.file_name, new_file_info.original_file_name);
+
+        // assert that the file_info_system entry exists
+        let count = query_scalar!(
+            "SELECT COUNT(*) 
+             FROM file_info_system 
+             WHERE file_info_id = ? AND system_id = ?",
+            new_file_info_id,
+            system_id
+        )
+        .fetch_one(&*pool)
+        .await
+        .unwrap();
+
+        assert_eq!(count, 1);
+    }
+
+    #[async_std::test]
+    async fn test_add_files_to_file_set_file_info_already_linked_with_system() {
+        let pool = Arc::new(setup_test_db().await);
+        let file_set_file_name = "test file set".to_string();
+        let file_type = FileType::Rom;
+
+        let files = vec![ImportedFile {
+            sha1_checksum: [0; 20],
+            file_size: 123,
+            original_file_name: "test.rom".to_string(),
+            archive_file_name: "archive_file_name_1".to_string(),
+        }];
+
+        let system_id = SystemRepository::new(pool.clone())
+            .add_system("Test System")
+            .await
+            .unwrap();
+
+        let file_set_repository = FileSetRepository { pool: pool.clone() };
+
+        let file_set_id = file_set_repository
+            .add_file_set(
+                "Test File Set",
+                &file_set_file_name,
+                &file_type,
+                "",
+                &files,
+                &[system_id],
+            )
+            .await
+            .unwrap();
+
+        let new_file_info = ImportedFile {
+            sha1_checksum: [2; 20],
+            file_size: 456,
+            original_file_name: "test2.rom".to_string(),
+            archive_file_name: "archive_file_name_2".to_string(),
+        };
+
+        let file_info_repo = FileInfoRepository::new(pool.clone());
+        let new_file_info_id = file_info_repo
+            .add_file_info(
+                &new_file_info.sha1_checksum,
+                new_file_info.file_size as i64,
+                &new_file_info.archive_file_name,
+                file_type,
+            )
+            .await
+            .unwrap();
+
+        // Manually link the new file info with the systems
+        query!(
+            "INSERT INTO file_info_system (file_info_id, system_id) VALUES (?, ?)",
+            new_file_info_id,
+            system_id
+        )
+        .execute(&*pool)
+        .await
+        .unwrap();
+
+        // Assert previous
+        let count = query_scalar!(
+            "SELECT COUNT(*) 
+             FROM file_info_system 
+             WHERE file_info_id = ? AND system_id = ?",
+            new_file_info_id,
+            system_id
+        )
+        .fetch_one(&*pool)
+        .await
+        .unwrap();
+
+        assert_eq!(count, 1);
+
+        // add file to file set, already existing link with system should be ignored and no error
+        // should occur
+
+        file_set_repository
+            .add_files_to_file_set(
+                file_set_id,
+                &[(new_file_info_id, new_file_info.original_file_name.clone())],
+            )
+            .await
+            .unwrap();
+
+        // assert that the file_set_file_info entry exists
+
+        let count = query_scalar!(
+            "SELECT COUNT(*) 
+             FROM file_set_file_info 
+             WHERE file_set_id = ? AND file_info_id = ?",
+            file_set_id,
+            new_file_info_id
+        )
+        .fetch_one(&*pool)
+        .await
+        .unwrap();
+
+        assert_eq!(count, 1);
+
+        // assert that the name inside file set is correct
+        let result = query!(
+            "SELECT file_name 
+             FROM file_set_file_info 
+             WHERE file_set_id = ? AND file_info_id = ?",
+            file_set_id,
+            new_file_info_id
+        )
+        .fetch_one(&*pool)
+        .await
+        .unwrap();
+        assert_eq!(result.file_name, new_file_info.original_file_name);
+
+        // assert that single file_info_system entry exists
+        let count = query_scalar!(
+            "SELECT COUNT(*) 
+             FROM file_info_system 
+             WHERE file_info_id = ? AND system_id = ?",
+            new_file_info_id,
+            system_id
+        )
+        .fetch_one(&*pool)
+        .await
+        .unwrap();
+
+        assert_eq!(count, 1);
+    }
+
+    #[async_std::test]
+    async fn test_add_files_to_non_existing_file_set() {
+        let pool = Arc::new(setup_test_db().await);
+
+        let file_set_repository = FileSetRepository { pool: pool.clone() };
+
+        let new_file_info = ImportedFile {
+            sha1_checksum: [2; 20],
+            file_size: 456,
+            original_file_name: "test2.rom".to_string(),
+            archive_file_name: "archive_file_name_2".to_string(),
+        };
+
+        let file_info_repo = FileInfoRepository::new(pool.clone());
+        let new_file_info_id = file_info_repo
+            .add_file_info(
+                &new_file_info.sha1_checksum,
+                new_file_info.file_size as i64,
+                &new_file_info.archive_file_name,
+                FileType::Rom,
+            )
+            .await
+            .unwrap();
+
+        let res = file_set_repository
+            .add_files_to_file_set(
+                9999,
+                &[(new_file_info_id, new_file_info.original_file_name.clone())],
+            )
+            .await;
+
+        assert!(res.is_err());
     }
 }

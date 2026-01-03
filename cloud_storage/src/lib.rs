@@ -29,15 +29,24 @@ pub enum CloudStorageError {
 
     #[error("Other error: {0}")]
     Other(String),
+
+    #[error("Invalid credentials: {0}")]
+    InvalidCredentials(String),
 }
 
-pub async fn connect_bucket(
+/// Note, this doesn't actually establish a persistent connection,
+/// but prepares the Bucket object for further operations.
+pub fn prepare_bucket(
     endpoint: &str,
     region: &str,
     bucket: &str,
     key_id: &str,
     secret_key: &str,
 ) -> Result<Box<Bucket>, CloudStorageError> {
+    println!(
+        "Preparing S3 bucket connection: endpoint={}, region={}, bucket={}",
+        endpoint, region, bucket
+    );
     let region = Region::Custom {
         region: region.to_string(),
         endpoint: endpoint.to_string(),
@@ -163,6 +172,9 @@ pub async fn multipart_upload(
             }
         };
     }
+    bucket
+        .complete_multipart_upload(key, &response.upload_id, parts)
+        .await?;
     Ok(())
 }
 
@@ -176,15 +188,15 @@ pub struct S3CloudStorage {
 }
 
 impl S3CloudStorage {
-    /// Connect to an S3-compatible storage bucket
-    pub async fn connect(
+    /// Prepare an S3-compatible storage bucket
+    pub fn get_bucket(
         endpoint: &str,
         region: &str,
         bucket_name: &str,
         key_id: &str,
         secret_key: &str,
     ) -> Result<Self, CloudStorageError> {
-        let bucket = connect_bucket(endpoint, region, bucket_name, key_id, secret_key).await?;
+        let bucket = prepare_bucket(endpoint, region, bucket_name, key_id, secret_key)?;
         Ok(Self { bucket })
     }
 

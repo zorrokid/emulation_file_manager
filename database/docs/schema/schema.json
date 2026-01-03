@@ -595,6 +595,12 @@
           "name": "arguments",
           "type": "TEXT",
           "nullable": false
+        },
+        {
+          "name": "cleanup_temp_files",
+          "type": "BOOLEAN",
+          "nullable": false,
+          "default": "FALSE"
         }
       ],
       "constraints": [
@@ -608,7 +614,7 @@
           ]
         }
       ],
-      "def": "CREATE TABLE document_viewer (\n    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,\n    name TEXT NOT NULL,\n    executable TEXT NOT NULL,\n    document_type INTEGER NOT NULL,\n    arguments TEXT NOT NULL\n)"
+      "def": "CREATE TABLE document_viewer (\n    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,\n    name TEXT NOT NULL,\n    executable TEXT NOT NULL,\n    document_type INTEGER NOT NULL,\n    arguments TEXT NOT NULL\n, cleanup_temp_files BOOLEAN NOT NULL DEFAULT FALSE)"
     },
     {
       "name": "release_system",
@@ -779,69 +785,6 @@
       "def": "CREATE TABLE \"release_software_title\" (\n    release_id INTEGER NOT NULL,\n    software_title_id INTEGER NOT NULL,\n    PRIMARY KEY (release_id, software_title_id),\n    FOREIGN KEY (release_id) REFERENCES release(id) ON DELETE CASCADE,\n    FOREIGN KEY (software_title_id) REFERENCES software_title(id) ON DELETE CASCADE\n)"
     },
     {
-      "name": "file_sync_log",
-      "type": "table",
-      "columns": [
-        {
-          "name": "id",
-          "type": "INTEGER",
-          "nullable": false
-        },
-        {
-          "name": "file_info_id",
-          "type": "INTEGER",
-          "nullable": false
-        },
-        {
-          "name": "sync_time",
-          "type": "TIMESTAMP",
-          "nullable": false,
-          "default": "CURRENT_TIMESTAMP"
-        },
-        {
-          "name": "status",
-          "type": "INTEGER",
-          "nullable": false
-        },
-        {
-          "name": "message",
-          "type": "TEXT",
-          "nullable": false,
-          "default": "''"
-        },
-        {
-          "name": "cloud_key",
-          "type": "TEXT",
-          "nullable": false
-        }
-      ],
-      "constraints": [
-        {
-          "name": "id",
-          "type": "PRIMARY KEY",
-          "def": "PRIMARY KEY (id)",
-          "table": "file_sync_log",
-          "columns": [
-            "id"
-          ]
-        },
-        {
-          "name": "- (Foreign key ID: 0)",
-          "type": "FOREIGN KEY",
-          "def": "FOREIGN KEY (file_info_id) REFERENCES file_info (id) ON UPDATE NO ACTION ON DELETE NO ACTION MATCH NONE",
-          "table": "file_sync_log",
-          "referenced_table": "file_info",
-          "columns": [
-            "file_info_id"
-          ],
-          "referenced_columns": [
-            "id"
-          ]
-        }
-      ],
-      "def": "CREATE TABLE file_sync_log (\n    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,\n    file_info_id INTEGER NOT NULL,\n    sync_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    status INTEGER NOT NULL,\n    message TEXT NOT NULL DEFAULT '',\n    cloud_key TEXT NOT NULL,\n    FOREIGN KEY (file_info_id) REFERENCES file_info(id)\n)"
-    },
-    {
       "name": "file_info_system",
       "type": "table",
       "columns": [
@@ -924,6 +867,56 @@
         }
       ],
       "def": "CREATE TABLE file_info_system (\n    file_info_id INTEGER NOT NULL,\n    system_id INTEGER NOT NULL,\n    PRIMARY KEY (file_info_id, system_id),\n    FOREIGN KEY (file_info_id) REFERENCES file_info(id) ON DELETE CASCADE,\n    FOREIGN KEY (system_id) REFERENCES system(id)\n)"
+    },
+    {
+      "name": "file_sync_log",
+      "type": "table",
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "file_info_id",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "sync_time",
+          "type": "TIMESTAMP",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP"
+        },
+        {
+          "name": "status",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "message",
+          "type": "TEXT",
+          "nullable": false,
+          "default": "''"
+        },
+        {
+          "name": "cloud_key",
+          "type": "TEXT",
+          "nullable": false
+        }
+      ],
+      "constraints": [
+        {
+          "name": "id",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (id)",
+          "table": "file_sync_log",
+          "columns": [
+            "id"
+          ]
+        }
+      ],
+      "def": "CREATE TABLE file_sync_log (\n    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,\n    file_info_id INTEGER NOT NULL,\n    sync_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    status INTEGER NOT NULL,\n    message TEXT NOT NULL DEFAULT '',\n    cloud_key TEXT NOT NULL\n)"
     }
   ],
   "relations": [
@@ -1056,19 +1049,6 @@
       ],
       "parent_cardinality": "exactly_one",
       "def": "FOREIGN KEY (release_id) REFERENCES release (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
-    },
-    {
-      "table": "file_sync_log",
-      "columns": [
-        "file_info_id"
-      ],
-      "cardinality": "zero_or_more",
-      "parent_table": "file_info",
-      "parent_columns": [
-        "id"
-      ],
-      "parent_cardinality": "exactly_one",
-      "def": "FOREIGN KEY (file_info_id) REFERENCES file_info (id) ON UPDATE NO ACTION ON DELETE NO ACTION MATCH NONE"
     },
     {
       "table": "file_info_system",

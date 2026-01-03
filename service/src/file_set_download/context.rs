@@ -53,8 +53,7 @@ pub struct FileDownloadResult {
     pub cloud_operation_success: bool,
     pub file_write_success: bool,
 
-    pub cloud_error: Option<String>,
-    pub file_io_error: Option<String>,
+    pub error: Option<String>,
 }
 
 pub struct DownloadContextSettings {

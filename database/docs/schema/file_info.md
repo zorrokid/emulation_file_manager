@@ -20,7 +20,7 @@ CREATE TABLE file_info (
 
 | Name | Type | Default | Nullable | Children | Parents | Comment |
 | ---- | ---- | ------- | -------- | -------- | ------- | ------- |
-| id | INTEGER |  | false | [file_set_file_info](file_set_file_info.md) [file_sync_log](file_sync_log.md) [file_info_system](file_info_system.md) |  |  |
+| id | INTEGER |  | false | [file_set_file_info](file_set_file_info.md) [file_info_system](file_info_system.md) |  |  |
 | sha1_checksum | BLOB |  | false |  |  |  |
 | file_size | INTEGER |  | false |  |  |  |
 | archive_file_name | TEXT |  | false |  |  |  |

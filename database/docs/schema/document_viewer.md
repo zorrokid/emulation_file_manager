@@ -12,7 +12,7 @@ CREATE TABLE document_viewer (
     executable TEXT NOT NULL,
     document_type INTEGER NOT NULL,
     arguments TEXT NOT NULL
-)
+, cleanup_temp_files BOOLEAN NOT NULL DEFAULT FALSE)
 ```
 
 </details>
@@ -26,6 +26,7 @@ CREATE TABLE document_viewer (
 | executable | TEXT |  | false |  |  |  |
 | document_type | INTEGER |  | false |  |  |  |
 | arguments | TEXT |  | false |  |  |  |
+| cleanup_temp_files | BOOLEAN | FALSE | false |  |  |  |
 
 ## Constraints
 

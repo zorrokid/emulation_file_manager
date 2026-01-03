@@ -4,7 +4,7 @@ use std::{
     path::PathBuf,
 };
 
-use core_types::{ArgumentType, DocumentType, FileType, SettingName};
+use core_types::{ArgumentType, DocumentType, FileSize, FileType, SettingName, Sha1Checksum};
 use database::models::{
     DocumentViewer, Emulator, FileSet, FileSetFileInfo, ReleaseExtended, SoftwareTitle, System,
 };
@@ -189,10 +189,39 @@ pub struct FileSetViewModel {
     pub id: i64,
     pub file_set_name: String,
     pub file_type: FileType,
-    pub files: Vec<FileSetFileInfo>,
+    pub files: Vec<FileSetFileInfoViewModel>,
     pub file_name: String,
     pub source: String,
     pub can_delete: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct FileSetFileInfoViewModel {
+    pub file_set_id: i64,
+    pub file_info_id: i64,
+    pub file_name: String,
+    pub sha1_checksum: Sha1Checksum,
+    pub file_size: FileSize,
+    pub archive_file_name: String,
+    pub file_type: FileType,
+}
+
+impl From<&FileSetFileInfo> for FileSetFileInfoViewModel {
+    fn from(file_set_file_info: &FileSetFileInfo) -> Self {
+        FileSetFileInfoViewModel {
+            file_set_id: file_set_file_info.file_set_id,
+            file_info_id: file_set_file_info.file_info_id,
+            file_name: file_set_file_info.file_name.clone(),
+            sha1_checksum: file_set_file_info
+                .sha1_checksum
+                .clone()
+                .try_into()
+                .expect("Invalid SHA1 checksum length"),
+            file_size: file_set_file_info.file_size as u64,
+            archive_file_name: file_set_file_info.archive_file_name.clone(),
+            file_type: file_set_file_info.file_type,
+        }
+    }
 }
 
 impl Display for FileSetViewModel {
@@ -211,7 +240,7 @@ pub struct FileSetFileViewModel {
 #[derive(Debug, Clone)]
 pub struct FileInfoViewModel {
     pub id: i64,
-    pub sha1_checksum: Vec<u8>,
+    pub sha1_checksum: Sha1Checksum,
     pub file_size: u64,
     pub archive_file_name: String,
     pub belongs_to_file_sets: Vec<FileSetListModel>,

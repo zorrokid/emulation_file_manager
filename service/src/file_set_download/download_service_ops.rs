@@ -145,13 +145,22 @@ impl DownloadServiceOps for MockDownloadServiceOps {
         extract_files: bool,
         _progress_tx: Option<Sender<DownloadEvent>>,
     ) -> Result<DownloadResult, Error> {
+        println!(
+            "Mock download_file_set called with file_set_id: {}, extract_files: {}",
+            file_set_id, extract_files
+        );
         let call = DownloadCall {
             file_set_id,
             extract_files,
         };
         self.download_calls.lock().unwrap().push(call);
+        println!(
+            "Total download calls so far: {}",
+            self.download_calls.lock().unwrap().len()
+        );
 
         if self.should_fail {
+            println!("Mock download is set to fail");
             return Err(Error::DownloadError(
                 self.error_message
                     .clone()
@@ -159,11 +168,14 @@ impl DownloadServiceOps for MockDownloadServiceOps {
             ));
         }
 
+        println!("Mock download succeeded");
+
         Ok(DownloadResult {
             successful_downloads: self.successful_downloads_count.unwrap_or(1),
             failed_downloads: self.failed_downloads_count.unwrap_or(0),
             thumbnail_path_map: ThumbnailPathMap::new(),
             output_file_names: vec![],
+            errors: vec![],
         })
     }
 }
@@ -187,7 +199,7 @@ mod tests {
 
         let call = &calls[0];
         assert_eq!(call.file_set_id, 123);
-        assert_eq!(call.extract_files, true);
+        assert!(call.extract_files);
 
         let download_result = result.unwrap();
         assert_eq!(download_result.successful_downloads, 1);
@@ -224,10 +236,10 @@ mod tests {
         assert_eq!(mock.total_calls(), 3);
         let calls = mock.download_calls();
         assert_eq!(calls[0].file_set_id, 1);
-        assert_eq!(calls[0].extract_files, true);
+        assert!(calls[0].extract_files);
         assert_eq!(calls[1].file_set_id, 2);
-        assert_eq!(calls[1].extract_files, false);
+        assert!(!calls[1].extract_files);
         assert_eq!(calls[2].file_set_id, 3);
-        assert_eq!(calls[2].extract_files, true);
+        assert!(calls[2].extract_files);
     }
 }

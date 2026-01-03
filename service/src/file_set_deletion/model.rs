@@ -1,5 +1,6 @@
 use database::models::FileInfo;
 
+// TODO: move to shared models module
 #[derive(Debug, Clone)]
 pub struct FileDeletionResult {
     pub file_info: FileInfo,
