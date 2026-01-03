@@ -123,6 +123,10 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileInfoToDatabaseStep {
                 .await;
             match add_file_info_result {
                 Ok(id) => {
+                    println!(
+                        "Added file info record with id {} for file '{}'",
+                        id, imported_file.archive_file_name
+                    );
                     tracing::info!(
                         file_count = context.imported_files.len(),
                         "Added file info records to database"
@@ -136,6 +140,10 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileInfoToDatabaseStep {
                     });
                 }
                 Err(err) => {
+                    println!(
+                        "Error adding file info record for file '{}': {}",
+                        imported_file.archive_file_name, err
+                    );
                     tracing::error!(
                         error = %err,
                         "Error adding file info records to database"
@@ -397,7 +405,7 @@ mod tests {
     use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
     use core_types::{FileType, ImportedFile, Sha1Checksum};
-    use database::{repository_manager::RepositoryManager, setup_test_db};
+    use database::{models::FileSet, repository_manager::RepositoryManager, setup_test_db};
     use file_import::mock::MockFileImportOps;
 
     use crate::{
@@ -527,5 +535,35 @@ mod tests {
                 .iter()
                 .any(|f| f.sha1_checksum == file_1_checksum)
         );
+    }
+
+    #[async_std::test]
+    async fn test_update_file_info_to_database_step() {
+        let mut context = create_test_context(None).await;
+        context.file_set = Some(FileSet {
+            id: 1,
+            name: "Test File Set".to_string(),
+            file_name: "test_game".to_string(),
+            file_type: FileType::Rom,
+            source: "test_source".to_string(),
+        });
+
+        let file_1_checksum: Sha1Checksum = [1u8; 20];
+
+        context.imported_files.insert(
+            file_1_checksum,
+            ImportedFile {
+                original_file_name: "game1.rom".to_string(),
+                sha1_checksum: file_1_checksum,
+                file_size: 1024,
+                archive_file_name: "archive123.zst".to_string(),
+            },
+        );
+
+        let step = super::UpdateFileInfoToDatabaseStep;
+        let action = step.execute(&mut context).await;
+        assert!(matches!(action, StepAction::Continue));
+        assert!(!context.new_files.is_empty());
+        assert_eq!(context.new_files[0].sha1_checksum, file_1_checksum);
     }
 }
