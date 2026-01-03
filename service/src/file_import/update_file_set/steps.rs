@@ -224,7 +224,7 @@ impl PipelineStep<UpdateFileSetContext> for CollectDeletionCandidatesStep {
         let removed_files = context
             .get_removed_files()
             .iter()
-            .map(|file| file.sha1_checksum.clone().try_into().unwrap())
+            .map(|file| file.sha1_checksum)
             .collect::<Vec<Sha1Checksum>>();
 
         let repository = context.repository_manager.get_file_info_repository();
@@ -354,12 +354,12 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileSetStep {
     }
 }
 
-pub struct MarkFilesForCloudSyncStep;
+pub struct MarkNewFilesForCloudSyncStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<UpdateFileSetContext> for MarkFilesForCloudSyncStep {
+impl PipelineStep<UpdateFileSetContext> for MarkNewFilesForCloudSyncStep {
     fn name(&self) -> &'static str {
-        "mark_files_for_cloud_sync"
+        "mark_new_files_for_cloud_sync"
     }
 
     fn should_execute(&self, context: &UpdateFileSetContext) -> bool {
@@ -643,15 +643,15 @@ mod tests {
     async fn test_collect_deletion_candidates_step() {
         let (mut context, file_1_checksum) = create_context_and_test_file_set().await;
 
-        // Fetch files currently in file set
-        let step_fetch = super::FetchFilesInFileSetStep;
-        let _ = step_fetch.execute(&mut context).await;
-
         // Fetch file set
         let step_fetch_set = super::FetchFileSetStep;
         let _ = step_fetch_set.execute(&mut context).await;
 
-        // Update file_import_data to have no selected files (simulating removal)
+        // Fetch files currently in file set
+        let step_fetch = super::FetchFilesInFileSetStep;
+        let _ = step_fetch.execute(&mut context).await;
+
+        // Swet file_import_data without selected files (simulating removal)
         context.file_import_data =
             FileImportData::new(FileType::Rom, PathBuf::from("/imported/files"));
 

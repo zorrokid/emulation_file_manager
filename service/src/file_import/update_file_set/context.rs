@@ -80,13 +80,10 @@ impl UpdateFileSetContext {
         // Check if there are files that were in the file set but are not in the selected files
         // anymore
         self.files_in_file_set.iter().any(|file| {
-            let sha1: Sha1Checksum = file
-                .sha1_checksum
-                .clone()
-                .try_into()
-                .expect("Invalid SHA1 checksum length");
-
-            !self.file_import_data.selected_files.contains(&sha1)
+            !self
+                .file_import_data
+                .selected_files
+                .contains(&file.sha1_checksum)
         })
     }
 
@@ -94,12 +91,10 @@ impl UpdateFileSetContext {
         self.files_in_file_set
             .iter()
             .filter(|file| {
-                let sha1: Sha1Checksum = file
-                    .sha1_checksum
-                    .clone()
-                    .try_into()
-                    .expect("Invalid SHA1 checksum length");
-                !self.file_import_data.selected_files.contains(&sha1)
+                !self
+                    .file_import_data
+                    .selected_files
+                    .contains(&file.sha1_checksum)
             })
             .cloned()
             .collect()
