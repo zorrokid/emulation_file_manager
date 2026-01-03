@@ -208,10 +208,17 @@ mod tests {
 
     // Helper to check if keyring service is available
     fn is_keyring_available() -> bool {
-        let entry = Entry::new(get_service_name(), USERNAME);
-        match entry {
-            Ok(entry) => entry.get_password().is_ok() || entry.get_password().is_err(),
-            Err(_) => false,
+        let entry = match Entry::new(get_service_name(), USERNAME) {
+            Ok(e) => e,
+            Err(_) => return false,
+        };
+        
+        // Try a simple operation - if it fails with platform/service error, keyring is unavailable
+        match entry.get_password() {
+            Ok(_) => true, // Password exists, service is available
+            Err(keyring::Error::NoEntry) => true, // No password stored but service is available
+            Err(keyring::Error::PlatformFailure(_)) => false, // Service unavailable
+            Err(_) => true, // Other errors mean service is available but operation failed
         }
     }
 
