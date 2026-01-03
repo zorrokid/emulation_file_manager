@@ -235,7 +235,7 @@ mod tests {
         let mut context = create_test_context(file_import_data);
         context.existing_files.push(FileInfo {
             id: 1,
-            sha1_checksum: checksum1.to_vec(),
+            sha1_checksum: checksum1,
             file_size: 2048,
             archive_file_name: "existing_archive_file".to_string(),
             file_type: FileType::Rom,
@@ -283,7 +283,7 @@ mod tests {
         let mut context = create_test_context(file_import_data);
         context.existing_files.push(FileInfo {
             id: 1,
-            sha1_checksum: checksum2.to_vec(),
+            sha1_checksum: checksum2,
             file_size: 2048,
             archive_file_name: "existing_archive_file_name".to_string(),
             file_type: FileType::Rom,

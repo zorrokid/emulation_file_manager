@@ -240,7 +240,7 @@ pub struct FileSetFileViewModel {
 #[derive(Debug, Clone)]
 pub struct FileInfoViewModel {
     pub id: i64,
-    pub sha1_checksum: Vec<u8>,
+    pub sha1_checksum: Sha1Checksum,
     pub file_size: u64,
     pub archive_file_name: String,
     pub belongs_to_file_sets: Vec<FileSetListModel>,

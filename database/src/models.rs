@@ -1,6 +1,6 @@
 use chrono::NaiveDateTime;
 use core::fmt;
-use core_types::{DocumentType, FileSyncStatus, FileType};
+use core_types::{DocumentType, FileSyncStatus, FileType, Sha1Checksum};
 use std::fmt::{Display, Formatter};
 
 use sqlx::FromRow;
@@ -8,7 +8,7 @@ use sqlx::FromRow;
 #[derive(Debug, Clone, PartialEq)]
 pub struct FileInfo {
     pub id: i64,
-    pub sha1_checksum: Vec<u8>,
+    pub sha1_checksum: Sha1Checksum,
     pub file_size: u64,
     pub archive_file_name: String,
     pub file_type: FileType,
@@ -18,7 +18,7 @@ impl From<&FileSetFileInfo> for FileInfo {
     fn from(file_set_file_info: &FileSetFileInfo) -> Self {
         Self {
             id: file_set_file_info.file_info_id,
-            sha1_checksum: file_set_file_info.sha1_checksum.clone(),
+            sha1_checksum: file_set_file_info.sha1_checksum,
             file_size: file_set_file_info.file_size as u64,
             archive_file_name: file_set_file_info.archive_file_name.clone(),
             file_type: file_set_file_info.file_type,
@@ -60,7 +60,7 @@ pub struct FileSetFileInfo {
     pub file_set_id: i64,
     pub file_info_id: i64,
     pub file_name: String,
-    pub sha1_checksum: Vec<u8>,
+    pub sha1_checksum: Sha1Checksum,
     pub file_size: i64,
     pub archive_file_name: String,
     pub file_type: FileType,

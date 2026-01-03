@@ -243,7 +243,7 @@ impl PipelineStep<UpdateFileSetContext> for CollectDeletionCandidatesStep {
                 );
                 context.deletion_results = files
                     .into_iter()
-                    .map(|file| (file.sha1_checksum.clone(), FileDeletionResult::new(file)))
+                    .map(|file| (file.sha1_checksum, FileDeletionResult::new(file)))
                     .collect();
             }
             Err(err) => {
@@ -316,6 +316,7 @@ impl PipelineStep<UpdateFileSetContext> for UnlinkFilesFromFileSetStep {
 }
 
 pub struct UpdateFileSetStep;
+
 #[async_trait::async_trait]
 impl PipelineStep<UpdateFileSetContext> for UpdateFileSetStep {
     fn name(&self) -> &'static str {
@@ -327,8 +328,8 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileSetStep {
         let result = repository
             .update_file_set(
                 context.file_set_id,
-                &context.file_set_name,
                 &context.file_set_file_name,
+                &context.file_set_name,
                 &context.source,
                 &context.file_import_data.file_type,
             )
@@ -565,5 +566,172 @@ mod tests {
         assert!(matches!(action, StepAction::Continue));
         assert!(!context.new_files.is_empty());
         assert_eq!(context.new_files[0].sha1_checksum, file_1_checksum);
+    }
+
+    #[async_std::test]
+    async fn test_update_file_set_files_step() {
+        let (mut context, file_1_checksum) = create_context_and_test_file_set().await;
+
+        // Fetch the existing file info for file_1
+        let file_1_infos = context
+            .repository_manager
+            .get_file_info_repository()
+            .get_file_infos_by_sha1_checksums(&[file_1_checksum], FileType::Rom)
+            .await
+            .unwrap();
+
+        // Add file_1 to existing_files
+        context.existing_files = file_1_infos;
+
+        // Add a new file to be imported
+        let file_2_checksum: Sha1Checksum = [2u8; 20];
+        let file_2_id = context
+            .repository_manager
+            .get_file_info_repository()
+            .add_file_info(&file_2_checksum, 2048, "test_archive_name_2", FileType::Rom)
+            .await
+            .unwrap();
+
+        context.new_files.push(database::models::FileInfo {
+            id: file_2_id,
+            sha1_checksum: file_2_checksum.into(),
+            file_size: 2048,
+            archive_file_name: "test_archive_name_2".to_string(),
+            file_type: FileType::Rom,
+        });
+
+        // Update file_import_data to only include the new file (file_2)
+        // file_1 is already in the file set
+        context.file_import_data =
+            FileImportData::new(FileType::Rom, PathBuf::from("/imported/files"))
+                .with_selected_file(file_2_checksum)
+                .with_file_import_source(
+                    FileImportSource::new(PathBuf::from("/test/games.zip")).with_content(
+                        ImportFileContent {
+                            file_name: "game2.rom".to_string(),
+                            sha1_checksum: file_2_checksum,
+                            file_size: 2048,
+                        },
+                    ),
+                );
+
+        let step = super::UpdateFileSetFilesStep;
+        let action = step.execute(&mut context).await;
+        assert!(matches!(action, StepAction::Continue));
+
+        // Verify the new file was added to the file set (total should be 2)
+        let files_in_set = context
+            .repository_manager
+            .get_file_info_repository()
+            .get_file_infos_by_file_set(context.file_set_id)
+            .await
+            .unwrap();
+        assert_eq!(files_in_set.len(), 2);
+        assert!(
+            files_in_set
+                .iter()
+                .any(|f| f.sha1_checksum == file_1_checksum)
+        );
+        assert!(
+            files_in_set
+                .iter()
+                .any(|f| f.sha1_checksum == file_2_checksum)
+        );
+    }
+
+    #[async_std::test]
+    async fn test_collect_deletion_candidates_step() {
+        let (mut context, file_1_checksum) = create_context_and_test_file_set().await;
+
+        // Fetch files currently in file set
+        let step_fetch = super::FetchFilesInFileSetStep;
+        let _ = step_fetch.execute(&mut context).await;
+
+        // Fetch file set
+        let step_fetch_set = super::FetchFileSetStep;
+        let _ = step_fetch_set.execute(&mut context).await;
+
+        // Update file_import_data to have no selected files (simulating removal)
+        context.file_import_data =
+            FileImportData::new(FileType::Rom, PathBuf::from("/imported/files"));
+
+        let step = super::CollectDeletionCandidatesStep;
+
+        // Verify should_execute returns true when there are removed files
+        assert!(step.should_execute(&context));
+
+        let action = step.execute(&mut context).await;
+        assert!(matches!(action, StepAction::Continue));
+
+        // Verify deletion results were collected
+        assert_eq!(context.deletion_results.len(), 1);
+        assert!(context.deletion_results.contains_key(&file_1_checksum));
+    }
+
+    #[async_std::test]
+    async fn test_unlink_files_from_file_set_step() {
+        let (mut context, file_1_checksum) = create_context_and_test_file_set().await;
+
+        // Fetch files currently in file set
+        let step_fetch = super::FetchFilesInFileSetStep;
+        let _ = step_fetch.execute(&mut context).await;
+
+        // Update file_import_data to have no selected files (simulating removal)
+        context.file_import_data =
+            FileImportData::new(FileType::Rom, PathBuf::from("/imported/files"));
+
+        let step = super::UnlinkFilesFromFileSetStep;
+
+        // Verify should_execute returns true when there are removed files
+        assert!(step.should_execute(&context));
+
+        let action = step.execute(&mut context).await;
+        assert!(matches!(action, StepAction::Continue));
+
+        // Verify files were removed from the file set
+        let files_in_set = context
+            .repository_manager
+            .get_file_info_repository()
+            .get_file_infos_by_file_set(context.file_set_id)
+            .await
+            .unwrap();
+        assert_eq!(files_in_set.len(), 0);
+
+        // Verify the file info still exists in database (only unlinked from file set)
+        let file_info = context
+            .repository_manager
+            .get_file_info_repository()
+            .get_file_infos_by_sha1_checksums(&[file_1_checksum], FileType::Rom)
+            .await
+            .unwrap();
+        assert_eq!(file_info.len(), 1);
+    }
+
+    #[async_std::test]
+    async fn test_update_file_set_step() {
+        let (mut context, _) = create_context_and_test_file_set().await;
+
+        // Update file set metadata
+        context.file_set_name = "Updated File Set Name".to_string();
+        context.file_set_file_name = "updated_game".to_string();
+        context.source = "updated_source".to_string();
+        context.file_import_data.file_type = FileType::Rom;
+
+        let step = super::UpdateFileSetStep;
+        let action = step.execute(&mut context).await;
+        assert!(matches!(action, StepAction::Continue));
+
+        // Verify file set was updated
+        let updated_file_set = context
+            .repository_manager
+            .get_file_set_repository()
+            .get_file_set(context.file_set_id)
+            .await
+            .unwrap();
+
+        assert_eq!(updated_file_set.file_name, "updated_game");
+        assert_eq!(updated_file_set.name, "Updated File Set Name");
+        assert_eq!(updated_file_set.source, "updated_source");
+        assert_eq!(updated_file_set.file_type, FileType::Rom);
     }
 }

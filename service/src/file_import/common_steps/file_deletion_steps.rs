@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use core_types::FileSyncStatus;
+use core_types::{FileSyncStatus, Sha1Checksum};
 use database::repository_manager::RepositoryManager;
 
 use crate::{
@@ -25,10 +25,10 @@ pub trait FileDeletionStepsContext {
             .values()
             .any(|r| r.is_deletable && r.file_deletion_success.is_some_and(|s| s))
     }
-    fn deletion_results(&self) -> &std::collections::HashMap<Vec<u8>, FileDeletionResult>;
+    fn deletion_results(&self) -> &std::collections::HashMap<Sha1Checksum, FileDeletionResult>;
     fn deletion_results_mut(
         &mut self,
-    ) -> &mut std::collections::HashMap<Vec<u8>, FileDeletionResult>;
+    ) -> &mut std::collections::HashMap<Sha1Checksum, FileDeletionResult>;
     fn settings(&self) -> Arc<Settings>;
     fn fs_ops(&self) -> Arc<dyn FileSystemOps>;
 }
@@ -429,7 +429,7 @@ mod tests {
     struct TestContext {
         file_set_id: i64,
         repository_manager: Arc<RepositoryManager>,
-        deletion_results: HashMap<Vec<u8>, FileDeletionResult>,
+        deletion_results: HashMap<Sha1Checksum, FileDeletionResult>,
         settings: Arc<Settings>,
         fs_ops: Arc<dyn FileSystemOps>,
     }
@@ -443,11 +443,11 @@ mod tests {
             self.file_set_id
         }
 
-        fn deletion_results_mut(&mut self) -> &mut HashMap<Vec<u8>, FileDeletionResult> {
+        fn deletion_results_mut(&mut self) -> &mut HashMap<Sha1Checksum, FileDeletionResult> {
             &mut self.deletion_results
         }
 
-        fn deletion_results(&self) -> &HashMap<Vec<u8>, FileDeletionResult> {
+        fn deletion_results(&self) -> &HashMap<Sha1Checksum, FileDeletionResult> {
             &self.deletion_results
         }
 

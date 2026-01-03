@@ -190,6 +190,8 @@ impl FileSyncLogRepository {
 
 #[cfg(test)]
 mod tests {
+    use core_types::Sha1Checksum;
+
     use super::*;
     use crate::{repository::file_info_repository::FileInfoRepository, setup_test_db};
 
@@ -376,7 +378,8 @@ mod tests {
     }
 
     async fn insert_file_info(pool: &Pool<Sqlite>) -> i64 {
-        let bytes: Vec<u8> = vec![1, 2, 3];
+        let sha1_checksum: Sha1Checksum = [0u8; 20];
+        let sha1_checksum_bytes = sha1_checksum.to_vec();
         let result = sqlx::query!(
             "INSERT INTO file_info (
                 sha1_checksum,
@@ -384,7 +387,7 @@ mod tests {
                 archive_file_name,
                 file_type
             ) VALUES (?, ?, ?, ?)",
-            bytes,
+            sha1_checksum_bytes,
             1,
             "test_file_1",
             1

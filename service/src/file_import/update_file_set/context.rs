@@ -42,7 +42,7 @@ pub struct UpdateFileSetContext {
     pub new_files: Vec<FileInfo>,
     pub imported_files: HashMap<Sha1Checksum, ImportedFile>,
     /// To collect deletion results for files removed from the file set
-    pub deletion_results: HashMap<Vec<u8>, FileDeletionResult>,
+    pub deletion_results: HashMap<Sha1Checksum, FileDeletionResult>,
 }
 
 impl UpdateFileSetContext {
@@ -186,7 +186,7 @@ impl AddFileSetContextOps for UpdateFileSetContext {
                 !self
                     .existing_files
                     .iter()
-                    .any(|file_info| file_info.sha1_checksum == sha1_checksum)
+                    .any(|file_info| file_info.sha1_checksum == *sha1_checksum)
             })
     }
 }
@@ -204,11 +204,11 @@ impl FileDeletionStepsContext for UpdateFileSetContext {
         !self.deletion_results.is_empty()
     }
 
-    fn deletion_results_mut(&mut self) -> &mut HashMap<Vec<u8>, FileDeletionResult> {
+    fn deletion_results_mut(&mut self) -> &mut HashMap<Sha1Checksum, FileDeletionResult> {
         &mut self.deletion_results
     }
 
-    fn deletion_results(&self) -> &HashMap<Vec<u8>, FileDeletionResult> {
+    fn deletion_results(&self) -> &HashMap<Sha1Checksum, FileDeletionResult> {
         &self.deletion_results
     }
 

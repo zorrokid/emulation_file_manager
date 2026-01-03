@@ -1,6 +1,6 @@
 use std::{collections::HashSet, sync::Arc};
 
-use core_types::{FileType, ImportedFile};
+use core_types::{FileType, ImportedFile, Sha1Checksum};
 use sqlx::{FromRow, Pool, Row, Sqlite, sqlite::SqliteRow};
 
 use crate::{
@@ -36,6 +36,10 @@ impl FromRow<'_, SqliteRow> for FileSet {
 impl FromRow<'_, SqliteRow> for FileSetFileInfo {
     fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
         let file_type_int: u8 = row.try_get("file_type")?;
+        let sha1_checksum: Vec<u8> = row.try_get("sha1_checksum")?;
+        let sha1_checksum: Sha1Checksum = sha1_checksum
+            .try_into()
+            .expect("Invalid SHA1 checksum length in DB");
         let file_type: FileType =
             FileType::from_db_int(file_type_int).expect("Invalid file type in DB");
         Ok(Self {
@@ -43,7 +47,7 @@ impl FromRow<'_, SqliteRow> for FileSetFileInfo {
             file_info_id: row.try_get("file_info_id")?,
             file_name: row.try_get("file_name")?,
             file_type,
-            sha1_checksum: row.try_get("sha1_checksum")?,
+            sha1_checksum,
             file_size: row.try_get("file_size")?,
             archive_file_name: row.try_get("archive_file_name")?,
         })

@@ -1,5 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
+use core_types::Sha1Checksum;
 use database::repository_manager::RepositoryManager;
 
 use crate::{
@@ -16,7 +17,7 @@ pub struct DeletionContext {
     pub fs_ops: Arc<dyn FileSystemOps>,
 
     // Accumulated state as pipeline progresses
-    pub deletion_results: HashMap<Vec<u8>, FileDeletionResult>,
+    pub deletion_results: HashMap<Sha1Checksum, FileDeletionResult>,
 }
 
 impl FileDeletionStepsContext for DeletionContext {
@@ -32,11 +33,11 @@ impl FileDeletionStepsContext for DeletionContext {
         !self.deletion_results.is_empty()
     }
 
-    fn deletion_results_mut(&mut self) -> &mut HashMap<Vec<u8>, FileDeletionResult> {
+    fn deletion_results_mut(&mut self) -> &mut HashMap<Sha1Checksum, FileDeletionResult> {
         &mut self.deletion_results
     }
 
-    fn deletion_results(&self) -> &HashMap<Vec<u8>, FileDeletionResult> {
+    fn deletion_results(&self) -> &HashMap<Sha1Checksum, FileDeletionResult> {
         &self.deletion_results
     }
 
