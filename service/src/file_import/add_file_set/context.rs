@@ -41,12 +41,34 @@ impl AddFileSetContext {
             self.existing_files.len()
         );
 
+        dbg!("existing files", &self.existing_files);
+
         // conbine newly imported files and existing files that were selected for import
         self.imported_files
             .values()
             .cloned()
-            .chain(self.existing_files.iter().map(|file_info| {
-                // TODO: simplify this lookup by storing a mapping in the context?
+            // TODO: in this case there shouldn't have been any existing files!! only newly
+            // imported files - from logs (how did it manage to find existing files then??):
+            // 2026-01-03T22:27:40.305488Z  INFO Executing step: check_existing_files
+            // Checking for existing files in the database...
+            // 2026-01-03T22:27:40.306318Z  INFO Fetched existing file info from repository existing_file_count=1
+            .chain(self.existing_files.iter().filter_map(|file_info| {
+                // TODO : this should never happen, fix the root cause
+                if !self
+                    .file_import_data
+                    .selected_files
+                    .contains(&file_info.sha1_checksum)
+                {
+                    tracing::warn!(
+                     existing_checksum = ?file_info.sha1_checksum,
+                     archive_file_name = %file_info.archive_file_name,
+                     selected_files = ?self.file_import_data.selected_files,
+
+                        "File with checksum in existing files that was not selected for import!",
+                    );
+                    return None;
+                }
+
                 let import_files: HashMap<Sha1Checksum, ImportFileContent> = self
                     .file_import_data
                     .import_files
@@ -54,15 +76,11 @@ impl AddFileSetContext {
                     .flat_map(|import_file| import_file.content.clone())
                     .collect();
 
-                dbg!(&import_files);
+                dbg!("import files", &import_files);
+                dbg!("file info sha1", &file_info.sha1_checksum);
 
-                let sha1_checksum: Sha1Checksum = file_info
-                    .sha1_checksum
-                    .clone()
-                    .try_into()
-                    .expect("Was expecting checksum to be 20 bytes for SHA1");
-                let original_file_name = import_files
-                    .get(&sha1_checksum)
+                let original_file_name = match import_files
+                    .get(&file_info.sha1_checksum)
                     // TODO: fix this
                     // - I was importing a single file, it shouldn't be in both imported and
                     // existing files?
@@ -78,15 +96,28 @@ impl AddFileSetContext {
                     //
                     //thread 'tokio-runtime-worker' panicked at service/src/file_import/import/context.rs:61:22:
                     //FileInfo sha1_checksum not found in import files
-                    .map(|content| content.file_name.clone())
-                    .expect("FileInfo sha1_checksum not found in import files");
+                    //.map(|content| content.file_name.clone())
+                    //.expect("FileInfo sha1_checksum not found in import files.");
+                    {
+                        Some(content) => content.file_name.clone(),
+                        None => {
+                            tracing::warn!(
+                                existing_checksum = ?file_info.sha1_checksum,
+                                archive_file_name = %file_info.archive_file_name,
+                                import_files_checksums = ?import_files.keys().collect::<Vec<_>>(),
+                                "Checksum in selected_files but not in import_files. Possible data inconsistency."
 
-                ImportedFile {
+                            );
+                            return None;
+                        }
+                    };
+
+                Some(ImportedFile {
                     original_file_name,
-                    sha1_checksum,
+                    sha1_checksum: file_info.sha1_checksum,
                     file_size: file_info.file_size,
                     archive_file_name: file_info.archive_file_name.clone(),
-                }
+                })
             }))
             .collect()
     }
