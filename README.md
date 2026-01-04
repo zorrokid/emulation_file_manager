@@ -1,6 +1,10 @@
+# Why?
+
+I had lots of emulation related files (disk images, manuals, cover art, etc) stored in different locations on my computer or different computers and drives. Usually downloading them over and over again. I wanted to have a single application to manage these files and launch them with emulators and document viewers. I also wanted to be able to sync these files to cloud storage so that I can access them from multiple devices.
+
 # Emulation File Manager and Launcher
 
-Emulation File Manager can be used to manage your emulation related files and launch them with emulators and docment viewers. Files are stored under collection root folder and can be synced to S3 compatible cloud storage. File meta data is stored to local SQLite database. Files can be added from local file system or providing a download URL (for example to Internet Archive). 
+Emulation File Manager can be used to manage your emulation related files and launch them with emulators and document viewers. Files are stored under collection root folder and can be synced to S3 compatible cloud storage. File meta data is stored to local SQLite database. Files can be added from local file system or providing a download URL (for example to Internet Archive). 
 
 Emulators and document viewers can be configured for laumching files with. Bitmap-file types can be viewed directly in application.
 
