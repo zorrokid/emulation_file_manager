@@ -1,7 +1,7 @@
 pub mod events;
 
 use serde::{Deserialize, Serialize};
-use std::{fmt::Formatter, string::ToString};
+use std::string::ToString;
 use strum_macros::{Display, EnumIter};
 
 pub type Sha1Checksum = [u8; 20];
@@ -96,6 +96,8 @@ pub enum FileType {
     PackageScan = 12,
     #[strum(serialize = "Inlay Scan")]
     InlayScan = 13,
+    #[strum(serialize = "Box Scan")]
+    BoxScan = 14,
 }
 
 impl FileType {
@@ -114,6 +116,7 @@ impl FileType {
             FileType::MediaScan => "media_scan",
             FileType::PackageScan => "package_scan",
             FileType::InlayScan => "inlay_scan",
+            FileType::BoxScan => "box_scan",
         }
     }
 
@@ -136,6 +139,7 @@ impl FileType {
             11 => Ok(FileType::MediaScan),
             12 => Ok(FileType::PackageScan),
             13 => Ok(FileType::InlayScan),
+            14 => Ok(FileType::BoxScan),
             _ => Err(CoreTypeError::ConversionError(
                 "Failed convert to FileType".to_string(),
             )),
@@ -166,6 +170,7 @@ pub const IMAGE_FILE_TYPES: &[FileType] = &[
     FileType::TitleScreen,
     FileType::PackageScan,
     FileType::InlayScan,
+    FileType::BoxScan,
 ];
 
 pub const DOCUMENT_FILE_TYPES: &[FileType] = &[FileType::Manual];
