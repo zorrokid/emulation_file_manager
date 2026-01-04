@@ -23,7 +23,6 @@ use service::{
 use crate::{
     document_file_set_viewer::{DocumentViewer, DocumentViewerInit, DocumentViewerMsg},
     emulator_runner::{EmulatorRunnerInit, EmulatorRunnerModel, EmulatorRunnerMsg},
-    image_fileset_viewer::{ImageFileSetViewerInit, ImageFilesetViewer, ImageFilesetViewerMsg},
     list_item::ListItem,
     tabbed_image_viewer::{
         TabbedImageViewer, TabbedImageViewerInit, TabbedImageViewerMsg, TabbedImageViewerOutputMsg,

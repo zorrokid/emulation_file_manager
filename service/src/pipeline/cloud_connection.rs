@@ -99,14 +99,13 @@ impl<T: CloudConnectionContext + Send + Sync> PipelineStep<T> for ConnectToCloud
             }
         };
 
-        let cloud_ops_res = S3CloudStorage::connect(
+        let cloud_ops_res = S3CloudStorage::get_bucket(
             s3_settings.endpoint.as_str(),
             s3_settings.region.as_str(),
             s3_settings.bucket.as_str(),
             credentials.access_key_id.as_str(),
             credentials.secret_access_key.as_str(),
-        )
-        .await;
+        );
 
         match cloud_ops_res {
             Ok(cloud_ops) => {

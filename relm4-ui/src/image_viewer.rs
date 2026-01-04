@@ -130,7 +130,7 @@ impl Component for ImageViewer {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match msg {
             ImageViewerMsg::SetFileSet { file_set } => {
                 self.current_file_index = if !file_set.files.is_empty() {

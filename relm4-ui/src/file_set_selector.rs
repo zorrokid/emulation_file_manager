@@ -185,6 +185,7 @@ impl Component for FileSetSelector {
         let file_set_form_init_model = FileSetFormInit {
             repository_manager: Arc::clone(&init_model.repository_manager),
             settings: Arc::clone(&init_model.settings),
+            view_model_service: Arc::clone(&init_model.view_model_service),
         };
 
         let file_set_form = FileSetFormModel::builder()
@@ -194,6 +195,7 @@ impl Component for FileSetSelector {
                 FileSetFormOutputMsg::FileSetCreated(file_set_list_model) => {
                     FileSetSelectorMsg::FileSetCreated(file_set_list_model)
                 }
+                FileSetFormOutputMsg::FileSetUpdated(_) => FileSetSelectorMsg::Ignore, // TODO
             });
 
         let file_set_details_view_init = FileSetDetailsInit {

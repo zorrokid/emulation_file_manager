@@ -269,7 +269,6 @@ impl Component for DocumentViewerFormModel {
             DocumentViewerFormMsg::CleanupTempFilesToggled(value) => {
                 self.cleanup_temp_files = value;
             }
-            _ => {}
         }
         // This is essential:
         self.update_view(widgets, sender);

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use core_types::{FileType, Sha1Checksum};
-use sqlx::{prelude::FromRow, sqlite::SqliteRow, Pool, QueryBuilder, Row, Sqlite};
+use sqlx::{Pool, QueryBuilder, Row, Sqlite, prelude::FromRow, sqlite::SqliteRow};
 
 use crate::{database_error::Error, models::FileInfo};
 
@@ -15,10 +15,14 @@ impl FromRow<'_, SqliteRow> for FileInfo {
         let file_type_int: u8 = row.try_get("file_type")?;
         let file_type: FileType =
             FileType::from_db_int(file_type_int).expect("Invalid file type in DB");
+        let sha1_checksum: Vec<u8> = row.try_get("sha1_checksum")?;
+        let sha1_checksum: Sha1Checksum = sha1_checksum
+            .try_into()
+            .expect("Invalid SHA1 checksum length in DB");
         Ok(Self {
             id: row.try_get("id")?,
             file_type,
-            sha1_checksum: row.try_get("sha1_checksum")?,
+            sha1_checksum,
             file_size: row.try_get("file_size")?,
             archive_file_name: row.try_get("archive_file_name")?,
         })
@@ -65,7 +69,7 @@ impl FileInfoRepository {
 
     pub async fn get_file_infos_by_sha1_checksums(
         &self,
-        checksums: Vec<Sha1Checksum>,
+        checksums: &[Sha1Checksum],
         file_type: FileType,
     ) -> Result<Vec<FileInfo>, Error> {
         let mut query_builder = QueryBuilder::<Sqlite>::new(
@@ -75,7 +79,7 @@ impl FileInfoRepository {
         query_builder.push_bind(file_type.to_db_int());
         query_builder.push(" AND sha1_checksum IN (");
         let mut separated = query_builder.separated(", ");
-        for checksum in &checksums {
+        for checksum in checksums {
             separated.push_bind(checksum.to_vec());
         }
         separated.push_unseparated(")");
@@ -173,7 +177,7 @@ mod tests {
 
         let checksums: Vec<Sha1Checksum> = vec![checksum_1, checksum_2];
         let file_infos = file_info_repository
-            .get_file_infos_by_sha1_checksums(checksums, FileType::Rom)
+            .get_file_infos_by_sha1_checksums(&checksums, FileType::Rom)
             .await
             .unwrap();
 
@@ -185,7 +189,8 @@ mod tests {
         let pool = setup_test_db().await;
         let pool = Arc::new(pool);
         let file_info_repository = FileInfoRepository::new(pool.clone());
-        let checksum_1: Vec<u8> = "test_sha1_1".as_bytes().to_vec();
+        let checksum_1: Sha1Checksum = [0u8; 20];
+        let checksum_1_bytes = checksum_1.to_vec();
         let file_type = FileType::Rom.to_db_int();
 
         let result = query!(
@@ -195,7 +200,7 @@ mod tests {
                 archive_file_name,
                 file_type
                 ) VALUES (?, ?, ?, ?)",
-            checksum_1,
+            checksum_1_bytes,
             1234,
             "test_archive_name_1",
             file_type
@@ -205,7 +210,8 @@ mod tests {
         .unwrap();
 
         let file_info_id = result.last_insert_rowid();
-        let checksum_2: Vec<u8> = "test_sha1_2".as_bytes().to_vec();
+        let checksum_2: Sha1Checksum = [1u8; 20];
+        let checksum_2_bytes = checksum_2.to_vec();
 
         let result = query!(
             "INSERT INTO file_info (
@@ -214,7 +220,7 @@ mod tests {
                 archive_file_name,
                 file_type
                 ) VALUES (?, ?, ?, ?)",
-            checksum_2,
+            checksum_2_bytes,
             5678,
             "test_archive_name_2",
             file_type

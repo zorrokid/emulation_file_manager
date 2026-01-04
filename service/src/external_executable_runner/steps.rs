@@ -24,11 +24,14 @@ impl PipelineStep<ExternalExecutableRunnerContext> for PrepareFilesStep {
 
         match res {
             Ok(download_result) => {
-                tracing::info!("Files prepared successfully");
                 if download_result.failed_downloads > 0 {
-                    tracing::warn!("No files were downloaded successfully");
+                    tracing::error!(
+                        "Some files failed to download: {} failed, {} successful",
+                        download_result.failed_downloads,
+                        download_result.successful_downloads
+                    );
                     return StepAction::Abort(Error::DownloadError(
-                        "Some files failed to download".to_string(),
+                        "One or more files failed to download".to_string(),
                     ));
                 }
                 context.file_names = download_result.output_file_names;

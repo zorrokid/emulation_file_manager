@@ -9,7 +9,10 @@ use database::{models::FileInfo, repository_manager::RepositoryManager};
 use file_import::FileImportOps;
 
 use crate::{
-    file_import::model::{FileImportMetadata, FileImportModel, ImportFileContent},
+    file_import::{
+        common_steps::collect_file_info::CollectFileInfoContext,
+        model::{FileImportMetadata, FileImportSource, ImportFileContent},
+    },
     file_system_ops::FileSystemOps,
 };
 
@@ -44,31 +47,42 @@ impl PrepareFileImportContext {
         }
     }
 
-    pub fn get_imported_file_info(&self) -> FileImportModel {
+    pub fn get_imported_file_info(&self) -> FileImportSource {
         let import_content = self
             .file_info
             .iter()
             .map(|(sha1, file_info)| {
-                let existing_file = self
-                    .existing_files
-                    .iter()
-                    .find(|f| f.sha1_checksum == *sha1);
-
                 let file = ImportFileContent {
                     file_name: file_info.file_name.clone(),
                     sha1_checksum: *sha1,
                     file_size: file_info.file_size,
-                    existing_file_info_id: existing_file.map(|f| f.id),
-                    existing_archive_file_name: existing_file.map(|f| f.archive_file_name.clone()),
                 };
 
                 (*sha1, file)
             })
             .collect::<HashMap<_, _>>();
 
-        FileImportModel {
+        FileImportSource {
             path: self.file_path.clone(),
             content: import_content,
         }
+    }
+}
+
+impl CollectFileInfoContext for PrepareFileImportContext {
+    fn file_import_ops(&self) -> Arc<dyn FileImportOps> {
+        self.file_import_ops.clone()
+    }
+
+    fn set_file_info(&mut self, file_info: HashMap<Sha1Checksum, ReadFile>) {
+        self.file_info = file_info;
+    }
+
+    fn file_path(&self) -> &PathBuf {
+        &self.file_path
+    }
+
+    fn fs_ops(&self) -> Arc<dyn FileSystemOps> {
+        self.fs_ops.clone()
     }
 }

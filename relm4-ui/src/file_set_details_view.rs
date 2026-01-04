@@ -214,12 +214,12 @@ impl relm4::Component for FileSetDetailsView {
     fn update_cmd(
         &mut self,
         message: Self::CommandOutput,
-        _sender: ComponentSender<Self>,
+        sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
         match message {
             FileSetDetailsCmdMsg::FileSetLoaded(Ok(file_set_view_model)) => {
-                println!("Loaded File Set: {:?}", file_set_view_model);
+                tracing::info!("Loaded File Set");
                 let items = file_set_view_model.files.into_iter().map(|file| ListItem {
                     id: file.file_info_id,
                     name: file.file_name.clone(),
@@ -228,10 +228,17 @@ impl relm4::Component for FileSetDetailsView {
                 self.files_list_view_wrapper.extend_from_iter(items);
             }
             FileSetDetailsCmdMsg::FileSetLoaded(Err(err)) => {
-                eprintln!("Error loading File Set: {:?}", err);
+                tracing::error!(
+                    error = %err,
+                    "Error loading File Set"
+                );
+                sender.input(FileSetDetailsMsg::ShowError(format!(
+                    "Error loading File Set: {}",
+                    err
+                )));
             }
             FileSetDetailsCmdMsg::ReleasesLoaded(Ok(releases)) => {
-                println!("Loaded Releases: {:?}", releases);
+                tracing::info!("Loaded Releases");
                 let software_titles: HashSet<ListItem> = releases
                     .iter()
                     .flat_map(|release| {
@@ -249,10 +256,17 @@ impl relm4::Component for FileSetDetailsView {
                     .extend_from_iter(software_titles);
             }
             FileSetDetailsCmdMsg::ReleasesLoaded(Err(err)) => {
-                eprintln!("Error loading Releases: {:?}", err);
+                tracing::error!(
+                    error = %err,
+                    "Error loading Releases"
+                );
+                sender.input(FileSetDetailsMsg::ShowError(format!(
+                    "Error loading Releases: {}",
+                    err
+                )));
             }
             FileSetDetailsCmdMsg::FileSetSystemsLoaded(Ok(systems)) => {
-                println!("Loaded Systems: {:?}", systems);
+                tracing::info!("Loaded Systems");
                 let items = systems.into_iter().map(|system| ListItem {
                     id: system.id,
                     name: system.name.clone(),
@@ -261,7 +275,14 @@ impl relm4::Component for FileSetDetailsView {
                 self.systems_list_view_wrapper.extend_from_iter(items);
             }
             FileSetDetailsCmdMsg::FileSetSystemsLoaded(Err(err)) => {
-                eprintln!("Error loading Systems: {:?}", err);
+                tracing::error!(
+                    error = %err,
+                    "Error loading Systems"
+                );
+                sender.input(FileSetDetailsMsg::ShowError(format!(
+                    "Error loading Systems: {}",
+                    err
+                )));
             }
         }
     }

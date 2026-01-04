@@ -3,10 +3,7 @@ use std::sync::Arc;
 use core_types::{ArgumentType, DocumentType};
 use sqlx::{Pool, Row, Sqlite};
 
-use crate::{
-    database_error::{DatabaseError, Error},
-    models::DocumentViewer,
-};
+use crate::{database_error::DatabaseError, models::DocumentViewer};
 
 #[derive(Debug)]
 pub struct DocumentViewerRepository {
@@ -97,7 +94,7 @@ impl DocumentViewerRepository {
         let arguments = serde_json::to_string(&arguments)
             .map_err(|e| DatabaseError::SerializationError(e.to_string()))?;
 
-        let result = sqlx::query!(
+        sqlx::query!(
             "UPDATE document_viewer SET 
              name = ?, 
              executable = ?, 

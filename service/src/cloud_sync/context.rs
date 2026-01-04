@@ -6,7 +6,8 @@ use core_types::events::SyncEvent;
 use database::repository_manager::RepositoryManager;
 
 use crate::{
-    pipeline::cloud_connection::CloudConnectionContext, settings_service::SettingsService,
+    pipeline::cloud_connection::CloudConnectionContext,
+    settings_service::SettingsService,
     view_models::Settings,
 };
 

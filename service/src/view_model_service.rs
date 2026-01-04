@@ -6,8 +6,8 @@ use crate::{
     error::Error,
     view_models::{
         DocumentViewerListModel, DocumentViewerViewModel, EmulatorViewModel, FileInfoViewModel,
-        FileSetListModel, FileSetViewModel, ReleaseListModel, ReleaseViewModel, Settings,
-        SoftwareTitleListModel, SystemListModel,
+        FileSetFileInfoViewModel, FileSetListModel, FileSetViewModel, ReleaseListModel,
+        ReleaseViewModel, Settings, SoftwareTitleListModel, SystemListModel,
     },
 };
 
@@ -347,7 +347,10 @@ impl ViewModelService {
                 .get_file_set_repository()
                 .get_file_set_file_info(file_set.id)
                 .await
-                .map_err(|err| Error::DbError(err.to_string()))?;
+                .map_err(|err| Error::DbError(err.to_string()))?
+                .iter()
+                .map(|f| f.into())
+                .collect();
 
             let can_delete = !self
                 .repository_manager
@@ -388,12 +391,15 @@ impl ViewModelService {
             .get_file_set(file_set_id)
             .await?;
 
-        let files = self
+        let files: Vec<FileSetFileInfoViewModel> = self
             .repository_manager
             .get_file_set_repository()
             .get_file_set_file_info(file_set.id)
             .await
-            .map_err(|err| Error::DbError(err.to_string()))?;
+            .map_err(|err| Error::DbError(err.to_string()))?
+            .iter()
+            .map(|f| f.into())
+            .collect();
 
         let can_delete = !self
             .repository_manager

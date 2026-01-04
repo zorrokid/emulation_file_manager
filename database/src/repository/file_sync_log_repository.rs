@@ -156,6 +156,26 @@ impl FileSyncLogRepository {
         Ok(result.last_insert_rowid())
     }
 
+    pub async fn mark_files_for_cloud_sync(
+        &self,
+        file_info_ids: &[(i64, String)],
+    ) -> Result<(), sqlx::Error> {
+        if file_info_ids.is_empty() {
+            return Ok(());
+        }
+        let mut query_builder = sqlx::QueryBuilder::<Sqlite>::new(
+            "INSERT INTO file_sync_log (file_info_id, status, cloud_key) ",
+        );
+        query_builder.push_values(file_info_ids.iter(), |mut b, (file_info_id, cloud_key)| {
+            b.push_bind(file_info_id)
+                .push_bind(FileSyncStatus::UploadPending.to_db_int())
+                .push_bind(cloud_key);
+        });
+        let query = query_builder.build();
+        query.execute(&*self.pool).await?;
+        Ok(())
+    }
+
     /// Clean up sync log entries for file_info records that no longer exist
     pub async fn cleanup_orphaned_logs(&self) -> Result<u64, sqlx::Error> {
         let result = sqlx::query!(
@@ -170,8 +190,10 @@ impl FileSyncLogRepository {
 
 #[cfg(test)]
 mod tests {
+    use core_types::Sha1Checksum;
+
     use super::*;
-    use crate::setup_test_db;
+    use crate::{repository::file_info_repository::FileInfoRepository, setup_test_db};
 
     #[async_std::test]
     async fn test_get_logs_and_file_info_by_sync_status() {
@@ -314,8 +336,50 @@ mod tests {
         assert_eq!(deleted_count, 1);
     }
 
+    #[async_std::test]
+    async fn test_mark_files_for_cloud_sync() {
+        let pool = Arc::new(setup_test_db().await);
+        let repository = FileSyncLogRepository::new(Arc::clone(&pool));
+        let file_info_id_1 = insert_file_info(&pool).await;
+        let file_info_id_2 = insert_file_info(&pool).await;
+
+        let file_info_repository = FileInfoRepository::new(Arc::clone(&pool));
+        let file_info_1 = file_info_repository
+            .get_file_info(file_info_id_1)
+            .await
+            .unwrap();
+
+        let file_info_2 = file_info_repository
+            .get_file_info(file_info_id_2)
+            .await
+            .unwrap();
+
+        repository
+            .mark_files_for_cloud_sync(&[
+                (file_info_id_1, file_info_1.generate_cloud_key()),
+                (file_info_id_2, file_info_2.generate_cloud_key()),
+            ])
+            .await
+            .unwrap();
+
+        let logs_1 = repository
+            .get_logs_by_file_info(file_info_id_1)
+            .await
+            .unwrap();
+        assert_eq!(logs_1.len(), 1);
+        assert_eq!(logs_1[0].status, FileSyncStatus::UploadPending);
+
+        let logs_2 = repository
+            .get_logs_by_file_info(file_info_id_2)
+            .await
+            .unwrap();
+        assert_eq!(logs_2.len(), 1);
+        assert_eq!(logs_2[0].status, FileSyncStatus::UploadPending);
+    }
+
     async fn insert_file_info(pool: &Pool<Sqlite>) -> i64 {
-        let bytes: Vec<u8> = vec![1, 2, 3];
+        let sha1_checksum: Sha1Checksum = [0u8; 20];
+        let sha1_checksum_bytes = sha1_checksum.to_vec();
         let result = sqlx::query!(
             "INSERT INTO file_info (
                 sha1_checksum,
@@ -323,7 +387,7 @@ mod tests {
                 archive_file_name,
                 file_type
             ) VALUES (?, ?, ?, ?)",
-            bytes,
+            sha1_checksum_bytes,
             1,
             "test_file_1",
             1
