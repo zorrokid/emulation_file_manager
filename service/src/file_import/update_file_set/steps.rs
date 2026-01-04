@@ -720,6 +720,15 @@ mod tests {
     async fn test_update_file_set_step() {
         let (mut context, _) = create_context_and_test_file_set().await;
 
+        let file_set = context
+            .repository_manager
+            .get_file_set_repository()
+            .get_file_set(context.file_set_id)
+            .await
+            .unwrap();
+
+        context.file_set = Some(file_set);
+
         // Update file set metadata
         context.file_set_name = "Updated File Set Name".to_string();
         context.file_set_file_name = "updated_game".to_string();

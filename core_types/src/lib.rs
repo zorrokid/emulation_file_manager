@@ -1,4 +1,5 @@
 pub mod events;
+pub mod item_type;
 
 use serde::{Deserialize, Serialize};
 use std::string::ToString;
@@ -79,6 +80,7 @@ pub enum FileType {
     #[strum(serialize = "Tape Image")]
     TapeImage = 3,
     Screenshot = 4,
+    /// Manual document file (e.g. pdf)
     Manual = 5,
     #[strum(serialize = "Cover Scan")]
     CoverScan = 6,
@@ -98,6 +100,8 @@ pub enum FileType {
     InlayScan = 13,
     #[strum(serialize = "Box Scan")]
     BoxScan = 14,
+    /// Box document file (e.g. pdf)
+    Box = 15,
 }
 
 impl FileType {
@@ -117,6 +121,7 @@ impl FileType {
             FileType::PackageScan => "package_scan",
             FileType::InlayScan => "inlay_scan",
             FileType::BoxScan => "box_scan",
+            FileType::Box => "box",
         }
     }
 
@@ -140,6 +145,7 @@ impl FileType {
             12 => Ok(FileType::PackageScan),
             13 => Ok(FileType::InlayScan),
             14 => Ok(FileType::BoxScan),
+            15 => Ok(FileType::Box),
             _ => Err(CoreTypeError::ConversionError(
                 "Failed convert to FileType".to_string(),
             )),
@@ -173,7 +179,7 @@ pub const IMAGE_FILE_TYPES: &[FileType] = &[
     FileType::BoxScan,
 ];
 
-pub const DOCUMENT_FILE_TYPES: &[FileType] = &[FileType::Manual];
+pub const DOCUMENT_FILE_TYPES: &[FileType] = &[FileType::Manual, FileType::Box];
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Display, Serialize, Deserialize)]
 pub enum ArgumentType {
