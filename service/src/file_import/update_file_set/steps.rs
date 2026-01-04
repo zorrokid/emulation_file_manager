@@ -323,15 +323,24 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileSetStep {
         "update_file_set"
     }
 
+    fn should_execute(&self, context: &UpdateFileSetContext) -> bool {
+        context.file_set.is_some()
+    }
+
     async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
         let repository = context.repository_manager.get_file_set_repository();
+        let original_file_type = context.file_set.as_ref().unwrap().file_type;
         let result = repository
             .update_file_set(
                 context.file_set_id,
                 &context.file_set_file_name,
                 &context.file_set_name,
                 &context.source,
-                &context.file_import_data.file_type,
+                // TODO: currently we cannot update the file type because of the folder structure
+                // in local storage and S3. We need to implement a way to move files when the file
+                // type is changed. For now, we just keep the original file type and if file type
+                // is needed to change the file set need to be deleted and re-imported.
+                &original_file_type, // &context.file_import_data.file_type,
             )
             .await;
         match result {
