@@ -1,7 +1,7 @@
 pub mod events;
 
 use serde::{Deserialize, Serialize};
-use std::string::ToString;
+use std::{fmt::Formatter, string::ToString};
 use strum_macros::{Display, EnumIter};
 
 pub type Sha1Checksum = [u8; 20];

@@ -293,6 +293,8 @@ impl<T: FileDeletionStepsContext + Send + Sync> PipelineStep<T> for MarkForCloud
                         deletion_result.file_info.id
                     );
 
+                    // TODO: maybe check that there is at least one successful upload before
+                    // marking for deletion instead of just checking the last log entry?
                     if let Some(entry) = sync_logs.last() {
                         tracing::info!(
                             "File info with id {} has last sync log with status {:?}, marking for cloud deletion",

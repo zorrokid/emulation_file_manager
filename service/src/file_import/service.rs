@@ -180,7 +180,7 @@ impl FileImportService {
 mod tests {
     use std::path::PathBuf;
 
-    use core_types::{ImportedFile, ReadFile};
+    use core_types::{FileSyncStatus, ImportedFile, ReadFile};
     use database::setup_test_db;
     use file_import::mock::MockFileImportOps;
 
@@ -199,6 +199,7 @@ mod tests {
     fn create_settings() -> Arc<Settings> {
         Arc::new(Settings {
             collection_root_dir: std::path::PathBuf::from("/tmp/collection"),
+            s3_sync_enabled: true,
             ..Default::default()
         })
     }
@@ -382,14 +383,25 @@ mod tests {
             .unwrap();
 
         assert_eq!(file_set_files.len(), 2);
-        let new_file_found = file_set_files
+        let new_file = &file_set_files
             .iter()
-            .any(|file_info| file_info.sha1_checksum == new_file_sha1_checksum);
-        assert!(new_file_found);
+            .find(|file_info| file_info.sha1_checksum == new_file_sha1_checksum);
+        assert!(new_file.is_some());
+        let new_file_info_id = new_file.unwrap().id;
+
+        // assert that file is marked for cloud sync (enabled in settings)
+        let sync_logs = repository_manager
+            .get_file_sync_log_repository()
+            .get_logs_by_file_info(new_file_info_id)
+            .await
+            .unwrap();
+
+        assert!(!sync_logs.is_empty());
+        assert_eq!(sync_logs[0].status, FileSyncStatus::UploadPending);
     }
 
     #[async_std::test]
-    async fn test_update_file_set_unlink_file_from_file_set() {
+    async fn test_update_file_set_unlink_file_from_file_set_not_linked_to_other_file_set() {
         let repository_manager = create_repository_manager().await;
         let system_id = create_system(&repository_manager).await;
         let settings = create_settings();
@@ -413,6 +425,26 @@ mod tests {
                     archive_file_name: "archive_file_name".to_string(),
                 }],
                 &[system_id],
+            )
+            .await
+            .unwrap();
+
+        let file_info = repository_manager
+            .get_file_info_repository()
+            .get_file_infos_by_sha1_checksums(&[existing_file_checksum], FileType::DiskImage)
+            .await
+            .unwrap()
+            .pop()
+            .unwrap();
+
+        // simulate a successful cloud sync for the file in file set
+        repository_manager
+            .get_file_sync_log_repository()
+            .add_log_entry(
+                file_info.id,
+                FileSyncStatus::UploadCompleted,
+                "",
+                file_info.generate_cloud_key().as_str(),
             )
             .await
             .unwrap();
@@ -451,14 +483,152 @@ mod tests {
             .unwrap();
 
         // Because file was linked only to this file set, it should be removed completely
-        let file_info = repository_manager
+        let file_infos = repository_manager
             .get_file_info_repository()
             .get_file_infos_by_sha1_checksums(&[existing_file_checksum], FileType::DiskImage)
             .await
             .unwrap();
 
-        assert_eq!(file_info.len(), 0);
+        assert_eq!(file_infos.len(), 0);
         assert_eq!(file_set_files.len(), 0);
+
+        // assert that file is marked for deletion for cloud sync (enabled in settings)
+        let sync_logs = repository_manager
+            .get_file_sync_log_repository()
+            .get_logs_by_file_info(file_info.id)
+            .await
+            .unwrap();
+
+        assert!(!sync_logs.is_empty());
+        assert_eq!(sync_logs[0].status, FileSyncStatus::DeletionPending);
+    }
+
+    #[async_std::test]
+    async fn test_update_file_set_unlink_file_from_file_set_linked_to_other_file_set() {
+        let repository_manager = create_repository_manager().await;
+        let system_id = create_system(&repository_manager).await;
+        let settings = create_settings();
+
+        // First, create an existing file set with one file, which we will remove
+        let existing_file_checksum = [1u8; 20];
+        let existing_file_name = "existing_game.st".to_string();
+        let existing_file_size = 2048;
+
+        let file_set_id = repository_manager
+            .get_file_set_repository()
+            .add_file_set(
+                "Existing File Set",
+                "Existing File Set",
+                &FileType::DiskImage,
+                "Source",
+                &[ImportedFile {
+                    original_file_name: existing_file_name.clone(),
+                    sha1_checksum: existing_file_checksum,
+                    file_size: existing_file_size,
+                    archive_file_name: "archive_file_name".to_string(),
+                }],
+                &[system_id],
+            )
+            .await
+            .unwrap();
+
+        // create another file set with same file
+        let _another_file_set_id = repository_manager
+            .get_file_set_repository()
+            .add_file_set(
+                "Another File Set",
+                "Another File Set",
+                &FileType::DiskImage,
+                "Source",
+                &[ImportedFile {
+                    original_file_name: existing_file_name.clone(),
+                    sha1_checksum: existing_file_checksum,
+                    file_size: existing_file_size,
+                    archive_file_name: "archive_file_name".to_string(),
+                }],
+                &[system_id],
+            )
+            .await
+            .unwrap();
+
+        let file_info = repository_manager
+            .get_file_info_repository()
+            .get_file_infos_by_sha1_checksums(&[existing_file_checksum], FileType::DiskImage)
+            .await
+            .unwrap()
+            .pop()
+            .unwrap();
+
+        // simulate a successful cloud sync for the file in file set
+        repository_manager
+            .get_file_sync_log_repository()
+            .add_log_entry(
+                file_info.id,
+                FileSyncStatus::UploadCompleted,
+                "",
+                file_info.generate_cloud_key().as_str(),
+            )
+            .await
+            .unwrap();
+
+        let file_import_ops = Arc::new(MockFileImportOps::new());
+
+        let fs_ops = Arc::new(MockFileSystemOps::new());
+
+        let service = FileImportService {
+            repository_manager: repository_manager.clone(),
+            fs_ops,
+            file_import_ops,
+            settings,
+        };
+
+        let update_file_set_model = UpdateFileSetModel {
+            file_set_id,
+            // no files are selected, so the existing file will be unlinked from the set
+            selected_files: vec![],
+            import_files: vec![],
+            file_type: FileType::DiskImage,
+            // TODO: source should be file specific, not file set specific
+            source: "test_source".to_string(),
+            file_set_name: "".to_string(),
+            file_set_file_name: "".to_string(),
+        };
+
+        // Perform the addition
+        let result = service.update_file_set(update_file_set_model).await;
+        assert!(result.is_ok());
+
+        let file_set_files = repository_manager
+            .get_file_info_repository()
+            .get_file_infos_by_file_set(file_set_id)
+            .await
+            .unwrap();
+
+        assert_eq!(file_set_files.len(), 0);
+
+        // Because file was linked to another file set, it should still exist in database
+        let file_infos = repository_manager
+            .get_file_info_repository()
+            .get_file_infos_by_sha1_checksums(&[existing_file_checksum], FileType::DiskImage)
+            .await
+            .unwrap();
+
+        assert_eq!(file_infos.len(), 1);
+
+        // assert that file is not marked for deletion for cloud sync (enabled in settings)
+        let sync_logs = repository_manager
+            .get_file_sync_log_repository()
+            .get_logs_by_file_info(file_info.id)
+            .await
+            .unwrap();
+
+        assert!(!sync_logs.is_empty()); // because we marked it as uploaded before
+
+        let deletion_logs: Vec<_> = sync_logs
+            .into_iter()
+            .filter(|log| log.status == FileSyncStatus::DeletionPending)
+            .collect();
+        assert!(deletion_logs.is_empty());
     }
 
     #[async_std::test]

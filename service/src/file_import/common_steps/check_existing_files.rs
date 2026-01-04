@@ -57,6 +57,7 @@ impl<T: CheckExistingFilesContext + Send + Sync> PipelineStep<T> for CheckExisti
                     existing_file_count = existing_files_file_info.len(),
                     "Fetched existing file info from repository"
                 );
+                dbg!("existing files", &existing_files_file_info);
                 context.set_existing_files(existing_files_file_info);
 
                 StepAction::Continue

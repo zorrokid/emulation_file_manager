@@ -753,6 +753,8 @@ impl Component for FileSetFormModel {
                 );
                 self.file_set_id = Some(file_set_view_model.id);
                 self.selected_file_type = Some(file_set_view_model.file_type);
+                self.dropdown
+                    .emit(DropDownMsg::SetSelected(file_set_view_model.file_type));
                 // TODO: set system ids - why system ids are not included in FileSetViewModel?
                 // Maybe they should be? Then there could be file sets without releases? Is that
                 // needed?
