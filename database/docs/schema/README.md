@@ -20,6 +20,8 @@
 | [release_software_title](release_software_title.md) | 2 |  | table |
 | [file_info_system](file_info_system.md) | 2 |  | table |
 | [file_sync_log](file_sync_log.md) | 6 |  | table |
+| [release_item](release_item.md) | 4 |  | table |
+| [file_set_item](file_set_item.md) | 2 |  | table |
 
 ## Relations
 

@@ -27,18 +27,17 @@
 **Files**: `database/migrations/YYYYMMDDHHMMSS_add_release_item_tables.sql`, `database/migrations/YYYYMMDDHHMMSS_add_file_set_ordering.sql`
 
 **Migration 1: Add release_item tables**
-- [ ] Create migration file with timestamp
-- [ ] Add `release_item` table:
+- [x] Create migration file with timestamp
+- [x] Add `release_item` table:
   - id (INTEGER PRIMARY KEY)
   - release_id (INTEGER NOT NULL, FK to release)
   - item_type (INTEGER NOT NULL)
   - notes (TEXT)
-  - created_at (TEXT, default CURRENT_TIMESTAMP)
-- [ ] Add `file_set_item` junction table (many-to-many):
+- [x] Add `file_set_item` junction table (many-to-many):
   - file_set_id (INTEGER NOT NULL, FK to file_set)
   - item_id (INTEGER NOT NULL, FK to release_item)
   - PRIMARY KEY on (file_set_id, item_id)
-- [ ] Add CASCADE DELETE on foreign keys
+- [x] Add CASCADE DELETE on foreign keys
 
 **Migration 2: Add file ordering**
 - [ ] Add `sort_order INTEGER` column to `file_set_file_info` table
