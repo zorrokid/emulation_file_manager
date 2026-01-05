@@ -51,7 +51,7 @@
 **Estimate**: 15 min  
 **Files**: `database/src/models.rs` (or new `database/src/models/release_item.rs`)
 
-- [ ] Create `ReleaseItem` struct:
+- [x] Create `ReleaseItem` struct:
   - id: i64
   - release_id: i64
   - item_type: ItemType (use from_db_int for conversion)
