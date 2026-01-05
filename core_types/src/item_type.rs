@@ -6,29 +6,29 @@ use crate::CoreTypeError;
 #[repr(u8)]
 pub enum ItemType {
     #[strum(serialize = "Disk or Set of Disks")]
-    DiskOrSetOfDisks,
+    DiskOrSetOfDisks, // FileType: DiskImage, MediaScan
     #[strum(serialize = "Tape or Set of Tapes")]
-    TapeOrSetOfTapes,
-    Manual,
-    Box,
-    Cartridge,
+    TapeOrSetOfTapes, // FileType: TapeImage
+    Manual,    // FileType: Manual or ManualScan
+    Box,       // FileType: Box or BoxScan
+    Cartridge, // FileType: Rom
     #[strum(serialize = "Reference Card")]
-    ReferenceCard,
+    ReferenceCard, // No associated FileType yet
     #[strum(serialize = "Registration Card")]
-    RegistrationCard,
+    RegistrationCard, // No associated FileType yet
     #[strum(serialize = "Inlay Card")]
-    InlayCard,
-    Poster,
-    Map,
+    InlayCard, // FileType: InlayScan
+    Poster,    // No associated FileType yet
+    Map,       // No associated FileType yet
     #[strum(serialize = "Keyboard Overlay")]
-    KeyboardOverlay,
+    KeyboardOverlay, // No associated FileType yet
     #[strum(serialize = "Code Wheel")]
-    CodeWheel,
-    Advertisement,
-    Sticker,
-    Book,
-    Brochure,
-    Other,
+    CodeWheel, // No associated FileType yet
+    Advertisement, // No associated FileType yet
+    Sticker,   // No associated FileType yet
+    Book,      // No associated FileType yet
+    Brochure,  // No associated FileType yet
+    Other,     // No associated FileType yet
 }
 
 impl ItemType {
@@ -73,5 +73,18 @@ mod tests {
             let converted_item_type = ItemType::from_db_int(db_int).unwrap();
             assert_eq!(item_type, converted_item_type);
         }
+    }
+
+    #[test]
+    fn test_invalid_db_int() {
+        let invalid_value = 255;
+        let result = ItemType::from_db_int(invalid_value);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_item_type_display() {
+        let item_type = ItemType::DiskOrSetOfDisks;
+        assert_eq!(item_type.to_string(), "Disk or Set of Disks");
     }
 }

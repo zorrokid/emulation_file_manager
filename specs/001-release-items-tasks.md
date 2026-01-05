@@ -1,5 +1,6 @@
 # Release Items Feature - Task Breakdown
 
+
 **Branch**: `001-release-items`  
 **Spec**: `specs/release-items.md`
 
@@ -9,13 +10,13 @@
 **Estimate**: 30 min  
 **Files**: `core_types/src/lib.rs`
 
-- [ ] Create `ItemType` enum with variants:
+- [x] Create `ItemType` enum with variants:
   - Box, Manual, InlayCard, Disk, Tape, Cartridge
   - Map, RegistrationCard, ReferenceCard, KeyboardOverlay, CodeWheel, Other
-- [ ] Implement `to_db_int()` -> u8
-- [ ] Implement `from_db_int(u8)` -> Result<ItemType, CoreTypeError>
-- [ ] Implement `Display` trait
-- [ ] Add unit tests for conversions
+- [x] Implement `to_db_int()` -> u8
+- [x] Implement `from_db_int(u8)` -> Result<ItemType, CoreTypeError>
+- [x] Implement `Display` trait
+- [x] Add unit tests for conversions
 
 **Dependencies**: None
 
@@ -33,10 +34,10 @@
   - item_type (INTEGER NOT NULL)
   - notes (TEXT)
   - created_at (TEXT, default CURRENT_TIMESTAMP)
-- [ ] Add `release_item_file_set` junction table:
-  - release_item_id (INTEGER NOT NULL, FK to release_item)
+- [ ] Add `file_set_item` junction table (many-to-many):
   - file_set_id (INTEGER NOT NULL, FK to file_set)
-  - PRIMARY KEY on (release_item_id, file_set_id)
+  - item_id (INTEGER NOT NULL, FK to release_item)
+  - PRIMARY KEY on (file_set_id, item_id)
 - [ ] Add CASCADE DELETE on foreign keys
 
 **Migration 2: Add file ordering**
@@ -75,9 +76,15 @@
   - `get_items_for_release(release_id: i64)` -> Result<Vec<ReleaseItem>>`
   - `update_item(item_id: i64, notes: Option<String>)` -> Result<()>
   - `delete_item(item_id: i64)` -> Result<()>
-  - `add_file_set_to_item(item_id: i64, file_set_id: i64)` -> Result<()>
-  - `remove_file_set_from_item(item_id: i64, file_set_id: i64)` -> Result<()>
+  - `link_file_set_to_item(file_set_id: i64, item_id: i64)` -> Result<()>
+  - `unlink_file_set_from_item(file_set_id: i64, item_id: i64)` -> Result<()>
   - `get_file_sets_for_item(item_id: i64)` -> Result<Vec<FileSet>>`
+  - `get_items_for_file_set(file_set_id: i64)` -> Result<Vec<ReleaseItem>>`
+- [ ] Use SQLx with compile-time verification (sqlx::query_as!)
+- [ ] Add proper error handling
+- [ ] Export from repository/mod.rs
+
+**Dependencies**: Task 3
 - [ ] Use SQLx with compile-time verification (sqlx::query_as!)
 - [ ] Add proper error handling
 - [ ] Export from repository/mod.rs
@@ -107,9 +114,11 @@
 - [ ] Test `get_items_for_release` returns all items for release
 - [ ] Test `update_item` updates notes
 - [ ] Test `delete_item` removes item and cascades to file_set links
-- [ ] Test `add_file_set_to_item` creates link
-- [ ] Test `remove_file_set_from_item` removes link
+- [ ] Test `link_file_set_to_item` creates link in file_set_item table
+- [ ] Test `unlink_file_set_from_item` removes link
 - [ ] Test `get_file_sets_for_item` returns linked file sets
+- [ ] Test `get_items_for_file_set` returns linked items
+- [ ] Test file_set can link to multiple items (many-to-many)
 - [ ] Test foreign key constraints work
 - [ ] Test multiple items per release
 - [ ] Test multiple file sets per item
@@ -148,29 +157,29 @@
 
 ## Phase 2: File Import Pipeline Updates
 
-### Task 9: Update FileImportData/Context for item linking
+### Task 9: Update FileImportData/Context for optional item linking
 **Estimate**: 1 hour  
 **Files**: `service/src/file_import/model.rs`, context files
 
-- [ ] Add `item_id: i64` field to FileImportData
-- [ ] Update all context structs (AddFileSetContext, etc.) to include item_id
-- [ ] Update existing code to pass item_id through pipeline
-- [ ] For now, can use placeholder/default value for backward compatibility
+- [ ] Add `item_ids: Vec<i64>` field to FileImportData (optional, can be empty)
+- [ ] Update all context structs (AddFileSetContext, etc.) to include item_ids
+- [ ] Update existing code to pass item_ids through pipeline
+- [ ] Default to empty vec for backward compatibility
 
 **Dependencies**: Phase 1 complete
 
 ---
 
-### Task 10: Update import pipeline to link via items
+### Task 10: Update import pipeline to optionally link to items
 **Estimate**: 1-2 hours  
 **Files**: `service/src/file_import/add_file_set/steps.rs`, `service/src/file_import/update_file_set/steps.rs`
 
 - [ ] Update `UpdateDatabaseStep` in add_file_set:
-  - After creating file_set, link to item via `release_item_file_set`
-  - Keep temporary support for old `release_file_set` linking
+  - First create file_set and link to release (existing behavior via `release_file_set`)
+  - Then loop through item_ids and link via `file_set_item` table
 - [ ] Update UpdateFileSet pipeline similarly
 - [ ] Add error handling for missing items
-- [ ] Update rollback logic if needed
+- [ ] Update rollback logic if needed (remove file_set_item links on failure)
 
 **Dependencies**: Task 9
 
@@ -180,8 +189,9 @@
 **Estimate**: 30-45 min  
 **Files**: Test files in `service/src/file_import/`
 
-- [ ] Test file import with item_id links to correct item
-- [ ] Test file import creates entry in release_item_file_set
+- [ ] Test file import with empty item_ids works (backward compatible)
+- [ ] Test file import with single item_id creates link in file_set_item
+- [ ] Test file import with multiple item_ids creates multiple links
 - [ ] Test error handling when item doesn't exist
 - [ ] Verify existing tests still pass with changes
 
@@ -191,40 +201,41 @@
 
 ## Phase 3: Data Migration (Future)
 
-### Task 12: Create migration script/service
+### Task 12: Create optional data migration script/service
 **Estimate**: 2-3 hours  
 **Files**: New migration utility or service method
 
-- [ ] Create migration service to convert existing data:
-  - For each release with file_sets in `release_file_set`:
+- [ ] Create migration service to optionally associate file_sets with items:
+  - For releases where user wants item tracking:
     - Determine appropriate ItemType from FileType:
-      - DiskImage, TapeImage, Rom, MemorySnapshot → Disk/Tape/Cartridge
+      - DiskImage, TapeImage, Rom → Disk/Tape/Cartridge
       - ManualScan, Manual → Manual
       - BoxScan, PackageScan → Box
       - InlayScan → InlayCard
       - MediaScan → needs determination (Disk/Tape/Cartridge)
+      - Screenshot, MemorySnapshot, etc. → skip (no item)
     - Create release_item if doesn't exist for that type
-    - Link file_set to item via release_item_file_set
-    - Remove old link from release_file_set
+    - Link file_set to item via `file_set_item` table
+    - Keep `release_file_set` link (required for release association)
 - [ ] Add dry-run mode to preview changes
 - [ ] Add progress reporting
 - [ ] Add verification step
-- [ ] Handle edge cases (multiple items of same type, etc.)
+- [ ] Handle edge cases (combined PDFs, etc.)
 
 **Dependencies**: Phase 2 complete
 
 ---
 
-### Task 13: Remove deprecated release_file_set table
-**Estimate**: 30 min  
-**Files**: Database migration, code cleanup
+### Task 13: UI for item-to-file-set linking
+**Estimate**: 1-2 hours  
+**Files**: Existing file management UI
 
-- [ ] Create migration to drop `release_file_set` table
-- [ ] Remove any remaining code references to release_file_set
-- [ ] Update documentation
-- [ ] Run all tests to verify nothing breaks
+- [ ] Add UI to view which items a file_set is linked to
+- [ ] Add ability to link/unlink file_sets to/from items
+- [ ] Show in file set detail view
+- [ ] Allow multi-select for linking to multiple items
 
-**Dependencies**: Task 12 (migration complete)
+**Dependencies**: Phase 3 Task 12 (or can be done independently)
 
 ---
 
@@ -247,15 +258,15 @@
 
 ---
 
-### Task 15: Update file import UI to require item selection
+### Task 15: Update file import UI for optional item selection
 **Estimate**: 2-3 hours  
 **Files**: File import components in `relm4-ui/`
 
-- [ ] Add item selection dropdown/list in file import dialog
-- [ ] Allow creating new item during import
-- [ ] Update import flow to pass item_id
-- [ ] Show which item files will be attached to
-- [ ] Handle case where no items exist yet
+- [ ] Add optional item selection (multi-select) in file import dialog
+- [ ] Allow creating new items during import
+- [ ] Update import flow to pass item_ids (can be empty)
+- [ ] Show which items files will be linked to
+- [ ] Make item selection optional (backward compatible)
 
 **Dependencies**: Task 14
 
@@ -275,15 +286,13 @@
 
 ---
 
-### Task 17: Update game launching to work with items
-**Estimate**: 1-2 hours  
+### Task 17: Update game launching (if needed)
+**Estimate**: 30 min - 1 hour  
 **Files**: Game launch logic in service/UI
 
-- [ ] Update executable file discovery to look through items
-- [ ] Find Disk/Tape/Cartridge items and their DiskImage/Rom file sets
-- [ ] Maintain existing launch functionality
-- [ ] Handle case where multiple executable file sets exist
-- [ ] Show which item/file set is being launched
+- [ ] Verify game launching still works (should be unaffected since release_file_set unchanged)
+- [ ] Optionally: Show which item the launched file belongs to
+- [ ] No changes needed if release_file_set remains the primary mechanism
 
 **Dependencies**: Task 14
 
@@ -295,13 +304,30 @@
 - Core types, database schema, repositories
 - Tests
 - No UI changes, no migration, backward compatible
+- `release_file_set` unchanged, items are optional metadata layer
 
 **Phase 2 (Import Pipeline)**: ~3-4 hours
-- Update import to link through items
-- Keep backward compatibility temporarily
+- Update import to optionally link file sets to items
+- Fully backward compatible (item linking is optional)
 
-**Phase 3 (Migration)**: ~3-4 hours  
-- Data migration from old structure
+**Phase 3 (Migration)**: ~3-5 hours  
+- Optional data migration tool
+- UI for managing file_set ↔ item links
+
+**Phase 4 (UI)**: ~7-11 hours  
+- Complete UI implementation
+- Item management, file ordering, optional item selection in import
+
+**Total**: ~18-27 hours for complete feature
+
+## Notes
+
+- Each phase can be developed and deployed independently
+- Phase 1 can be merged without breaking existing functionality
+- `release_file_set` table remains essential (not deprecated)
+- Items are optional organizational metadata
+- File sets can exist without item associations
+- File ordering can be implemented separately from items if needed
 - Remove deprecated table
 
 **Phase 4 (UI)**: ~9-14 hours  

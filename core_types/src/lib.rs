@@ -79,23 +79,25 @@ pub enum FileType {
     DiskImage = 2,
     #[strum(serialize = "Tape Image")]
     TapeImage = 3,
-    Screenshot = 4,
+    Screenshot = 4, // This file type doesn't have associated ItemType
     /// Manual document file (e.g. pdf)
     Manual = 5,
     #[strum(serialize = "Cover Scan")]
-    CoverScan = 6,
+    CoverScan = 6, // This file type doesn't have associated ItemType (can be from box, inlay,
+    // manual, etc)
     #[strum(serialize = "Memory Snapshot")]
-    MemorySnapshot = 7,
+    MemorySnapshot = 7, // This file type doesn't have associated ItemType
     #[strum(serialize = "Loading Screen")]
-    LoadingScreen = 8,
+    LoadingScreen = 8, // This file type doesn't have associated ItemType
     #[strum(serialize = "Title Screen")]
-    TitleScreen = 9,
+    TitleScreen = 9, // This file type doesn't have associated ItemType
     #[strum(serialize = "Manual Scan")]
     ManualScan = 10,
     #[strum(serialize = "Media Scan")]
     MediaScan = 11,
-    #[strum(serialize = "Package Scan")]
-    PackageScan = 12,
+    // This is not currently used, use BoxScan or InlayScan instead instead instead instead
+    // #[strum(serialize = "Package Scan")]
+    //PackageScan = 12,
     #[strum(serialize = "Inlay Scan")]
     InlayScan = 13,
     #[strum(serialize = "Box Scan")]
@@ -118,7 +120,7 @@ impl FileType {
             FileType::TitleScreen => "title_screen",
             FileType::ManualScan => "manual_scan",
             FileType::MediaScan => "media_scan",
-            FileType::PackageScan => "package_scan",
+            //FileType::PackageScan => "package_scan",
             FileType::InlayScan => "inlay_scan",
             FileType::BoxScan => "box_scan",
             FileType::Box => "box",
@@ -142,7 +144,7 @@ impl FileType {
             9 => Ok(FileType::TitleScreen),
             10 => Ok(FileType::ManualScan),
             11 => Ok(FileType::MediaScan),
-            12 => Ok(FileType::PackageScan),
+            //12 => Ok(FileType::PackageScan),
             13 => Ok(FileType::InlayScan),
             14 => Ok(FileType::BoxScan),
             15 => Ok(FileType::Box),
@@ -174,7 +176,7 @@ pub const IMAGE_FILE_TYPES: &[FileType] = &[
     FileType::MediaScan,
     FileType::LoadingScreen,
     FileType::TitleScreen,
-    FileType::PackageScan,
+    //FileType::PackageScan,
     FileType::InlayScan,
     FileType::BoxScan,
 ];
@@ -351,7 +353,7 @@ mod tests {
         assert!(!FileType::TitleScreen.is_media_type());
         assert!(!FileType::ManualScan.is_media_type());
         assert!(!FileType::MediaScan.is_media_type());
-        assert!(!FileType::PackageScan.is_media_type());
+        //assert!(!FileType::PackageScan.is_media_type());
         assert!(!FileType::InlayScan.is_media_type());
     }
 }

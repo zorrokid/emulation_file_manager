@@ -19,15 +19,17 @@ Items are the physical/digital components of a software release:
 ## Goals
 
 1. **Track item ownership**: Users can mark which items they have for each release
-2. **File management**: Attach file sets to specific items (e.g., disk images to disk item, manual scans to manual item)
-3. **Unified model**: All files (including executable media) linked through items
-4. **Migration**: Convert existing file_set links from release to appropriate items
+2. **File management**: Optionally link file sets to specific items for organization
+3. **Flexible linking**: File sets can be linked to multiple items (e.g., combined PDF with multiple items)
+4. **Backward compatible**: File sets without item associations continue to work
+5. **Migration**: Optionally associate existing file_sets with appropriate items
 
 ## Current State
 
-- File sets are currently linked directly to releases via `release_file_set` table
-- FileType enum has both media types (Rom, DiskImage) and scan types (ManualScan, BoxScan)
-- Need to introduce items as intermediary between releases and file sets
+- File sets are linked to releases via `release_file_set` table
+- No concept of items yet
+- Need to add items as optional metadata/organization layer
+- Some FileTypes don't have physical item equivalents (MemorySnapshot, Screenshot, etc.)
 
 ## Requirements
 
@@ -53,27 +55,34 @@ Methods needed:
 
 **Note**: File organization remains by FileType (disk_image/, rom/, manual_scan/), not ItemType.
 
-### 2. File Organization Strategy (Unified Model)
+### 2. File Organization Strategy (Many-to-Many Model)
 
-**Unified approach**: All files linked through items
-- Release → Item → FileSet → Files
+**Flexible approach**: Optional many-to-many linking between file sets and items
+- Release → FileSet (via `release_file_set` - unchanged)
+- FileSet ↔ Item (via new `file_set_item` - optional, many-to-many)
 - ItemType = physical thing (Disk, Manual, Box, etc.)
 - FileType = digital content type (DiskImage, ManualScan, etc.)
-- One item can have multiple file sets of different types
+
+**Key benefits**:
+- File sets can link to 0, 1, or many items
+- Handles complex cases (e.g., one PDF with scans of multiple items)
+- Backward compatible (existing file sets have no item links)
+- Some file types don't need items (MemorySnapshot, Screenshot, etc.)
 
 **Examples**:
 
-1. **Disk item** can have:
-   - FileSet (type: DiskImage) - executable dump of the disk
-   - FileSet (type: MediaScan) - photos/scans of physical disk
+1. **Disk item** with separate file sets:
+   - FileSet A (type: DiskImage) → links to Disk item
+   - FileSet B (type: MediaScan) → links to Disk item
+   - Both also linked to release via `release_file_set`
 
-2. **Manual item** can have:
-   - FileSet (type: ManualScan) - scanned pages
-   - FileSet (type: Manual) - PDF document
+2. **Combined PDF** with multiple items:
+   - FileSet (type: ManualScan, contains all scans) → links to Manual, Box, InlayCard items
+   - Also linked to release
 
-3. **Cartridge item** can have:
-   - FileSet (type: Rom) - ROM dump from cartridge
-   - FileSet (type: MediaScan) - photos of cartridge
+3. **Screenshots** (no physical item):
+   - FileSet (type: Screenshot) → no item links
+   - Just linked to release via `release_file_set`
 
 **File path structure** (unchanged):
 ```
@@ -82,6 +91,9 @@ collection_root/
   disk_image/
   tape_image/
   memory_snapshot/
+  screenshot/
+  loading_screen/
+  title_screen/
   manual_scan/
   box_scan/
   inlay_scan/
@@ -91,7 +103,7 @@ collection_root/
   ... (organized by FileType as before)
 ```
 
-**Key insight**: FileType determines storage location, ItemType represents the physical object.
+**Key insight**: FileType determines storage location, ItemType represents the physical object. Linking is optional and flexible.
 
 ### 3. Database Schema
 
@@ -107,15 +119,18 @@ CREATE TABLE release_item (
 );
 ```
 
-**New junction table: `release_item_file_set`**
+**New junction table: `file_set_item` (many-to-many)**
 ```sql
-CREATE TABLE release_item_file_set (
-    release_item_id INTEGER NOT NULL,
+CREATE TABLE file_set_item (
     file_set_id INTEGER NOT NULL,
-    PRIMARY KEY (release_item_id, file_set_id),
-    FOREIGN KEY (release_item_id) REFERENCES release_item(id) ON DELETE CASCADE,
-    FOREIGN KEY (file_set_id) REFERENCES file_set(id) ON DELETE CASCADE
+    item_id INTEGER NOT NULL,
+    PRIMARY KEY (file_set_id, item_id),
+    FOREIGN KEY (file_set_id) REFERENCES file_set(id) ON DELETE CASCADE,
+    FOREIGN KEY (item_id) REFERENCES release_item(id) ON DELETE CASCADE
 );
+```
+
+**Existing table unchanged**: `release_file_set` continues to link file sets to releases as before.
 ```
 
 **Update existing table: `file_set_file_info`**
@@ -130,7 +145,7 @@ ALTER TABLE file_set_file_info ADD COLUMN sort_order INTEGER;
 - Can auto-order by filename postfix (e.g., "disk1.d64", "disk2.d64")
 - Lower sort_order = earlier in sequence
 
-**Migration note**: Existing `release_file_set` table will be deprecated and eventually removed after data migration.
+**Migration note**: `release_file_set` table remains unchanged. New `file_set_item` table provides optional item associations.
 
 ### 4. Repository (database crate)
 
@@ -140,58 +155,63 @@ Create `ReleaseItemRepository` with methods:
 - `get_item(item_id)` -> ReleaseItem
 - `update_item(item_id, notes)`
 - `delete_item(item_id)`
-- `add_file_set_to_item(item_id, file_set_id)`
-- `remove_file_set_from_item(item_id, file_set_id)`
+- `link_file_set_to_item(file_set_id, item_id)` -> Result<()>
+- `unlink_file_set_from_item(file_set_id, item_id)` -> Result<()>
 - `get_file_sets_for_item(item_id)` -> Vec<FileSet>
+- `get_items_for_file_set(file_set_id)` -> Vec<ReleaseItem>
 
 ### 5. File Import Pipeline Updates (service crate)
 
-The current import pipeline links file_sets directly to releases via `release_file_set`. We need to update it to link through items.
+The current import pipeline links file_sets to releases via `release_file_set`. Item linking is optional and can be added separately.
 
 **Changes to FileImportData / Context**:
-- Add `item_id: i64` field (required)
-- All file sets must be linked to an item
-- Remove direct release → file_set linking
+- Add `item_ids: Vec<i64>` field (optional, can be empty)
+- After file_set is created and linked to release, optionally link to items
+- Backward compatible: existing code continues to work without item links
 
 **Pipeline steps to update**:
-- `UpdateDatabaseStep` in `add_file_set`: Link file_set to item via `release_item_file_set` instead of to release
+- `UpdateDatabaseStep` in `add_file_set`: 
+  - First create file_set and link to release (existing behavior)
+  - Then optionally link to items via `file_set_item` table
 - No directory structure changes needed (still organized by FileType)
 
 **UI flow**:
-1. User creates/selects an item (e.g., "Disk 1")
-2. User imports files for that item
-3. Files are linked to the item via file_set
+1. User imports files for a release (existing flow)
+2. Optionally: User selects which items the file set represents
+3. File set is linked to release (required) and items (optional)
 
 **Backward compatibility**:
-- Phase 1: Keep `release_file_set` table for existing data, add new item-based linking
-- Phase 2: Migrate existing links to items
+- Phase 1: Item linking is optional, all existing code continues to work
+- File sets without item links function normally
 
 ### 6. Migration Strategy
 
 **Phase 1**: Add new schema alongside existing system
 - Add ItemType enum
-- Add release_item and release_item_file_set tables
+- Add release_item and file_set_item tables
 - Add repository
-- Keep existing `release_file_set` table functional
+- Keep existing `release_file_set` table functional (no changes)
 
-**Phase 2**: Data migration
-- For each release with file_sets:
-  - Analyze FileType and create appropriate items
-  - Create Disk/Tape/Cartridge items for media file sets (DiskImage, TapeImage, Rom)
-  - Create Manual items for ManualScan file sets
-  - Create Box items for BoxScan/PackageScan file sets
-  - Create InlayCard items for InlayScan file sets
-  - Handle MediaScan (could belong to Disk, Tape, or Cartridge - may need user input)
-  - Link file_sets to new items via `release_item_file_set`
-  - Remove old links from `release_file_set`
+**Phase 2**: Optional data migration
+- For releases where item tracking is desired:
+  - Analyze FileType and create appropriate items:
+    - DiskImage, TapeImage, Rom → Disk/Tape/Cartridge items
+    - ManualScan, Manual → Manual items
+    - BoxScan, PackageScan → Box items
+    - InlayScan → InlayCard items
+    - MediaScan → Disk/Tape/Cartridge (may need user input)
+  - Link file_sets to items via `file_set_item`
+  - Keep `release_file_set` links (required for release association)
+- Screenshot, MemorySnapshot, etc. file sets have no item links (intentionally)
 - **S3 files**: No changes needed (organized by FileType, which doesn't change)
-- **Database updates**: Only table linking changes, no file path updates needed
+- **Database updates**: Only add links in `file_set_item`, no changes to existing tables
 
 **Phase 3**: UI updates
 - Add item management UI
-- Update file attachment UI to work with items
+- Update file import UI to optionally select items
 - Show item checklist for releases
-- Update game launching to find executable files through items
+- Display which items a file set belongs to
+- Allow linking/unlinking file sets to/from items
 
 ## Technical Notes
 
@@ -208,7 +228,7 @@ The current import pipeline links file_sets directly to releases via `release_fi
 - Item condition tracking (good/fair/poor)
 - Item completeness tracking (complete/incomplete)
 - Multiple instances of same item type with labels (e.g., "Disk 1", "Disk 2")
-- Removal of deprecated `release_file_set` table
+- Deprecation of `release_file_set` table (remains essential)
 
 ## Success Criteria
 
