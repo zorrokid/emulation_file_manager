@@ -40,8 +40,8 @@
 - [x] Add CASCADE DELETE on foreign keys
 
 **Migration 2: Add file ordering**
-- [ ] Add `sort_order INTEGER` column to `file_set_file_info` table
-- [ ] Test migrations run successfully
+- [x] Add `sort_order INTEGER` column to `file_set_file_info` table
+- [x] Test migrations run successfully
 
 **Dependencies**: Task 1 (ItemType enum)
 
@@ -56,7 +56,6 @@
   - release_id: i64
   - item_type: ItemType (use from_db_int for conversion)
   - notes: Option<String>
-  - created_at: String
 - [ ] Implement `sqlx::FromRow` if needed (or use query_as! macro)
 - [ ] Add to `models/mod.rs` exports
 
