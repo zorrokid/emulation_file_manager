@@ -153,27 +153,30 @@
 <!-- file_set_file_info -->
 <g id="node7" class="node">
 <title>file_set_file_info</title>
-<polygon fill="#efefef" stroke="none" points="1595.17,-463 1595.17,-498.6 1802.38,-498.6 1802.38,-463 1595.17,-463"/>
-<polygon fill="none" stroke="black" points="1595.17,-463 1595.17,-498.6 1802.38,-498.6 1802.38,-463 1595.17,-463"/>
-<text text-anchor="start" x="1602.17" y="-476.4" font-family="Arial Bold" font-size="18.00">file_set_file_info</text>
-<text text-anchor="start" x="1726.13" y="-476.4" font-family="Arial" font-size="14.00">    </text>
-<text text-anchor="start" x="1757.24" y="-476.4" font-family="Arial" font-size="14.00" fill="#666666">[table]</text>
-<polygon fill="none" stroke="black" points="1595.17,-432.2 1595.17,-463 1802.38,-463 1802.38,-432.2 1595.17,-432.2"/>
-<text text-anchor="start" x="1602.17" y="-444.4" font-family="Arial" font-size="14.00">file_set_id </text>
-<text text-anchor="start" x="1669.1" y="-444.4" font-family="Arial" font-size="14.00" fill="#666666">[INTEGER]</text>
-<polygon fill="none" stroke="black" points="1595.17,-401.4 1595.17,-432.2 1802.38,-432.2 1802.38,-401.4 1595.17,-401.4"/>
-<text text-anchor="start" x="1602.17" y="-413.6" font-family="Arial" font-size="14.00">file_info_id </text>
-<text text-anchor="start" x="1672.99" y="-413.6" font-family="Arial" font-size="14.00" fill="#666666">[INTEGER]</text>
-<polygon fill="none" stroke="black" points="1595.17,-370.6 1595.17,-401.4 1802.38,-401.4 1802.38,-370.6 1595.17,-370.6"/>
-<text text-anchor="start" x="1602.17" y="-382.8" font-family="Arial" font-size="14.00">file_name </text>
-<text text-anchor="start" x="1666.76" y="-382.8" font-family="Arial" font-size="14.00" fill="#666666">[TEXT]</text>
+<polygon fill="#efefef" stroke="none" points="1595.17,-478.4 1595.17,-514 1802.38,-514 1802.38,-478.4 1595.17,-478.4"/>
+<polygon fill="none" stroke="black" points="1595.17,-478.4 1595.17,-514 1802.38,-514 1802.38,-478.4 1595.17,-478.4"/>
+<text text-anchor="start" x="1602.17" y="-491.8" font-family="Arial Bold" font-size="18.00">file_set_file_info</text>
+<text text-anchor="start" x="1726.13" y="-491.8" font-family="Arial" font-size="14.00">    </text>
+<text text-anchor="start" x="1757.24" y="-491.8" font-family="Arial" font-size="14.00" fill="#666666">[table]</text>
+<polygon fill="none" stroke="black" points="1595.17,-447.6 1595.17,-478.4 1802.38,-478.4 1802.38,-447.6 1595.17,-447.6"/>
+<text text-anchor="start" x="1602.17" y="-459.8" font-family="Arial" font-size="14.00">file_set_id </text>
+<text text-anchor="start" x="1669.1" y="-459.8" font-family="Arial" font-size="14.00" fill="#666666">[INTEGER]</text>
+<polygon fill="none" stroke="black" points="1595.17,-416.8 1595.17,-447.6 1802.38,-447.6 1802.38,-416.8 1595.17,-416.8"/>
+<text text-anchor="start" x="1602.17" y="-429" font-family="Arial" font-size="14.00">file_info_id </text>
+<text text-anchor="start" x="1672.99" y="-429" font-family="Arial" font-size="14.00" fill="#666666">[INTEGER]</text>
+<polygon fill="none" stroke="black" points="1595.17,-386 1595.17,-416.8 1802.38,-416.8 1802.38,-386 1595.17,-386"/>
+<text text-anchor="start" x="1602.17" y="-398.2" font-family="Arial" font-size="14.00">file_name </text>
+<text text-anchor="start" x="1666.76" y="-398.2" font-family="Arial" font-size="14.00" fill="#666666">[TEXT]</text>
+<polygon fill="none" stroke="black" points="1595.17,-355.2 1595.17,-386 1802.38,-386 1802.38,-355.2 1595.17,-355.2"/>
+<text text-anchor="start" x="1602.17" y="-367.4" font-family="Arial" font-size="14.00">sort_order </text>
+<text text-anchor="start" x="1669.86" y="-367.4" font-family="Arial" font-size="14.00" fill="#666666">[INTEGER]</text>
 </g>
 <!-- file_set_file_info&#45;&gt;file_set -->
 <g id="edge6" class="edge">
 <title>file_set_file_info:file_set_id&#45;&gt;file_set:id</title>
-<path fill="none" stroke="black" d="M1813.19,-444.79C1858.76,-416.39 1825.73,-181.8 1769.79,-181.8"/>
-<polygon fill="black" stroke="black" points="1813.32,-444.76 1802.47,-443.18 1808.19,-446.22 1804.03,-447.42 1804.03,-447.42 1804.03,-447.42 1808.19,-446.22 1804.94,-451.83 1813.32,-444.76"/>
-<text text-anchor="start" x="1243.52" y="-457.6" font-family="Arial" font-size="10.00">FOREIGN KEY (file_set_id) REFERENCES file_set (id) ON UPDATE NO ACTION ON DELETE NO ACTION MATCH NONE</text>
+<path fill="none" stroke="black" d="M1813.16,-460.4C1862.42,-432.05 1829.16,-181.8 1769.79,-181.8"/>
+<polygon fill="black" stroke="black" points="1813.37,-460.34 1802.55,-458.57 1808.21,-461.71 1804.03,-462.83 1804.03,-462.83 1804.03,-462.83 1808.21,-461.71 1804.86,-467.26 1813.37,-460.34"/>
+<text text-anchor="start" x="1810.38" y="-473" font-family="Arial" font-size="10.00">FOREIGN KEY (file_set_id) REFERENCES file_set (id) ON UPDATE NO ACTION ON DELETE NO ACTION MATCH NONE</text>
 </g>
 <!-- file_set_item -->
 <g id="node8" class="node">

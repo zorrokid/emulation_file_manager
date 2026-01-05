@@ -12,7 +12,7 @@
 | [release](release.md) | 2 |  | table |
 | [file_info](file_info.md) | 5 |  | table |
 | [file_set](file_set.md) | 5 |  | table |
-| [file_set_file_info](file_set_file_info.md) | 3 |  | table |
+| [file_set_file_info](file_set_file_info.md) | 4 |  | table |
 | [release_file_set](release_file_set.md) | 2 |  | table |
 | [setting](setting.md) | 2 |  | table |
 | [document_viewer](document_viewer.md) | 6 |  | table |

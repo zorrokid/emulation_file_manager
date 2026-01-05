@@ -365,6 +365,12 @@
           "name": "file_name",
           "type": "TEXT",
           "nullable": false
+        },
+        {
+          "name": "sort_order",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "0"
         }
       ],
       "indexes": [
@@ -434,7 +440,7 @@
           ]
         }
       ],
-      "def": "CREATE TABLE file_set_file_info (\n    file_set_id INTEGER NOT NULL,\n    file_info_id INTEGER NOT NULL,\n    -- same file can have different names in different file sets \n    file_name TEXT NOT NULL,\n    PRIMARY KEY (file_set_id, file_info_id),\n    FOREIGN KEY (file_set_id) REFERENCES file_set(id),\n    FOREIGN KEY (file_info_id) REFERENCES file_info(id)\n)"
+      "def": "CREATE TABLE file_set_file_info (\n    file_set_id INTEGER NOT NULL,\n    file_info_id INTEGER NOT NULL,\n    -- same file can have different names in different file sets \n    file_name TEXT NOT NULL, sort_order INTEGER NOT NULL DEFAULT 0,\n    PRIMARY KEY (file_set_id, file_info_id),\n    FOREIGN KEY (file_set_id) REFERENCES file_set(id),\n    FOREIGN KEY (file_info_id) REFERENCES file_info(id)\n)"
     },
     {
       "name": "release_file_set",
