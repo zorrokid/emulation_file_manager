@@ -155,7 +155,7 @@ pub struct FileSyncLogWithFileInfo {
     pub file_type: FileType,
 }
 
-pub struct FileSetItem {
+pub struct ReleaseItem {
     pub id: i64,
     pub release_id: i64,
     pub item_type: ItemType,
