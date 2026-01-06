@@ -181,3 +181,112 @@ impl ReleaseItemRepository {
         Ok(items)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::repository_manager::RepositoryManager;
+    use crate::setup_test_db;
+    use core_types::FileType;
+    use core_types::item_type::ItemType;
+
+    async fn get_repository() -> RepositoryManager {
+        let pool = setup_test_db().await;
+        RepositoryManager::new(Arc::new(pool))
+    }
+
+    #[async_std::test]
+    async fn test_create_and_get_item() {
+        let repository = get_repository().await;
+        let release_id = repository
+            .get_release_repository()
+            .add_release("Test Release")
+            .await
+            .unwrap();
+
+        let item_type = ItemType::Book;
+        let notes = "Test notes".to_string();
+
+        let release_item_repo = repository.get_release_item_repository();
+
+        let item_id = release_item_repo
+            .create_item(release_id, item_type, Some(notes.clone()))
+            .await
+            .unwrap();
+
+        let item = release_item_repo.get_item(item_id).await.unwrap();
+        assert_eq!(item.id, item_id);
+        assert_eq!(item.release_id, release_id);
+        assert_eq!(item.item_type, item_type);
+        assert_eq!(item.notes, notes);
+
+        let items = release_item_repo
+            .get_items_for_release(release_id)
+            .await
+            .unwrap();
+        assert_eq!(items.len(), 1);
+
+        release_item_repo
+            .update_item(item_id, Some("Updated notes".to_string()))
+            .await
+            .unwrap();
+
+        let updated_item = release_item_repo.get_item(item_id).await.unwrap();
+        assert_eq!(updated_item.notes, "Updated notes".to_string());
+
+        let system_id = repository
+            .get_system_repository()
+            .add_system("Test System")
+            .await
+            .unwrap();
+
+        let file_set_id = repository
+            .get_file_set_repository()
+            .add_file_set(
+                "test_file_set",
+                "test_file_set",
+                &FileType::Rom,
+                "Source",
+                &[],
+                &[system_id],
+            )
+            .await
+            .unwrap();
+
+        release_item_repo
+            .link_file_set_to_item(item_id, file_set_id)
+            .await
+            .unwrap();
+        let file_sets = release_item_repo
+            .get_file_sets_for_item(item_id)
+            .await
+            .unwrap();
+        assert_eq!(file_sets.len(), 1);
+        assert_eq!(file_sets[0].id, file_set_id);
+
+        let items_for_file_set = release_item_repo
+            .get_items_for_file_set(file_set_id)
+            .await
+            .unwrap();
+        assert_eq!(items_for_file_set.len(), 1);
+        assert_eq!(items_for_file_set[0].id, item_id);
+
+        release_item_repo
+            .unlink_file_set_from_item(item_id, file_set_id)
+            .await
+            .unwrap();
+
+        let file_sets_after_unlink = release_item_repo
+            .get_file_sets_for_item(item_id)
+            .await
+            .unwrap();
+        assert_eq!(file_sets_after_unlink.len(), 0);
+
+        release_item_repo.delete_item(item_id).await.unwrap();
+        let items_after_delete = release_item_repo
+            .get_items_for_release(release_id)
+            .await
+            .unwrap();
+        assert_eq!(items_after_delete.len(), 0);
+    }
+}
