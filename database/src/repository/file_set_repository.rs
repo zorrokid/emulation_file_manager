@@ -50,6 +50,7 @@ impl FromRow<'_, SqliteRow> for FileSetFileInfo {
             sha1_checksum,
             file_size: row.try_get("file_size")?,
             archive_file_name: row.try_get("archive_file_name")?,
+            sort_order: row.try_get("sort_order")?,
         })
     }
 }
@@ -321,11 +322,13 @@ impl FileSetRepository {
                 "INSERT INTO file_set_file_info (
                     file_set_id, 
                     file_info_id, 
-                    file_name
-                 ) VALUES (?, ?, ?)",
+                    file_name,
+                    sort_order
+                 ) VALUES (?, ?, ?, ?)",
                 file_set_id,
                 file_info_id,
-                file.original_file_name
+                file.original_file_name,
+                0 // TODO: get sort order from UI
             )
             .execute(&mut *transaction)
             .await?;
@@ -361,11 +364,13 @@ impl FileSetRepository {
                 "INSERT INTO file_set_file_info (
                     file_set_id, 
                     file_info_id, 
-                    file_name
-                 ) VALUES (?, ?, ?)",
+                    file_name,
+                    sort_order
+                 ) VALUES (?, ?, ?, ?)",
                 file_set_id,
                 file_info_id,
-                file_name
+                file_name,
+                0 // TODO: get sort order from UI
             )
             .execute(&mut *transaction)
             .await?;
@@ -484,7 +489,8 @@ impl FileSetRepository {
                 fi.sha1_checksum, 
                 fi.file_size, 
                 fi.archive_file_name,
-                fi.file_type
+                fi.file_type,
+                fsfi.sort_order
              FROM file_set_file_info fsfi
              JOIN file_info fi ON fsfi.file_info_id = fi.id
              WHERE fsfi.file_set_id = ?",
@@ -493,6 +499,25 @@ impl FileSetRepository {
 
         let file_set_file_infos = query.fetch_all(&*self.pool).await?;
         Ok(file_set_file_infos)
+    }
+
+    async fn update_file_set_file_info_sort_order(
+        &self,
+        file_set_id: i64,
+        file_info_id: i64,
+        sort_order: i64,
+    ) -> Result<(), DatabaseError> {
+        sqlx::query!(
+            "UPDATE file_set_file_info 
+             SET sort_order = ? 
+             WHERE file_set_id = ? AND file_info_id = ?",
+            sort_order,
+            file_set_id,
+            file_info_id
+        )
+        .execute(&*self.pool)
+        .await?;
+        Ok(())
     }
 }
 

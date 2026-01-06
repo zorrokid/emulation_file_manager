@@ -116,10 +116,10 @@
 - [x] Test `unlink_file_set_from_item` removes link
 - [x] Test `get_file_sets_for_item` returns linked file sets
 - [x] Test `get_items_for_file_set` returns linked items
-- [ ] Test file_set can link to multiple items (many-to-many)
-- [ ] Test foreign key constraints work
-- [ ] Test multiple items per release
-- [ ] Test multiple file sets per item
+- [x] Test file_set can link to multiple items (many-to-many)
+- [x] Test foreign key constraints work
+- [x] Test multiple items per release
+- [x] Test multiple file sets per item
 
 **Dependencies**: Task 4
 
@@ -129,7 +129,7 @@
 **Estimate**: 1 hour  
 **Files**: `database/src/repository/file_set_repository.rs`
 
-- [ ] Update queries to include `sort_order` column
+- [x] Update queries to include `sort_order` column
 - [ ] Add method to update file ordering: `update_file_order(file_set_id, file_info_id, new_order)`
 - [ ] Update `get_files_for_file_set` to order by `sort_order`
 - [ ] Add method to reorder all files in a file set: `reorder_files(file_set_id, Vec<(file_info_id, order)>)`

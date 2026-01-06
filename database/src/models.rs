@@ -64,6 +64,7 @@ pub struct FileSetFileInfo {
     pub file_size: i64,
     pub archive_file_name: String,
     pub file_type: FileType,
+    pub sort_order: i64,
 }
 
 impl Display for FileSetFileInfo {
