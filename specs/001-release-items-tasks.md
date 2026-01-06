@@ -130,10 +130,10 @@
 **Files**: `database/src/repository/file_set_repository.rs`
 
 - [x] Update queries to include `sort_order` column
-- [ ] Add method to update file ordering: `update_file_order(file_set_id, file_info_id, new_order)`
-- [ ] Update `get_files_for_file_set` to order by `sort_order`
-- [ ] Add method to reorder all files in a file set: `reorder_files(file_set_id, Vec<(file_info_id, order)>)`
-- [ ] Add tests for ordering functionality
+- [x] Add method to update file ordering: `update_file_set_file_info_sort_order(file_set_id, file_info_id, new_order)`
+- [x] Update `get_files_for_file_set` to order by `sort_order`
+- [x] Add method to reorder all files in a file set: `update_file_set_file_infos_sort_order(file_set_id, Vec<(file_info_id, order)>)`
+- [x] Add tests for ordering functionality
 
 **Dependencies**: Task 2
 
@@ -142,12 +142,12 @@
 ### Task 8: Run all tests and verify
 **Estimate**: 15 min
 
-- [ ] Run `cargo test` in database crate
-- [ ] Run `cargo test` in workspace root
-- [ ] Verify all existing tests still pass
-- [ ] Verify new tests pass
-- [ ] Check for compiler warnings
-- [ ] Run `cargo clippy`
+- [x] Run `cargo test` in database crate
+- [x] Run `cargo test` in workspace root
+- [x] Verify all existing tests still pass
+- [x] Verify new tests pass
+- [x] Check for compiler warnings
+- [x] Run `cargo clippy`
 
 **Dependencies**: All previous tasks
 

@@ -81,29 +81,40 @@ pub enum FileType {
     TapeImage = 3,
     Screenshot = 4, // This file type doesn't have associated ItemType
     /// Manual document file (e.g. pdf)
+    // TODO: will be deprecated, use generic Document type instead
     Manual = 5,
     #[strum(serialize = "Cover Scan")]
+    // TODO: will be deprecated, use generic Scan type instead
     CoverScan = 6, // This file type doesn't have associated ItemType (can be from box, inlay,
     // manual, etc)
     #[strum(serialize = "Memory Snapshot")]
     MemorySnapshot = 7, // This file type doesn't have associated ItemType
+    // TODO: will be deprecated, use generic Screenshot type instead
     #[strum(serialize = "Loading Screen")]
     LoadingScreen = 8, // This file type doesn't have associated ItemType
+    // TODO: will be deprecated, use generic Screenshot type instead
     #[strum(serialize = "Title Screen")]
     TitleScreen = 9, // This file type doesn't have associated ItemType
     #[strum(serialize = "Manual Scan")]
+    // TODO: will be deprecated, use generic Scan type instead
     ManualScan = 10,
     #[strum(serialize = "Media Scan")]
+    // TODO: will be deprecated, use generic Scan type instead
     MediaScan = 11,
     // This is not currently used, use BoxScan or InlayScan instead instead instead instead
     // #[strum(serialize = "Package Scan")]
     //PackageScan = 12,
     #[strum(serialize = "Inlay Scan")]
+    // TODO: will be deprecated, use generic Scan type instead
     InlayScan = 13,
     #[strum(serialize = "Box Scan")]
+    // TODO: will be deprecated, use generic Scan type instead
     BoxScan = 14,
     /// Box document file (e.g. pdf)
+    // TODO: will be deprecated, use generic Document type instead
     Box = 15,
+    Document = 16, // Generic document type (e.g. pdf)
+    Scan = 17,     // Generic scan type (e.g. jpg, png)
 }
 
 impl FileType {
@@ -124,6 +135,8 @@ impl FileType {
             FileType::InlayScan => "inlay_scan",
             FileType::BoxScan => "box_scan",
             FileType::Box => "box",
+            FileType::Document => "document",
+            FileType::Scan => "scan",
         }
     }
 
@@ -148,6 +161,8 @@ impl FileType {
             13 => Ok(FileType::InlayScan),
             14 => Ok(FileType::BoxScan),
             15 => Ok(FileType::Box),
+            16 => Ok(FileType::Document),
+            17 => Ok(FileType::Scan),
             _ => Err(CoreTypeError::ConversionError(
                 "Failed convert to FileType".to_string(),
             )),
@@ -179,9 +194,10 @@ pub const IMAGE_FILE_TYPES: &[FileType] = &[
     //FileType::PackageScan,
     FileType::InlayScan,
     FileType::BoxScan,
+    FileType::Scan,
 ];
 
-pub const DOCUMENT_FILE_TYPES: &[FileType] = &[FileType::Manual, FileType::Box];
+pub const DOCUMENT_FILE_TYPES: &[FileType] = &[FileType::Manual, FileType::Box, FileType::Document];
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Display, Serialize, Deserialize)]
 pub enum ArgumentType {

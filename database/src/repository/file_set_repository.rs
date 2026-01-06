@@ -493,7 +493,9 @@ impl FileSetRepository {
                 fsfi.sort_order
              FROM file_set_file_info fsfi
              JOIN file_info fi ON fsfi.file_info_id = fi.id
-             WHERE fsfi.file_set_id = ?",
+             WHERE fsfi.file_set_id = ?
+             ORDER BY fsfi.sort_order ASC
+             ",
         )
         .bind(file_set_id);
 
@@ -501,6 +503,7 @@ impl FileSetRepository {
         Ok(file_set_file_infos)
     }
 
+    // TODO: is this needed? maybe the sort order will be updated with file set update
     async fn update_file_set_file_info_sort_order(
         &self,
         file_set_id: i64,
@@ -517,6 +520,30 @@ impl FileSetRepository {
         )
         .execute(&*self.pool)
         .await?;
+        Ok(())
+    }
+
+    async fn update_file_set_file_infos_sort_order(
+        &self,
+        file_set_id: i64,
+        file_info_sort_orders: &[(i64, i64)],
+    ) -> Result<(), DatabaseError> {
+        let mut transaction = self.pool.begin().await?;
+
+        for (file_info_id, sort_order) in file_info_sort_orders {
+            sqlx::query!(
+                "UPDATE file_set_file_info 
+                 SET sort_order = ? 
+                 WHERE file_set_id = ? AND file_info_id = ?",
+                sort_order,
+                file_set_id,
+                file_info_id
+            )
+            .execute(&mut *transaction)
+            .await?;
+        }
+
+        transaction.commit().await?;
         Ok(())
     }
 }
@@ -1246,5 +1273,71 @@ mod tests {
             .await;
 
         assert!(res.is_err());
+    }
+
+    #[async_std::test]
+    async fn test_update_file_set_file_infos_sort_order() {
+        let pool = Arc::new(setup_test_db().await);
+        let file_set_file_name = "test file set".to_string();
+        let file_type = FileType::Rom;
+
+        let files = vec![
+            ImportedFile {
+                sha1_checksum: [0; 20],
+                file_size: 123,
+                original_file_name: "test1.rom".to_string(),
+                archive_file_name: "archive_file_name_1".to_string(),
+            },
+            ImportedFile {
+                sha1_checksum: [1; 20],
+                file_size: 456,
+                original_file_name: "test2.rom".to_string(),
+                archive_file_name: "archive_file_name_2".to_string(),
+            },
+        ];
+
+        let system_id = SystemRepository::new(pool.clone())
+            .add_system("Test System")
+            .await
+            .unwrap();
+
+        let file_set_repository = FileSetRepository { pool: pool.clone() };
+
+        let file_set_id = file_set_repository
+            .add_file_set(
+                "Test File Set",
+                &file_set_file_name,
+                &file_type,
+                "",
+                &files,
+                &[system_id],
+            )
+            .await
+            .unwrap();
+
+        let file_infos = file_set_repository
+            .get_file_set_file_info(file_set_id)
+            .await
+            .unwrap();
+
+        let file_info_id_1 = file_infos[0].file_info_id;
+        let file_info_id_2 = file_infos[1].file_info_id;
+
+        // Update sort order
+        let sort_orders = vec![(file_info_id_2, 1), (file_info_id_1, 2)];
+
+        file_set_repository
+            .update_file_set_file_infos_sort_order(file_set_id, &sort_orders)
+            .await
+            .unwrap();
+
+        // Verify sort order
+        let result = file_set_repository
+            .get_file_set_file_info(file_set_id)
+            .await
+            .unwrap();
+
+        assert_eq!(result[0].file_info_id, file_info_id_2);
+        assert_eq!(result[1].file_info_id, file_info_id_1);
     }
 }
