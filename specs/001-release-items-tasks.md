@@ -67,8 +67,8 @@
 **Estimate**: 2-3 hours  
 **Files**: `database/src/repository/release_item_repository.rs`, `database/src/repository/mod.rs`
 
-- [ ] Create `ReleaseItemRepository` struct with pool
-- [ ] Implement methods:
+- [x] Create `ReleaseItemRepository` struct with pool
+- [x] Implement methods:
   - `create_item(release_id: i64, item_type: ItemType, notes: Option<String>)` -> Result<ReleaseItem>
   - `get_item(item_id: i64)` -> Result<ReleaseItem>
   - `get_items_for_release(release_id: i64)` -> Result<Vec<ReleaseItem>>`
