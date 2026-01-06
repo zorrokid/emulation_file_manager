@@ -78,14 +78,14 @@
   - `unlink_file_set_from_item(file_set_id: i64, item_id: i64)` -> Result<()>
   - `get_file_sets_for_item(item_id: i64)` -> Result<Vec<FileSet>>`
   - `get_items_for_file_set(file_set_id: i64)` -> Result<Vec<ReleaseItem>>`
-- [ ] Use SQLx with compile-time verification (sqlx::query_as!)
-- [ ] Add proper error handling
-- [ ] Export from repository/mod.rs
+- [x] Use SQLx with compile-time verification (sqlx::query_as!)
+- [x] Add proper error handling
+- [x] Export from repository/mod.rs
 
 **Dependencies**: Task 3
-- [ ] Use SQLx with compile-time verification (sqlx::query_as!)
-- [ ] Add proper error handling
-- [ ] Export from repository/mod.rs
+- [x] Use SQLx with compile-time verification (sqlx::query_as!)
+- [x] Add proper error handling
+- [x] Export from repository/mod.rs
 
 **Dependencies**: Task 3
 
@@ -95,9 +95,9 @@
 **Estimate**: 10 min  
 **Files**: `database/src/repository_manager.rs` (or wherever RepositoryManager is defined)
 
-- [ ] Add `release_item_repository` field to RepositoryManager
-- [ ] Initialize in constructor
-- [ ] Add getter method `pub fn release_item_repository(&self) -> &ReleaseItemRepository`
+- [x] Add `release_item_repository` field to RepositoryManager
+- [x] Initialize in constructor
+- [x] Add getter method `pub fn release_item_repository(&self) -> &ReleaseItemRepository`
 
 **Dependencies**: Task 4
 
@@ -107,15 +107,15 @@
 **Estimate**: 45 min - 1 hour  
 **Files**: `database/src/repository/release_item_repository.rs` (test module) or `database/tests/`
 
-- [ ] Test `create_item` creates item successfully
-- [ ] Test `get_item` retrieves correct item
-- [ ] Test `get_items_for_release` returns all items for release
-- [ ] Test `update_item` updates notes
-- [ ] Test `delete_item` removes item and cascades to file_set links
-- [ ] Test `link_file_set_to_item` creates link in file_set_item table
-- [ ] Test `unlink_file_set_from_item` removes link
-- [ ] Test `get_file_sets_for_item` returns linked file sets
-- [ ] Test `get_items_for_file_set` returns linked items
+- [x] Test `create_item` creates item successfully
+- [x] Test `get_item` retrieves correct item
+- [x] Test `get_items_for_release` returns all items for release
+- [x] Test `update_item` updates notes
+- [x] Test `delete_item` removes item and cascades to file_set links
+- [x] Test `link_file_set_to_item` creates link in file_set_item table
+- [x] Test `unlink_file_set_from_item` removes link
+- [x] Test `get_file_sets_for_item` returns linked file sets
+- [x] Test `get_items_for_file_set` returns linked items
 - [ ] Test file_set can link to multiple items (many-to-many)
 - [ ] Test foreign key constraints work
 - [ ] Test multiple items per release

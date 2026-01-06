@@ -195,14 +195,41 @@ mod tests {
         RepositoryManager::new(Arc::new(pool))
     }
 
-    #[async_std::test]
-    async fn test_create_and_get_item() {
-        let repository = get_repository().await;
-        let release_id = repository
+    async fn create_release(repository: &RepositoryManager) -> i64 {
+        repository
             .get_release_repository()
             .add_release("Test Release")
             .await
-            .unwrap();
+            .unwrap()
+    }
+
+    async fn create_system(repository: &RepositoryManager) -> i64 {
+        repository
+            .get_system_repository()
+            .add_system("Test System")
+            .await
+            .unwrap()
+    }
+
+    async fn create_file_set(repository: &RepositoryManager, system_id: i64) -> i64 {
+        repository
+            .get_file_set_repository()
+            .add_file_set(
+                "test_file_set",
+                "Test File Set",
+                &FileType::Rom,
+                "Source",
+                &[],
+                &[system_id],
+            )
+            .await
+            .unwrap()
+    }
+
+    #[async_std::test]
+    async fn test_create_and_get_item() {
+        let repository = get_repository().await;
+        let release_id = create_release(&repository).await;
 
         let item_type = ItemType::Book;
         let notes = "Test notes".to_string();
@@ -234,24 +261,8 @@ mod tests {
         let updated_item = release_item_repo.get_item(item_id).await.unwrap();
         assert_eq!(updated_item.notes, "Updated notes".to_string());
 
-        let system_id = repository
-            .get_system_repository()
-            .add_system("Test System")
-            .await
-            .unwrap();
-
-        let file_set_id = repository
-            .get_file_set_repository()
-            .add_file_set(
-                "test_file_set",
-                "test_file_set",
-                &FileType::Rom,
-                "Source",
-                &[],
-                &[system_id],
-            )
-            .await
-            .unwrap();
+        let system_id = create_system(&repository).await;
+        let file_set_id = create_file_set(&repository, system_id).await;
 
         release_item_repo
             .link_file_set_to_item(item_id, file_set_id)
@@ -288,5 +299,173 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(items_after_delete.len(), 0);
+    }
+
+    #[async_std::test]
+    async fn test_multiple_file_sets_per_item() {
+        let repository = get_repository().await;
+        let release_id = create_release(&repository).await;
+
+        let item_type = ItemType::Manual;
+        let notes = "Test manual".to_string();
+
+        let release_item_repo = repository.get_release_item_repository();
+
+        let item_id = release_item_repo
+            .create_item(release_id, item_type, Some(notes.clone()))
+            .await
+            .unwrap();
+
+        let system_id = create_system(&repository).await;
+        let file_set_id_1 = create_file_set(&repository, system_id).await;
+        let file_set_id_2 = create_file_set(&repository, system_id).await;
+
+        release_item_repo
+            .link_file_set_to_item(item_id, file_set_id_1)
+            .await
+            .unwrap();
+        release_item_repo
+            .link_file_set_to_item(item_id, file_set_id_2)
+            .await
+            .unwrap();
+
+        let file_sets = release_item_repo
+            .get_file_sets_for_item(item_id)
+            .await
+            .unwrap();
+        assert_eq!(file_sets.len(), 2);
+    }
+
+    #[async_std::test]
+    async fn test_multiple_items_per_file_set() {
+        let repository = get_repository().await;
+
+        let release_id = repository
+            .get_release_repository()
+            .add_release("Test Release")
+            .await
+            .unwrap();
+
+        let release_item_repo = repository.get_release_item_repository();
+
+        let system_id = create_system(&repository).await;
+
+        let file_set_id = create_file_set(&repository, system_id).await;
+
+        let item_id_1 = release_item_repo
+            .create_item(release_id, ItemType::Manual, Some("Item 1".to_string()))
+            .await
+            .unwrap();
+
+        let item_id_2 = release_item_repo
+            .create_item(
+                release_id,
+                ItemType::ReferenceCard,
+                Some("Item 2".to_string()),
+            )
+            .await
+            .unwrap();
+
+        release_item_repo
+            .link_file_set_to_item(item_id_1, file_set_id)
+            .await
+            .unwrap();
+        release_item_repo
+            .link_file_set_to_item(item_id_2, file_set_id)
+            .await
+            .unwrap();
+
+        let items = release_item_repo
+            .get_items_for_file_set(file_set_id)
+            .await
+            .unwrap();
+
+        assert_eq!(items.len(), 2);
+    }
+
+    #[async_std::test]
+    async fn test_invalid_item_type_in_db() {
+        let repository = get_repository().await;
+        let pool = repository.get_release_item_repository().pool.clone();
+        let result = sqlx::query!(
+            "INSERT INTO release_item (
+                release_id,
+                item_type,
+                notes
+            ) VALUES (?, ?, ?)",
+            1,
+            255, // Invalid item type
+            "Invalid item type"
+        )
+        .execute(&*pool)
+        .await;
+        assert!(result.is_err());
+    }
+
+    #[async_std::test]
+    async fn test_update_item_notes_to_none() {
+        let repository = get_repository().await;
+        let release_id = repository
+            .get_release_repository()
+            .add_release("Test Release")
+            .await
+            .unwrap();
+        let item_type = ItemType::Poster;
+        let notes = "Initial notes".to_string();
+        let release_item_repo = repository.get_release_item_repository();
+        let item_id = release_item_repo
+            .create_item(release_id, item_type, Some(notes.clone()))
+            .await
+            .unwrap();
+        release_item_repo.update_item(item_id, None).await.unwrap();
+        let updated_item = release_item_repo.get_item(item_id).await.unwrap();
+        assert_eq!(updated_item.notes, "");
+    }
+
+    #[async_std::test]
+    async fn test_release_delete_deletes_release_items() {
+        let repository = get_repository().await;
+        let release_id = create_release(&repository).await;
+        let item_type = ItemType::Map;
+        let release_item_repo = repository.get_release_item_repository();
+        let item_id = release_item_repo
+            .create_item(release_id, item_type, Some("Test notes".to_string()))
+            .await
+            .unwrap();
+        let delete_result = repository
+            .get_release_repository()
+            .delete_release(release_id)
+            .await;
+        assert!(delete_result.is_ok());
+        let res = release_item_repo.get_item(item_id).await;
+        assert!(res.is_err());
+    }
+
+    #[async_std::test]
+    async fn test_file_set_delete_removes_links() {
+        let repository = get_repository().await;
+        let release_id = create_release(&repository).await;
+        let item_type = ItemType::Manual;
+        let release_item_repo = repository.get_release_item_repository();
+        let item_id = release_item_repo
+            .create_item(release_id, item_type, None)
+            .await
+            .unwrap();
+        let system_id = create_system(&repository).await;
+        let file_set_id = create_file_set(&repository, system_id).await;
+        release_item_repo
+            .link_file_set_to_item(item_id, file_set_id)
+            .await
+            .unwrap();
+        let delete_result = repository
+            .get_file_set_repository()
+            .delete_file_set(file_set_id)
+            .await;
+        assert!(delete_result.is_ok());
+        let file_sets = release_item_repo
+            .get_file_sets_for_item(item_id)
+            .await
+            .unwrap();
+        assert_eq!(file_sets.len(), 0);
     }
 }
