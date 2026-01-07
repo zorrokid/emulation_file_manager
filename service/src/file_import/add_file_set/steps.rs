@@ -292,4 +292,13 @@ mod tests {
         let res = step.execute(&mut context).await;
         assert_eq!(res, StepAction::Continue);
     }
+
+    #[async_std::test]
+    async fn test_add_file_set_items_step_without_items() {
+        let mut context = create_test_context(None).await;
+        context.item_ids = vec![];
+        context.file_set_id = Some(123);
+        let step = AddFileSetItemsStep;
+        assert!(!step.should_execute(&context));
+    }
 }
