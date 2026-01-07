@@ -159,10 +159,10 @@
 **Estimate**: 1 hour  
 **Files**: `service/src/file_import/model.rs`, context files
 
-- [ ] Add `item_ids: Vec<i64>` field to FileImportData (optional, can be empty)
-- [ ] Update all context structs (AddFileSetContext, etc.) to include item_ids
-- [ ] Update existing code to pass item_ids through pipeline
-- [ ] Default to empty vec for backward compatibility
+- [x] Add `item_ids: Vec<i64>` field to FileImportData (optional, can be empty)
+- [x] Update all context structs (AddFileSetContext, etc.) to include item_ids
+- [x] Update existing code to pass item_ids through pipeline
+- [x] Default to empty vec for backward compatibility
 
 **Dependencies**: Phase 1 complete
 

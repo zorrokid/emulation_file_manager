@@ -1,6 +1,9 @@
 use crate::{
     file_import::{
-        add_file_set::{context::AddFileSetContext, steps::UpdateDatabaseStep},
+        add_file_set::{
+            context::AddFileSetContext,
+            steps::{AddFileSetItemsStep, UpdateDatabaseStep},
+        },
         common_steps::{check_existing_files::CheckExistingFilesStep, import::ImportFilesStep},
     },
     pipeline::generic_pipeline::Pipeline,
@@ -12,6 +15,7 @@ impl Pipeline<AddFileSetContext> {
             Box::new(CheckExistingFilesStep::<AddFileSetContext>::new()),
             Box::new(ImportFilesStep::<AddFileSetContext>::new()),
             Box::new(UpdateDatabaseStep),
+            Box::new(AddFileSetItemsStep),
         ])
     }
 }

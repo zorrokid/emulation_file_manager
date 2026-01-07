@@ -279,7 +279,9 @@ impl FileSetRepository {
 
             // insert new systems for file_info
 
-            // for newly inserted file_info, there are no systems yet
+            // for newly inserted file_info, there are no systems yet,
+            // but for existing file_info can be alrady to linked some system.
+            // new system_id(s) can be something different from the old one(s).
             let file_info_systems = sqlx::query!(
                 "SELECT system_id FROM file_info_system 
                  WHERE file_info_id = ?",

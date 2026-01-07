@@ -79,11 +79,45 @@ impl PipelineStep<AddFileSetContext> for UpdateDatabaseStep {
     }
 }
 
+pub struct AddFileSetItemsStep;
+
+#[async_trait::async_trait]
+impl PipelineStep<AddFileSetContext> for AddFileSetItemsStep {
+    fn name(&self) -> &'static str {
+        "add_file_set_items"
+    }
+
+    fn should_execute(&self, context: &AddFileSetContext) -> bool {
+        !context.item_ids.is_empty() && context.file_set_id.is_some()
+    }
+
+    async fn execute(&self, context: &mut AddFileSetContext) -> StepAction {
+        let res = context
+            .repository_manager
+            .get_release_item_repository()
+            .link_file_set_to_items(&context.item_ids, context.file_set_id.unwrap())
+            .await;
+
+        match res {
+            Ok(_) => tracing::info!("File set linked to item(s)"),
+            Err(err) => {
+                tracing::error!(error = %err,
+                    "Link file set to items operation failed.");
+                // No point to abort here
+                // TODO: user should see error message about linking failure!
+            }
+        }
+
+        StepAction::Continue
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::file_import::model::{FileImportData, FileImportSource, ImportFileContent};
     use crate::file_system_ops::mock::MockFileSystemOps;
+    use core_types::item_type::ItemType;
     use core_types::{FileType, ImportedFile, Sha1Checksum};
     use database::{repository_manager::RepositoryManager, setup_test_db};
     use file_import::mock::MockFileImportOps;
@@ -224,5 +258,46 @@ mod tests {
         // Verify both files were added - just check the file set was created
         let file_set_id = context.file_set_id.unwrap();
         assert!(file_set_id > 0);
+    }
+
+    #[async_std::test]
+    async fn test_add_file_set_items_step() {
+        let pool = Arc::new(setup_test_db().await);
+        let repository_manager = Arc::new(RepositoryManager::new(pool));
+
+        // insert release, need for release_item
+
+        let release_id = repository_manager
+            .get_release_repository()
+            .add_release("")
+            .await
+            .unwrap();
+
+        // insert file set, need file set id for linking
+        let file_set_id = repository_manager
+            .get_file_set_repository()
+            .add_file_set("", "", &FileType::Rom, "", &[], &[])
+            .await
+            .unwrap();
+
+        // insert release item, need for linking
+        let release_item = repository_manager
+            .get_release_item_repository()
+            .create_item(release_id, ItemType::Manual, None)
+            .await
+            .unwrap();
+
+        let mock_ops = Arc::new(MockFileImportOps::new());
+        let file_import_data = create_file_import_data(vec![], vec![]);
+
+        let mut context = create_test_context(mock_ops, file_import_data).await;
+        context.item_ids = vec![release_item];
+        context.file_set_id = Some(file_set_id);
+
+        let step = AddFileSetItemsStep;
+        assert!(step.should_execute(&context));
+
+        let res = step.execute(&mut context).await;
+        assert_eq!(res, StepAction::Continue);
     }
 }

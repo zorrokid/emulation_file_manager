@@ -109,20 +109,26 @@ impl ReleaseItemRepository {
         Ok(())
     }
 
-    pub async fn link_file_set_to_item(
+    pub async fn link_file_set_to_items(
         &self,
-        item_id: i64,
+        item_ids: &[i64],
         file_set_id: i64,
     ) -> Result<(), sqlx::Error> {
-        let query = sqlx::query(
-            "INSERT INTO file_set_item (
+        let mut transaction = self.pool.begin().await?;
+
+        for item_id in item_ids {
+            sqlx::query(
+                "INSERT INTO file_set_item (
                 file_set_id,
                 item_id
             ) VALUES (?, ?)",
-        )
-        .bind(file_set_id)
-        .bind(item_id);
-        query.execute(&*self.pool).await?;
+            )
+            .bind(file_set_id)
+            .bind(item_id)
+            .execute(&mut *transaction)
+            .await?;
+        }
+        transaction.commit().await?;
         Ok(())
     }
 
@@ -265,7 +271,7 @@ mod tests {
         let file_set_id = create_file_set(&repository, system_id).await;
 
         release_item_repo
-            .link_file_set_to_item(item_id, file_set_id)
+            .link_file_set_to_items(&[item_id], file_set_id)
             .await
             .unwrap();
         let file_sets = release_item_repo
@@ -321,11 +327,11 @@ mod tests {
         let file_set_id_2 = create_file_set(&repository, system_id).await;
 
         release_item_repo
-            .link_file_set_to_item(item_id, file_set_id_1)
+            .link_file_set_to_items(&[item_id], file_set_id_1)
             .await
             .unwrap();
         release_item_repo
-            .link_file_set_to_item(item_id, file_set_id_2)
+            .link_file_set_to_items(&[item_id], file_set_id_2)
             .await
             .unwrap();
 
@@ -367,11 +373,11 @@ mod tests {
             .unwrap();
 
         release_item_repo
-            .link_file_set_to_item(item_id_1, file_set_id)
+            .link_file_set_to_items(&[item_id_1], file_set_id)
             .await
             .unwrap();
         release_item_repo
-            .link_file_set_to_item(item_id_2, file_set_id)
+            .link_file_set_to_items(&[item_id_2], file_set_id)
             .await
             .unwrap();
 
@@ -454,7 +460,7 @@ mod tests {
         let system_id = create_system(&repository).await;
         let file_set_id = create_file_set(&repository, system_id).await;
         release_item_repo
-            .link_file_set_to_item(item_id, file_set_id)
+            .link_file_set_to_items(&[item_id], file_set_id)
             .await
             .unwrap();
         let delete_result = repository
