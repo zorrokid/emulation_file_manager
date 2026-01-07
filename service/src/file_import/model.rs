@@ -1,11 +1,21 @@
 use std::{
     collections::{HashMap, HashSet},
     path::PathBuf,
+    sync::Arc,
 };
 
 use core_types::{FileSize, FileType, ImportedFile, Sha1Checksum};
-use database::models::FileInfo;
-use file_import::FileImportModel;
+use database::{models::FileInfo, repository_manager::RepositoryManager};
+use file_import::{FileImportModel, FileImportOps};
+
+use crate::{file_system_ops::FileSystemOps, view_models::Settings};
+
+pub struct FileSetOperationDeps {
+    pub repository_manager: Arc<RepositoryManager>,
+    pub settings: Arc<Settings>,
+    pub file_import_ops: Arc<dyn FileImportOps>,
+    pub fs_ops: Arc<dyn FileSystemOps>,
+}
 
 #[derive(Debug, Clone)]
 pub struct FileImportMetadata {
@@ -147,6 +157,7 @@ pub struct FileSetImportModel {
     pub file_set_name: String,
     pub file_set_file_name: String,
     pub file_type: FileType,
+    pub item_ids: Vec<i64>,
 }
 
 #[derive(Debug)]
@@ -162,6 +173,7 @@ pub struct UpdateFileSetModel {
     pub file_set_name: String,
     pub file_set_file_name: String,
     pub file_type: FileType,
+    pub item_ids: Vec<i64>,
 }
 
 #[cfg(test)]

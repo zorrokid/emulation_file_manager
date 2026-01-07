@@ -465,6 +465,7 @@ mod tests {
             file_set_file_name: "test_game".to_string(),
             source: "test_source".to_string(),
             deletion_results: HashMap::new(),
+            item_ids: vec![],
         }
     }
 

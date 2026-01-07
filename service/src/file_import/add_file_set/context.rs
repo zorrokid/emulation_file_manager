@@ -9,7 +9,7 @@ use crate::{
         common_steps::{
             check_existing_files::CheckExistingFilesContext, import::AddFileSetContextOps,
         },
-        model::{FileImportData, ImportFileContent},
+        model::{FileImportData, FileSetOperationDeps, ImportFileContent},
     },
     file_system_ops::FileSystemOps,
     view_models::Settings,
@@ -18,6 +18,9 @@ use crate::{
 pub struct AddFileSetContext {
     pub repository_manager: Arc<RepositoryManager>,
     pub settings: Arc<Settings>,
+    pub file_import_ops: Arc<dyn FileImportOps>,
+    pub file_system_ops: Arc<dyn FileSystemOps>,
+
     pub system_ids: Vec<i64>,
     pub file_import_data: FileImportData,
 
@@ -25,15 +28,46 @@ pub struct AddFileSetContext {
     pub file_set_name: String,
     pub file_set_file_name: String,
     pub source: String,
+    pub item_ids: Vec<i64>,
 
     pub imported_files: HashMap<Sha1Checksum, ImportedFile>,
     pub file_set_id: Option<i64>,
-    pub file_import_ops: Arc<dyn FileImportOps>,
-    pub file_system_ops: Arc<dyn FileSystemOps>,
     pub existing_files: Vec<FileInfo>,
 }
 
+pub struct FileSetParams {
+    file_import_data: FileImportData,
+    file_set_name: String,
+    file_set_file_name: String,
+    source: String,
+    item_ids: Vec<i64>,
+    system_ids: Vec<i64>,
+}
+
 impl AddFileSetContext {
+    pub fn new(
+        file_set_operation_deps: FileSetOperationDeps,
+        file_set_params: FileSetParams,
+    ) -> Self {
+        Self {
+            repository_manager: file_set_operation_deps.repository_manager,
+            settings: file_set_operation_deps.settings,
+            file_import_ops: file_set_operation_deps.file_import_ops,
+            file_system_ops: file_set_operation_deps.fs_ops,
+
+            file_import_data: file_set_params.file_import_data,
+            file_set_name: file_set_params.file_set_name,
+            file_set_file_name: file_set_params.file_set_file_name,
+            item_ids: file_set_params.item_ids,
+            source: file_set_params.source,
+            system_ids: file_set_params.system_ids,
+
+            imported_files: HashMap::new(),
+            file_set_id: None,
+            existing_files: Vec::new(),
+        }
+    }
+
     pub fn get_files_in_file_set(&self) -> Vec<ImportedFile> {
         println!(
             "Getting files in file set. Imported files count: {}, Existing files count: {}",
@@ -201,6 +235,7 @@ mod tests {
             file_import_ops,
             file_system_ops,
             existing_files: vec![],
+            item_ids: vec![],
         }
     }
 

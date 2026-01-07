@@ -113,6 +113,7 @@ mod tests {
             file_import_ops,
             file_system_ops,
             existing_files: vec![],
+            item_ids: vec![],
         }
     }
 
