@@ -125,10 +125,7 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::Arc;
 
-    async fn create_test_context(
-        file_import_ops: Arc<MockFileImportOps>,
-        file_import_data: FileImportData,
-    ) -> AddFileSetContext {
+    async fn create_test_context(file_import_data: Option<FileImportData>) -> AddFileSetContext {
         let pool = Arc::new(setup_test_db().await);
         let repository_manager = Arc::new(RepositoryManager::new(pool));
         let settings = Arc::new(crate::view_models::Settings::default());
@@ -137,14 +134,14 @@ mod tests {
         AddFileSetContext {
             repository_manager,
             settings,
-            file_import_data,
+            file_import_data: file_import_data.unwrap_or(create_file_import_data(vec![], vec![])),
             system_ids: vec![],
             source: "test_source".to_string(),
             file_set_name: "Test Game".to_string(),
             file_set_file_name: "test_game.zip".to_string(),
             imported_files: HashMap::new(),
             file_set_id: None,
-            file_import_ops,
+            file_import_ops: Arc::new(MockFileImportOps::new()),
             file_system_ops,
             existing_files: vec![],
             item_ids: vec![],
@@ -165,10 +162,9 @@ mod tests {
 
     #[async_std::test]
     async fn test_update_database_step_success() {
-        let mock_ops = Arc::new(MockFileImportOps::new());
         let checksum: Sha1Checksum = [1u8; 20];
         let file_import_data = create_file_import_data(vec![checksum], vec![]);
-        let mut context = create_test_context(mock_ops, file_import_data).await;
+        let mut context = create_test_context(Some(file_import_data)).await;
 
         // Add system to database first
         let system_id = context
@@ -202,7 +198,6 @@ mod tests {
 
     #[async_std::test]
     async fn test_update_database_step_with_existing_files() {
-        let mock_ops = Arc::new(MockFileImportOps::new());
         let checksum1: Sha1Checksum = [1u8; 20];
         let checksum2: Sha1Checksum = [2u8; 20];
 
@@ -225,7 +220,7 @@ mod tests {
             }],
         );
 
-        let mut context = create_test_context(mock_ops, file_import_data).await;
+        let mut context = create_test_context(Some(file_import_data)).await;
         // Add system to database first
         let system_id = context
             .repository_manager
@@ -287,10 +282,7 @@ mod tests {
             .await
             .unwrap();
 
-        let mock_ops = Arc::new(MockFileImportOps::new());
-        let file_import_data = create_file_import_data(vec![], vec![]);
-
-        let mut context = create_test_context(mock_ops, file_import_data).await;
+        let mut context = create_test_context(None).await;
         context.item_ids = vec![release_item];
         context.file_set_id = Some(file_set_id);
 
