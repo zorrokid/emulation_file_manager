@@ -1,6 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{
+    error::Error,
     file_import::{
         common_steps::{
             check_existing_files::CheckExistingFilesContext,
@@ -44,6 +45,8 @@ pub struct UpdateFileSetContext {
     pub imported_files: HashMap<Sha1Checksum, ImportedFile>,
     /// To collect deletion results for files removed from the file set
     pub deletion_results: HashMap<Sha1Checksum, FileDeletionResult>,
+    // There can be steps where failure don't abort the pipeline. Collect those failed steps during deletion, with error message
+    pub failed_steps: HashMap<String, Error>,
 }
 
 pub struct FileSetParams {
@@ -79,6 +82,7 @@ impl UpdateFileSetContext {
             files_in_file_set: vec![],
             source: file_set_params.source,
             deletion_results: HashMap::new(),
+            failed_steps: HashMap::new(),
         }
     }
 

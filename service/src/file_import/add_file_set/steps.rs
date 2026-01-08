@@ -103,8 +103,11 @@ impl PipelineStep<AddFileSetContext> for AddFileSetItemsStep {
             Err(err) => {
                 tracing::error!(error = %err,
                     "Link file set to items operation failed.");
-                // No point to abort here
-                // TODO: user should see error message about linking failure!
+                // No point to abort here, add to failed steps and continue
+                context.failed_steps.insert(
+                    self.name().to_string(),
+                    Error::DbError(format!("Error linking file set to items: {}", err)),
+                );
             }
         }
 
@@ -115,7 +118,10 @@ impl PipelineStep<AddFileSetContext> for AddFileSetItemsStep {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::file_import::model::{FileImportData, FileImportSource, ImportFileContent};
+    use crate::file_import::add_file_set::context::FileSetParams;
+    use crate::file_import::model::{
+        FileImportData, FileImportSource, FileSetOperationDeps, ImportFileContent,
+    };
     use crate::file_system_ops::mock::MockFileSystemOps;
     use core_types::item_type::ItemType;
     use core_types::{FileType, ImportedFile, Sha1Checksum};
@@ -131,21 +137,23 @@ mod tests {
         let settings = Arc::new(crate::view_models::Settings::default());
         let file_system_ops = Arc::new(MockFileSystemOps::new());
 
-        AddFileSetContext {
-            repository_manager,
-            settings,
-            file_import_data: file_import_data.unwrap_or(create_file_import_data(vec![], vec![])),
-            system_ids: vec![],
-            source: "test_source".to_string(),
-            file_set_name: "Test Game".to_string(),
-            file_set_file_name: "test_game.zip".to_string(),
-            imported_files: HashMap::new(),
-            file_set_id: None,
-            file_import_ops: Arc::new(MockFileImportOps::new()),
-            file_system_ops,
-            existing_files: vec![],
-            item_ids: vec![],
-        }
+        AddFileSetContext::new(
+            FileSetOperationDeps {
+                repository_manager,
+                settings,
+                fs_ops: file_system_ops,
+                file_import_ops: Arc::new(MockFileImportOps::new()),
+            },
+            FileSetParams {
+                file_import_data: file_import_data
+                    .unwrap_or(create_file_import_data(vec![], vec![])),
+                system_ids: vec![],
+                source: "test_source".to_string(),
+                file_set_name: "Test Game".to_string(),
+                file_set_file_name: "test_game.zip".to_string(),
+                item_ids: vec![],
+            },
+        )
     }
 
     fn create_file_import_data(

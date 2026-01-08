@@ -5,6 +5,7 @@ use database::{models::FileInfo, repository_manager::RepositoryManager};
 use file_import::FileImportOps;
 
 use crate::{
+    error::Error,
     file_import::{
         common_steps::{
             check_existing_files::CheckExistingFilesContext, import::AddFileSetContextOps,
@@ -33,15 +34,17 @@ pub struct AddFileSetContext {
     pub imported_files: HashMap<Sha1Checksum, ImportedFile>,
     pub file_set_id: Option<i64>,
     pub existing_files: Vec<FileInfo>,
+    // There can be steps where failure don't abort the pipeline. Collect those failed steps during deletion, with error message
+    pub failed_steps: HashMap<String, Error>,
 }
 
 pub struct FileSetParams {
-    file_import_data: FileImportData,
-    file_set_name: String,
-    file_set_file_name: String,
-    source: String,
-    item_ids: Vec<i64>,
-    system_ids: Vec<i64>,
+    pub file_import_data: FileImportData,
+    pub file_set_name: String,
+    pub file_set_file_name: String,
+    pub source: String,
+    pub item_ids: Vec<i64>,
+    pub system_ids: Vec<i64>,
 }
 
 impl AddFileSetContext {
@@ -65,6 +68,7 @@ impl AddFileSetContext {
             imported_files: HashMap::new(),
             file_set_id: None,
             existing_files: Vec::new(),
+            failed_steps: HashMap::new(),
         }
     }
 
@@ -236,6 +240,7 @@ mod tests {
             file_system_ops,
             existing_files: vec![],
             item_ids: vec![],
+            failed_steps: HashMap::new(),
         }
     }
 

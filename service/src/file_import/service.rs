@@ -7,13 +7,13 @@ use file_import::FileImportOps;
 use crate::{
     error::Error,
     file_import::{
-        add_file_set::context::AddFileSetContext,
+        add_file_set::context::{AddFileSetContext, FileSetParams as AddFileSetParams},
         model::{
             FileImportData, FileImportPrepareResult, FileImportResult, FileSetImportModel,
             FileSetOperationDeps, UpdateFileSetModel,
         },
         prepare::context::PrepareFileImportContext,
-        update_file_set::context::{FileSetParams, UpdateFileSetContext},
+        update_file_set::context::{FileSetParams as UpdateFileSetParams, UpdateFileSetContext},
     },
     file_system_ops::{FileSystemOps, StdFileSystemOps},
     pipeline::generic_pipeline::Pipeline,
@@ -105,23 +105,23 @@ impl FileImportService {
             import_files: import_model.import_files,
         };
 
-        let mut context = AddFileSetContext {
-            repository_manager: self.repository_manager.clone(),
-            settings: self.settings.clone(),
-            file_import_ops: self.file_import_ops.clone(),
-            file_system_ops: self.fs_ops.clone(),
+        let mut context = AddFileSetContext::new(
+            FileSetOperationDeps {
+                repository_manager: self.repository_manager.clone(),
+                settings: self.settings.clone(),
+                file_import_ops: self.file_import_ops.clone(),
+                fs_ops: self.fs_ops.clone(),
+            },
+            AddFileSetParams {
+                file_import_data,
+                file_set_name: import_model.file_set_name,
+                file_set_file_name: import_model.file_set_file_name,
+                source: import_model.source,
+                item_ids: import_model.item_ids,
+                system_ids: import_model.system_ids,
+            },
+        );
 
-            file_import_data,
-            system_ids: import_model.system_ids,
-            source: import_model.source,
-            file_set_name: import_model.file_set_name,
-            file_set_file_name: import_model.file_set_file_name,
-            item_ids: import_model.item_ids,
-
-            imported_files: std::collections::HashMap::new(),
-            file_set_id: None,
-            existing_files: vec![],
-        };
         let pipeline = Pipeline::<AddFileSetContext>::new();
         let result = pipeline.execute(&mut context).await;
         match (result, context.file_set_id) {
@@ -132,6 +132,7 @@ impl FileImportService {
                     .values()
                     .cloned()
                     .collect::<Vec<ImportedFile>>(),
+                failed_steps: context.failed_steps,
             }),
             (Err(err), _) => Err(err),
             (_, None) => Err(Error::FileImportError(
@@ -157,7 +158,7 @@ impl FileImportService {
                 file_import_ops: self.file_import_ops.clone(),
                 fs_ops: self.fs_ops.clone(),
             },
-            FileSetParams {
+            UpdateFileSetParams {
                 file_set_id: import_model.file_set_id,
                 file_set_name: import_model.file_set_name,
                 file_set_file_name: import_model.file_set_file_name,
@@ -176,6 +177,7 @@ impl FileImportService {
                     .values()
                     .cloned()
                     .collect::<Vec<ImportedFile>>(),
+                failed_steps: context.failed_steps,
             }),
             Err(err) => Err(err),
         }

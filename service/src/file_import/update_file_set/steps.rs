@@ -410,6 +410,46 @@ impl PipelineStep<UpdateFileSetContext> for MarkNewFilesForCloudSyncStep {
     }
 }
 
+// TODO: this can be probably used in add file set pipeline as well
+pub struct UpdateLinkedItemsStep;
+
+#[async_trait::async_trait]
+impl PipelineStep<UpdateFileSetContext> for UpdateLinkedItemsStep {
+    fn name(&self) -> &'static str {
+        "update_linked_items_step"
+    }
+
+    fn should_execute(&self, context: &UpdateFileSetContext) -> bool {
+        !context.item_ids.is_empty()
+    }
+
+    async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
+        let res = context
+            .repository_manager
+            .get_release_item_repository()
+            .update_file_set_to_items_links(&context.item_ids, context.file_set_id)
+            .await;
+
+        match res {
+            Ok(_) => tracing::info!("File set to item(s) links updated."),
+            Err(err) => {
+                tracing::error!(error = %err,
+                    "Updating links file set to items operation failed.");
+                // No point to abort here, store failed step and continue
+                context.failed_steps.insert(
+                    self.name().to_string(),
+                    Error::DbError(format!(
+                        "Updating links file set to items operation failed: {}",
+                        err
+                    )),
+                );
+            }
+        }
+
+        StepAction::Continue
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::{collections::HashMap, path::PathBuf, sync::Arc};
@@ -466,6 +506,7 @@ mod tests {
             source: "test_source".to_string(),
             deletion_results: HashMap::new(),
             item_ids: vec![],
+            failed_steps: HashMap::new(),
         }
     }
 

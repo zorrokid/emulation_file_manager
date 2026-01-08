@@ -8,7 +8,7 @@ use core_types::{FileSize, FileType, ImportedFile, Sha1Checksum};
 use database::{models::FileInfo, repository_manager::RepositoryManager};
 use file_import::{FileImportModel, FileImportOps};
 
-use crate::{file_system_ops::FileSystemOps, view_models::Settings};
+use crate::{error::Error, file_system_ops::FileSystemOps, view_models::Settings};
 
 pub struct FileSetOperationDeps {
     pub repository_manager: Arc<RepositoryManager>,
@@ -145,6 +145,7 @@ pub struct FileImportPrepareResult {
 pub struct FileImportResult {
     pub file_set_id: i64,
     pub imported_new_files: Vec<ImportedFile>,
+    pub failed_steps: HashMap<String, Error>,
 }
 
 #[derive(Debug)]

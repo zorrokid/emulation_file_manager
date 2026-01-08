@@ -132,6 +132,69 @@ impl ReleaseItemRepository {
         Ok(())
     }
 
+    pub async fn update_file_set_to_items_links(
+        &self,
+        item_ids: &[i64],
+        file_set_id: i64,
+    ) -> Result<(), sqlx::Error> {
+        let mut transaction = self.pool.begin().await?;
+
+        // First get existing links for the file_set_id
+        let existing_item_ids: Vec<i64> = sqlx::query!(
+            "SELECT item_id
+            FROM file_set_item
+            WHERE file_set_id = ?",
+            file_set_id
+        )
+        .fetch_all(&mut *transaction)
+        .await?
+        .into_iter()
+        .map(|row| row.item_id)
+        .collect();
+
+        let removed_item_ids: Vec<i64> = existing_item_ids
+            .iter()
+            .cloned()
+            .filter(|id| !item_ids.contains(id))
+            .collect();
+
+        let new_item_ids: Vec<i64> = item_ids
+            .iter()
+            .cloned()
+            .filter(|id| !existing_item_ids.contains(id))
+            .collect();
+
+        if removed_item_ids.is_empty() && new_item_ids.is_empty() {
+            // No changes needed
+            return Ok(());
+        }
+
+        // Remove links that are no longer needed
+        for item_id in removed_item_ids {
+            sqlx::query("DELETE FROM file_set_item WHERE item_id = ?")
+                .bind(item_id)
+                .execute(&mut *transaction)
+                .await?;
+        }
+
+        // Then, insert new links
+        for item_id in new_item_ids {
+            sqlx::query(
+                "INSERT INTO file_set_item (
+                file_set_id,
+                item_id
+            ) VALUES (?, ?)",
+            )
+            .bind(file_set_id)
+            .bind(item_id)
+            .execute(&mut *transaction)
+            .await?;
+        }
+
+        transaction.commit().await?;
+        Ok(())
+    }
+
     pub async fn unlink_file_set_from_item(
         &self,
         item_id: i64,
@@ -473,5 +536,37 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(file_sets.len(), 0);
+    }
+
+    #[async_std::test]
+    async fn test_update_file_set_to_items_links() {
+        let repository = get_repository().await;
+        let release_id = create_release(&repository).await;
+        let item_type = ItemType::Book;
+        let release_item_repo = repository.get_release_item_repository();
+        let item_id_1 = release_item_repo
+            .create_item(release_id, item_type, None)
+            .await
+            .unwrap();
+        let item_id_2 = release_item_repo
+            .create_item(release_id, item_type, None)
+            .await
+            .unwrap();
+        let system_id = create_system(&repository).await;
+        let file_set_id = create_file_set(&repository, system_id).await;
+        release_item_repo
+            .link_file_set_to_items(&[item_id_1], file_set_id)
+            .await
+            .unwrap();
+        release_item_repo
+            .update_file_set_to_items_links(&[item_id_2], file_set_id)
+            .await
+            .unwrap();
+        let items = release_item_repo
+            .get_items_for_file_set(file_set_id)
+            .await
+            .unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].id, item_id_2);
     }
 }
