@@ -15,6 +15,7 @@ mod list_item;
 mod logging;
 mod release;
 mod release_form;
+mod release_form_components;
 mod releases;
 mod settings_form;
 mod software_title_form;
