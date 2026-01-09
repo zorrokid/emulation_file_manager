@@ -192,19 +192,14 @@ The current import pipeline links file_sets to releases via `release_file_set`. 
 - Add repository
 - Keep existing `release_file_set` table functional (no changes)
 
-**Phase 2**: Optional data migration
-- For releases where item tracking is desired:
-  - Analyze FileType and create appropriate items:
-    - DiskImage, TapeImage, Rom → Disk/Tape/Cartridge items
-    - ManualScan, Manual → Manual items
-    - BoxScan, PackageScan → Box items
-    - InlayScan → InlayCard items
-    - MediaScan → Disk/Tape/Cartridge (may need user input)
+**Phase 2**: Data migration via Feature 002
+- Data migration to items will be handled by the File Type Migration feature (spec 002)
+- That migration will:
+  - Consolidate FileTypes (e.g., ManualScan → Scan)
+  - Create appropriate items for each release
   - Link file_sets to items via `file_set_item`
-  - Keep `release_file_set` links (required for release association)
-- Screenshot, MemorySnapshot, etc. file sets have no item links (intentionally)
-- **S3 files**: No changes needed (organized by FileType, which doesn't change)
-- **Database updates**: Only add links in `file_set_item`, no changes to existing tables
+  - Move files to new directory structure
+- See `002-file-type-migration.md` for details
 
 **Phase 3**: UI updates
 - Add item management UI

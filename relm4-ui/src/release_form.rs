@@ -22,7 +22,7 @@ use service::{
 };
 
 use crate::{
-    file_set_editor::{FileSetEditor, FileSetEditorInit, FileSetEditorMsg, FileSetEditorOutputMsg},
+    //file_set_editor::{FileSetEditor, FileSetEditorInit, FileSetEditorMsg, FileSetEditorOutputMsg},
     file_set_form::{FileSetFormInit, FileSetFormModel, FileSetFormMsg, FileSetFormOutputMsg},
     file_set_selector::{
         FileSetSelector, FileSetSelectorInit, FileSetSelectorMsg, FileSetSelectorOutputMsg,
@@ -136,8 +136,9 @@ pub struct ReleaseFormModel {
     selected_software_titles_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     selected_systems_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     selected_file_sets_list_view_wrapper: TypedListView<FileSetListItem, gtk::SingleSelection>,
+    selected_items_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     release: Option<ReleaseViewModel>,
-    file_set_editor: OnceCell<Controller<FileSetEditor>>,
+    //file_set_editor: OnceCell<Controller<FileSetEditor>>,
     file_set_form: OnceCell<Controller<FileSetFormModel>>,
     release_name: String,
 }
@@ -149,7 +150,7 @@ pub struct ReleaseFormInit {
 }
 
 impl ReleaseFormModel {
-    fn ensure_file_set_editor(&mut self, root: &gtk::Window, sender: &ComponentSender<Self>) {
+    /*fn ensure_file_set_editor(&mut self, root: &gtk::Window, sender: &ComponentSender<Self>) {
         if self.file_set_editor.get().is_none() {
             let file_set_editor_init = FileSetEditorInit {
                 view_model_service: Arc::clone(&self.view_model_service),
@@ -167,7 +168,7 @@ impl ReleaseFormModel {
                 tracing::error!(error = ?e, "Failed to set file set editor");
             }
         }
-    }
+    }*/
 
     fn ensure_file_set_form(&mut self, root: &gtk::Window, sender: &ComponentSender<Self>) {
         if self.file_set_form.get().is_none() {
@@ -322,6 +323,41 @@ impl Component for ReleaseFormModel {
                     },
                 },
 
+                gtk::Frame {
+                    set_label: Some("Items"),
+                    gtk::Box {
+                       set_orientation: gtk::Orientation::Horizontal,
+                       gtk::ScrolledWindow {
+                            set_min_content_height: 360,
+                            set_hexpand: true,
+                            #[local_ref]
+                            selected_items_list_view -> gtk::ListView {}
+                        },
+                        gtk::Box {
+                            set_orientation: gtk::Orientation::Vertical,
+                            set_width_request: 250,
+                            add_css_class: "button-group",
+                             gtk::Button {
+                                set_label: "Add Item",
+                                // items can be added only after release is created
+                                set_sensitive: model.release.is_some(),
+                                //connect_clicked => ReleaseFormMsg::OpenFileSelector,
+                            },
+                            gtk::Button {
+                                set_label: "Edit Item",
+                                //connect_clicked => ReleaseFormMsg::EditFileSet,
+                            },
+                            gtk::Button {
+                                // TODO: should this delete also linked file set or only unlink
+                                // them? Probably only unlink. File Sets remain still linked to
+                                // Release.
+                                set_label: "Delete Item",
+                                //connect_clicked => ReleaseFormMsg::UnlinkFileSet,
+                            },
+                        },
+                    },
+                },
+
                 gtk::Button {
                     set_label: "Submit Release",
                     connect_clicked => ReleaseFormMsg::StartSaveRelease,
@@ -336,6 +372,9 @@ impl Component for ReleaseFormModel {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let selected_systems_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
+            TypedListView::new();
+
+        let selected_items_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
             TypedListView::new();
 
         let selected_file_sets_list_view_wrapper: TypedListView<
@@ -404,13 +443,15 @@ impl Component for ReleaseFormModel {
             software_title_selector,
             selected_software_titles_list_view_wrapper,
             selected_systems_list_view_wrapper,
+            selected_items_list_view_wrapper,
             selected_file_sets_list_view_wrapper,
-            file_set_editor: OnceCell::new(),
+            //file_set_editor: OnceCell::new(),
             file_set_form: OnceCell::new(),
             release_name: String::new(),
         };
 
         let selected_systems_list_view = &model.selected_systems_list_view_wrapper.view;
+        let selected_items_list_view = &model.selected_items_list_view_wrapper.view;
         let selected_file_sets_list_view = &model.selected_file_sets_list_view_wrapper.view;
         let selected_software_titles_list_view =
             &model.selected_software_titles_list_view_wrapper.view;
@@ -603,6 +644,8 @@ impl Component for ReleaseFormModel {
                         name: s.name.clone(),
                     }),
                 );
+
+                self.selected_items_list_view_wrapper.clear();
                 self.selected_file_sets_list_view_wrapper.clear();
                 self.selected_file_sets_list_view_wrapper.extend_from_iter(
                     selected_file_sets.iter().map(|fs| FileSetListItem {

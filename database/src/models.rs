@@ -156,6 +156,7 @@ pub struct FileSyncLogWithFileInfo {
     pub file_type: FileType,
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub struct ReleaseItem {
     pub id: i64,
     pub release_id: i64,

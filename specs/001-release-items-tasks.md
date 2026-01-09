@@ -172,12 +172,9 @@
 **Estimate**: 1-2 hours  
 **Files**: `service/src/file_import/add_file_set/steps.rs`, `service/src/file_import/update_file_set/steps.rs`
 
-- [ ] Update `UpdateDatabaseStep` in add_file_set:
-  - First create file_set and link to release (existing behavior via `release_file_set`)
+- [x] Add new step to in add_file_set for linking items with file_set:
   - Then loop through item_ids and link via `file_set_item` table
-- [ ] Update UpdateFileSet pipeline similarly
-- [ ] Add error handling for missing items
-- [ ] Update rollback logic if needed (remove file_set_item links on failure)
+- [x] Update UpdateFileSet pipeline similarly
 
 **Dependencies**: Task 9
 
@@ -187,11 +184,11 @@
 **Estimate**: 30-45 min  
 **Files**: Test files in `service/src/file_import/`
 
-- [ ] Test file import with empty item_ids works (backward compatible)
+- [x] Test file import with empty item_ids works (backward compatible)
 - [ ] Test file import with single item_id creates link in file_set_item
 - [ ] Test file import with multiple item_ids creates multiple links
 - [ ] Test error handling when item doesn't exist
-- [ ] Verify existing tests still pass with changes
+- [x] Verify existing tests still pass with changes
 
 **Dependencies**: Task 10
 
@@ -199,28 +196,16 @@
 
 ## Phase 3: Data Migration (Future)
 
-### Task 12: Create optional data migration script/service
-**Estimate**: 2-3 hours  
-**Files**: New migration utility or service method
+### Task 12: Data migration via Feature 002
+**Note**: This task is replaced by Feature 002 (File Type Migration)
 
-- [ ] Create migration service to optionally associate file_sets with items:
-  - For releases where user wants item tracking:
-    - Determine appropriate ItemType from FileType:
-      - DiskImage, TapeImage, Rom → Disk/Tape/Cartridge
-      - ManualScan, Manual → Manual
-      - BoxScan, PackageScan → Box
-      - InlayScan → InlayCard
-      - MediaScan → needs determination (Disk/Tape/Cartridge)
-      - Screenshot, MemorySnapshot, etc. → skip (no item)
-    - Create release_item if doesn't exist for that type
-    - Link file_set to item via `file_set_item` table
-    - Keep `release_file_set` link (required for release association)
-- [ ] Add dry-run mode to preview changes
-- [ ] Add progress reporting
-- [ ] Add verification step
-- [ ] Handle edge cases (combined PDFs, etc.)
+Data migration will be handled comprehensively by the File Type Migration feature (see `002-file-type-migration.md`), which will:
+- Consolidate FileTypes (ManualScan → Scan, BoxScan → Document, etc.)
+- Create and link items automatically
+- Move files to new directory structure
+- Update S3 storage
 
-**Dependencies**: Phase 2 complete
+**No separate migration implementation needed for this feature.**
 
 ---
 
@@ -228,12 +213,13 @@
 **Estimate**: 1-2 hours  
 **Files**: Existing file management UI
 
-- [ ] Add UI to view which items a file_set is linked to
+- [ ] File set form should present a list to pick items to link file set to 
+- [ ] File set form should have an action to add new item to release and selection list will be populated after addition OR should the addition be only in release form 
+- [ ] File set form should present the items the file set is linked to 
 - [ ] Add ability to link/unlink file_sets to/from items
-- [ ] Show in file set detail view
-- [ ] Allow multi-select for linking to multiple items
+- [ ] Show linked items in file set detail view
 
-**Dependencies**: Phase 3 Task 12 (or can be done independently)
+**Dependencies**: Phase 1 complete
 
 ---
 
@@ -312,11 +298,15 @@
 - Optional data migration tool
 - UI for managing file_set ↔ item links
 
+**Phase 3 (Migration)**: ~0-1 hours
+- Migration handled by Feature 002
+- Optional: UI for manual item-to-file_set linking
+
 **Phase 4 (UI)**: ~7-11 hours  
 - Complete UI implementation
 - Item management, file ordering, optional item selection in import
 
-**Total**: ~18-27 hours for complete feature
+**Total**: ~15-23 hours for complete feature (reduced from 18-27)
 
 ## Notes
 
@@ -326,17 +316,4 @@
 - Items are optional organizational metadata
 - File sets can exist without item associations
 - File ordering can be implemented separately from items if needed
-- Remove deprecated table
-
-**Phase 4 (UI)**: ~9-14 hours  
-- Complete UI implementation
-- Item management, file ordering, game launching
-
-**Total**: ~20-29 hours for complete feature
-
-## Notes
-
-- Each phase can be developed and deployed independently
-- Phase 1 can be merged without breaking existing functionality
-- UI can start development during Phase 2/3
-- File ordering can be implemented separately from items if needed
+- Data migration to items handled by Feature 002 (File Type Migration)

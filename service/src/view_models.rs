@@ -4,9 +4,12 @@ use std::{
     path::PathBuf,
 };
 
-use core_types::{ArgumentType, DocumentType, FileSize, FileType, SettingName, Sha1Checksum};
+use core_types::{
+    ArgumentType, DocumentType, FileSize, FileType, SettingName, Sha1Checksum, item_type::ItemType,
+};
 use database::models::{
-    DocumentViewer, Emulator, FileSet, FileSetFileInfo, ReleaseExtended, SoftwareTitle, System,
+    DocumentViewer, Emulator, FileSet, FileSetFileInfo, ReleaseExtended, ReleaseItem,
+    SoftwareTitle, System,
 };
 use file_system::get_files_root_dir;
 
@@ -196,6 +199,23 @@ pub struct FileSetViewModel {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct ReleaseItemViewModel {
+    pub id: i64,
+    pub item_type: ItemType,
+    pub notes: String,
+}
+
+impl From<ReleaseItem> for ReleaseItemViewModel {
+    fn from(release_item: ReleaseItem) -> Self {
+        ReleaseItemViewModel {
+            id: release_item.id,
+            item_type: release_item.item_type,
+            notes: release_item.notes.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct FileSetFileInfoViewModel {
     pub file_set_id: i64,
     pub file_info_id: i64,
@@ -287,6 +307,7 @@ pub struct ReleaseViewModel {
     pub systems: Vec<System>,
     pub software_titles: Vec<SoftwareTitle>,
     pub file_sets: Vec<FileSetViewModel>,
+    pub items: Vec<ReleaseItemViewModel>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
