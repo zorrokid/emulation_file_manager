@@ -81,7 +81,7 @@ pub enum FileSetListMsg {
     FileSetSelected(FileSetListModel),
     UnlinkFileSet,
     OpenFileSelector,
-    SetSelectedSystemIds(Vec<i64>),
+    SystemsChanged { system_ids: Vec<i64> },
     FileSetUpdated(FileSetListModel),
     ResetItems {
         items: Vec<FileSetListModel>,
@@ -91,8 +91,7 @@ pub enum FileSetListMsg {
 
 #[derive(Debug)]
 pub enum FileSetListOutputMsg {
-    FileSetSelected(i64),
-    FileSetUnlinked(i64),
+    ItemsChanged { file_set_ids: Vec<i64> },
 }
 
 #[derive(Debug)]
@@ -144,6 +143,15 @@ impl FileSetList {
                 tracing::error!(error = ?e, "Failed to set file set editor");
             }
         }
+    }
+
+    fn notify_items_changed(&self, sender: &ComponentSender<Self>) {
+        let file_set_ids = get_item_ids(&self.selected_file_sets_list_view_wrapper);
+        sender
+            .output(FileSetListOutputMsg::ItemsChanged { file_set_ids })
+            .unwrap_or_else(|err| {
+                tracing::error!(error = ?err, "Error sending output message");
+            });
     }
 }
 
@@ -252,17 +260,13 @@ impl Component for FileSetList {
                         id: file_set.id,
                         file_type: file_set.file_type.to_string(),
                     });
-                sender.output(FileSetListOutputMsg::FileSetSelected(file_set.id)).unwrap_or_else(|e| {
-                    tracing::error!(error = ?e, "Failed to send FileSetSelected output message");
-                });
+                self.notify_items_changed(&sender);
             }
             FileSetListMsg::UnlinkFileSet => {
                 let selected_id = get_selected_item_id(&self.selected_file_sets_list_view_wrapper);
                 if let Some(selected_id) = selected_id {
                     remove_selected(&mut self.selected_file_sets_list_view_wrapper);
-                    sender.output(FileSetListOutputMsg::FileSetUnlinked(selected_id)).unwrap_or_else(|e| {
-                    tracing::error!(error = ?e, "Failed to send FileSetUnlinked output message");
-                });
+                    self.notify_items_changed(&sender);
                 }
             }
             FileSetListMsg::FileSetUpdated(file_set) => {
@@ -281,7 +285,7 @@ impl Component for FileSetList {
                     selected_file_set_ids: get_item_ids(&self.selected_file_sets_list_view_wrapper),
                 });
             }
-            FileSetListMsg::SetSelectedSystemIds(system_ids) => {
+            FileSetListMsg::SystemsChanged { system_ids } => {
                 self.selected_system_ids = system_ids;
             }
             FileSetListMsg::ResetItems { items, system_ids } => {
@@ -294,6 +298,7 @@ impl Component for FileSetList {
                     }));
 
                 self.selected_system_ids = system_ids;
+                self.notify_items_changed(&sender);
             }
         }
     }
