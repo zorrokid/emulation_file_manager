@@ -86,7 +86,7 @@ impl ReleaseItemRepository {
         Ok(items)
     }
 
-    pub async fn update_item(&self, item_id: i64, notes: Option<String>) -> Result<(), Error> {
+    pub async fn update_item(&self, item_id: i64, notes: Option<String>) -> Result<i64, Error> {
         sqlx::query!(
             "UPDATE release_item
             SET notes = ?
@@ -96,7 +96,7 @@ impl ReleaseItemRepository {
         )
         .execute(&*self.pool)
         .await?;
-        Ok(())
+        Ok(item_id)
     }
 
     pub async fn delete_item(&self, item_id: i64) -> Result<(), Error> {

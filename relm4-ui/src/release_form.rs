@@ -201,19 +201,21 @@ impl Component for ReleaseFormModel {
 
         let item_list_init = ItemListInit {
             release_id: None,
+            repository_manager: Arc::clone(&init_model.repository_manager),
         };
-        let item_list = ItemList::builder()
-            .launch(item_list_init)
-            .forward(sender.input_sender(), |msg| match msg {
-                ItemListOutputMsg::ItemsChanged { item_ids } => {
-                    ReleaseFormMsg::ItemsChanged { item_ids }
-                }
-                // AddItem, EditItem, RemoveItem output events are not yet handled
-                _ => {
-                    tracing::debug!("Item list action not yet implemented");
-                    ReleaseFormMsg::ItemsChanged { item_ids: vec![] }
-                }
-            });
+        let item_list =
+            ItemList::builder()
+                .launch(item_list_init)
+                .forward(sender.input_sender(), |msg| match msg {
+                    ItemListOutputMsg::ItemsChanged { item_ids } => {
+                        ReleaseFormMsg::ItemsChanged { item_ids }
+                    }
+                    // AddItem, EditItem, RemoveItem output events are not yet handled
+                    _ => {
+                        tracing::debug!("Item list action not yet implemented");
+                        ReleaseFormMsg::ItemsChanged { item_ids: vec![] }
+                    }
+                });
 
         let model = ReleaseFormModel {
             view_model_service: init_model.view_model_service,
@@ -247,10 +249,9 @@ impl Component for ReleaseFormModel {
             file_set_list_view,
             Some(&gtk::Label::new(Some("File Sets"))),
         );
-        widgets.notebook.append_page(
-            item_list_view,
-            Some(&gtk::Label::new(Some("Items"))),
-        );
+        widgets
+            .notebook
+            .append_page(item_list_view, Some(&gtk::Label::new(Some("Items"))));
         ComponentParts { model, widgets }
     }
 
@@ -365,7 +366,7 @@ impl Component for ReleaseFormModel {
                 let mut selected_items = vec![];
                 let mut release_name = String::new();
                 let release_id = self.release.as_ref().map(|r| r.id);
-                
+
                 if let Some(release) = &self.release {
                     selected_systems = release
                         .systems
@@ -431,7 +432,8 @@ impl Component for ReleaseFormModel {
                 self.selected_software_title_ids =
                     selected_software_titles.iter().map(|st| st.id).collect();
 
-                self.item_list.emit(ItemListMsg::SetReleaseId { release_id });
+                self.item_list
+                    .emit(ItemListMsg::SetReleaseId { release_id });
                 self.item_list.emit(ItemListMsg::ResetItems {
                     items: selected_items,
                 });

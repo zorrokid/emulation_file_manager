@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use core_types::item_type::ItemType;
-use database::{database_error::Error, repository_manager::RepositoryManager};
+use database::{database_error::Error, models::ReleaseItem, repository_manager::RepositoryManager};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
@@ -26,7 +26,7 @@ pub struct ItemForm {
     pub item_type: Option<ItemType>,
     pub notes: String,
     pub release_item_id: Option<i64>,
-    pub release_id: i64,
+    pub release_id: Option<i64>,
     pub item_type_dropdown: Controller<ItemTypeDropDown>,
 }
 
@@ -38,24 +38,26 @@ pub enum ItemFormMsg {
     Hide,
     Show {
         release_id: i64,
-        edit_item: Option<ReleaseItemListModel>,
+        edit_item_id: Option<i64>,
     },
+    UpdateFields,
 }
 
 #[derive(Debug)]
 pub enum ItemFormOutputMsg {
     ItemAdded(ReleaseItemListModel),
+    ItemUpdated(ReleaseItemListModel),
 }
 
 #[derive(Debug)]
 pub enum ItemFormCommandMsg {
     ItemSubmitted(Result<i64, Error>),
+    ProcessGetEditItemResult(Result<ReleaseItem, Error>),
 }
 
 #[derive(Debug)]
 pub struct ItemFormInit {
     pub repository_manager: Arc<RepositoryManager>,
-    pub release_id: i64,
 }
 
 #[relm4::component(pub)]
@@ -114,9 +116,9 @@ impl Component for ItemForm {
                         #[watch]
                         set_text: &model.notes,
                         set_placeholder_text: Some("Enter notes about the item"),
-                        // TODO: or connect_activate?
-                        connect_changed[sender] => move |entry| {
+                        connect_activate[sender] => move |entry| {
                             let buffer = entry.buffer();
+                            println!("Notes entry activated: {}", buffer.text());
                             sender.input(
                                 ItemFormMsg::UpdateNotes(buffer.text().into()),
                             );
@@ -145,7 +147,7 @@ impl Component for ItemForm {
             repository_manager: init_model.repository_manager,
             item_type_dropdown,
             release_item_id: None,
-            release_id: init_model.release_id,
+            release_id: None,
         };
 
         let item_type_dropdown = model.item_type_dropdown.widget();
@@ -166,26 +168,45 @@ impl Component for ItemForm {
                 self.item_type = Some(item_type);
             }
             ItemFormMsg::UpdateNotes(notes) => {
+                println!("Updating notes: {}", notes);
                 self.notes = notes;
             }
             ItemFormMsg::CreateOrUpdateItem => {
-                if let Some(item_type) = self.item_type {
+                if let (Some(item_type), Some(release_id)) = (self.item_type, self.release_id) {
                     let notes = if self.notes.is_empty() {
                         None
                     } else {
                         Some(self.notes.clone())
                     };
 
+                    println!(
+                        "Creating or updating item: type={:?}, notes={:?}",
+                        item_type, notes
+                    );
+
                     let repository_manager = Arc::clone(&self.repository_manager);
-                    let release_id = self.release_id;
-                    sender.oneshot_command(async move {
-                        tracing::info!(item_type = ?item_type, "Adding new release item");
-                        let result = repository_manager
-                            .get_release_item_repository()
-                            .create_item(release_id, item_type, notes)
-                            .await;
-                        ItemFormCommandMsg::ItemSubmitted(result)
-                    });
+
+                    if let Some(edit_item_id) = self.release_item_id {
+                        sender.oneshot_command(async move {
+                            tracing::info!(item_id = edit_item_id, item_type = ?item_type, "Updating release item");
+                            let result = repository_manager
+                                .get_release_item_repository()
+                                .update_item(edit_item_id, notes)
+                                .await;
+
+                            ItemFormCommandMsg::ItemSubmitted(result)
+                        });
+                    } else {
+                        sender.oneshot_command(async move {
+                            tracing::info!(item_type = ?item_type, "Adding new release item");
+                            let result = repository_manager
+                                .get_release_item_repository()
+                                .create_item(release_id, item_type, notes)
+                                .await;
+
+                            ItemFormCommandMsg::ItemSubmitted(result)
+                        });
+                    }
                 }
             }
             ItemFormMsg::Hide => {
@@ -193,25 +214,32 @@ impl Component for ItemForm {
             }
             ItemFormMsg::Show {
                 release_id,
-                edit_item,
+                edit_item_id,
             } => {
-                self.release_id = release_id;
+                self.release_id = Some(release_id);
+                self.item_type = None;
+                self.notes.clear();
+                self.release_item_id = None;
 
-                if let Some(edit_item) = edit_item {
-                    self.item_type = Some(edit_item.item_type);
-                    self.item_type_dropdown
-                        .emit(DropDownMsg::SetSelected(edit_item.item_type));
-                    //self.notes = edit_item.notes.clone().unwrap_or_default();
-                    self.release_item_id = Some(edit_item.id);
-                } else {
-                    self.item_type = None;
-                    self.notes.clear();
-                    self.release_item_id = None;
-                    // TODO: clear selection
-                    /*self.item_type_dropdown
-                    .emit(ItemTypeSelectedMsg::ClearSelection);*/
+                if let Some(edit_item_id) = edit_item_id {
+                    let repository_manager = Arc::clone(&self.repository_manager);
+                    sender.oneshot_command(async move {
+                        tracing::info!(item_id = edit_item_id, "Fetching release item for editing");
+                        let result = repository_manager
+                            .get_release_item_repository()
+                            .get_item(edit_item_id)
+                            .await;
+                        ItemFormCommandMsg::ProcessGetEditItemResult(result)
+                    });
                 }
                 root.show();
+            }
+            ItemFormMsg::UpdateFields => {
+                widgets.notes_entry.set_text(&self.notes);
+                if let Some(item_type) = self.item_type {
+                    self.item_type_dropdown
+                        .emit(DropDownMsg::SetSelected(item_type));
+                }
             }
         }
         // This is essential with update_with_view:
@@ -231,17 +259,43 @@ impl Component for ItemForm {
                         id: item_id,
                         item_type,
                     };
-                    sender
-                        .output(ItemFormOutputMsg::ItemAdded(item))
-                        .unwrap_or_else(|err| {
-                            tracing::error!(error = ?err, "Error sending output message");
-                        });
+                    if self.release_item_id.is_some() {
+                        tracing::info!(item_id, "Release item updated successfully");
+                        sender
+                            .output(ItemFormOutputMsg::ItemUpdated(item))
+                            .unwrap_or_else(|err| {
+                                tracing::error!(error = ?err, "Error sending output message");
+                            });
+                    } else {
+                        tracing::info!(item_id, "Release item created successfully");
+                        sender
+                            .output(ItemFormOutputMsg::ItemAdded(item))
+                            .unwrap_or_else(|err| {
+                                tracing::error!(error = ?err, "Error sending output message");
+                            });
+                    }
+                    root.close();
                 }
             }
             ItemFormCommandMsg::ItemSubmitted(Err(err)) => {
                 tracing::error!(error = ?err, "Error submitting item");
                 show_error_dialog(
                     format!("An error occurred while submitting the item: {}", err),
+                    root,
+                );
+            }
+            ItemFormCommandMsg::ProcessGetEditItemResult(Ok(edit_item)) => {
+                tracing::info!(item_id = edit_item.id, "Fetched item for editing");
+                dbg!(&edit_item);
+                self.item_type = Some(edit_item.item_type);
+                self.notes = edit_item.notes;
+                self.release_item_id = Some(edit_item.id);
+                sender.input(ItemFormMsg::UpdateFields);
+            }
+            ItemFormCommandMsg::ProcessGetEditItemResult(Err(err)) => {
+                tracing::error!(error = ?err, "Error fetching item for editing");
+                show_error_dialog(
+                    format!("An error occurred while fetching the item: {}", err),
                     root,
                 );
             }

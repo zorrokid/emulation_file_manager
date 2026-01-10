@@ -81,7 +81,9 @@ pub enum FileSetListMsg {
     FileSetSelected(FileSetListModel),
     UnlinkFileSet,
     OpenFileSelector,
-    SystemsChanged { system_ids: Vec<i64> },
+    SystemsChanged {
+        system_ids: Vec<i64>,
+    },
     FileSetUpdated(FileSetListModel),
     ResetItems {
         items: Vec<FileSetListModel>,
@@ -139,9 +141,9 @@ impl FileSetList {
                         FileSetListMsg::FileSetSelected(file_set)
                     }
                 });
-            if let Err(e) = self.file_set_form.set(file_set_form) {
+            self.file_set_form.set(file_set_form).unwrap_or_else(|e| {
                 tracing::error!(error = ?e, "Failed to set file set editor");
-            }
+            });
         }
     }
 
