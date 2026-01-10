@@ -515,6 +515,20 @@ where
     list_view_wrapper.remove(list_view_wrapper.selection_model.selected());
 }
 
+pub fn remove_by_id<T>(list_view_wrapper: &mut TypedListView<T, gtk::SingleSelection>, id: i64)
+where
+    T: RelmListItem + HasId,
+{
+    for i in 0..list_view_wrapper.len() {
+        if let Some(list_item) = list_view_wrapper.get(i)
+            && list_item.borrow().id() == id
+        {
+            list_view_wrapper.remove(i);
+            break;
+        }
+    }
+}
+
 pub fn get_selected_item_id<T>(
     list_view_wrapper: &TypedListView<T, gtk::SingleSelection>,
 ) -> Option<i64>

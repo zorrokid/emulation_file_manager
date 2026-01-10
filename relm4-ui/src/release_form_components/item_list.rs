@@ -5,6 +5,7 @@ use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
         self,
+        glib::clone,
         prelude::{ButtonExt, OrientableExt, WidgetExt},
     },
     once_cell::sync::OnceCell,
@@ -14,7 +15,7 @@ use service::view_models::ReleaseItemListModel;
 
 use crate::{
     list_item::ListItem,
-    release_form::{get_item_ids, remove_selected},
+    release_form::{get_item_ids, get_selected_item_id, remove_by_id},
     release_form_components::item_form::{ItemForm, ItemFormInit, ItemFormMsg, ItemFormOutputMsg},
 };
 
@@ -27,6 +28,7 @@ pub enum ItemListMsg {
     SetReleaseId { release_id: Option<i64> },
     ItemAdded(ReleaseItemListModel),
     ItemUpdated(ReleaseItemListModel),
+    SelectionChanged,
 }
 
 #[derive(Debug)]
@@ -50,6 +52,7 @@ pub struct ItemList {
     release_id: Option<i64>,
     selected_items_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     item_form: OnceCell<Controller<ItemForm>>,
+    selected_item: Option<i64>,
 }
 
 #[relm4::component(pub)]
@@ -63,11 +66,17 @@ impl Component for ItemList {
         gtk::Box {
             set_orientation: gtk::Orientation::Horizontal,
 
-            gtk::ScrolledWindow {
-                set_min_content_height: 360,
-                set_hexpand: true,
-                #[local_ref]
-                selected_items_list_view -> gtk::ListView {}
+            if model.release_id.is_none() {
+                gtk::Label {
+                    set_label: "Please create a release first to manage its items.",
+                }
+            } else {
+                gtk::ScrolledWindow {
+                    set_min_content_height: 360,
+                    set_hexpand: true,
+                    #[local_ref]
+                    selected_items_list_view -> gtk::ListView {}
+                }
             },
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
@@ -83,10 +92,14 @@ impl Component for ItemList {
                 gtk::Button {
                     set_label: "Edit Item",
                     connect_clicked => ItemListMsg::EditItem,
+                    #[watch]
+                    set_sensitive: model.selected_item.is_some(),
                 },
                 gtk::Button {
                     set_label: "Delete Item",
                     connect_clicked => ItemListMsg::RemoveItem,
+                    #[watch]
+                    set_sensitive:  model.selected_item.is_some(),
                 },
             },
         }
@@ -95,7 +108,7 @@ impl Component for ItemList {
     fn init(
         init_model: Self::Init,
         _root: Self::Root,
-        _sender: ComponentSender<Self>,
+        sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let selected_items_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
             TypedListView::new();
@@ -105,9 +118,18 @@ impl Component for ItemList {
             release_id: init_model.release_id,
             selected_items_list_view_wrapper,
             item_form: OnceCell::new(),
+            selected_item: None,
         };
 
         let selected_items_list_view = &model.selected_items_list_view_wrapper.view;
+        let selection_model = &model.selected_items_list_view_wrapper.selection_model;
+        selection_model.connect_selected_notify(clone!(
+            #[strong]
+            sender,
+            move |_| {
+                sender.input(ItemListMsg::SelectionChanged);
+            }
+        ));
 
         let widgets = view_output!();
 
@@ -130,10 +152,7 @@ impl Component for ItemList {
                 }
             }
             ItemListMsg::EditItem => {
-                if let (Some(item_id), Some(release_id)) = (
-                    get_selected_item_id(&self.selected_items_list_view_wrapper),
-                    self.release_id,
-                ) {
+                if let (Some(item_id), Some(release_id)) = (self.selected_item, self.release_id) {
                     tracing::info!(item_id, "Opening item form to edit item");
                     self.ensure_item_form(root, &sender);
                     self.item_form
@@ -146,10 +165,8 @@ impl Component for ItemList {
                 }
             }
             ItemListMsg::RemoveItem => {
-                if let Some(item_id) = get_selected_item_id(&self.selected_items_list_view_wrapper)
-                {
-                    // TODO: maybe remove after successful deletion
-                    remove_selected(&mut self.selected_items_list_view_wrapper);
+                if let Some(item_id) = self.selected_item {
+                    remove_by_id(&mut self.selected_items_list_view_wrapper, item_id);
                     let repository_manager = Arc::clone(&self.repository_manager);
                     sender.oneshot_command(async move {
                         tracing::info!(item_id, "Removing release item with ID");
@@ -191,11 +208,17 @@ impl Component for ItemList {
                             name: item.item_type.to_string(),
                         };
                         self.selected_items_list_view_wrapper.remove(i);
-                        self.selected_items_list_view_wrapper.insert(i, updated_item);
+                        self.selected_items_list_view_wrapper
+                            .insert(i, updated_item);
                         break;
                     }
                 }
                 self.notify_items_changed(&sender);
+            }
+            ItemListMsg::SelectionChanged => {
+                let selected_item_id = get_selected_item_id(&self.selected_items_list_view_wrapper);
+                tracing::info!(selected_item_id = ?selected_item_id, "Item selection changed");
+                self.selected_item = selected_item_id;
             }
         }
     }
@@ -253,13 +276,4 @@ impl ItemList {
             });
         }
     }
-}
-
-fn get_selected_item_id(
-    list_view_wrapper: &TypedListView<ListItem, gtk::SingleSelection>,
-) -> Option<i64> {
-    let selected_position = list_view_wrapper.selection_model.selected();
-    list_view_wrapper
-        .get(selected_position)
-        .map(|item| item.borrow().id)
 }
