@@ -24,24 +24,18 @@ use crate::{
     list_item::{HasId, ListItem},
     release_form_components::{
         file_set_list::{FileSetList, FileSetListInit, FileSetListMsg, FileSetListOutputMsg},
+        software_title_list::{
+            SoftwareTitleList, SoftwareTitleListInit, SoftwareTitleListMsg,
+            SoftwareTitleListOutputMsg,
+        },
         system_list::{SystemList, SystemListInit, SystemListMsg, SystemListOutputMsg},
-    },
-    software_title_selector::{
-        SoftwareTitleSelectInit, SoftwareTitleSelectModel, SoftwareTitleSelectMsg,
-        SoftwareTitleSelectOutputMsg,
     },
     utils::dialog_utils::{show_error_dialog, show_info_dialog},
 };
 
 #[derive(Debug)]
 pub enum ReleaseFormMsg {
-    SystemSelected(SystemListModel),
-    SoftwareTitleSelected(SoftwareTitleListModel),
     StartSaveRelease,
-    OpenSoftwareTitleSelector,
-    SoftwareTitleCreated(SoftwareTitleListModel),
-    SoftwareTitleUpdated(SoftwareTitleListModel),
-    UnlinkSoftwareTitle,
     Show { release_id: Option<i64> },
     Hide,
     NameChanged(String),
@@ -49,10 +43,11 @@ pub enum ReleaseFormMsg {
     AddItem,
     EditItem,
     RemoveItem,
-    FileSetSelected(i64),
-    FileSetUnlinked(i64),
     SystemsChanged { system_ids: Vec<i64> },
     FileSetsChanged { file_set_ids: Vec<i64> },
+    SoftwareTitlesChanged { software_title_ids: Vec<i64> },
+    SoftwareTitleCreated(SoftwareTitleListModel),
+    SoftwareTitleUpdated(SoftwareTitleListModel),
 }
 
 #[derive(Debug)]
@@ -73,8 +68,6 @@ pub struct ReleaseFormModel {
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
 
-    software_title_selector: Controller<SoftwareTitleSelectModel>,
-    selected_software_titles_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     selected_items_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     release: Option<ReleaseViewModel>,
     release_name: String,
@@ -83,6 +76,8 @@ pub struct ReleaseFormModel {
     file_set_list: Controller<FileSetList>,
     selected_system_ids: Vec<i64>,
     system_list: Controller<SystemList>,
+    selected_software_title_ids: Vec<i64>,
+    software_title_list: Controller<SoftwareTitleList>,
 }
 
 pub struct ReleaseFormInit {
@@ -130,31 +125,6 @@ impl Component for ReleaseFormModel {
                             sender.input(ReleaseFormMsg::NameChanged(buffer.text().into()));
                         },
                         set_hexpand: true,
-                    },
-                },
-
-                gtk::Frame {
-                    set_label: Some("Software Titles"),
-                    gtk::Box {
-                        set_orientation: gtk::Orientation::Horizontal,
-                        gtk::ScrolledWindow {
-                            set_hexpand: true,
-                            #[local_ref]
-                            selected_software_titles_list_view -> gtk::ListView {}
-                        },
-                        gtk::Box {
-                            set_orientation: gtk::Orientation::Vertical,
-                            set_width_request: 250,
-                            add_css_class: "button-group",
-                            gtk::Button {
-                                set_label: "Select Software Title",
-                                connect_clicked => ReleaseFormMsg::OpenSoftwareTitleSelector,
-                            },
-                            gtk::Button {
-                                set_label: "Unlink Software Title",
-                                connect_clicked => ReleaseFormMsg::UnlinkSoftwareTitle,
-                            },
-                        },
                     },
                 },
 
@@ -220,29 +190,6 @@ impl Component for ReleaseFormModel {
         let selected_items_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
             TypedListView::new();
 
-        let selected_software_titles_list_view_wrapper: TypedListView<
-            ListItem,
-            gtk::SingleSelection,
-        > = TypedListView::new();
-
-        let software_title_selector = SoftwareTitleSelectModel::builder()
-            .transient_for(&root)
-            .launch(SoftwareTitleSelectInit {
-                view_model_service: Arc::clone(&init_model.view_model_service),
-                repository_manager: Arc::clone(&init_model.repository_manager),
-            })
-            .forward(sender.input_sender(), |msg| match msg {
-                SoftwareTitleSelectOutputMsg::Selected(software_title) => {
-                    ReleaseFormMsg::SoftwareTitleSelected(software_title)
-                }
-                SoftwareTitleSelectOutputMsg::Created(software_title) => {
-                    ReleaseFormMsg::SoftwareTitleCreated(software_title)
-                }
-                SoftwareTitleSelectOutputMsg::Updated(software_title) => {
-                    ReleaseFormMsg::SoftwareTitleUpdated(software_title)
-                }
-            });
-
         let file_set_list_init = FileSetListInit {
             view_model_service: Arc::clone(&init_model.view_model_service),
             repository_manager: Arc::clone(&init_model.repository_manager),
@@ -271,28 +218,51 @@ impl Component for ReleaseFormModel {
             },
         );
 
+        let software_title_list_init = SoftwareTitleListInit {
+            view_model_service: Arc::clone(&init_model.view_model_service),
+            repository_manager: Arc::clone(&init_model.repository_manager),
+        };
+        let software_title_list = SoftwareTitleList::builder()
+            .launch(software_title_list_init)
+            .forward(sender.input_sender(), |msg| match msg {
+                SoftwareTitleListOutputMsg::ItemsChanged {
+                    software_title_ids,
+                } => ReleaseFormMsg::SoftwareTitlesChanged {
+                    software_title_ids,
+                },
+                SoftwareTitleListOutputMsg::SoftwareTitleCreated(software_title) => {
+                    ReleaseFormMsg::SoftwareTitleCreated(software_title)
+                }
+                SoftwareTitleListOutputMsg::SoftwareTitleUpdated(software_title) => {
+                    ReleaseFormMsg::SoftwareTitleUpdated(software_title)
+                }
+            });
+
         let model = ReleaseFormModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
             release: None,
-            software_title_selector,
-            selected_software_titles_list_view_wrapper,
             selected_items_list_view_wrapper,
             release_name: String::new(),
             file_set_list,
             selected_file_set_ids: vec![],
             system_list,
             selected_system_ids: vec![],
+            software_title_list,
+            selected_software_title_ids: vec![],
         };
 
         let selected_items_list_view = &model.selected_items_list_view_wrapper.view;
-        let selected_software_titles_list_view =
-            &model.selected_software_titles_list_view_wrapper.view;
 
         let file_set_list_view = model.file_set_list.widget();
         let system_list_view = model.system_list.widget();
+        let software_title_list_view = model.software_title_list.widget();
 
         let widgets = view_output!();
+        widgets.notebook.append_page(
+            software_title_list_view,
+            Some(&gtk::Label::new(Some("Software Titles"))),
+        );
         widgets.notebook.append_page(
             system_list_view,
             Some(&gtk::Label::new(Some("Systems"))),
@@ -312,25 +282,6 @@ impl Component for ReleaseFormModel {
         root: &Self::Root,
     ) {
         match msg {
-            ReleaseFormMsg::OpenSoftwareTitleSelector => {
-                self.software_title_selector
-                    .emit(SoftwareTitleSelectMsg::Show {
-                        selected_software_title_ids: get_item_ids(
-                            &self.selected_software_titles_list_view_wrapper,
-                        ),
-                    });
-            }
-
-            ReleaseFormMsg::SystemSelected(system) => {
-                self.system_list.emit(SystemListMsg::SystemSelected(system));
-            }
-            ReleaseFormMsg::SoftwareTitleSelected(software_title) => {
-                self.selected_software_titles_list_view_wrapper
-                    .append(ListItem {
-                        name: software_title.name.clone(),
-                        id: software_title.id,
-                    });
-            }
             ReleaseFormMsg::SystemsChanged { system_ids } => {
                 self.selected_system_ids = system_ids.clone();
                 self.file_set_list.emit(FileSetListMsg::SystemsChanged {
@@ -340,11 +291,15 @@ impl Component for ReleaseFormModel {
             ReleaseFormMsg::FileSetsChanged { file_set_ids } => {
                 self.selected_file_set_ids = file_set_ids;
             }
+            ReleaseFormMsg::SoftwareTitlesChanged {
+                software_title_ids,
+            } => {
+                self.selected_software_title_ids = software_title_ids;
+            }
             ReleaseFormMsg::StartSaveRelease => {
                 tracing::info!("Starting to save release with selected systems and file sets");
                 let repository_manager = Arc::clone(&self.repository_manager);
-                let software_title_ids =
-                    get_item_ids(&self.selected_software_titles_list_view_wrapper);
+                let software_title_ids = self.selected_software_title_ids.clone();
                 let system_ids = self.selected_system_ids.clone();
 
                 let file_set_ids = self.selected_file_set_ids.clone();
@@ -423,9 +378,6 @@ impl Component for ReleaseFormModel {
                         |err| tracing::error!(error = ?err, "Error in sending message"),
                     );
             }
-            ReleaseFormMsg::UnlinkSoftwareTitle => {
-                remove_selected(&mut self.selected_software_titles_list_view_wrapper);
-            }
             ReleaseFormMsg::UpdateEditFields => {
                 let mut selected_systems = vec![];
                 let mut selected_file_sets = vec![];
@@ -481,12 +433,12 @@ impl Component for ReleaseFormModel {
                     system_ids: selected_systems.iter().map(|s| s.id).collect(),
                 });
 
-                self.selected_software_titles_list_view_wrapper.clear();
-                self.selected_software_titles_list_view_wrapper
-                    .extend_from_iter(selected_software_titles.iter().map(|st| ListItem {
-                        id: st.id,
-                        name: st.name.clone(),
-                    }));
+                self.software_title_list
+                    .emit(SoftwareTitleListMsg::ResetItems {
+                        items: selected_software_titles.clone(),
+                    });
+                self.selected_software_title_ids =
+                    selected_software_titles.iter().map(|st| st.id).collect();
             }
             ReleaseFormMsg::Show { release_id } => {
                 if let Some(id) = release_id {
@@ -526,16 +478,6 @@ impl Component for ReleaseFormModel {
                 if let Some(release) = &self.release {
                     tracing::info!(release_id = release.id, "Removing item from release");
                 }
-            }
-            ReleaseFormMsg::FileSetSelected(id) => {
-                if !self.selected_file_set_ids.contains(&id) {
-                    tracing::info!(id = id, "File set selected for release");
-                    self.selected_file_set_ids.push(id);
-                }
-            }
-            ReleaseFormMsg::FileSetUnlinked(id) => {
-                tracing::info!(id = id, "File set unlinked from release");
-                self.selected_file_set_ids.retain(|&fs_id| fs_id != id);
             }
         }
         // This is essential with update_with_view:
