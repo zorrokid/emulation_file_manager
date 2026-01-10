@@ -166,7 +166,7 @@ impl Component for ItemList {
             ItemListMsg::ResetItems { items } => {
                 self.selected_items_list_view_wrapper.clear();
                 self.selected_items_list_view_wrapper
-                    .extend_from_iter(items.into_iter());
+                    .extend_from_iter(items);
                 self.notify_items_changed(&sender);
             }
             ItemListMsg::SetReleaseId { release_id } => {
@@ -180,13 +180,19 @@ impl Component for ItemList {
                 self.notify_items_changed(&sender);
             }
             ItemListMsg::ItemUpdated(item) => {
-                // Update the item in the list
+                // Update the item in the list by removing and re-inserting
                 for i in 0..self.selected_items_list_view_wrapper.len() {
-                    if let Some(list_item) = self.selected_items_list_view_wrapper.get(i) {
-                        if list_item.borrow().id == item.id {
-                            list_item.borrow_mut().name = item.item_type.to_string();
-                            break;
-                        }
+                    if let Some(list_item) = self.selected_items_list_view_wrapper.get(i)
+                        && list_item.borrow().id == item.id
+                    {
+                        tracing::info!(item_id = item.id, "Updating item in the list");
+                        let updated_item = ListItem {
+                            id: item.id,
+                            name: item.item_type.to_string(),
+                        };
+                        self.selected_items_list_view_wrapper.remove(i);
+                        self.selected_items_list_view_wrapper.insert(i, updated_item);
+                        break;
                     }
                 }
                 self.notify_items_changed(&sender);

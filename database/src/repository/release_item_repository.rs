@@ -86,12 +86,20 @@ impl ReleaseItemRepository {
         Ok(items)
     }
 
-    pub async fn update_item(&self, item_id: i64, notes: Option<String>) -> Result<i64, Error> {
+    pub async fn update_item(
+        &self,
+        item_id: i64,
+        item_type: ItemType,
+        notes: Option<String>,
+    ) -> Result<i64, Error> {
+        let item_type = item_type.to_db_int();
         sqlx::query!(
             "UPDATE release_item
-            SET notes = ?
+            SET notes = ?,
+                item_type = ?
             WHERE id = ?",
             notes,
+            item_type,
             item_id
         )
         .execute(&*self.pool)
@@ -319,7 +327,7 @@ mod tests {
         assert_eq!(items.len(), 1);
 
         release_item_repo
-            .update_item(item_id, Some("Updated notes".to_string()))
+            .update_item(item_id, item_type, Some("Updated notes".to_string()))
             .await
             .unwrap();
 
@@ -482,7 +490,10 @@ mod tests {
             .create_item(release_id, item_type, Some(notes.clone()))
             .await
             .unwrap();
-        release_item_repo.update_item(item_id, None).await.unwrap();
+        release_item_repo
+            .update_item(item_id, item_type, None)
+            .await
+            .unwrap();
         let updated_item = release_item_repo.get_item(item_id).await.unwrap();
         assert_eq!(updated_item.notes, "");
     }

@@ -162,6 +162,7 @@ impl Component for ItemForm {
     ) {
         match message {
             ItemFormMsg::UpdateItemType(item_type) => {
+                tracing::info!("Updating item type: {:?}", item_type);
                 self.item_type = Some(item_type);
             }
             ItemFormMsg::UpdateNotes(notes) => {
@@ -188,7 +189,7 @@ impl Component for ItemForm {
                             tracing::info!(item_id = edit_item_id, item_type = ?item_type, "Updating release item");
                             let result = repository_manager
                                 .get_release_item_repository()
-                                .update_item(edit_item_id, notes)
+                                .update_item(edit_item_id, item_type, notes)
                                 .await;
 
                             ItemFormCommandMsg::ItemSubmitted(result)
@@ -219,6 +220,7 @@ impl Component for ItemForm {
                 self.release_item_id = None;
 
                 if let Some(edit_item_id) = edit_item_id {
+                    tracing::info!(item_id = edit_item_id, "Preparing to edit release item");
                     let repository_manager = Arc::clone(&self.repository_manager);
                     sender.oneshot_command(async move {
                         tracing::info!(item_id = edit_item_id, "Fetching release item for editing");
@@ -228,11 +230,12 @@ impl Component for ItemForm {
                             .await;
                         ItemFormCommandMsg::ProcessGetEditItemResult(result)
                     });
+                    // Don't show yet - wait until data is loaded
                 } else {
                     // Clear the entry for new items
                     widgets.notes_entry.set_text("");
+                    root.show();
                 }
-                root.show();
             }
             ItemFormMsg::UpdateFields => {
                 widgets.notes_entry.set_text(&self.notes);
@@ -291,6 +294,7 @@ impl Component for ItemForm {
                 self.notes = edit_item.notes;
                 self.release_item_id = Some(edit_item.id);
                 sender.input(ItemFormMsg::UpdateFields);
+                root.show();
             }
             ItemFormCommandMsg::ProcessGetEditItemResult(Err(err)) => {
                 tracing::error!(error = ?err, "Error fetching item for editing");

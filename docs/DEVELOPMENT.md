@@ -155,6 +155,65 @@ fn update_with_view(&mut self, widgets: &mut Self::Widgets, msg: Self::Input, ..
 - Use `connect_changed` for immediate updates, `connect_activate` for Enter-to-submit
 - Always clear entry widgets explicitly when resetting forms
 
+### Loading Forms with Async Data
+
+When opening a form/dialog that needs to load data asynchronously (e.g., editing an existing item), don't show the window until the data is ready.
+
+#### Problem: Showing Window Before Data Loads
+
+**DON'T do this:**
+```rust
+ItemFormMsg::Show { edit_item_id, .. } => {
+    if let Some(edit_item_id) = edit_item_id {
+        sender.oneshot_command(async move {
+            let result = fetch_item(edit_item_id).await;
+            CommandMsg::ItemLoaded(result)
+        });
+    }
+    root.show();  // ❌ Shows window before data loads
+}
+```
+
+**Problem:** The window appears with default/empty values, then visibly updates when data loads. This creates a jarring user experience and can cause issues with widgets like dropdowns showing wrong initial selections.
+
+#### Solution: Show Window After Data Loads
+
+**DO this instead:**
+```rust
+ItemFormMsg::Show { edit_item_id, .. } => {
+    if let Some(edit_item_id) = edit_item_id {
+        // Fetch data first
+        sender.oneshot_command(async move {
+            let result = fetch_item(edit_item_id).await;
+            CommandMsg::ItemLoaded(result)
+        });
+        // Don't show yet - wait for data
+    } else {
+        // For new items, show immediately
+        root.show();
+    }
+}
+
+// In update_cmd:
+CommandMsg::ItemLoaded(Ok(item)) => {
+    self.field = item.field;
+    sender.input(Msg::UpdateFields);
+    root.show();  // ✅ Show after data is loaded and fields are set
+}
+```
+
+**Benefits:**
+- Window appears with correct data already populated
+- No visual "flicker" as fields update
+- Dropdown widgets show correct selection immediately
+- Better user experience
+
+**Key Points:**
+- Only show the window after async data is loaded and processed
+- For "new item" mode, you can show immediately since no data needs loading
+- Apply field updates before showing the window
+- This pattern works for any form that loads data: edit dialogs, detail views, etc.
+
 ## rust-s3 Library Usage
 
 ### Error Handling Differences
