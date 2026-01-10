@@ -8,6 +8,24 @@ Emulation File Manager can be used to manage your emulation related files and la
 
 Emulators and document viewers can be configured for laumching files with. Bitmap-file types can be viewed directly in application.
 
+# Concepts (Domain Language) 
+
+## System
+
+## Software Title
+
+### Software Release
+
+## File Set
+
+### File
+
+### File Type
+
+## Emulator
+
+## Document Viewer
+
 
 ## Technologies
 

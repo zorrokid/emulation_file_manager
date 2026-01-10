@@ -3,7 +3,10 @@ use std::sync::Arc;
 use core_types::item_type::ItemType;
 use sqlx::{Pool, Row, Sqlite, prelude::FromRow, sqlite::SqliteRow};
 
-use crate::models::{FileSet, ReleaseItem};
+use crate::{
+    database_error::Error,
+    models::{FileSet, ReleaseItem},
+};
 
 impl FromRow<'_, SqliteRow> for ReleaseItem {
     fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
@@ -34,7 +37,7 @@ impl ReleaseItemRepository {
         release_id: i64,
         item_type: ItemType,
         notes: Option<String>,
-    ) -> Result<i64, sqlx::Error> {
+    ) -> Result<i64, Error> {
         let item_type = item_type.to_db_int();
         let result = sqlx::query!(
             "INSERT INTO release_item (
@@ -51,7 +54,7 @@ impl ReleaseItemRepository {
         Ok(result.last_insert_rowid())
     }
 
-    pub async fn get_item(&self, item_id: i64) -> Result<ReleaseItem, sqlx::Error> {
+    pub async fn get_item(&self, item_id: i64) -> Result<ReleaseItem, Error> {
         let item = sqlx::query_as::<_, ReleaseItem>(
             "SELECT 
                 id,
@@ -67,10 +70,7 @@ impl ReleaseItemRepository {
         Ok(item)
     }
 
-    pub async fn get_items_for_release(
-        &self,
-        release_id: i64,
-    ) -> Result<Vec<ReleaseItem>, sqlx::Error> {
+    pub async fn get_items_for_release(&self, release_id: i64) -> Result<Vec<ReleaseItem>, Error> {
         let items = sqlx::query_as::<_, ReleaseItem>(
             "SELECT 
                 id,
@@ -86,11 +86,7 @@ impl ReleaseItemRepository {
         Ok(items)
     }
 
-    pub async fn update_item(
-        &self,
-        item_id: i64,
-        notes: Option<String>,
-    ) -> Result<(), sqlx::Error> {
+    pub async fn update_item(&self, item_id: i64, notes: Option<String>) -> Result<(), Error> {
         sqlx::query!(
             "UPDATE release_item
             SET notes = ?
@@ -103,7 +99,7 @@ impl ReleaseItemRepository {
         Ok(())
     }
 
-    pub async fn delete_item(&self, item_id: i64) -> Result<(), sqlx::Error> {
+    pub async fn delete_item(&self, item_id: i64) -> Result<(), Error> {
         let query = sqlx::query("DELETE FROM release_item WHERE id = ?").bind(item_id);
         query.execute(&*self.pool).await?;
         Ok(())
@@ -113,7 +109,7 @@ impl ReleaseItemRepository {
         &self,
         item_ids: &[i64],
         file_set_id: i64,
-    ) -> Result<(), sqlx::Error> {
+    ) -> Result<(), Error> {
         let mut transaction = self.pool.begin().await?;
 
         for item_id in item_ids {
@@ -136,7 +132,7 @@ impl ReleaseItemRepository {
         &self,
         item_ids: &[i64],
         file_set_id: i64,
-    ) -> Result<(), sqlx::Error> {
+    ) -> Result<(), Error> {
         let mut transaction = self.pool.begin().await?;
 
         // First get existing links for the file_set_id
@@ -199,7 +195,7 @@ impl ReleaseItemRepository {
         &self,
         item_id: i64,
         file_set_id: i64,
-    ) -> Result<(), sqlx::Error> {
+    ) -> Result<(), Error> {
         sqlx::query(
             "DELETE FROM file_set_item
             WHERE file_set_id = ? AND item_id = ?",
@@ -212,7 +208,7 @@ impl ReleaseItemRepository {
     }
 
     // TODO: should this be in FileSetRepository?
-    pub async fn get_file_sets_for_item(&self, item_id: i64) -> Result<Vec<FileSet>, sqlx::Error> {
+    pub async fn get_file_sets_for_item(&self, item_id: i64) -> Result<Vec<FileSet>, Error> {
         let file_sets = sqlx::query_as::<_, FileSet>(
             "SELECT 
                 fs.id,
@@ -233,7 +229,7 @@ impl ReleaseItemRepository {
     pub async fn get_items_for_file_set(
         &self,
         file_set_id: i64,
-    ) -> Result<Vec<ReleaseItem>, sqlx::Error> {
+    ) -> Result<Vec<ReleaseItem>, Error> {
         let items = sqlx::query_as::<_, ReleaseItem>(
             "SELECT 
                 ri.id,

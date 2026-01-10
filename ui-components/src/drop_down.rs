@@ -1,3 +1,4 @@
+use core_types::item_type::ItemType;
 use relm4::gtk;
 use relm4::gtk::prelude::*;
 use relm4::prelude::*;
@@ -120,13 +121,16 @@ where
 
                 if let Some(item) = self.items.get(index as usize) {
                     let message = M::from_selection(item.clone());
-                    let _ = sender.output(DropDownOutputMsg::ItemSelected(message));
+                    sender
+                        .output(DropDownOutputMsg::ItemSelected(message))
+                        .unwrap_or_else(|err| {
+                            eprintln!("Error sending output message: {:?}", err);
+                        });
                 }
             }
             DropDownMsg::SetSelected(item) => {
                 if let Some(index) = self.items.iter().position(|i| i == &item) {
                     self.selected_index = Some(index as u32);
-                    //root.widgets.dropdown.set_selected(index as u32);
                 }
             }
             DropDownMsg::_Phantom(_) => {}
@@ -198,3 +202,23 @@ impl DropDownMessage<DocumentType> for DocumentTypeSelectedMsg {
 }
 
 pub type DocumentTypeDropDown = DropDown<DocumentType, DocumentTypeSelectedMsg>;
+
+// ItemType-specific implementation
+pub type ItemTypeDropDown = DropDown<ItemType, ItemTypeSelectedMsg>;
+
+#[derive(Debug, Clone)]
+pub enum ItemTypeSelectedMsg {
+    ItemTypeSelected(ItemType),
+}
+
+impl DropDownItem for ItemType {
+    fn all_items() -> Vec<Self> {
+        ItemType::iter().collect()
+    }
+}
+
+impl DropDownMessage<ItemType> for ItemTypeSelectedMsg {
+    fn from_selection(item: ItemType) -> Self {
+        ItemTypeSelectedMsg::ItemTypeSelected(item)
+    }
+}

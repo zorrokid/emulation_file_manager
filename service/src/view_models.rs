@@ -216,6 +216,12 @@ impl From<ReleaseItem> for ReleaseItemViewModel {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct ReleaseItemListModel {
+    pub id: i64,
+    pub item_type: ItemType,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct FileSetFileInfoViewModel {
     pub file_set_id: i64,
     pub file_info_id: i64,

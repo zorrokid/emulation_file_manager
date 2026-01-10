@@ -1,0 +1,266 @@
+use std::sync::Arc;
+
+use core_types::item_type::ItemType;
+use database::{database_error::Error, repository_manager::RepositoryManager};
+use relm4::{
+    Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
+    gtk::{
+        self, glib,
+        prelude::{
+            BoxExt, ButtonExt, EditableExt, EntryBufferExtManual, EntryExt, GtkWindowExt,
+            OrientableExt, WidgetExt,
+        },
+    },
+};
+use service::view_models::ReleaseItemListModel;
+use ui_components::{
+    DropDownMsg, DropDownOutputMsg,
+    drop_down::{ItemTypeDropDown, ItemTypeSelectedMsg},
+};
+
+use crate::utils::dialog_utils::show_error_dialog;
+
+#[derive(Debug)]
+pub struct ItemForm {
+    pub repository_manager: Arc<RepositoryManager>,
+    pub item_type: Option<ItemType>,
+    pub notes: String,
+    pub release_item_id: Option<i64>,
+    pub release_id: i64,
+    pub item_type_dropdown: Controller<ItemTypeDropDown>,
+}
+
+#[derive(Debug)]
+pub enum ItemFormMsg {
+    UpdateItemType(ItemType),
+    UpdateNotes(String),
+    CreateOrUpdateItem,
+    Hide,
+    Show {
+        release_id: i64,
+        edit_item: Option<ReleaseItemListModel>,
+    },
+}
+
+#[derive(Debug)]
+pub enum ItemFormOutputMsg {
+    ItemAdded(ReleaseItemListModel),
+}
+
+#[derive(Debug)]
+pub enum ItemFormCommandMsg {
+    ItemSubmitted(Result<i64, Error>),
+}
+
+#[derive(Debug)]
+pub struct ItemFormInit {
+    pub repository_manager: Arc<RepositoryManager>,
+    pub release_id: i64,
+}
+
+#[relm4::component(pub)]
+impl Component for ItemForm {
+    type Input = ItemFormMsg;
+    type Output = ItemFormOutputMsg;
+    type CommandOutput = ItemFormCommandMsg;
+    type Init = ItemFormInit;
+
+    view! {
+        #[root]
+        gtk::Window {
+            set_default_width: 800,
+            set_default_height: 600,
+            set_margin_all: 10,
+
+            #[watch]
+            set_title: if model.release_item_id.is_some() {
+                Some("Edit Release Item")
+            } else {
+                Some("Create Release Item")
+            },
+
+            connect_close_request[sender] => move |_| {
+                sender.input(ItemFormMsg::Hide);
+                glib::Propagation::Proceed
+            },
+
+            gtk::Box {
+                set_orientation: gtk::Orientation::Vertical,
+                set_spacing: 5,
+                set_margin_all: 5,
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    set_spacing: 5,
+
+                    gtk::Label {
+                        set_label: "Item Type:",
+                    },
+
+                    #[local_ref]
+                    item_type_dropdown -> gtk::Box,
+                },
+
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    set_spacing: 5,
+
+                    gtk::Label {
+                        set_label: "Notes:",
+                    },
+
+                    #[name = "notes_entry"]
+                    gtk::Entry {
+                        set_hexpand: true,
+                        #[watch]
+                        set_text: &model.notes,
+                        set_placeholder_text: Some("Enter notes about the item"),
+                        // TODO: or connect_activate?
+                        connect_changed[sender] => move |entry| {
+                            let buffer = entry.buffer();
+                            sender.input(
+                                ItemFormMsg::UpdateNotes(buffer.text().into()),
+                            );
+                        },
+                    },
+                },
+                gtk::Button {
+                    set_label: "Submit",
+                    #[watch]
+                    set_sensitive: model.item_type.is_some(),
+                    connect_clicked => ItemFormMsg::CreateOrUpdateItem,
+                },
+            }
+        }
+    }
+
+    fn init(
+        init_model: Self::Init,
+        root: Self::Root,
+        sender: ComponentSender<Self>,
+    ) -> ComponentParts<Self> {
+        let item_type_dropdown = Self::create_item_type_dropdown(None, &sender);
+        let model = ItemForm {
+            item_type: None,
+            notes: String::new(),
+            repository_manager: init_model.repository_manager,
+            item_type_dropdown,
+            release_item_id: None,
+            release_id: init_model.release_id,
+        };
+
+        let item_type_dropdown = model.item_type_dropdown.widget();
+
+        let widgets = view_output!();
+        ComponentParts { model, widgets }
+    }
+
+    fn update_with_view(
+        &mut self,
+        widgets: &mut Self::Widgets,
+        message: Self::Input,
+        sender: ComponentSender<Self>,
+        root: &Self::Root,
+    ) {
+        match message {
+            ItemFormMsg::UpdateItemType(item_type) => {
+                self.item_type = Some(item_type);
+            }
+            ItemFormMsg::UpdateNotes(notes) => {
+                self.notes = notes;
+            }
+            ItemFormMsg::CreateOrUpdateItem => {
+                if let Some(item_type) = self.item_type {
+                    let notes = if self.notes.is_empty() {
+                        None
+                    } else {
+                        Some(self.notes.clone())
+                    };
+
+                    let repository_manager = Arc::clone(&self.repository_manager);
+                    let release_id = self.release_id;
+                    sender.oneshot_command(async move {
+                        tracing::info!(item_type = ?item_type, "Adding new release item");
+                        let result = repository_manager
+                            .get_release_item_repository()
+                            .create_item(release_id, item_type, notes)
+                            .await;
+                        ItemFormCommandMsg::ItemSubmitted(result)
+                    });
+                }
+            }
+            ItemFormMsg::Hide => {
+                root.hide();
+            }
+            ItemFormMsg::Show {
+                release_id,
+                edit_item,
+            } => {
+                self.release_id = release_id;
+
+                if let Some(edit_item) = edit_item {
+                    self.item_type = Some(edit_item.item_type);
+                    self.item_type_dropdown
+                        .emit(DropDownMsg::SetSelected(edit_item.item_type));
+                    //self.notes = edit_item.notes.clone().unwrap_or_default();
+                    self.release_item_id = Some(edit_item.id);
+                } else {
+                    self.item_type = None;
+                    self.notes.clear();
+                    self.release_item_id = None;
+                    // TODO: clear selection
+                    /*self.item_type_dropdown
+                    .emit(ItemTypeSelectedMsg::ClearSelection);*/
+                }
+                root.show();
+            }
+        }
+        // This is essential with update_with_view:
+        self.update_view(widgets, sender);
+    }
+
+    fn update_cmd(
+        &mut self,
+        message: Self::CommandOutput,
+        sender: ComponentSender<Self>,
+        root: &Self::Root,
+    ) {
+        match message {
+            ItemFormCommandMsg::ItemSubmitted(Ok(item_id)) => {
+                if let Some(item_type) = self.item_type {
+                    let item = ReleaseItemListModel {
+                        id: item_id,
+                        item_type,
+                    };
+                    sender
+                        .output(ItemFormOutputMsg::ItemAdded(item))
+                        .unwrap_or_else(|err| {
+                            tracing::error!(error = ?err, "Error sending output message");
+                        });
+                }
+            }
+            ItemFormCommandMsg::ItemSubmitted(Err(err)) => {
+                tracing::error!(error = ?err, "Error submitting item");
+                show_error_dialog(
+                    format!("An error occurred while submitting the item: {}", err),
+                    root,
+                );
+            }
+        }
+    }
+}
+
+impl ItemForm {
+    fn create_item_type_dropdown(
+        initial_selection: Option<ItemType>,
+        sender: &ComponentSender<Self>,
+    ) -> Controller<ItemTypeDropDown> {
+        ItemTypeDropDown::builder()
+            .launch(initial_selection)
+            .forward(sender.input_sender(), |msg| match msg {
+                DropDownOutputMsg::ItemSelected(ItemTypeSelectedMsg::ItemTypeSelected(
+                    item_type,
+                )) => ItemFormMsg::UpdateItemType(item_type),
+                _ => unreachable!(),
+            })
+    }
+}
