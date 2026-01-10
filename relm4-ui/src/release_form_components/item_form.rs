@@ -113,12 +113,9 @@ impl Component for ItemForm {
                     #[name = "notes_entry"]
                     gtk::Entry {
                         set_hexpand: true,
-                        #[watch]
-                        set_text: &model.notes,
                         set_placeholder_text: Some("Enter notes about the item"),
-                        connect_activate[sender] => move |entry| {
+                        connect_changed[sender] => move |entry| {
                             let buffer = entry.buffer();
-                            println!("Notes entry activated: {}", buffer.text());
                             sender.input(
                                 ItemFormMsg::UpdateNotes(buffer.text().into()),
                             );
@@ -231,6 +228,9 @@ impl Component for ItemForm {
                             .await;
                         ItemFormCommandMsg::ProcessGetEditItemResult(result)
                     });
+                } else {
+                    // Clear the entry for new items
+                    widgets.notes_entry.set_text("");
                 }
                 root.show();
             }

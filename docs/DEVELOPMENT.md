@@ -85,6 +85,76 @@ Other crates would need to add `tracing = "0.1"` to their `Cargo.toml`.
 
 (To be documented)
 
+## Relm4 UI Development
+
+### Using gtk::Entry Widget Correctly
+
+When using `gtk::Entry` widgets in Relm4's `view!` macro, be careful about how you handle text updates to avoid common pitfalls:
+
+#### Problem: Infinite Update Loop
+
+**DON'T do this:**
+```rust
+gtk::Entry {
+    #[watch]
+    set_text: &model.field,  // Sets text when model changes
+    connect_changed[sender] => move |entry| {  // Triggers on text change
+        sender.input(Msg::UpdateField(entry.buffer().text().into()));
+    },
+}
+```
+
+This creates an infinite loop:
+1. User types → `connect_changed` fires → sends `UpdateField` message
+2. Model updates → `#[watch]` triggers → `set_text` called
+3. Text change → `connect_changed` fires again → repeat from step 1
+
+#### Solution: Let Entry Manage Its Own State
+
+**DO this instead:**
+```rust
+#[name = "field_entry"]
+gtk::Entry {
+    set_placeholder_text: Some("Enter value"),
+    connect_changed[sender] => move |entry| {
+        sender.input(Msg::UpdateField(entry.buffer().text().into()));
+    },
+}
+```
+
+Then manually set the text only when needed (e.g., loading data):
+```rust
+fn update_with_view(&mut self, widgets: &mut Self::Widgets, msg: Self::Input, ...) {
+    match msg {
+        Msg::LoadData(data) => {
+            self.field = data.clone();
+            widgets.field_entry.set_text(&data);  // Set text explicitly
+        }
+        Msg::UpdateField(value) => {
+            self.field = value;  // Don't set_text here - Entry already has it
+        }
+    }
+}
+```
+
+#### When to Use Each Signal
+
+**`connect_changed`** - Fires on every keystroke
+- Use for fields that need live updates (search, filters, notes)
+- Model updates immediately as user types
+- Example: Search boxes, notes fields
+
+**`connect_activate`** - Fires only when Enter is pressed
+- Use for fields that should commit on Enter (login, single-line inputs)
+- Model updates only when user explicitly submits
+- Example: Username, password, single-value inputs
+
+**Key Points:**
+- Entry widgets maintain their own text state internally
+- Only use `#[watch]` with `set_text` if the text is controlled externally (rare)
+- Use `connect_changed` for immediate updates, `connect_activate` for Enter-to-submit
+- Always clear entry widgets explicitly when resetting forms
+
 ## rust-s3 Library Usage
 
 ### Error Handling Differences
