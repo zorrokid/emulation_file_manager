@@ -24,6 +24,7 @@ use crate::{
     list_item::{HasId, ListItem},
     release_form_components::{
         file_set_list::{FileSetList, FileSetListInit, FileSetListMsg, FileSetListOutputMsg},
+        item_list::{ItemList, ItemListInit, ItemListMsg, ItemListOutputMsg},
         software_title_list::{
             SoftwareTitleList, SoftwareTitleListInit, SoftwareTitleListMsg,
             SoftwareTitleListOutputMsg,
@@ -40,14 +41,12 @@ pub enum ReleaseFormMsg {
     Hide,
     NameChanged(String),
     UpdateEditFields,
-    AddItem,
-    EditItem,
-    RemoveItem,
     SystemsChanged { system_ids: Vec<i64> },
     FileSetsChanged { file_set_ids: Vec<i64> },
     SoftwareTitlesChanged { software_title_ids: Vec<i64> },
     SoftwareTitleCreated(SoftwareTitleListModel),
     SoftwareTitleUpdated(SoftwareTitleListModel),
+    ItemsChanged { item_ids: Vec<i64> },
 }
 
 #[derive(Debug)]
@@ -68,7 +67,6 @@ pub struct ReleaseFormModel {
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
 
-    selected_items_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     release: Option<ReleaseViewModel>,
     release_name: String,
 
@@ -78,6 +76,8 @@ pub struct ReleaseFormModel {
     system_list: Controller<SystemList>,
     selected_software_title_ids: Vec<i64>,
     software_title_list: Controller<SoftwareTitleList>,
+    selected_item_ids: Vec<i64>,
+    item_list: Controller<ItemList>,
 }
 
 pub struct ReleaseFormInit {
@@ -134,43 +134,6 @@ impl Component for ReleaseFormModel {
                     //set_vexpand: true,
                 },
 
-
-                // TODO: doesn't fit to screen, split to tabs
-                /*gtk::Frame {
-                    set_label: Some("Items"),
-                    gtk::Box {
-                       set_orientation: gtk::Orientation::Horizontal,
-                       gtk::ScrolledWindow {
-                            set_min_content_height: 360,
-                            set_hexpand: true,
-                            #[local_ref]
-                            selected_items_list_view -> gtk::ListView {}
-                        },
-                        gtk::Box {
-                            set_orientation: gtk::Orientation::Vertical,
-                            set_width_request: 250,
-                            add_css_class: "button-group",
-                             gtk::Button {
-                                set_label: "Add Item",
-                                // items can be added only after release is created
-                                set_sensitive: model.release.is_some(),
-                                connect_clicked => ReleaseFormMsg::AddItem,
-                            },
-                            gtk::Button {
-                                set_label: "Edit Item",
-                                connect_clicked => ReleaseFormMsg::EditItem,
-                            },
-                            gtk::Button {
-                                // TODO: should this delete also linked file set or only unlink
-                                // them? Probably only unlink. File Sets remain still linked to
-                                // Release.
-                                set_label: "Delete Item",
-                                connect_clicked => ReleaseFormMsg::RemoveItem,
-                            },
-                        },
-                    },
-                },*/
-
                 gtk::Button {
                     set_label: "Submit Release",
                     connect_clicked => ReleaseFormMsg::StartSaveRelease,
@@ -209,14 +172,14 @@ impl Component for ReleaseFormModel {
             view_model_service: Arc::clone(&init_model.view_model_service),
             repository_manager: Arc::clone(&init_model.repository_manager),
         };
-        let system_list = SystemList::builder().launch(system_list_init).forward(
-            sender.input_sender(),
-            |msg| match msg {
-                SystemListOutputMsg::ItemsChanged { system_ids } => {
-                    ReleaseFormMsg::SystemsChanged { system_ids }
-                }
-            },
-        );
+        let system_list =
+            SystemList::builder()
+                .launch(system_list_init)
+                .forward(sender.input_sender(), |msg| match msg {
+                    SystemListOutputMsg::ItemsChanged { system_ids } => {
+                        ReleaseFormMsg::SystemsChanged { system_ids }
+                    }
+                });
 
         let software_title_list_init = SoftwareTitleListInit {
             view_model_service: Arc::clone(&init_model.view_model_service),
@@ -225,11 +188,9 @@ impl Component for ReleaseFormModel {
         let software_title_list = SoftwareTitleList::builder()
             .launch(software_title_list_init)
             .forward(sender.input_sender(), |msg| match msg {
-                SoftwareTitleListOutputMsg::ItemsChanged {
-                    software_title_ids,
-                } => ReleaseFormMsg::SoftwareTitlesChanged {
-                    software_title_ids,
-                },
+                SoftwareTitleListOutputMsg::ItemsChanged { software_title_ids } => {
+                    ReleaseFormMsg::SoftwareTitlesChanged { software_title_ids }
+                }
                 SoftwareTitleListOutputMsg::SoftwareTitleCreated(software_title) => {
                     ReleaseFormMsg::SoftwareTitleCreated(software_title)
                 }
@@ -238,11 +199,26 @@ impl Component for ReleaseFormModel {
                 }
             });
 
+        let item_list_init = ItemListInit {
+            release_id: None,
+        };
+        let item_list = ItemList::builder()
+            .launch(item_list_init)
+            .forward(sender.input_sender(), |msg| match msg {
+                ItemListOutputMsg::ItemsChanged { item_ids } => {
+                    ReleaseFormMsg::ItemsChanged { item_ids }
+                }
+                // AddItem, EditItem, RemoveItem output events are not yet handled
+                _ => {
+                    tracing::debug!("Item list action not yet implemented");
+                    ReleaseFormMsg::ItemsChanged { item_ids: vec![] }
+                }
+            });
+
         let model = ReleaseFormModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
             release: None,
-            selected_items_list_view_wrapper,
             release_name: String::new(),
             file_set_list,
             selected_file_set_ids: vec![],
@@ -250,26 +226,30 @@ impl Component for ReleaseFormModel {
             selected_system_ids: vec![],
             software_title_list,
             selected_software_title_ids: vec![],
+            item_list,
+            selected_item_ids: vec![],
         };
-
-        let selected_items_list_view = &model.selected_items_list_view_wrapper.view;
 
         let file_set_list_view = model.file_set_list.widget();
         let system_list_view = model.system_list.widget();
         let software_title_list_view = model.software_title_list.widget();
+        let item_list_view = model.item_list.widget();
 
         let widgets = view_output!();
         widgets.notebook.append_page(
             software_title_list_view,
             Some(&gtk::Label::new(Some("Software Titles"))),
         );
-        widgets.notebook.append_page(
-            system_list_view,
-            Some(&gtk::Label::new(Some("Systems"))),
-        );
+        widgets
+            .notebook
+            .append_page(system_list_view, Some(&gtk::Label::new(Some("Systems"))));
         widgets.notebook.append_page(
             file_set_list_view,
             Some(&gtk::Label::new(Some("File Sets"))),
+        );
+        widgets.notebook.append_page(
+            item_list_view,
+            Some(&gtk::Label::new(Some("Items"))),
         );
         ComponentParts { model, widgets }
     }
@@ -284,17 +264,17 @@ impl Component for ReleaseFormModel {
         match msg {
             ReleaseFormMsg::SystemsChanged { system_ids } => {
                 self.selected_system_ids = system_ids.clone();
-                self.file_set_list.emit(FileSetListMsg::SystemsChanged {
-                    system_ids,
-                });
+                self.file_set_list
+                    .emit(FileSetListMsg::SystemsChanged { system_ids });
             }
             ReleaseFormMsg::FileSetsChanged { file_set_ids } => {
                 self.selected_file_set_ids = file_set_ids;
             }
-            ReleaseFormMsg::SoftwareTitlesChanged {
-                software_title_ids,
-            } => {
+            ReleaseFormMsg::SoftwareTitlesChanged { software_title_ids } => {
                 self.selected_software_title_ids = software_title_ids;
+            }
+            ReleaseFormMsg::ItemsChanged { item_ids } => {
+                self.selected_item_ids = item_ids;
             }
             ReleaseFormMsg::StartSaveRelease => {
                 tracing::info!("Starting to save release with selected systems and file sets");
@@ -382,7 +362,10 @@ impl Component for ReleaseFormModel {
                 let mut selected_systems = vec![];
                 let mut selected_file_sets = vec![];
                 let mut selected_software_titles = vec![];
+                let mut selected_items = vec![];
                 let mut release_name = String::new();
+                let release_id = self.release.as_ref().map(|r| r.id);
+                
                 if let Some(release) = &self.release {
                     selected_systems = release
                         .systems
@@ -416,6 +399,15 @@ impl Component for ReleaseFormModel {
                         })
                         .collect();
 
+                    selected_items = release
+                        .items
+                        .iter()
+                        .map(|item| ListItem {
+                            id: item.id,
+                            name: item.item_type.to_string(),
+                        })
+                        .collect();
+
                     release_name = release.name.clone();
                 }
 
@@ -427,7 +419,6 @@ impl Component for ReleaseFormModel {
                 });
                 self.selected_system_ids = selected_systems.iter().map(|s| s.id).collect();
 
-                self.selected_items_list_view_wrapper.clear();
                 self.file_set_list.emit(FileSetListMsg::ResetItems {
                     items: selected_file_sets,
                     system_ids: selected_systems.iter().map(|s| s.id).collect(),
@@ -439,6 +430,11 @@ impl Component for ReleaseFormModel {
                     });
                 self.selected_software_title_ids =
                     selected_software_titles.iter().map(|st| st.id).collect();
+
+                self.item_list.emit(ItemListMsg::SetReleaseId { release_id });
+                self.item_list.emit(ItemListMsg::ResetItems {
+                    items: selected_items,
+                });
             }
             ReleaseFormMsg::Show { release_id } => {
                 if let Some(id) = release_id {
@@ -460,24 +456,6 @@ impl Component for ReleaseFormModel {
             }
             ReleaseFormMsg::NameChanged(name) => {
                 self.release_name = name;
-            }
-            ReleaseFormMsg::AddItem => {
-                tracing::info!("Adding item to release");
-                if let Some(release) = &self.release {
-                    tracing::info!(release_id = release.id, "Adding item to release");
-                }
-            }
-            ReleaseFormMsg::EditItem => {
-                tracing::info!("Editing item of release");
-                if let Some(release) = &self.release {
-                    tracing::info!(release_id = release.id, "Editing item of release");
-                }
-            }
-            ReleaseFormMsg::RemoveItem => {
-                tracing::info!("Removing item from release");
-                if let Some(release) = &self.release {
-                    tracing::info!(release_id = release.id, "Removing item from release");
-                }
             }
         }
         // This is essential with update_with_view:
