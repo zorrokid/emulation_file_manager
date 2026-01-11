@@ -10,7 +10,6 @@ use relm4::{
             OrientableExt, WidgetExt,
         },
     },
-    typed_view::list::{RelmListItem, TypedListView},
 };
 use service::{
     error::Error as ServiceError,
@@ -21,7 +20,7 @@ use service::{
 };
 
 use crate::{
-    list_item::{HasId, ListItem},
+    list_item::ListItem,
     release_form_components::{
         file_set_list::{FileSetList, FileSetListInit, FileSetListMsg, FileSetListOutputMsg},
         item_list::{ItemList, ItemListInit, ItemListMsg, ItemListOutputMsg},
@@ -129,10 +128,7 @@ impl Component for ReleaseFormModel {
                 },
 
                 #[name="notebook"]
-                gtk::Notebook {
-                    //set_hexpand: true,
-                    //set_vexpand: true,
-                },
+                gtk::Notebook { },
 
                 gtk::Button {
                     set_label: "Submit Release",
@@ -147,12 +143,6 @@ impl Component for ReleaseFormModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let selected_systems_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
-            TypedListView::new();
-
-        let selected_items_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
-            TypedListView::new();
-
         let file_set_list_init = FileSetListInit {
             view_model_service: Arc::clone(&init_model.view_model_service),
             repository_manager: Arc::clone(&init_model.repository_manager),
@@ -209,11 +199,6 @@ impl Component for ReleaseFormModel {
                 .forward(sender.input_sender(), |msg| match msg {
                     ItemListOutputMsg::ItemsChanged { item_ids } => {
                         ReleaseFormMsg::ItemsChanged { item_ids }
-                    }
-                    // AddItem, EditItem, RemoveItem output events are not yet handled
-                    _ => {
-                        tracing::debug!("Item list action not yet implemented");
-                        ReleaseFormMsg::ItemsChanged { item_ids: vec![] }
                     }
                 });
 
@@ -497,45 +482,4 @@ impl Component for ReleaseFormModel {
             }
         }
     }
-}
-
-pub fn get_item_ids<T>(list_view_wrapper: &TypedListView<T, gtk::SingleSelection>) -> Vec<i64>
-where
-    T: RelmListItem + HasId,
-{
-    (0..list_view_wrapper.len())
-        .filter_map(|i| list_view_wrapper.get(i).map(|st| st.borrow().id()))
-        .collect()
-}
-
-pub fn remove_selected<T>(list_view_wrapper: &mut TypedListView<T, gtk::SingleSelection>)
-where
-    T: RelmListItem + HasId,
-{
-    list_view_wrapper.remove(list_view_wrapper.selection_model.selected());
-}
-
-pub fn remove_by_id<T>(list_view_wrapper: &mut TypedListView<T, gtk::SingleSelection>, id: i64)
-where
-    T: RelmListItem + HasId,
-{
-    for i in 0..list_view_wrapper.len() {
-        if let Some(list_item) = list_view_wrapper.get(i)
-            && list_item.borrow().id() == id
-        {
-            list_view_wrapper.remove(i);
-            break;
-        }
-    }
-}
-
-pub fn get_selected_item_id<T>(
-    list_view_wrapper: &TypedListView<T, gtk::SingleSelection>,
-) -> Option<i64>
-where
-    T: RelmListItem + HasId,
-{
-    list_view_wrapper
-        .get(list_view_wrapper.selection_model.selected())
-        .map(|st| st.borrow().id())
 }

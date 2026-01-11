@@ -6,7 +6,6 @@ mod emulator_form;
 mod emulator_runner;
 mod file_info_details;
 mod file_set_details_view;
-//mod file_set_editor;
 mod file_set_form;
 mod file_set_selector;
 mod image_fileset_viewer;

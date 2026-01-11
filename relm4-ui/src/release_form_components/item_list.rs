@@ -15,8 +15,8 @@ use service::view_models::ReleaseItemListModel;
 
 use crate::{
     list_item::ListItem,
-    release_form::{get_item_ids, get_selected_item_id, remove_by_id},
     release_form_components::item_form::{ItemForm, ItemFormInit, ItemFormMsg, ItemFormOutputMsg},
+    utils::typed_list_view_utils::{get_item_ids, get_selected_item_id, remove_by_id},
 };
 
 #[derive(Debug)]

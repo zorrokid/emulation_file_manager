@@ -2,25 +2,21 @@ use std::sync::Arc;
 
 use database::repository_manager::RepositoryManager;
 use relm4::{
-    Component, ComponentController, ComponentParts, ComponentSender,
+    Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
         self,
         prelude::{ButtonExt, OrientableExt, WidgetExt},
     },
     typed_view::list::TypedListView,
-    Controller,
 };
-use service::{
-    view_model_service::ViewModelService,
-    view_models::SystemListModel,
-};
+use service::{view_model_service::ViewModelService, view_models::SystemListModel};
 
 use crate::{
     list_item::ListItem,
-    release_form::{get_item_ids, remove_selected},
     system_selector::{
         SystemSelectInit, SystemSelectModel, SystemSelectMsg, SystemSelectOutputMsg,
     },
+    utils::typed_list_view_utils::{get_item_ids, remove_selected},
 };
 
 #[derive(Debug)]
@@ -136,12 +132,11 @@ impl Component for SystemList {
             }
             SystemListMsg::ResetItems { items } => {
                 self.selected_systems_list_view_wrapper.clear();
-                self.selected_systems_list_view_wrapper.extend_from_iter(
-                    items.iter().map(|s| ListItem {
+                self.selected_systems_list_view_wrapper
+                    .extend_from_iter(items.iter().map(|s| ListItem {
                         id: s.id,
                         name: s.name.clone(),
-                    }),
-                );
+                    }));
                 self.notify_items_changed(&sender);
             }
         }

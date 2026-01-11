@@ -2,26 +2,22 @@ use std::sync::Arc;
 
 use database::repository_manager::RepositoryManager;
 use relm4::{
-    Component, ComponentController, ComponentParts, ComponentSender,
+    Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
         self,
         prelude::{ButtonExt, OrientableExt, WidgetExt},
     },
     typed_view::list::TypedListView,
-    Controller,
 };
-use service::{
-    view_model_service::ViewModelService,
-    view_models::SoftwareTitleListModel,
-};
+use service::{view_model_service::ViewModelService, view_models::SoftwareTitleListModel};
 
 use crate::{
     list_item::ListItem,
-    release_form::{get_item_ids, remove_selected},
     software_title_selector::{
         SoftwareTitleSelectInit, SoftwareTitleSelectModel, SoftwareTitleSelectMsg,
         SoftwareTitleSelectOutputMsg,
     },
+    utils::typed_list_view_utils::{get_item_ids, remove_selected},
 };
 
 #[derive(Debug)]
@@ -92,8 +88,10 @@ impl Component for SoftwareTitleList {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let selected_software_titles_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
-            TypedListView::new();
+        let selected_software_titles_list_view_wrapper: TypedListView<
+            ListItem,
+            gtk::SingleSelection,
+        > = TypedListView::new();
 
         let software_title_selector_init = SoftwareTitleSelectInit {
             view_model_service: Arc::clone(&init_model.view_model_service),
@@ -122,7 +120,8 @@ impl Component for SoftwareTitleList {
             selected_software_titles_list_view_wrapper,
         };
 
-        let selected_software_titles_list_view = &model.selected_software_titles_list_view_wrapper.view;
+        let selected_software_titles_list_view =
+            &model.selected_software_titles_list_view_wrapper.view;
 
         let widgets = view_output!();
 
@@ -186,9 +185,7 @@ impl SoftwareTitleList {
     fn notify_items_changed(&self, sender: &ComponentSender<Self>) {
         let software_title_ids = get_item_ids(&self.selected_software_titles_list_view_wrapper);
         sender
-            .output(SoftwareTitleListOutputMsg::ItemsChanged {
-                software_title_ids,
-            })
+            .output(SoftwareTitleListOutputMsg::ItemsChanged { software_title_ids })
             .unwrap_or_else(|err| {
                 tracing::error!(error = ?err, "Error sending output message");
             });

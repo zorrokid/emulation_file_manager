@@ -21,7 +21,7 @@ use crate::{
         FileSetSelector, FileSetSelectorInit, FileSetSelectorMsg, FileSetSelectorOutputMsg,
     },
     list_item::HasId,
-    release_form::{get_item_ids, get_selected_item_id, remove_selected},
+    utils::typed_list_view_utils::{get_item_ids, get_selected_item_id, remove_selected},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
