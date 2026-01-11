@@ -49,7 +49,6 @@ Emulation files can be different kind of files (see `core_types::FileType` enum)
 Files are currently stored in local file system, collection directory is determined in `file_system` crate with `ProjectDirs`. I'm planning to add support for cloud storage in the future.
 
 When files are imported for software release, files are imported as file set whether it's a single file or multiple files. One file in file set can belong to multiple file sets. Each file set can have only files of certain `FileType`. Because of this, each file in file set is stored separately and different kind of file sets can be composed from files. 
-
 When storing files, each file gets a unique file name to avoid conflicts in file names. Original file name is stored in database as part of oringal imported file set. Files are also compressed using zstd compression. 
 
 File info and file set meta data is stored in database with this structure:
@@ -61,17 +60,24 @@ File info and file set meta data is stored in database with this structure:
    +-----------+       +----------------------+
          | 1                     | *
          |                       | 
-         | *                     | 1
-   +------------------+   +------------+  +----------+ 
-   | file_info_system |   |  file_set  |  |  release |
-   +------------------+   +------------+  +----------+
-          | *                    | *         1| 
-          |                      |            | 
-          | 1                    | 1        * | 
-    +-------------+         +-------------------+ 
-    |   system    |         |  release_file_set |
-    +-------------+         +-------------------+
-
+         | *                     |  
+   +------------------+          |                +----------+ 1
+   | file_info_system |          |                |  release |----------+
+   +------------------+          |                +----------+          |
+          | *                    |                     1|               |
+          |                      |                      |               |
+          | 1                    | 1                  * |               |*
+    +-------------+      +------------+ 1 * +-------------------+  +--------------+
+    |   system    |      |  file_set  |-----| release_file_set  |  | release_item | <-- items can be with or without file sets
+    +-------------+      +------------+     +-------------------+  +--------------+
+                                | 1                                   1|
+                                | *                                    |
+                      +-----------------+ *                            |
+                      | file_set_item   |------------------------------+
+                      +-----------------+
+                                        
+                                       ^
+                                       +----- release file sets can be with or without item
 ```
 
 
@@ -81,7 +87,15 @@ File info and file set meta data is stored in database with this structure:
 - `file_info_system`: file can be linked to multiple systems (for example same manual can be used for multiple systems)
 - `file_set`: represents a set of files, for example a set of disk images for a software release. File set has a single FileType so file set can contain only files of same type. File set also has a name which is used when file set is exported from application.
 - `file_set_file_info`: links file set to files. One file set can have multiple files and one file can belong to multiple file sets. This contains also a file set spefic file name for the file which is used when exporting file from application. 
-- `release_file_set`: links release to file sets. This enables file sets to be reused for multiple releases. 
+- `release_file_set`: links release to file sets. This is the primary relationship defining what file sets belong to a release. File sets can be reused across multiple releases (e.g., same manual in different versions).
+- `release_item`: represents physical items that should be part of a release (e.g., "this release should have 2 Disks, 1 Manual, and 1 Box"). Each item has an `item_type` and optional `notes`. This enables tracking both what physical items exist and assessing completeness of digital files.
+- `file_set_item`: categorizes and organizes file sets by linking them to release items. This is optional metadata that helps track which file sets represent which physical items (e.g., "these disk image file sets are for Disk 1" or "this PDF file set is the Manual"). A file set can exist in `release_file_set` without being linked to an item.
+
+The two-level linking approach (`release_file_set` + `file_set_item`) enables:
+- Tracking what file sets are in a release (primary relationship via `release_file_set`)
+- Organizing those file sets by physical item type (metadata via `file_set_item`)
+- Assessing completeness: "This release should have a Manual (release_item), but we haven't linked any file sets to it yet"
+- Sharing file sets across releases while maintaining release-specific item categorization
 
 When file is used with emulator or external viewer, file is exported to a temporary directory. File is exported with file set specific file name. Emulator files are exported either as a complete file set as a zip archive or as individual files depending on the emulator configuration.
 
