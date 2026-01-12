@@ -976,68 +976,55 @@
       "def": "CREATE TABLE release_item (\n    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,\n    release_id INTEGER NOT NULL,\n    item_type INTEGER NOT NULL,\n    notes TEXT,\n    FOREIGN KEY (release_id) REFERENCES release(id) ON DELETE CASCADE\n)"
     },
     {
-      "name": "file_set_item",
+      "name": "release_item_file_set",
       "type": "table",
       "columns": [
         {
-          "name": "file_set_id",
+          "name": "release_item_id",
           "type": "INTEGER",
           "nullable": false
         },
         {
-          "name": "item_id",
+          "name": "file_set_id",
           "type": "INTEGER",
           "nullable": false
         }
       ],
       "indexes": [
         {
-          "name": "sqlite_autoindex_file_set_item_1",
-          "def": "PRIMARY KEY (file_set_id, item_id)",
-          "table": "file_set_item",
+          "name": "sqlite_autoindex_release_item_file_set_1",
+          "def": "PRIMARY KEY (release_item_id, file_set_id)",
+          "table": "release_item_file_set",
           "columns": [
-            "file_set_id",
-            "item_id"
+            "release_item_id",
+            "file_set_id"
           ]
         }
       ],
       "constraints": [
         {
+          "name": "release_item_id",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (release_item_id)",
+          "table": "release_item_file_set",
+          "columns": [
+            "release_item_id"
+          ]
+        },
+        {
           "name": "file_set_id",
           "type": "PRIMARY KEY",
           "def": "PRIMARY KEY (file_set_id)",
-          "table": "file_set_item",
+          "table": "release_item_file_set",
           "columns": [
             "file_set_id"
           ]
         },
         {
-          "name": "item_id",
-          "type": "PRIMARY KEY",
-          "def": "PRIMARY KEY (item_id)",
-          "table": "file_set_item",
-          "columns": [
-            "item_id"
-          ]
-        },
-        {
           "name": "- (Foreign key ID: 0)",
           "type": "FOREIGN KEY",
-          "def": "FOREIGN KEY (item_id) REFERENCES release_item (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE",
-          "table": "file_set_item",
-          "referenced_table": "release_item",
-          "columns": [
-            "item_id"
-          ],
-          "referenced_columns": [
-            "id"
-          ]
-        },
-        {
-          "name": "- (Foreign key ID: 1)",
-          "type": "FOREIGN KEY",
           "def": "FOREIGN KEY (file_set_id) REFERENCES file_set (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE",
-          "table": "file_set_item",
+          "table": "release_item_file_set",
           "referenced_table": "file_set",
           "columns": [
             "file_set_id"
@@ -1047,17 +1034,30 @@
           ]
         },
         {
-          "name": "sqlite_autoindex_file_set_item_1",
-          "type": "PRIMARY KEY",
-          "def": "PRIMARY KEY (file_set_id, item_id)",
-          "table": "file_set_item",
+          "name": "- (Foreign key ID: 1)",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (release_item_id) REFERENCES release_item (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE",
+          "table": "release_item_file_set",
+          "referenced_table": "release_item",
           "columns": [
-            "file_set_id",
-            "item_id"
+            "release_item_id"
+          ],
+          "referenced_columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_release_item_file_set_1",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (release_item_id, file_set_id)",
+          "table": "release_item_file_set",
+          "columns": [
+            "release_item_id",
+            "file_set_id"
           ]
         }
       ],
-      "def": "CREATE TABLE file_set_item (\n    file_set_id INTEGER NOT NULL,\n    item_id INTEGER NOT NULL,\n    PRIMARY KEY (file_set_id, item_id),\n    FOREIGN KEY (file_set_id) REFERENCES file_set(id) ON DELETE CASCADE,\n    FOREIGN KEY (item_id) REFERENCES release_item(id) ON DELETE CASCADE\n)"
+      "def": "CREATE TABLE release_item_file_set (\n    release_item_id INTEGER NOT NULL,\n    file_set_id INTEGER NOT NULL,\n    PRIMARY KEY (release_item_id, file_set_id),\n    FOREIGN KEY (release_item_id) REFERENCES release_item(id) ON DELETE CASCADE,\n    FOREIGN KEY (file_set_id) REFERENCES file_set(id) ON DELETE CASCADE\n)"
     }
   ],
   "relations": [
@@ -1231,20 +1231,7 @@
       "def": "FOREIGN KEY (release_id) REFERENCES release (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
     },
     {
-      "table": "file_set_item",
-      "columns": [
-        "item_id"
-      ],
-      "cardinality": "zero_or_one",
-      "parent_table": "release_item",
-      "parent_columns": [
-        "id"
-      ],
-      "parent_cardinality": "exactly_one",
-      "def": "FOREIGN KEY (item_id) REFERENCES release_item (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
-    },
-    {
-      "table": "file_set_item",
+      "table": "release_item_file_set",
       "columns": [
         "file_set_id"
       ],
@@ -1255,6 +1242,19 @@
       ],
       "parent_cardinality": "exactly_one",
       "def": "FOREIGN KEY (file_set_id) REFERENCES file_set (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
+    },
+    {
+      "table": "release_item_file_set",
+      "columns": [
+        "release_item_id"
+      ],
+      "cardinality": "zero_or_one",
+      "parent_table": "release_item",
+      "parent_columns": [
+        "id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (release_item_id) REFERENCES release_item (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
     }
   ],
   "driver": {

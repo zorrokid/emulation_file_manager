@@ -197,27 +197,27 @@
 <polygon fill="black" stroke="black" points="1047.27,-431.12 1056.75,-436.64 1052.58,-431.68 1056.89,-432.13 1056.89,-432.13 1056.89,-432.13 1052.58,-431.68 1057.69,-427.69 1047.27,-431.12"/>
 <text text-anchor="start" x="1064.55" y="-442.2" font-family="Arial" font-size="10.00">FOREIGN KEY (release_id) REFERENCES release (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE</text>
 </g>
-<!-- file_set_item -->
+<!-- release_item_file_set -->
 <g id="node9" class="node">
-<title>file_set_item</title>
-<polygon fill="#efefef" stroke="none" points="1057.04,-698 1057.04,-733.6 1234.27,-733.6 1234.27,-698 1057.04,-698"/>
-<polygon fill="none" stroke="black" points="1057.04,-698 1057.04,-733.6 1234.27,-733.6 1234.27,-698 1057.04,-698"/>
-<text text-anchor="start" x="1064.04" y="-711.4" font-family="Arial Bold" font-size="18.00">file_set_item</text>
-<text text-anchor="start" x="1158.01" y="-711.4" font-family="Arial" font-size="14.00">    </text>
-<text text-anchor="start" x="1189.13" y="-711.4" font-family="Arial" font-size="14.00" fill="#666666">[table]</text>
-<polygon fill="none" stroke="black" points="1057.04,-667.2 1057.04,-698 1234.27,-698 1234.27,-667.2 1057.04,-667.2"/>
-<text text-anchor="start" x="1064.04" y="-679.4" font-family="Arial" font-size="14.00">file_set_id </text>
-<text text-anchor="start" x="1130.97" y="-679.4" font-family="Arial" font-size="14.00" fill="#666666">[INTEGER]</text>
-<polygon fill="none" stroke="black" points="1057.04,-636.4 1057.04,-667.2 1234.27,-667.2 1234.27,-636.4 1057.04,-636.4"/>
-<text text-anchor="start" x="1064.04" y="-648.6" font-family="Arial" font-size="14.00">item_id </text>
-<text text-anchor="start" x="1113.06" y="-648.6" font-family="Arial" font-size="14.00" fill="#666666">[INTEGER]</text>
+<title>release_item_file_set</title>
+<polygon fill="#efefef" stroke="none" points="1027.56,-698 1027.56,-733.6 1263.75,-733.6 1263.75,-698 1027.56,-698"/>
+<polygon fill="none" stroke="black" points="1027.56,-698 1027.56,-733.6 1263.75,-733.6 1263.75,-698 1027.56,-698"/>
+<text text-anchor="start" x="1034.56" y="-711.4" font-family="Arial Bold" font-size="18.00">release_item_file_set</text>
+<text text-anchor="start" x="1187.49" y="-711.4" font-family="Arial" font-size="14.00">    </text>
+<text text-anchor="start" x="1218.61" y="-711.4" font-family="Arial" font-size="14.00" fill="#666666">[table]</text>
+<polygon fill="none" stroke="black" points="1027.56,-667.2 1027.56,-698 1263.75,-698 1263.75,-667.2 1027.56,-667.2"/>
+<text text-anchor="start" x="1034.56" y="-679.4" font-family="Arial" font-size="14.00">release_item_id </text>
+<text text-anchor="start" x="1137.29" y="-679.4" font-family="Arial" font-size="14.00" fill="#666666">[INTEGER]</text>
+<polygon fill="none" stroke="black" points="1027.56,-636.4 1027.56,-667.2 1263.75,-667.2 1263.75,-636.4 1027.56,-636.4"/>
+<text text-anchor="start" x="1034.56" y="-648.6" font-family="Arial" font-size="14.00">file_set_id </text>
+<text text-anchor="start" x="1101.49" y="-648.6" font-family="Arial" font-size="14.00" fill="#666666">[INTEGER]</text>
 </g>
-<!-- file_set_item&#45;&gt;release_item -->
+<!-- release_item_file_set&#45;&gt;release_item -->
 <g id="edge8" class="edge">
-<title>file_set_item:item_id&#45;&gt;release_item:id</title>
-<path fill="none" stroke="black" d="M1146.59,-625.46C1154.67,-586.02 1212.82,-601.27 1232.76,-557.2 1250.02,-519.05 1275.63,-463 1233.76,-463"/>
-<polygon fill="black" stroke="black" points="1146.62,-625.11 1141.21,-634.65 1146.12,-630.42 1145.72,-634.73 1145.72,-634.73 1145.72,-634.73 1146.12,-630.42 1150.17,-635.49 1146.62,-625.11"/>
-<text text-anchor="start" x="1152.65" y="-645.4" font-family="Arial" font-size="10.00">FOREIGN KEY (item_id) REFERENCES release_item (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE</text>
+<title>release_item_file_set:release_item_id&#45;&gt;release_item:id</title>
+<path fill="none" stroke="black" d="M1274.42,-679.15C1309.33,-651.21 1279.38,-463 1233.76,-463"/>
+<polygon fill="black" stroke="black" points="1274.48,-679.13 1263.55,-678.25 1269.46,-680.92 1265.38,-682.38 1265.38,-682.38 1265.38,-682.38 1269.46,-680.92 1266.57,-686.73 1274.48,-679.13"/>
+<text text-anchor="start" x="1271.75" y="-692.6" font-family="Arial" font-size="10.00">FOREIGN KEY (release_item_id) REFERENCES release_item (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE</text>
 </g>
 </g>
 </svg>

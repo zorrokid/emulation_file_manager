@@ -21,7 +21,7 @@
 | [file_info_system](file_info_system.md) | 2 |  | table |
 | [file_sync_log](file_sync_log.md) | 6 |  | table |
 | [release_item](release_item.md) | 4 |  | table |
-| [file_set_item](file_set_item.md) | 2 |  | table |
+| [release_item_file_set](release_item_file_set.md) | 2 |  | table |
 
 ## Relations
 

@@ -113,30 +113,27 @@ impl ReleaseItemRepository {
         Ok(())
     }
 
-    pub async fn link_file_set_to_items(
+    pub async fn link_file_set_to_release_item(
         &self,
-        item_ids: &[i64],
+        release_item_id: i64,
         file_set_id: i64,
     ) -> Result<(), Error> {
-        let mut transaction = self.pool.begin().await?;
-
-        for item_id in item_ids {
-            sqlx::query(
-                "INSERT INTO file_set_item (
-                file_set_id,
-                item_id
+        sqlx::query(
+            "INSERT INTO release_item_file_set (
+                release_item_id,
+                file_set_id
             ) VALUES (?, ?)",
-            )
-            .bind(file_set_id)
-            .bind(item_id)
-            .execute(&mut *transaction)
-            .await?;
-        }
-        transaction.commit().await?;
+        )
+        .bind(release_item_id)
+        .bind(file_set_id)
+        .execute(&*self.pool)
+        .await?;
         Ok(())
     }
 
-    pub async fn update_file_set_to_items_links(
+    /* TODO probably not needed
+     *
+     * pub async fn update_file_set_to_items_links(
         &self,
         item_ids: &[i64],
         file_set_id: i64,
@@ -145,7 +142,7 @@ impl ReleaseItemRepository {
 
         // First get existing links for the file_set_id
         let existing_item_ids: Vec<i64> = sqlx::query!(
-            "SELECT item_id
+            "SELECT item_type
             FROM file_set_item
             WHERE file_set_id = ?",
             file_set_id
@@ -153,7 +150,7 @@ impl ReleaseItemRepository {
         .fetch_all(&mut *transaction)
         .await?
         .into_iter()
-        .map(|row| row.item_id)
+        .map(|row| row.item_type)
         .collect();
 
         let removed_item_ids: Vec<i64> = existing_item_ids
@@ -197,26 +194,28 @@ impl ReleaseItemRepository {
 
         transaction.commit().await?;
         Ok(())
-    }
+    }*/
 
     pub async fn unlink_file_set_from_item(
         &self,
-        item_id: i64,
+        release_item_id: i64,
         file_set_id: i64,
     ) -> Result<(), Error> {
         sqlx::query(
-            "DELETE FROM file_set_item
-            WHERE file_set_id = ? AND item_id = ?",
+            "DELETE FROM release_item_file_set
+            WHERE file_set_id = ? AND release_item_id = ?",
         )
         .bind(file_set_id)
-        .bind(item_id)
+        .bind(release_item_id)
         .execute(&*self.pool)
         .await?;
         Ok(())
     }
 
-    // TODO: should this be in FileSetRepository?
-    pub async fn get_file_sets_for_item(&self, item_id: i64) -> Result<Vec<FileSet>, Error> {
+    pub async fn get_file_sets_for_item(
+        &self,
+        release_item_id: i64,
+    ) -> Result<Vec<FileSet>, Error> {
         let file_sets = sqlx::query_as::<_, FileSet>(
             "SELECT 
                 fs.id,
@@ -225,10 +224,10 @@ impl ReleaseItemRepository {
                 fs.name,
                 fs.source
             FROM file_set fs
-            JOIN file_set_item fsi ON fs.id = fsi.file_set_id
-            WHERE fsi.item_id = ?",
+            JOIN release_item_file_set fsi ON fs.id = fsi.file_set_id
+            WHERE fsi.release_item_id = ?",
         )
-        .bind(item_id)
+        .bind(release_item_id)
         .fetch_all(&*self.pool)
         .await?;
         Ok(file_sets)
@@ -245,7 +244,7 @@ impl ReleaseItemRepository {
                 ri.item_type,
                 ri.notes
             FROM release_item ri
-            JOIN file_set_item fsi ON ri.id = fsi.item_id
+            JOIN release_item_file_set fsi ON ri.id = fsi.release_item_id
             WHERE fsi.file_set_id = ?",
         )
         .bind(file_set_id)
@@ -338,7 +337,7 @@ mod tests {
         let file_set_id = create_file_set(&repository, system_id).await;
 
         release_item_repo
-            .link_file_set_to_items(&[item_id], file_set_id)
+            .link_file_set_to_release_item(item_id, file_set_id)
             .await
             .unwrap();
         let file_sets = release_item_repo
@@ -394,11 +393,11 @@ mod tests {
         let file_set_id_2 = create_file_set(&repository, system_id).await;
 
         release_item_repo
-            .link_file_set_to_items(&[item_id], file_set_id_1)
+            .link_file_set_to_release_item(item_id, file_set_id_1)
             .await
             .unwrap();
         release_item_repo
-            .link_file_set_to_items(&[item_id], file_set_id_2)
+            .link_file_set_to_release_item(item_id, file_set_id_2)
             .await
             .unwrap();
 
@@ -440,11 +439,11 @@ mod tests {
             .unwrap();
 
         release_item_repo
-            .link_file_set_to_items(&[item_id_1], file_set_id)
+            .link_file_set_to_release_item(item_id_1, file_set_id)
             .await
             .unwrap();
         release_item_repo
-            .link_file_set_to_items(&[item_id_2], file_set_id)
+            .link_file_set_to_release_item(item_id_2, file_set_id)
             .await
             .unwrap();
 
@@ -530,7 +529,7 @@ mod tests {
         let system_id = create_system(&repository).await;
         let file_set_id = create_file_set(&repository, system_id).await;
         release_item_repo
-            .link_file_set_to_items(&[item_id], file_set_id)
+            .link_file_set_to_release_item(item_id, file_set_id)
             .await
             .unwrap();
         let delete_result = repository
@@ -545,7 +544,8 @@ mod tests {
         assert_eq!(file_sets.len(), 0);
     }
 
-    #[async_std::test]
+    /* TODO probably not needed
+     * #[async_std::test]
     async fn test_update_file_set_to_items_links() {
         let repository = get_repository().await;
         let release_id = create_release(&repository).await;
@@ -562,7 +562,7 @@ mod tests {
         let system_id = create_system(&repository).await;
         let file_set_id = create_file_set(&repository, system_id).await;
         release_item_repo
-            .link_file_set_to_items(&[item_id_1], file_set_id)
+            .link_file_set_to_release_item(item_id_1, file_set_id)
             .await
             .unwrap();
         release_item_repo
@@ -575,5 +575,5 @@ mod tests {
             .unwrap();
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].id, item_id_2);
-    }
+    }*/
 }

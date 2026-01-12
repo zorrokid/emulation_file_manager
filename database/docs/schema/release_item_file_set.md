@@ -1,4 +1,4 @@
-# file_set_item
+# release_item_file_set
 
 ## Description
 
@@ -6,10 +6,11 @@
 <summary><strong>Table Definition</strong></summary>
 
 ```sql
-CREATE TABLE file_set_item (
+CREATE TABLE release_item_file_set (
+    release_item_id INTEGER NOT NULL,
     file_set_id INTEGER NOT NULL,
-    item_type INTEGER NOT NULL,
-    PRIMARY KEY (file_set_id, item_type),
+    PRIMARY KEY (release_item_id, file_set_id),
+    FOREIGN KEY (release_item_id) REFERENCES release_item(id) ON DELETE CASCADE,
     FOREIGN KEY (file_set_id) REFERENCES file_set(id) ON DELETE CASCADE
 )
 ```
@@ -20,27 +21,28 @@ CREATE TABLE file_set_item (
 
 | Name | Type | Default | Nullable | Children | Parents | Comment |
 | ---- | ---- | ------- | -------- | -------- | ------- | ------- |
+| release_item_id | INTEGER |  | false |  | [release_item](release_item.md) |  |
 | file_set_id | INTEGER |  | false |  | [file_set](file_set.md) |  |
-| item_type | INTEGER |  | false |  |  |  |
 
 ## Constraints
 
 | Name | Type | Definition |
 | ---- | ---- | ---------- |
+| release_item_id | PRIMARY KEY | PRIMARY KEY (release_item_id) |
 | file_set_id | PRIMARY KEY | PRIMARY KEY (file_set_id) |
-| item_type | PRIMARY KEY | PRIMARY KEY (item_type) |
 | - (Foreign key ID: 0) | FOREIGN KEY | FOREIGN KEY (file_set_id) REFERENCES file_set (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE |
-| sqlite_autoindex_file_set_item_1 | PRIMARY KEY | PRIMARY KEY (file_set_id, item_type) |
+| - (Foreign key ID: 1) | FOREIGN KEY | FOREIGN KEY (release_item_id) REFERENCES release_item (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE |
+| sqlite_autoindex_release_item_file_set_1 | PRIMARY KEY | PRIMARY KEY (release_item_id, file_set_id) |
 
 ## Indexes
 
 | Name | Definition |
 | ---- | ---------- |
-| sqlite_autoindex_file_set_item_1 | PRIMARY KEY (file_set_id, item_type) |
+| sqlite_autoindex_release_item_file_set_1 | PRIMARY KEY (release_item_id, file_set_id) |
 
 ## Relations
 
-![er](file_set_item.svg)
+![er](release_item_file_set.svg)
 
 ---
 

@@ -21,7 +21,7 @@ CREATE TABLE release_item (
 
 | Name | Type | Default | Nullable | Children | Parents | Comment |
 | ---- | ---- | ------- | -------- | -------- | ------- | ------- |
-| id | INTEGER |  | false | [file_set_item](file_set_item.md) |  |  |
+| id | INTEGER |  | false | [release_item_file_set](release_item_file_set.md) |  |  |
 | release_id | INTEGER |  | false |  | [release](release.md) |  |
 | item_type | INTEGER |  | false |  |  |  |
 | notes | TEXT |  | true |  |  |  |
