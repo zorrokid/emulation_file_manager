@@ -72,9 +72,9 @@ File info and file set meta data is stored in database with this structure:
     +-------------+      +------------+     +-------------------+  +--------------+
                                 | 1                                   1|
                                 | *                                    |
-                      +-----------------+ *                            |
-                      | file_set_item   |------------------------------+
-                      +-----------------+
+                      +-----------------------+ *                      |
+                      | release_item_file_set |------------------------+
+                      +-----------------------+
                                         
                                        ^
                                        +----- release file sets can be with or without item

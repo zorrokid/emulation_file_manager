@@ -79,7 +79,9 @@ impl PipelineStep<AddFileSetContext> for UpdateDatabaseStep {
     }
 }
 
-pub struct AddFileSetItemsStep;
+/* TODO: probably not needed, link items to file set when creating release items
+ *
+ * pub struct AddFileSetItemsStep;
 
 #[async_trait::async_trait]
 impl PipelineStep<AddFileSetContext> for AddFileSetItemsStep {
@@ -113,7 +115,7 @@ impl PipelineStep<AddFileSetContext> for AddFileSetItemsStep {
 
         StepAction::Continue
     }
-}
+}*/
 
 #[cfg(test)]
 mod tests {
@@ -263,7 +265,9 @@ mod tests {
         assert!(file_set_id > 0);
     }
 
-    #[async_std::test]
+    /* TODO: probably not needed, link items to file set when creating release items
+     *
+     * #[async_std::test]
     async fn test_add_file_set_items_step() {
         let pool = Arc::new(setup_test_db().await);
         let repository_manager = Arc::new(RepositoryManager::new(pool));
@@ -308,5 +312,5 @@ mod tests {
         context.file_set_id = Some(123);
         let step = AddFileSetItemsStep;
         assert!(!step.should_execute(&context));
-    }
+    }*/
 }

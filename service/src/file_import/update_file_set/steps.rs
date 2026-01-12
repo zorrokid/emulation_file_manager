@@ -410,8 +410,9 @@ impl PipelineStep<UpdateFileSetContext> for MarkNewFilesForCloudSyncStep {
     }
 }
 
-// TODO: this can be probably used in add file set pipeline as well
-pub struct UpdateLinkedItemsStep;
+// TODO: probably not needed, linking between file set and items is handled by release item
+// management (file sets don't know about items)
+/*pub struct UpdateLinkedItemsStep;
 
 #[async_trait::async_trait]
 impl PipelineStep<UpdateFileSetContext> for UpdateLinkedItemsStep {
@@ -448,7 +449,7 @@ impl PipelineStep<UpdateFileSetContext> for UpdateLinkedItemsStep {
 
         StepAction::Continue
     }
-}
+}*/
 
 #[cfg(test)]
 mod tests {
