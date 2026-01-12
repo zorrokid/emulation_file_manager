@@ -17,6 +17,45 @@ impl FileSetRepository {
     pub fn new(pool: Arc<Pool<Sqlite>>) -> Self {
         Self { pool }
     }
+
+    /// Validates that file_type of FileInfo matches FileSet.
+    /// This ensures consistency between the file_type stored in both tables.
+    async fn validate_file_type_consistency(
+        &self,
+        transaction: &mut sqlx::Transaction<'_, Sqlite>,
+        file_set_id: i64,
+        file_info_id: i64,
+    ) -> Result<(), DatabaseError> {
+        let result = sqlx::query!(
+            "SELECT 
+                fs.file_type as file_set_type,
+                fi.file_type as file_info_type
+             FROM file_set fs, file_info fi
+             WHERE fs.id = ? AND fi.id = ?",
+            file_set_id,
+            file_info_id
+        )
+        .fetch_optional(&mut **transaction)
+        .await?;
+
+        if let Some(row) = result {
+            let file_info_type = row.file_info_type.ok_or_else(|| {
+                DatabaseError::ValidationError(format!(
+                    "FileInfo (id={}) has NULL file_type, which is not allowed",
+                    file_info_id
+                ))
+            })?;
+
+            if row.file_set_type != file_info_type {
+                return Err(DatabaseError::ValidationError(format!(
+                    "FileInfo (id={}, file_type={}) cannot be added to FileSet (id={}, file_type={}) - file types must match",
+                    file_info_id, file_info_type, file_set_id, row.file_set_type
+                )));
+            }
+        }
+        
+        Ok(())
+    }
 }
 
 impl FromRow<'_, SqliteRow> for FileSet {
@@ -319,6 +358,11 @@ impl FileSetRepository {
             }
 
             // insert file_set_file_info
+            
+            // Validate that file_type matches between FileSet and FileInfo
+            self.validate_file_type_consistency(&mut transaction, file_set_id, file_info_id)
+                .await
+                .map_err(|e| Error::DbError(e.to_string()))?;
 
             sqlx::query!(
                 "INSERT INTO file_set_file_info (
@@ -362,6 +406,11 @@ impl FileSetRepository {
         .await?;
 
         for (file_info_id, file_name) in file_info_ids_and_names {
+            // Validate that file_type matches between FileSet and FileInfo
+            self.validate_file_type_consistency(&mut transaction, file_set_id, *file_info_id)
+                .await
+                .map_err(|e| Error::DbError(e.to_string()))?;
+
             sqlx::query!(
                 "INSERT INTO file_set_file_info (
                     file_set_id, 
@@ -1341,5 +1390,136 @@ mod tests {
 
         assert_eq!(result[0].file_info_id, file_info_id_2);
         assert_eq!(result[1].file_info_id, file_info_id_1);
+    }
+
+    #[async_std::test]
+    async fn test_file_type_validation_prevents_mismatched_types() {
+        let pool = setup_test_db().await;
+        let pool = Arc::new(pool);
+
+        // Create a FileSet with Rom type
+        let rom_file_set_id = {
+            let file_type = FileType::Rom as i64;
+            let result = query!(
+                "INSERT INTO file_set (
+                    file_name,
+                    file_type,
+                    name,
+                    source
+                ) VALUES (?, ?, ?, ?)",
+                "rom_set.zip",
+                file_type,
+                "ROM File Set",
+                ""
+            )
+            .execute(&*pool)
+            .await
+            .unwrap();
+            result.last_insert_rowid()
+        };
+
+        // Create a FileInfo with Document type (different from FileSet)
+        let doc_file_info_id = {
+            let file_type = FileType::Document as i64;
+            let checksum = vec![1u8; 20];
+            let result = query!(
+                "INSERT INTO file_info (
+                    sha1_checksum,
+                    file_size,
+                    archive_file_name,
+                    file_type
+                ) VALUES (?, ?, ?, ?)",
+                checksum,
+                1000,
+                "document.pdf",
+                file_type
+            )
+            .execute(&*pool)
+            .await
+            .unwrap();
+            result.last_insert_rowid()
+        };
+
+        // Try to add Document FileInfo to Rom FileSet - should fail
+        let repository = FileSetRepository { pool: pool.clone() };
+        let result = repository
+            .add_files_to_file_set(rom_file_set_id, &[(doc_file_info_id, "doc.pdf".to_string())])
+            .await;
+
+        // Verify that validation error occurs
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        assert!(
+            error_msg.contains("file types must match") || error_msg.contains("file_type"),
+            "Expected validation error message, got: {}",
+            error_msg
+        );
+    }
+
+    #[async_std::test]
+    async fn test_file_type_validation_allows_matching_types() {
+        let pool = setup_test_db().await;
+        let pool = Arc::new(pool);
+
+        // Create a FileSet with Rom type
+        let rom_file_set_id = {
+            let file_type = FileType::Rom as i64;
+            let result = query!(
+                "INSERT INTO file_set (
+                    file_name,
+                    file_type,
+                    name,
+                    source
+                ) VALUES (?, ?, ?, ?)",
+                "rom_set.zip",
+                file_type,
+                "ROM File Set",
+                ""
+            )
+            .execute(&*pool)
+            .await
+            .unwrap();
+            result.last_insert_rowid()
+        };
+
+        // Create a FileInfo with Rom type (matching FileSet)
+        let rom_file_info_id = {
+            let file_type = FileType::Rom as i64;
+            let checksum = vec![2u8; 20];
+            let result = query!(
+                "INSERT INTO file_info (
+                    sha1_checksum,
+                    file_size,
+                    archive_file_name,
+                    file_type
+                ) VALUES (?, ?, ?, ?)",
+                checksum,
+                2000,
+                "game.rom",
+                file_type
+            )
+            .execute(&*pool)
+            .await
+            .unwrap();
+            result.last_insert_rowid()
+        };
+
+        // Try to add Rom FileInfo to Rom FileSet - should succeed
+        let repository = FileSetRepository { pool: pool.clone() };
+        let result = repository
+            .add_files_to_file_set(rom_file_set_id, &[(rom_file_info_id, "game.rom".to_string())])
+            .await;
+
+        // Verify success
+        assert!(result.is_ok());
+
+        // Verify the association was created
+        let file_infos = repository
+            .get_file_set_file_info(rom_file_set_id)
+            .await
+            .unwrap();
+        assert_eq!(file_infos.len(), 1);
+        assert_eq!(file_infos[0].file_info_id, rom_file_info_id);
+        assert_eq!(file_infos[0].file_type, FileType::Rom);
     }
 }
