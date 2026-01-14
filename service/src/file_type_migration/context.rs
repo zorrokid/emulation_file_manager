@@ -3,6 +3,7 @@ use std::{
     sync::Arc,
 };
 
+use cloud_storage::CloudStorageOps;
 use core_types::{FileType, Sha1Checksum};
 use database::repository_manager::RepositoryManager;
 
@@ -17,8 +18,10 @@ pub struct FileTypeMigrationContext {
     pub repository_manager: Arc<RepositoryManager>,
     pub settings: Arc<Settings>,
     pub fs_ops: Arc<dyn FileSystemOps>,
+    pub cloud_storage_ops: Arc<dyn CloudStorageOps>,
     // Mapping of file_set_id to new FileType
     pub file_sets_to_migrate: HashMap<i64, FileTypeMigration>,
+    pub file_ids_synced_to_cloud: HashSet<i64>,
     pub moved_local_file_sha1_checksums: HashSet<Sha1Checksum>,
     pub moved_cloud_file_sha1_checksums: HashSet<Sha1Checksum>,
     pub non_existing_local_file_sha1_checksums: HashSet<Sha1Checksum>,

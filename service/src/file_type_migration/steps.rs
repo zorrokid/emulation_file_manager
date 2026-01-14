@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use core_types::Sha1Checksum;
+use database::models::FileInfo;
 
 use crate::{
     error::Error,
@@ -79,6 +80,20 @@ impl PipelineStep<FileTypeMigrationContext> for CollectCloudFileSetsStep {
             .get_file_sync_log_repository()
             .get_all_synced_file_set_ids()
             .await;
+        match files {
+            Ok(file_set_ids) => {
+                context.file_ids_synced_to_cloud = file_set_ids;
+            }
+            Err(err) => {
+                tracing::error!(
+                    error = ?err,
+                    "Error fetching synced file set ids");
+                return StepAction::Abort(Error::DbError(format!(
+                    "Error fetching synced file set ids: {}",
+                    err
+                )));
+            }
+        };
         StepAction::Continue
     }
 }
@@ -117,8 +132,6 @@ impl PipelineStep<FileTypeMigrationContext> for MoveLocalFilesStep {
                             continue;
                         }
 
-                        // Here we would implement the logic to move the local file
-                        // based on the new file type. This is a placeholder.
                         tracing::info!(
                             file_id = file.id,
                             sha1_checksum = ?file.sha1_checksum,
@@ -149,6 +162,8 @@ impl PipelineStep<FileTypeMigrationContext> for MoveLocalFilesStep {
 
                         if context.is_dry_run {
                             tracing::info!(
+                                old_path = ?old_path,
+                                new_path = ?new_path,
                                 file_id = file.id,
                                 "Dry run enabled - skipping move from {:?} to {:?}",
                                 old_path,
@@ -238,6 +253,109 @@ impl PipelineStep<FileTypeMigrationContext> for MoveCloudFilesStep {
                 .get_file_info_repository()
                 .get_file_infos_by_file_set(*file_set_id)
                 .await;
+
+            match files {
+                Ok(files) => {
+                    for file in files.iter() {
+                        if context
+                            .moved_cloud_file_sha1_checksums
+                            .contains(&file.sha1_checksum)
+                        {
+                            tracing::info!(file_id = file.id, "File already moved, skipping move");
+                            continue;
+                        }
+
+                        if !context.file_ids_synced_to_cloud.contains(&file.id) {
+                            tracing::info!(
+                                file_id = file.id,
+                                "File not synced to cloud, skipping move"
+                            );
+                            continue;
+                        }
+
+                        tracing::info!(
+                            file_id = file.id,
+                            sha1_checksum = ?file.sha1_checksum,
+                            "Moving cloud file to new location based on new file type"
+                        );
+
+                        let old_cloud_key = file.generate_cloud_key();
+
+                        let new_file = FileInfo {
+                            id: file.id,
+                            sha1_checksum: file.sha1_checksum,
+                            file_size: file.file_size,
+                            archive_file_name: file.archive_file_name.clone(),
+                            file_type: file_type_migration.new_file_type,
+                        };
+
+                        let new_cloud_key = new_file.generate_cloud_key();
+
+                        if context.is_dry_run {
+                            tracing::info!(
+                                old_cloud_key = ?old_cloud_key,
+                                new_cloud_key = ?new_cloud_key,
+                                file_id = file.id,
+                                "Dry run enabled - skipping cloud move for sha1_checksum {:?}",
+                                file.sha1_checksum
+                            );
+                            context
+                                .moved_cloud_file_sha1_checksums
+                                .insert(file.sha1_checksum);
+
+                            continue;
+                        } else {
+                            tracing::info!(
+                                file_id = file.id,
+                                "Moving cloud file from {:?} to {:?}",
+                                old_cloud_key,
+                                new_cloud_key
+                            );
+
+                            let res = context
+                                .cloud_storage_ops
+                                .move_file(&old_cloud_key, &new_cloud_key)
+                                .await;
+
+                            match res {
+                                Ok(_) => {
+                                    tracing::info!(
+                                        file_id = file.id,
+                                        "Successfully moved cloud file from {:?} to {:?}",
+                                        old_cloud_key,
+                                        new_cloud_key
+                                    );
+                                    context
+                                        .moved_cloud_file_sha1_checksums
+                                        .insert(file.sha1_checksum);
+                                }
+                                Err(err) => {
+                                    tracing::error!(
+                                        file_id = file.id,
+                                        error = ?err,
+                                        "Error moving cloud file from {:?} to {:?}",
+                                        old_cloud_key,
+                                        new_cloud_key
+                                    );
+                                    return StepAction::Abort(Error::IoError(format!(
+                                        "Error moving cloud file: {}",
+                                        err
+                                    )));
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(err) => {
+                    tracing::error!(
+                        error = ?err,
+                        "Error fetching files for FileSet id {}", file_set_id);
+                    return StepAction::Abort(Error::DbError(format!(
+                        "Error fetching files: {}",
+                        err
+                    )));
+                }
+            }
         }
         StepAction::Continue
     }

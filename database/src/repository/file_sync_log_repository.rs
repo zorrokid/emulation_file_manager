@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use core_types::FileSyncStatus;
 use sqlx::{Pool, Row, Sqlite, prelude::FromRow, sqlite::SqliteRow};
@@ -186,7 +186,7 @@ impl FileSyncLogRepository {
         Ok(result.rows_affected())
     }
 
-    pub async fn get_all_synced_file_set_ids(&self) -> Result<Vec<i64>, sqlx::Error> {
+    pub async fn get_all_synced_file_set_ids(&self) -> Result<HashSet<i64>, sqlx::Error> {
         let upload_completed_status = FileSyncStatus::UploadCompleted.to_db_int();
         // include only file_info_ids where the latest log entry indicates upload completed
         let rows = sqlx::query!(
