@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use core_types::Sha1Checksum;
 
@@ -64,6 +64,25 @@ impl PipelineStep<FileTypeMigrationContext> for CollectFileSetsStep {
     }
 }
 
+pub struct CollectCloudFileSetsStep;
+
+#[async_trait::async_trait]
+impl PipelineStep<FileTypeMigrationContext> for CollectCloudFileSetsStep {
+    fn name(&self) -> &'static str {
+        "collect_cloud_file_sets_step"
+    }
+
+    async fn execute(&self, context: &mut FileTypeMigrationContext) -> StepAction {
+        // NOTE: at this point there are not so many file sets, so loading all into memory is
+        let files = context
+            .repository_manager
+            .get_file_sync_log_repository()
+            .get_all_synced_file_set_ids()
+            .await;
+        StepAction::Continue
+    }
+}
+
 pub struct MoveLocalFilesStep;
 
 #[async_trait::async_trait]
@@ -73,7 +92,6 @@ impl PipelineStep<FileTypeMigrationContext> for MoveLocalFilesStep {
     }
 
     async fn execute(&self, context: &mut FileTypeMigrationContext) -> StepAction {
-        let moved_file_sha1s: HashSet<Sha1Checksum> = HashSet::new();
         for (file_set_id, file_type_migration) in context.file_sets_to_migrate.iter() {
             tracing::info!(
                 file_set_id = file_set_id,
@@ -92,7 +110,10 @@ impl PipelineStep<FileTypeMigrationContext> for MoveLocalFilesStep {
             match files {
                 Ok(files) => {
                     for file in files.iter() {
-                        if moved_file_sha1s.contains(&file.sha1_checksum) {
+                        if context
+                            .moved_local_file_sha1_checksums
+                            .contains(&file.sha1_checksum)
+                        {
                             continue;
                         }
 
@@ -195,6 +216,32 @@ pub struct MoveCloudFilesStep;
 // TODO: similar to MoveLocalFilesStep, implement moving files in cloud storage
 // Check first from sync log if file has been synced to cloud storage already.
 // Update sync log entry with new cloud key if moved successfully.
+
+#[async_trait::async_trait]
+impl PipelineStep<FileTypeMigrationContext> for MoveCloudFilesStep {
+    fn name(&self) -> &'static str {
+        "move_cloud_files_step"
+    }
+
+    async fn execute(&self, context: &mut FileTypeMigrationContext) -> StepAction {
+        for (file_set_id, file_type_migration) in context.file_sets_to_migrate.iter() {
+            tracing::info!(
+                file_set_id = file_set_id,
+                old_file_type = ?file_type_migration.old_file_type,
+                new_file_type = ?file_type_migration.new_file_type,
+                "Moving local files for FileSet"
+            );
+
+            // Fetch files in the file set
+            let files = context
+                .repository_manager
+                .get_file_info_repository()
+                .get_file_infos_by_file_set(*file_set_id)
+                .await;
+        }
+        StepAction::Continue
+    }
+}
 
 pub struct UpdateDatabaseStep;
 // TODO: update database entries for file sets and file infos with new file types
