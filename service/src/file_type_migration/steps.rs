@@ -125,10 +125,7 @@ impl PipelineStep<FileTypeMigrationContext> for MoveLocalFilesStep {
             match files {
                 Ok(files) => {
                     for file in files.iter() {
-                        if context
-                            .moved_local_file_sha1_checksums
-                            .contains(&file.sha1_checksum)
-                        {
+                        if context.moved_local_file_ids.contains(&file.id) {
                             continue;
                         }
 
@@ -149,9 +146,7 @@ impl PipelineStep<FileTypeMigrationContext> for MoveLocalFilesStep {
                                 old_path = ?old_path,
                                 "Old file path does not exist, skipping move"
                             );
-                            context
-                                .non_existing_local_file_sha1_checksums
-                                .insert(file.sha1_checksum);
+                            context.non_existing_local_file_ids.insert(file.id);
                             continue;
                         }
 
@@ -169,9 +164,7 @@ impl PipelineStep<FileTypeMigrationContext> for MoveLocalFilesStep {
                                 old_path,
                                 new_path
                             );
-                            context
-                                .moved_local_file_sha1_checksums
-                                .insert(file.sha1_checksum);
+                            context.moved_local_file_ids.insert(file.id);
 
                             continue;
                         } else {
@@ -190,9 +183,7 @@ impl PipelineStep<FileTypeMigrationContext> for MoveLocalFilesStep {
                                         old_path,
                                         new_path
                                     );
-                                    context
-                                        .moved_local_file_sha1_checksums
-                                        .insert(file.sha1_checksum);
+                                    context.moved_local_file_ids.insert(file.id);
                                 }
                                 Err(err) => {
                                     tracing::error!(
@@ -257,10 +248,7 @@ impl PipelineStep<FileTypeMigrationContext> for MoveCloudFilesStep {
             match files {
                 Ok(files) => {
                     for file in files.iter() {
-                        if context
-                            .moved_cloud_file_sha1_checksums
-                            .contains(&file.sha1_checksum)
-                        {
+                        if context.moved_cloud_file_ids.contains(&file.id) {
                             tracing::info!(file_id = file.id, "File already moved, skipping move");
                             continue;
                         }
@@ -299,9 +287,7 @@ impl PipelineStep<FileTypeMigrationContext> for MoveCloudFilesStep {
                                 "Dry run enabled - skipping cloud move for sha1_checksum {:?}",
                                 file.sha1_checksum
                             );
-                            context
-                                .moved_cloud_file_sha1_checksums
-                                .insert(file.sha1_checksum);
+                            context.moved_cloud_file_ids.insert(file.id);
 
                             continue;
                         } else {
@@ -325,9 +311,7 @@ impl PipelineStep<FileTypeMigrationContext> for MoveCloudFilesStep {
                                         old_cloud_key,
                                         new_cloud_key
                                     );
-                                    context
-                                        .moved_cloud_file_sha1_checksums
-                                        .insert(file.sha1_checksum);
+                                    context.moved_cloud_file_ids.insert(file.id);
                                 }
                                 Err(err) => {
                                     tracing::error!(
@@ -361,5 +345,136 @@ impl PipelineStep<FileTypeMigrationContext> for MoveCloudFilesStep {
     }
 }
 
-pub struct UpdateDatabaseStep;
 // TODO: update database entries for file sets and file infos with new file types
+pub struct UpdateFileInfosStep;
+
+#[async_trait::async_trait]
+impl PipelineStep<FileTypeMigrationContext> for UpdateFileInfosStep {
+    fn name(&self) -> &'static str {
+        "update_file_infos_step"
+    }
+
+    async fn execute(&self, context: &mut FileTypeMigrationContext) -> StepAction {
+        for (file_set_id, file_type_migration) in context.file_sets_to_migrate.iter() {
+            tracing::info!(
+                file_set_id = file_set_id,
+                old_file_type = ?file_type_migration.old_file_type,
+                new_file_type = ?file_type_migration.new_file_type,
+                "Updating FileInfo entries for FileSet"
+            );
+            // Fetch files in the file set
+            let files = context
+                .repository_manager
+                .get_file_info_repository()
+                .get_file_infos_by_file_set(*file_set_id)
+                .await;
+
+            match files {
+                Ok(files) => {
+                    for file in files.iter() {
+                        if context.updated_file_info_ids.contains(&file.id) {
+                            tracing::info!(
+                                file_id = file.id,
+                                "File already updated, skipping move"
+                            );
+                            continue;
+                        }
+
+                        tracing::info!(
+                            file_id = file.id,
+                            sha1_checksum = ?file.sha1_checksum,
+                            "Updating FileInfo entry with new file type"
+                        );
+
+                        let result = context
+                            .repository_manager
+                            .get_file_info_repository()
+                            .update_file_type(file.id, file_type_migration.new_file_type)
+                            .await;
+
+                        match result {
+                            Ok(_) => {
+                                tracing::info!(
+                                    file_id = file.id,
+                                    "Successfully updated FileInfo entry with new file type"
+                                );
+                                context.updated_file_info_ids.insert(file.id);
+                            }
+                            Err(err) => {
+                                tracing::error!(
+                                    file_id = file.id,
+                                    error = ?err,
+                                    "Error updating FileInfo entry with new file type"
+                                );
+                                return StepAction::Abort(Error::DbError(format!(
+                                    "Error updating FileInfo: {}",
+                                    err
+                                )));
+                            }
+                        }
+                    }
+                }
+                Err(err) => {
+                    tracing::error!(
+                        error = ?err,
+                        "Error fetching files for FileSet id {}", file_set_id);
+                    return StepAction::Abort(Error::DbError(format!(
+                        "Error fetching files: {}",
+                        err
+                    )));
+                }
+            }
+        }
+
+        StepAction::Continue
+    }
+}
+
+pub struct UpdateFileSetsStep;
+
+#[async_trait::async_trait]
+impl PipelineStep<FileTypeMigrationContext> for UpdateFileSetsStep {
+    fn name(&self) -> &'static str {
+        "update_file_sets_step"
+    }
+
+    async fn execute(&self, context: &mut FileTypeMigrationContext) -> StepAction {
+        for (file_set_id, file_type_migration) in context.file_sets_to_migrate.iter() {
+            tracing::info!(
+                file_set_id = file_set_id,
+                old_file_type = ?file_type_migration.old_file_type,
+                new_file_type = ?file_type_migration.new_file_type,
+                "Updating FileSet entry with new file type"
+            );
+
+            let result = context
+                .repository_manager
+                .get_file_set_repository()
+                .update_file_type(file_set_id, &file_type_migration.new_file_type)
+                .await;
+
+            match result {
+                Ok(_) => {
+                    tracing::info!(
+                        file_set_id = file_set_id,
+                        "Successfully updated FileSet entry with new file type"
+                    );
+                    context.updated_file_set_ids.insert(*file_set_id);
+                }
+                Err(err) => {
+                    tracing::error!(
+                        file_set_id = file_set_id,
+                        error = ?err,
+                        "Error updating FileSet entry with new file type"
+                    );
+                    return StepAction::Abort(Error::DbError(format!(
+                        "Error updating FileSet: {}",
+                        err
+                    )));
+                }
+            }
+        }
+
+        StepAction::Continue
+    }
+}

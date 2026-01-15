@@ -22,8 +22,10 @@ pub struct FileTypeMigrationContext {
     // Mapping of file_set_id to new FileType
     pub file_sets_to_migrate: HashMap<i64, FileTypeMigration>,
     pub file_ids_synced_to_cloud: HashSet<i64>,
-    pub moved_local_file_sha1_checksums: HashSet<Sha1Checksum>,
-    pub moved_cloud_file_sha1_checksums: HashSet<Sha1Checksum>,
-    pub non_existing_local_file_sha1_checksums: HashSet<Sha1Checksum>,
+    pub moved_local_file_ids: HashSet<i64>,
+    pub moved_cloud_file_ids: HashSet<i64>,
+    pub non_existing_local_file_ids: HashSet<i64>,
+    pub updated_file_info_ids: HashSet<i64>,
+    pub updated_file_set_ids: HashSet<i64>,
     pub is_dry_run: bool,
 }

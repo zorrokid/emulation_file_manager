@@ -130,6 +130,14 @@ impl FileInfoRepository {
         query.execute(&*self.pool).await?;
         Ok(())
     }
+
+    pub async fn update_file_type(&self, id: i64, new_file_type: FileType) -> Result<(), Error> {
+        let query = sqlx::query("UPDATE file_info SET file_type = ? WHERE id = ?")
+            .bind(new_file_type.to_db_int())
+            .bind(id);
+        query.execute(&*self.pool).await?;
+        Ok(())
+    }
 }
 #[cfg(test)]
 mod tests {

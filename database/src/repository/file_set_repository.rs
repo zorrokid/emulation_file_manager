@@ -53,7 +53,7 @@ impl FileSetRepository {
                 )));
             }
         }
-        
+
         Ok(())
     }
 }
@@ -358,7 +358,7 @@ impl FileSetRepository {
             }
 
             // insert file_set_file_info
-            
+
             // Validate that file_type matches between FileSet and FileInfo
             self.validate_file_type_consistency(&mut transaction, file_set_id, file_info_id)
                 .await
@@ -492,6 +492,25 @@ impl FileSetRepository {
         .execute(&*self.pool)
         .await?;
         Ok(id)
+    }
+
+    pub async fn update_file_type(
+        &self,
+        id: &i64,
+        new_file_type: &FileType,
+    ) -> Result<(), DatabaseError> {
+        let new_file_type = new_file_type.to_db_int();
+        sqlx::query!(
+            "UPDATE file_set 
+             SET 
+                file_type = ? 
+             WHERE id = ?",
+            new_file_type,
+            id
+        )
+        .execute(&*self.pool)
+        .await?;
+        Ok(())
     }
 
     pub async fn is_in_use(&self, id: i64) -> Result<bool, DatabaseError> {
@@ -1443,7 +1462,10 @@ mod tests {
         // Try to add Document FileInfo to Rom FileSet - should fail
         let repository = FileSetRepository { pool: pool.clone() };
         let result = repository
-            .add_files_to_file_set(rom_file_set_id, &[(doc_file_info_id, "doc.pdf".to_string())])
+            .add_files_to_file_set(
+                rom_file_set_id,
+                &[(doc_file_info_id, "doc.pdf".to_string())],
+            )
             .await;
 
         // Verify that validation error occurs
@@ -1507,7 +1529,10 @@ mod tests {
         // Try to add Rom FileInfo to Rom FileSet - should succeed
         let repository = FileSetRepository { pool: pool.clone() };
         let result = repository
-            .add_files_to_file_set(rom_file_set_id, &[(rom_file_info_id, "game.rom".to_string())])
+            .add_files_to_file_set(
+                rom_file_set_id,
+                &[(rom_file_info_id, "game.rom".to_string())],
+            )
             .await;
 
         // Verify success
