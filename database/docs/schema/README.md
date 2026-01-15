@@ -22,6 +22,7 @@
 | [file_sync_log](file_sync_log.md) | 6 |  | table |
 | [release_item](release_item.md) | 4 |  | table |
 | [release_item_file_set](release_item_file_set.md) | 2 |  | table |
+| [file_set_item_type](file_set_item_type.md) | 2 |  | table |
 
 ## Relations
 

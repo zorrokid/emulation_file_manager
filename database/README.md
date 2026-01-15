@@ -24,7 +24,7 @@ sqlite3 ~/.local/share/efm/db.sqlite
 
 # Migrations
 
-Add migration: `sqlx migrate add <name>`
+Add migration in database crate: `sqlx migrate add <name>`
 
 Run migrations: `sqlx migrate run`
 

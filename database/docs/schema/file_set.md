@@ -20,7 +20,7 @@ CREATE TABLE file_set (
 
 | Name | Type | Default | Nullable | Children | Parents | Comment |
 | ---- | ---- | ------- | -------- | -------- | ------- | ------- |
-| id | INTEGER |  | false | [file_set_file_info](file_set_file_info.md) [release_file_set](release_file_set.md) [release_item_file_set](release_item_file_set.md) |  |  |
+| id | INTEGER |  | false | [file_set_file_info](file_set_file_info.md) [release_file_set](release_file_set.md) [release_item_file_set](release_item_file_set.md) [file_set_item_type](file_set_item_type.md) |  |  |
 | file_name | TEXT |  | false |  |  |  |
 | file_type | INTEGER |  | false |  |  |  |
 | name | TEXT |  | false |  |  |  |
