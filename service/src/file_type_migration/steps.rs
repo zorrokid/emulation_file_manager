@@ -1,13 +1,10 @@
-use std::collections::HashSet;
-
-use core_types::Sha1Checksum;
 use database::models::FileInfo;
 
 use crate::{
     error::Error,
     file_type_migration::{
         context::{FileTypeMigration, FileTypeMigrationContext},
-        file_type_mapper::map_old_file_type_to_new,
+        file_type_mapper::{map_old_file_type_to_item_type, map_old_file_type_to_new},
     },
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
@@ -33,6 +30,7 @@ impl PipelineStep<FileTypeMigrationContext> for CollectFileSetsStep {
             Ok(file_sets) => {
                 for file_set in file_sets.iter() {
                     let new_file_type = map_old_file_type_to_new(file_set.file_type);
+                    let item_type = map_old_file_type_to_item_type(file_set.file_type);
                     if new_file_type != file_set.file_type {
                         tracing::info!(
                             id = file_set.id,
@@ -45,6 +43,7 @@ impl PipelineStep<FileTypeMigrationContext> for CollectFileSetsStep {
                             FileTypeMigration {
                                 old_file_type: file_set.file_type,
                                 new_file_type,
+                                item_type,
                             },
                         );
                     }
@@ -472,6 +471,47 @@ impl PipelineStep<FileTypeMigrationContext> for UpdateFileSetsStep {
                         err
                     )));
                 }
+            }
+        }
+
+        StepAction::Continue
+    }
+}
+
+pub struct AddItemsToFileSetsStep;
+
+#[async_trait::async_trait]
+impl PipelineStep<FileTypeMigrationContext> for AddItemsToFileSetsStep {
+    fn name(&self) -> &'static str {
+        "add_items_to_file_sets_step"
+    }
+
+    async fn execute(&self, context: &mut FileTypeMigrationContext) -> StepAction {
+        for (file_set_id, file_type_migration) in context.file_sets_to_migrate.iter() {
+            tracing::info!(
+                file_set_id = file_set_id,
+                old_file_type = ?file_type_migration.old_file_type,
+                new_file_type = ?file_type_migration.new_file_type,
+                "Updating FileSet entry with new file type"
+            );
+
+            if let Some(item_type) = &file_type_migration.item_type {
+                tracing::info!(
+                    file_set_id = file_set_id,
+                    item_type = ?item_type,
+                    "Adding ItemType to FileSet"
+                );
+                let result = context
+                    .repository_manager
+                    .get_file_set_repository()
+                    .add_item_type_to_file_set(file_set_id, item_type)
+                    .await;
+            } else {
+                tracing::warn!(
+                    file_set_id = file_set_id,
+                    "No ItemType mapped for this FileType, skipping adding ItemType to FileSet"
+                );
+                continue;
             }
         }
 

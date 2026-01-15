@@ -4,7 +4,7 @@ use std::{
 };
 
 use cloud_storage::CloudStorageOps;
-use core_types::{FileType, Sha1Checksum};
+use core_types::{FileType, item_type::ItemType};
 use database::repository_manager::RepositoryManager;
 
 use crate::{file_system_ops::FileSystemOps, view_models::Settings};
@@ -12,6 +12,7 @@ use crate::{file_system_ops::FileSystemOps, view_models::Settings};
 pub struct FileTypeMigration {
     pub old_file_type: FileType,
     pub new_file_type: FileType,
+    pub item_type: Option<ItemType>,
 }
 
 pub struct FileTypeMigrationContext {

@@ -574,7 +574,7 @@ impl FileSetRepository {
     }
 
     // TODO: is this needed? maybe the sort order will be updated with file set update
-    async fn update_file_set_file_info_sort_order(
+    pub async fn update_file_set_file_info_sort_order(
         &self,
         file_set_id: i64,
         file_info_id: i64,
@@ -593,7 +593,7 @@ impl FileSetRepository {
         Ok(())
     }
 
-    async fn update_file_set_file_infos_sort_order(
+    pub async fn update_file_set_file_infos_sort_order(
         &self,
         file_set_id: i64,
         file_info_sort_orders: &[(i64, i64)],
@@ -617,10 +617,10 @@ impl FileSetRepository {
         Ok(())
     }
 
-    async fn add_item_type_to_file_set(
+    pub async fn add_item_type_to_file_set(
         &self,
-        file_set_id: i64,
-        item_type: ItemType,
+        file_set_id: &i64,
+        item_type: &ItemType,
     ) -> Result<(), DatabaseError> {
         let item_type = item_type.to_db_int();
         sqlx::query!(
@@ -1598,12 +1598,12 @@ mod tests {
             .unwrap();
 
         file_set_repository
-            .add_item_type_to_file_set(file_set_id, ItemType::Box)
+            .add_item_type_to_file_set(&file_set_id, &ItemType::Box)
             .await
             .unwrap();
 
         file_set_repository
-            .add_item_type_to_file_set(file_set_id, ItemType::Manual)
+            .add_item_type_to_file_set(&file_set_id, &ItemType::Manual)
             .await
             .unwrap();
 
