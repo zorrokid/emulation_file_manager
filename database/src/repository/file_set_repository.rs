@@ -1,6 +1,6 @@
 use std::{collections::HashSet, sync::Arc};
 
-use core_types::{FileType, ImportedFile, Sha1Checksum};
+use core_types::{FileType, ImportedFile, Sha1Checksum, item_type::ItemType};
 use sqlx::{FromRow, Pool, Row, Sqlite, sqlite::SqliteRow};
 
 use crate::{
@@ -615,6 +615,45 @@ impl FileSetRepository {
 
         transaction.commit().await?;
         Ok(())
+    }
+
+    async fn add_item_type_to_file_set(
+        &self,
+        file_set_id: i64,
+        item_type: ItemType,
+    ) -> Result<(), DatabaseError> {
+        let item_type = item_type.to_db_int();
+        sqlx::query!(
+            "INSERT INTO file_set_item_type (file_set_id, item_type) 
+                 VALUES (?, ?)",
+            file_set_id,
+            item_type
+        )
+        .execute(&*self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    async fn get_item_types_for_file_set(
+        &self,
+        file_set_id: i64,
+    ) -> Result<Vec<ItemType>, DatabaseError> {
+        let rows = sqlx::query!(
+            "SELECT item_type 
+             FROM file_set_item_type 
+             WHERE file_set_id = ?",
+            file_set_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        let item_types = rows
+            .into_iter()
+            .filter_map(|row| ItemType::from_db_int(row.item_type as u8).ok())
+            .collect();
+
+        Ok(item_types)
     }
 }
 
@@ -1546,5 +1585,35 @@ mod tests {
         assert_eq!(file_infos.len(), 1);
         assert_eq!(file_infos[0].file_info_id, rom_file_info_id);
         assert_eq!(file_infos[0].file_type, FileType::Rom);
+    }
+
+    #[async_std::test]
+    async fn test_add_item_type_to_file_set() {
+        let pool = setup_test_db().await;
+        let pool = Arc::new(pool);
+        let file_set_repository = FileSetRepository { pool: pool.clone() };
+        let file_set_id = file_set_repository
+            .add_file_set("Test File Set", "test.zip", &FileType::Rom, "", &[], &[])
+            .await
+            .unwrap();
+
+        file_set_repository
+            .add_item_type_to_file_set(file_set_id, ItemType::Box)
+            .await
+            .unwrap();
+
+        file_set_repository
+            .add_item_type_to_file_set(file_set_id, ItemType::Manual)
+            .await
+            .unwrap();
+
+        let item_types = file_set_repository
+            .get_item_types_for_file_set(file_set_id)
+            .await
+            .unwrap();
+
+        assert_eq!(item_types.len(), 2);
+        assert!(item_types.contains(&ItemType::Box));
+        assert!(item_types.contains(&ItemType::Manual));
     }
 }
