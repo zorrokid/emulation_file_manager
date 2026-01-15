@@ -489,6 +489,6 @@ mod tests {
 
         let synced_file_set_ids = repository.get_all_synced_file_set_ids().await.unwrap();
         assert_eq!(synced_file_set_ids.len(), 1);
-        assert_eq!(synced_file_set_ids[0], file_info_id_1);
+        assert!(synced_file_set_ids.contains(&file_info_id_1));
     }
 }
