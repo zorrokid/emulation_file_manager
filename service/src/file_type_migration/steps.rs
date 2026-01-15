@@ -36,7 +36,8 @@ impl PipelineStep<FileTypeMigrationContext> for CollectFileSetsStep {
                             id = file_set.id,
                             old_file_type = ?file_set.file_type,
                             new_file_type = ?new_file_type,
-                            "FileSet mapping file type"
+                            item_type = ?item_type,
+                            "FileSet mapping file type and item type"
                         );
                         context.file_sets_to_migrate.insert(
                             file_set.id,
@@ -385,30 +386,39 @@ impl PipelineStep<FileTypeMigrationContext> for UpdateFileInfosStep {
                             "Updating FileInfo entry with new file type"
                         );
 
-                        let result = context
-                            .repository_manager
-                            .get_file_info_repository()
-                            .update_file_type(file.id, file_type_migration.new_file_type)
-                            .await;
+                        if context.is_dry_run {
+                            tracing::info!(
+                                file_id = file.id,
+                                "Dry run enabled - skipping update of FileInfo entry with new file type"
+                            );
+                            context.updated_file_info_ids.insert(file.id);
+                            continue;
+                        } else {
+                            let result = context
+                                .repository_manager
+                                .get_file_info_repository()
+                                .update_file_type(file.id, file_type_migration.new_file_type)
+                                .await;
 
-                        match result {
-                            Ok(_) => {
-                                tracing::info!(
-                                    file_id = file.id,
-                                    "Successfully updated FileInfo entry with new file type"
-                                );
-                                context.updated_file_info_ids.insert(file.id);
-                            }
-                            Err(err) => {
-                                tracing::error!(
-                                    file_id = file.id,
-                                    error = ?err,
-                                    "Error updating FileInfo entry with new file type"
-                                );
-                                return StepAction::Abort(Error::DbError(format!(
-                                    "Error updating FileInfo: {}",
-                                    err
-                                )));
+                            match result {
+                                Ok(_) => {
+                                    tracing::info!(
+                                        file_id = file.id,
+                                        "Successfully updated FileInfo entry with new file type"
+                                    );
+                                    context.updated_file_info_ids.insert(file.id);
+                                }
+                                Err(err) => {
+                                    tracing::error!(
+                                        file_id = file.id,
+                                        error = ?err,
+                                        "Error updating FileInfo entry with new file type"
+                                    );
+                                    return StepAction::Abort(Error::DbError(format!(
+                                        "Error updating FileInfo: {}",
+                                        err
+                                    )));
+                                }
                             }
                         }
                     }
@@ -446,30 +456,39 @@ impl PipelineStep<FileTypeMigrationContext> for UpdateFileSetsStep {
                 "Updating FileSet entry with new file type"
             );
 
-            let result = context
-                .repository_manager
-                .get_file_set_repository()
-                .update_file_type(file_set_id, &file_type_migration.new_file_type)
-                .await;
+            if context.is_dry_run {
+                tracing::info!(
+                    file_set_id = file_set_id,
+                    "Dry run enabled - skipping update of FileSet entry with new file type"
+                );
+                context.updated_file_set_ids.insert(*file_set_id);
+                continue;
+            } else {
+                let result = context
+                    .repository_manager
+                    .get_file_set_repository()
+                    .update_file_type(file_set_id, &file_type_migration.new_file_type)
+                    .await;
 
-            match result {
-                Ok(_) => {
-                    tracing::info!(
-                        file_set_id = file_set_id,
-                        "Successfully updated FileSet entry with new file type"
-                    );
-                    context.updated_file_set_ids.insert(*file_set_id);
-                }
-                Err(err) => {
-                    tracing::error!(
-                        file_set_id = file_set_id,
-                        error = ?err,
-                        "Error updating FileSet entry with new file type"
-                    );
-                    return StepAction::Abort(Error::DbError(format!(
-                        "Error updating FileSet: {}",
-                        err
-                    )));
+                match result {
+                    Ok(_) => {
+                        tracing::info!(
+                            file_set_id = file_set_id,
+                            "Successfully updated FileSet entry with new file type"
+                        );
+                        context.updated_file_set_ids.insert(*file_set_id);
+                    }
+                    Err(err) => {
+                        tracing::error!(
+                            file_set_id = file_set_id,
+                            error = ?err,
+                            "Error updating FileSet entry with new file type"
+                        );
+                        return StepAction::Abort(Error::DbError(format!(
+                            "Error updating FileSet: {}",
+                            err
+                        )));
+                    }
                 }
             }
         }
@@ -501,11 +520,39 @@ impl PipelineStep<FileTypeMigrationContext> for AddItemsToFileSetsStep {
                     item_type = ?item_type,
                     "Adding ItemType to FileSet"
                 );
-                let result = context
-                    .repository_manager
-                    .get_file_set_repository()
-                    .add_item_type_to_file_set(file_set_id, item_type)
-                    .await;
+                if context.is_dry_run {
+                    tracing::info!(
+                        file_set_id = file_set_id,
+                        "Dry run enabled - skipping adding ItemType to FileSet"
+                    );
+                    continue;
+                } else {
+                    tracing::info!(file_set_id = file_set_id, "Adding ItemType to FileSet");
+                    let result = context
+                        .repository_manager
+                        .get_file_set_repository()
+                        .add_item_type_to_file_set(file_set_id, item_type)
+                        .await;
+                    match result {
+                        Ok(_) => {
+                            tracing::info!(
+                                file_set_id = file_set_id,
+                                "Successfully added ItemType to FileSet"
+                            );
+                        }
+                        Err(err) => {
+                            tracing::error!(
+                                file_set_id = file_set_id,
+                                error = ?err,
+                                "Error adding ItemType to FileSet"
+                            );
+                            return StepAction::Abort(Error::DbError(format!(
+                                "Error adding ItemType to FileSet: {}",
+                                err
+                            )));
+                        }
+                    }
+                }
             } else {
                 tracing::warn!(
                     file_set_id = file_set_id,
