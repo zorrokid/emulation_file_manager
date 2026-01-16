@@ -13,6 +13,7 @@ use relm4::{
 };
 use service::{
     cloud_sync::service::{CloudStorageSyncService, SyncResult},
+    file_type_migration::service::FileTypeMigrationService,
     view_model_service::ViewModelService,
     view_models::{Settings, SoftwareTitleListModel},
 };
@@ -75,6 +76,7 @@ pub struct AppModel {
     view_model_service: OnceCell<Arc<ViewModelService>>,
     settings: OnceCell<Arc<Settings>>,
     sync_service: OnceCell<Arc<CloudStorageSyncService>>,
+    file_type_migration_service: OnceCell<Arc<FileTypeMigrationService>>,
     software_titles: OnceCell<Controller<SoftwareTitlesList>>,
     releases_view: gtk::Box,
     releases: OnceCell<Controller<ReleasesModel>>,
@@ -191,6 +193,7 @@ impl Component for AppModel {
             release: OnceCell::new(),
             software_titles: OnceCell::new(),
             sync_service: OnceCell::new(),
+            file_type_migration_service: OnceCell::new(),
             settings_form: OnceCell::new(),
             status_bar,
             flags,
@@ -661,6 +664,11 @@ impl AppModel {
         self.release_view.append(release_model.widget());
 
         let sync_service = Arc::new(CloudStorageSyncService::new(
+            Arc::clone(&init_result.repository_manager),
+            Arc::clone(&init_result.settings),
+        ));
+
+        let file_type_migration_service = Arc::new(FileTypeMigrationService::new(
             Arc::clone(&init_result.repository_manager),
             Arc::clone(&init_result.settings),
         ));

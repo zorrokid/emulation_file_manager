@@ -6,7 +6,7 @@ use crate::{
             MoveCloudFilesStep, MoveLocalFilesStep, UpdateFileInfosStep, UpdateFileSetsStep,
         },
     },
-    pipeline::generic_pipeline::Pipeline,
+    pipeline::{cloud_connection::ConnectToCloudStep, generic_pipeline::Pipeline},
 };
 
 impl Pipeline<FileTypeMigrationContext> {
@@ -15,6 +15,7 @@ impl Pipeline<FileTypeMigrationContext> {
             Box::new(CollectFileSetsStep),
             Box::new(CollectCloudFileSetsStep),
             Box::new(MoveLocalFilesStep),
+            Box::new(ConnectToCloudStep::<FileTypeMigrationContext>::new()),
             Box::new(MoveCloudFilesStep),
             Box::new(UpdateFileInfosStep),
             Box::new(UpdateFileSetsStep),

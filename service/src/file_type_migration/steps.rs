@@ -226,7 +226,12 @@ impl PipelineStep<FileTypeMigrationContext> for MoveCloudFilesStep {
         "move_cloud_files_step"
     }
 
+    fn should_execute(&self, context: &FileTypeMigrationContext) -> bool {
+        context.cloud_ops.is_some()
+    }
+
     async fn execute(&self, context: &mut FileTypeMigrationContext) -> StepAction {
+        let cloud_ops = context.cloud_ops.as_ref().unwrap().clone();
         for (file_set_id, file_type_migration) in context.file_sets_to_migrate.iter() {
             tracing::info!(
                 file_set_id = file_set_id,
@@ -295,10 +300,7 @@ impl PipelineStep<FileTypeMigrationContext> for MoveCloudFilesStep {
                                 new_cloud_key
                             );
 
-                            let res = context
-                                .cloud_storage_ops
-                                .move_file(&old_cloud_key, &new_cloud_key)
-                                .await;
+                            let res = cloud_ops.move_file(&old_cloud_key, &new_cloud_key).await;
 
                             match res {
                                 Ok(_) => {
