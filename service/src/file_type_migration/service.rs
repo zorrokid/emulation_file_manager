@@ -55,13 +55,17 @@ impl FileTypeMigrationService {
             self.settings.clone(),
             self.settings_service.clone(),
             self.fs_ops.clone(),
-            false,
+            true,
         );
 
         let pipeline = Pipeline::<FileTypeMigrationContext>::new();
         match pipeline.execute(&mut context).await {
             Ok(_) => {
                 tracing::info!("File type migration completed successfully.");
+                let migration_results = context.collect_migration_results();
+                for (key, value) in migration_results {
+                    tracing::info!("{}: {}", key, value);
+                }
                 Ok(())
             }
             Err(e) => {

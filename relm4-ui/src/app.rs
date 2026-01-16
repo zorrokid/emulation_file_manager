@@ -333,6 +333,7 @@ impl AppModel {
         sync_button.set_sensitive(false);
 
         header_bar.pack_end(&sync_button);
+        header_bar.pack_end(&migrate_button);
 
         let menu_button = gtk::MenuButton::builder()
             .icon_name("open-menu-symbolic")
