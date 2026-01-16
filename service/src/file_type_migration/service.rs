@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use cloud_storage::{CloudStorageOps, S3CloudStorage};
 use database::repository_manager::RepositoryManager;
 
 use crate::{
+    error::Error,
     file_system_ops::{FileSystemOps, StdFileSystemOps},
     file_type_migration::context::FileTypeMigrationContext,
     pipeline::generic_pipeline::Pipeline,
@@ -16,6 +16,12 @@ pub struct FileTypeMigrationService {
     settings: Arc<Settings>,
     settings_service: Arc<SettingsService>,
     fs_ops: Arc<dyn FileSystemOps>,
+}
+
+impl std::fmt::Debug for FileTypeMigrationService {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FileTypeMigrationService").finish()
+    }
 }
 
 impl FileTypeMigrationService {
@@ -43,7 +49,7 @@ impl FileTypeMigrationService {
         }
     }
 
-    pub async fn migrate_file_types(&self) {
+    pub async fn migrate_file_types(&self) -> Result<(), Error> {
         let mut context = FileTypeMigrationContext::new(
             self.repository_manager.clone(),
             self.settings.clone(),
@@ -56,9 +62,11 @@ impl FileTypeMigrationService {
         match pipeline.execute(&mut context).await {
             Ok(_) => {
                 tracing::info!("File type migration completed successfully.");
+                Ok(())
             }
             Err(e) => {
                 tracing::error!("File type migration failed: {:?}", e);
+                Err(e)
             }
         }
     }

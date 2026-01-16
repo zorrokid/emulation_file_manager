@@ -60,6 +60,24 @@ impl FileTypeMigrationContext {
             settings_service,
         }
     }
+
+    pub fn collect_migration_results(&self) -> HashMap<&'static str, usize> {
+        let mut results = HashMap::new();
+        results.insert("file_sets_to_migrate", self.file_sets_to_migrate.len());
+        results.insert(
+            "file_ids_synced_to_cloud",
+            self.file_ids_synced_to_cloud.len(),
+        );
+        results.insert("moved_local_file_ids", self.moved_local_file_ids.len());
+        results.insert("moved_cloud_file_ids", self.moved_cloud_file_ids.len());
+        results.insert(
+            "non_existing_local_file_ids",
+            self.non_existing_local_file_ids.len(),
+        );
+        results.insert("updated_file_info_ids", self.updated_file_info_ids.len());
+        results.insert("updated_file_set_ids", self.updated_file_set_ids.len());
+        results
+    }
 }
 
 impl CloudConnectionContext for FileTypeMigrationContext {
