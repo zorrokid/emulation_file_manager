@@ -227,7 +227,7 @@ impl PipelineStep<FileTypeMigrationContext> for MoveCloudFilesStep {
     }
 
     fn should_execute(&self, context: &FileTypeMigrationContext) -> bool {
-        context.cloud_ops.is_some()
+        context.cloud_ops.is_some() && !context.file_ids_synced_to_cloud.is_empty()
     }
 
     async fn execute(&self, context: &mut FileTypeMigrationContext) -> StepAction {

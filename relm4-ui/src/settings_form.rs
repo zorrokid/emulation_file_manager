@@ -31,7 +31,26 @@ pub struct SettingsForm {
     pub s3_access_key_id: String,
     pub s3_secret_access_key: String,
 
+    // Credential status indicator
+    pub credentials_stored: bool,
+    pub stored_access_key_preview: Option<String>,
+
     pub settings_service: Arc<SettingsService>,
+}
+
+impl SettingsForm {
+    /// Helper function to create a preview of the access key ID for display
+    fn format_access_key_preview(access_key_id: &str) -> String {
+        if access_key_id.len() >= 8 {
+            format!(
+                "{}...{}",
+                &access_key_id[..4],
+                &access_key_id[access_key_id.len() - 4..]
+            )
+        } else {
+            "****".to_string()
+        }
+    }
 }
 
 pub struct SettingsFormInit {
@@ -56,11 +75,20 @@ pub enum SettingsFormMsg {
     S3RegionChanged(String),
     S3AccessKeyChanged(String),
     S3SecretKeyChanged(String),
+    LoadCredentialStatus,
 }
 
 #[derive(Debug)]
 pub enum SettingsFormCommandMsg {
-    SettingsSaved(Result<(), Error>),
+    SettingsSaved {
+        result: Result<(), Error>,
+        credentials_stored: bool,
+        stored_key_preview: Option<String>,
+    },
+    CredentialStatusLoaded {
+        credentials_stored: bool,
+        stored_key_preview: Option<String>,
+    },
 }
 
 #[relm4::component(pub)]
@@ -106,6 +134,36 @@ impl Component for SettingsForm {
                     add_css_class: "dim-label",
                 },
 
+                #[name = "credentials_status_box"]
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    set_spacing: 5,
+                    set_margin_bottom: 10,
+
+                    #[name = "credentials_status_icon"]
+                    gtk::Label {
+                        #[watch]
+                        set_label: if model.credentials_stored { "✓" } else { "⚠" },
+                        #[watch]
+                        add_css_class: if model.credentials_stored { "success" } else { "warning" },
+                    },
+
+                    #[name = "credentials_status_label"]
+                    gtk::Label {
+                        #[watch]
+                        set_label: &if model.credentials_stored {
+                            if let Some(ref preview) = model.stored_access_key_preview {
+                                format!("Credentials stored ({})", preview)
+                            } else {
+                                "Credentials stored".to_string()
+                            }
+                        } else {
+                            "No credentials stored".to_string()
+                        },
+                        set_xalign: 0.0,
+                    },
+                },
+
                 gtk::Box {
                     set_orientation: gtk::Orientation::Horizontal,
                     set_spacing: 5,
@@ -114,7 +172,6 @@ impl Component for SettingsForm {
                         set_label: "S3 Bucket name",
                     },
 
-                    #[name = "s3_bucket_name_entry"]
                     gtk::Entry {
                         set_placeholder_text: Some("S3 Bucket Name"),
                         set_text: &model.s3_bucket_name,
@@ -135,7 +192,6 @@ impl Component for SettingsForm {
                         set_label: "S3 endpoint URL",
                     },
 
-                    #[name = "s3_endpoint_entry"]
                     gtk::Entry {
                         set_placeholder_text: Some("S3 Endpoint"),
                         set_text: &model.s3_endpoint,
@@ -153,7 +209,6 @@ impl Component for SettingsForm {
                         set_label: "S3 region",
                     },
 
-                    #[name = "s3_region_entry"]
                     gtk::Entry {
                         set_placeholder_text: Some("S3 Region"),
                         set_text: &model.s3_region,
@@ -233,9 +288,14 @@ impl Component for SettingsForm {
             s3_access_key_id: String::new(),
             s3_secret_access_key: String::new(),
             s3_sync_enabled: init.settings.s3_sync_enabled,
-            settings_service,
+            credentials_stored: false,
+            stored_access_key_preview: None,
+            settings_service: settings_service.clone(),
         };
         let widgets = view_output!();
+
+        // Load credential status on initialization
+        sender.input(SettingsFormMsg::LoadCredentialStatus);
 
         ComponentParts { model, widgets }
     }
@@ -267,18 +327,27 @@ impl Component for SettingsForm {
                 self.s3_secret_access_key = secret_key;
             }
             SettingsFormMsg::ClearCredentials => {
-                // Clear the form fields
+                // Clear the form fields in model
                 self.s3_access_key_id.clear();
                 self.s3_secret_access_key.clear();
+
+                // Clear the UI widgets
+                widgets.s3_access_key_entry.set_text("");
+                widgets.s3_secret_key_entry.set_text("");
 
                 // Delete from keyring
                 let settings_service = Arc::clone(&self.settings_service);
                 sender.oneshot_command(async move {
-                    if let Err(e) = settings_service.delete_credentials().await {
-                        // TODO: emit message to show error to user
+                    let result = settings_service.delete_credentials().await;
+                    if let Err(ref e) = result {
                         tracing::error!(error = ?e, "Error deleting credentials");
                     }
-                    SettingsFormCommandMsg::SettingsSaved(Ok(()))
+                    // Return status update: no credentials stored after deletion
+                    SettingsFormCommandMsg::SettingsSaved {
+                        result,
+                        credentials_stored: false,
+                        stored_key_preview: None,
+                    }
                 });
             }
             SettingsFormMsg::Submit => {
@@ -294,8 +363,41 @@ impl Component for SettingsForm {
                 };
 
                 sender.oneshot_command(async move {
-                    let res = settings_service.save_settings(settings).await;
-                    SettingsFormCommandMsg::SettingsSaved(res)
+                    let save_result = settings_service.save_settings(settings).await;
+
+                    // Check credential status after save attempt
+                    let (credentials_stored, stored_key_preview) =
+                        match settings_service.load_credentials().await {
+                            Ok(Some(creds)) => {
+                                let preview = Self::format_access_key_preview(&creds.access_key_id);
+                                (true, Some(preview))
+                            }
+                            _ => (false, None),
+                        };
+
+                    SettingsFormCommandMsg::SettingsSaved {
+                        result: save_result,
+                        credentials_stored,
+                        stored_key_preview,
+                    }
+                });
+            }
+            SettingsFormMsg::LoadCredentialStatus => {
+                let settings_service = Arc::clone(&self.settings_service);
+                sender.oneshot_command(async move {
+                    match settings_service.load_credentials().await {
+                        Ok(Some(creds)) => {
+                            let preview = Self::format_access_key_preview(&creds.access_key_id);
+                            SettingsFormCommandMsg::CredentialStatusLoaded {
+                                credentials_stored: true,
+                                stored_key_preview: Some(preview),
+                            }
+                        }
+                        _ => SettingsFormCommandMsg::CredentialStatusLoaded {
+                            credentials_stored: false,
+                            stored_key_preview: None,
+                        },
+                    }
                 });
             }
             SettingsFormMsg::Show => {
@@ -317,19 +419,39 @@ impl Component for SettingsForm {
         root: &Self::Root,
     ) {
         match msg {
-            SettingsFormCommandMsg::SettingsSaved(Ok(())) => {
-                // notify main application that settings have changed
-                sender
-                    .output(SettingsFormOutputMsg::SettingsChanged)
-                    .unwrap_or_else(|e| {
-                        tracing::error!(error = ?e,
-                        "Error sending SettingsChanged message")
-                    });
-                root.hide();
+            SettingsFormCommandMsg::SettingsSaved {
+                result,
+                credentials_stored,
+                stored_key_preview,
+            } => {
+                // Update credential status
+                self.credentials_stored = credentials_stored;
+                self.stored_access_key_preview = stored_key_preview;
+
+                match result {
+                    Ok(()) => {
+                        // notify main application that settings have changed
+                        sender
+                            .output(SettingsFormOutputMsg::SettingsChanged)
+                            .unwrap_or_else(|e| {
+                                tracing::error!(error = ?e,
+                                "Error sending SettingsChanged message")
+                            });
+                        root.hide();
+                    }
+                    Err(e) => {
+                        tracing::error!(error = ?e, "Error saving settings");
+                        show_error_dialog(format!("Error saving settings: {}", e), root);
+                    }
+                }
             }
-            SettingsFormCommandMsg::SettingsSaved(Err(e)) => {
-                tracing::error!(error = ?e, "Error saving settings");
-                show_error_dialog(format!("Error saving settings: {}", e), root);
+            SettingsFormCommandMsg::CredentialStatusLoaded {
+                credentials_stored,
+                stored_key_preview,
+            } => {
+                // Update credential status display
+                self.credentials_stored = credentials_stored;
+                self.stored_access_key_preview = stored_key_preview;
             }
         }
     }

@@ -94,7 +94,6 @@ impl CloudConnectionContext for FileTypeMigrationContext {
     }
 
     fn should_connect(&self) -> bool {
-        // TODO
-        true
+        !self.file_ids_synced_to_cloud.is_empty()
     }
 }
