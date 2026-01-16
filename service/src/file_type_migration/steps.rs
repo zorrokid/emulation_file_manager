@@ -105,7 +105,7 @@ impl PipelineStep<FileTypeMigrationContext> for CollectCloudFileSetsStep {
 #[async_trait::async_trait]
 impl PipelineStep<FileTypeMigrationContext> for MoveLocalFilesStep {
     fn name(&self) -> &'static str {
-        "collect_file_sets_step"
+        "move_local_files_step"
     }
 
     async fn execute(&self, context: &mut FileTypeMigrationContext) -> StepAction {
@@ -571,13 +571,16 @@ mod tests {
     };
 
     use super::*;
-    async fn setup_test_context() -> FileTypeMigrationContext {
+    async fn setup_test_context(fs_ops: Option<MockFileSystemOps>) -> FileTypeMigrationContext {
         let pool = setup_test_db().await;
         let repository_manager = Arc::new(RepositoryManager::new(Arc::new(pool)));
-        let settings = Arc::new(Settings::default());
+        let settings = Arc::new(Settings {
+            collection_root_dir: "/files".into(),
+            ..Default::default()
+        });
         let settings_service = Arc::new(SettingsService::new(repository_manager.clone()));
 
-        let fs_ops = Arc::new(MockFileSystemOps::new());
+        let fs_ops = Arc::new(fs_ops.unwrap_or(MockFileSystemOps::new()));
         FileTypeMigrationContext::new(
             repository_manager,
             settings,
@@ -599,13 +602,14 @@ mod tests {
         repository_manager: &RepositoryManager,
         file_type: &FileType,
         file_sha1: Sha1Checksum,
+        archive_file_name: String,
     ) -> i64 {
         let system_id = insert_test_system(repository_manager, "Test System").await;
 
         let imported_file = ImportedFile {
             sha1_checksum: file_sha1,
             file_size: 1234,
-            archive_file_name: "test_file.rom".to_string(),
+            archive_file_name,
             original_file_name: "original_test_file.rom".to_string(),
         };
 
@@ -625,7 +629,7 @@ mod tests {
 
     #[async_std::test]
     async fn test_collect_file_sets_step_no_file_sets_to_migrate() {
-        let mut context = setup_test_context().await;
+        let mut context = setup_test_context(None).await;
         let step = CollectFileSetsStep;
         let action = step.execute(&mut context).await;
         assert!(matches!(action, StepAction::Continue));
@@ -634,7 +638,7 @@ mod tests {
 
     #[async_std::test]
     async fn test_collect_file_sets_step_with_file_sets_to_migrate() {
-        let mut context = setup_test_context().await;
+        let mut context = setup_test_context(None).await;
         let repository_manager = context.repository_manager.clone();
 
         let file_1_checksum = Sha1Checksum::from([0; 20]);
@@ -643,6 +647,7 @@ mod tests {
             &repository_manager,
             &FileType::ManualScan, // this will be migrated to FileType::Scan
             file_1_checksum,
+            "123123.zst".to_string(),
         )
         .await;
 
@@ -651,6 +656,7 @@ mod tests {
             &repository_manager,
             &FileType::Rom, // this will NOT be migrated
             file_2_checksum,
+            "456456.zst".to_string(),
         )
         .await;
 
@@ -663,7 +669,7 @@ mod tests {
 
     #[async_std::test]
     async fn test_collect_cloud_file_sets_step() {
-        let mut context = setup_test_context().await;
+        let mut context = setup_test_context(None).await;
         let repository_manager = context.repository_manager.clone();
 
         let file_info_id_1 = 1;
@@ -684,5 +690,64 @@ mod tests {
         assert!(matches!(action, StepAction::Continue));
         assert_eq!(context.file_ids_synced_to_cloud.len(), 1);
         assert!(context.file_ids_synced_to_cloud.contains(&file_info_id_1));
+    }
+
+    #[async_std::test]
+    async fn test_move_local_files_step() {
+        let fs_ops = MockFileSystemOps::new();
+        let file_archive_name = "123123.zst".to_string();
+        // only simulate that the other file exists in local file system
+        fs_ops.add_file(format!("/files/manual_scan/{}", file_archive_name.clone()));
+        let mut context = setup_test_context(Some(fs_ops)).await;
+        let repository_manager = context.repository_manager.clone();
+        let file_checksum = Sha1Checksum::from([0; 20]);
+
+        // file in this file set will be moved
+        let file_set_id = insert_test_file_set(
+            &repository_manager,
+            &FileType::ManualScan,
+            file_checksum,
+            file_archive_name.clone(),
+        )
+        .await;
+
+        let file_info_id = repository_manager
+            .get_file_info_repository()
+            .get_file_infos_by_file_set(file_set_id)
+            .await
+            .unwrap()[0]
+            .id;
+
+        let file_checksum_2 = Sha1Checksum::from([1; 20]);
+        // file in this file set does not exist locally, so move will be skipped
+        let file_set_id_2 = insert_test_file_set(
+            &repository_manager,
+            &FileType::Rom, // this will NOT be migrated
+            file_checksum_2,
+            "456456.zst".to_string(),
+        )
+        .await;
+
+        context.file_sets_to_migrate.insert(
+            file_set_id,
+            FileTypeMigration {
+                old_file_type: FileType::ManualScan,
+                new_file_type: FileType::Scan,
+                item_type: None,
+            },
+        );
+        context.file_sets_to_migrate.insert(
+            file_set_id_2,
+            FileTypeMigration {
+                old_file_type: FileType::Manual,
+                new_file_type: FileType::Document,
+                item_type: None,
+            },
+        );
+        let step = MoveLocalFilesStep;
+        let action = step.execute(&mut context).await;
+        assert!(matches!(action, StepAction::Continue));
+        assert_eq!(context.moved_local_file_ids.len(), 1);
+        assert!(context.moved_local_file_ids.contains(&file_info_id));
     }
 }
