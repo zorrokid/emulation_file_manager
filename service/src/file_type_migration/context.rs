@@ -30,3 +30,28 @@ pub struct FileTypeMigrationContext {
     pub updated_file_set_ids: HashSet<i64>,
     pub is_dry_run: bool,
 }
+
+impl FileTypeMigrationContext {
+    pub fn new(
+        repository_manager: Arc<RepositoryManager>,
+        settings: Arc<Settings>,
+        fs_ops: Arc<dyn FileSystemOps>,
+        cloud_storage_ops: Arc<dyn CloudStorageOps>,
+        is_dry_run: bool,
+    ) -> Self {
+        Self {
+            repository_manager,
+            settings,
+            fs_ops,
+            cloud_storage_ops,
+            file_sets_to_migrate: HashMap::new(),
+            file_ids_synced_to_cloud: HashSet::new(),
+            moved_local_file_ids: HashSet::new(),
+            moved_cloud_file_ids: HashSet::new(),
+            non_existing_local_file_ids: HashSet::new(),
+            updated_file_info_ids: HashSet::new(),
+            updated_file_set_ids: HashSet::new(),
+            is_dry_run,
+        }
+    }
+}

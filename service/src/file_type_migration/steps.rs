@@ -10,6 +10,12 @@ use crate::{
 };
 
 pub struct CollectFileSetsStep;
+pub struct CollectCloudFileSetsStep;
+pub struct MoveLocalFilesStep;
+pub struct MoveCloudFilesStep;
+pub struct UpdateFileInfosStep;
+pub struct UpdateFileSetsStep;
+pub struct AddItemsToFileSetsStep;
 
 #[async_trait::async_trait]
 impl PipelineStep<FileTypeMigrationContext> for CollectFileSetsStep {
@@ -65,8 +71,6 @@ impl PipelineStep<FileTypeMigrationContext> for CollectFileSetsStep {
     }
 }
 
-pub struct CollectCloudFileSetsStep;
-
 #[async_trait::async_trait]
 impl PipelineStep<FileTypeMigrationContext> for CollectCloudFileSetsStep {
     fn name(&self) -> &'static str {
@@ -97,8 +101,6 @@ impl PipelineStep<FileTypeMigrationContext> for CollectCloudFileSetsStep {
         StepAction::Continue
     }
 }
-
-pub struct MoveLocalFilesStep;
 
 #[async_trait::async_trait]
 impl PipelineStep<FileTypeMigrationContext> for MoveLocalFilesStep {
@@ -217,11 +219,6 @@ impl PipelineStep<FileTypeMigrationContext> for MoveLocalFilesStep {
         StepAction::Continue
     }
 }
-
-pub struct MoveCloudFilesStep;
-// TODO: similar to MoveLocalFilesStep, implement moving files in cloud storage
-// Check first from sync log if file has been synced to cloud storage already.
-// Update sync log entry with new cloud key if moved successfully.
 
 #[async_trait::async_trait]
 impl PipelineStep<FileTypeMigrationContext> for MoveCloudFilesStep {
@@ -345,9 +342,6 @@ impl PipelineStep<FileTypeMigrationContext> for MoveCloudFilesStep {
     }
 }
 
-// TODO: update database entries for file sets and file infos with new file types
-pub struct UpdateFileInfosStep;
-
 #[async_trait::async_trait]
 impl PipelineStep<FileTypeMigrationContext> for UpdateFileInfosStep {
     fn name(&self) -> &'static str {
@@ -439,8 +433,6 @@ impl PipelineStep<FileTypeMigrationContext> for UpdateFileInfosStep {
     }
 }
 
-pub struct UpdateFileSetsStep;
-
 #[async_trait::async_trait]
 impl PipelineStep<FileTypeMigrationContext> for UpdateFileSetsStep {
     fn name(&self) -> &'static str {
@@ -496,8 +488,6 @@ impl PipelineStep<FileTypeMigrationContext> for UpdateFileSetsStep {
         StepAction::Continue
     }
 }
-
-pub struct AddItemsToFileSetsStep;
 
 #[async_trait::async_trait]
 impl PipelineStep<FileTypeMigrationContext> for AddItemsToFileSetsStep {
