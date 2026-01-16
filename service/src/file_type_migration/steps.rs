@@ -557,3 +557,132 @@ impl PipelineStep<FileTypeMigrationContext> for AddItemsToFileSetsStep {
         StepAction::Continue
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use core_types::{FileSyncStatus, FileType, ImportedFile, Sha1Checksum};
+    use database::{repository_manager::RepositoryManager, setup_test_db};
+
+    use crate::{
+        file_system_ops::mock::MockFileSystemOps, settings_service::SettingsService,
+        view_models::Settings,
+    };
+
+    use super::*;
+    async fn setup_test_context() -> FileTypeMigrationContext {
+        let pool = setup_test_db().await;
+        let repository_manager = Arc::new(RepositoryManager::new(Arc::new(pool)));
+        let settings = Arc::new(Settings::default());
+        let settings_service = Arc::new(SettingsService::new(repository_manager.clone()));
+
+        let fs_ops = Arc::new(MockFileSystemOps::new());
+        FileTypeMigrationContext::new(
+            repository_manager,
+            settings,
+            settings_service,
+            fs_ops,
+            false,
+        )
+    }
+
+    async fn insert_test_system(repository_manager: &RepositoryManager, name: &str) -> i64 {
+        repository_manager
+            .get_system_repository()
+            .add_system(name)
+            .await
+            .unwrap()
+    }
+
+    async fn insert_test_file_set(
+        repository_manager: &RepositoryManager,
+        file_type: &FileType,
+        file_sha1: Sha1Checksum,
+    ) -> i64 {
+        let system_id = insert_test_system(repository_manager, "Test System").await;
+
+        let imported_file = ImportedFile {
+            sha1_checksum: file_sha1,
+            file_size: 1234,
+            archive_file_name: "test_file.rom".to_string(),
+            original_file_name: "original_test_file.rom".to_string(),
+        };
+
+        repository_manager
+            .get_file_set_repository()
+            .add_file_set(
+                "Test FileSet",
+                "Test Description",
+                file_type,
+                "source",
+                &[imported_file],
+                &[system_id],
+            )
+            .await
+            .unwrap()
+    }
+
+    #[async_std::test]
+    async fn test_collect_file_sets_step_no_file_sets_to_migrate() {
+        let mut context = setup_test_context().await;
+        let step = CollectFileSetsStep;
+        let action = step.execute(&mut context).await;
+        assert!(matches!(action, StepAction::Continue));
+        assert!(context.file_sets_to_migrate.is_empty());
+    }
+
+    #[async_std::test]
+    async fn test_collect_file_sets_step_with_file_sets_to_migrate() {
+        let mut context = setup_test_context().await;
+        let repository_manager = context.repository_manager.clone();
+
+        let file_1_checksum = Sha1Checksum::from([0; 20]);
+
+        let file_set_id_1 = insert_test_file_set(
+            &repository_manager,
+            &FileType::ManualScan, // this will be migrated to FileType::Scan
+            file_1_checksum,
+        )
+        .await;
+
+        let file_2_checksum = Sha1Checksum::from([1; 20]);
+        let _ = insert_test_file_set(
+            &repository_manager,
+            &FileType::Rom, // this will NOT be migrated
+            file_2_checksum,
+        )
+        .await;
+
+        let step = CollectFileSetsStep;
+        let action = step.execute(&mut context).await;
+        assert!(matches!(action, StepAction::Continue));
+        assert_eq!(context.file_sets_to_migrate.len(), 1);
+        assert!(context.file_sets_to_migrate.contains_key(&file_set_id_1));
+    }
+
+    #[async_std::test]
+    async fn test_collect_cloud_file_sets_step() {
+        let mut context = setup_test_context().await;
+        let repository_manager = context.repository_manager.clone();
+
+        let file_info_id_1 = 1;
+        let file_info_id_2 = 2;
+        let _ = repository_manager
+            .get_file_sync_log_repository()
+            .add_log_entry(file_info_id_1, FileSyncStatus::UploadCompleted, "", "")
+            .await
+            .unwrap();
+        let _ = repository_manager
+            .get_file_sync_log_repository()
+            .add_log_entry(file_info_id_2, FileSyncStatus::UploadPending, "", "")
+            .await
+            .unwrap();
+
+        let step = CollectCloudFileSetsStep;
+        let action = step.execute(&mut context).await;
+        assert!(matches!(action, StepAction::Continue));
+        assert_eq!(context.file_ids_synced_to_cloud.len(), 1);
+        assert!(context.file_ids_synced_to_cloud.contains(&file_info_id_1));
+    }
+}
