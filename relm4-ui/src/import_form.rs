@@ -1,6 +1,7 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use core_types::{FileType, item_type::ItemType};
+use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
@@ -13,20 +14,26 @@ use relm4::{
         },
     },
 };
+use service::{view_model_service::ViewModelService, view_models::SystemListModel};
 use ui_components::{
     DropDownOutputMsg, FileTypeDropDown, FileTypeSelectedMsg,
     drop_down::{ItemTypeDropDown, ItemTypeSelectedMsg},
 };
 
+use crate::system_selector::{
+    SystemSelectInit, SystemSelectModel, SystemSelectMsg, SystemSelectOutputMsg,
+};
+
 #[derive(Debug)]
 pub struct ImportForm {
     file_path: PathBuf,
-    selected_system_id: Option<i32>,
+    selected_system: Option<SystemListModel>,
     selected_file_type: Option<FileType>,
     selected_item_type: Option<ItemType>,
     source: String,
     file_type_dropdown: Controller<FileTypeDropDown>,
     item_type_dropdown: Controller<ItemTypeDropDown>,
+    system_selector: Controller<SystemSelectModel>,
 }
 
 #[derive(Debug)]
@@ -36,8 +43,16 @@ pub enum ImportFormMsg {
     FileTypeChanged(FileType),
     ItemTypeChanged(ItemType),
     SourceChanged(String),
+    SystemSelected(SystemListModel),
     Show,
     Hide,
+    OpenSystemSelector,
+    StartImport,
+}
+
+pub struct ImportFormInit {
+    pub view_model_service: Arc<ViewModelService>,
+    pub repository_manager: Arc<RepositoryManager>,
 }
 
 impl ImportForm {
@@ -75,7 +90,7 @@ impl Component for ImportForm {
     type Input = ImportFormMsg;
     type Output = ();
     type CommandOutput = ();
-    type Init = ();
+    type Init = ImportFormInit;
 
     view! {
         #[root]
@@ -120,6 +135,10 @@ impl Component for ImportForm {
                     #[watch]
                     set_sensitive: model.selected_file_type.is_some(),
                 },
+                gtk::Button {
+                    set_label: "Select System",
+                    connect_clicked => ImportFormMsg::OpenSystemSelector,
+                },
                 gtk::Entry {
                     set_placeholder_text: Some("Source (e.g. website URL)"),
                     #[watch]
@@ -131,6 +150,11 @@ impl Component for ImportForm {
                         );
                     }
                 },
+                gtk::Button {
+                    set_label: "Start Import",
+                    connect_clicked => ImportFormMsg::StartImport,
+                },
+
             }
         }
     }
@@ -142,14 +166,30 @@ impl Component for ImportForm {
     ) -> ComponentParts<Self> {
         let file_type_dropdown = Self::create_file_type_dropdown(None, &sender);
         let item_type_dropdown = Self::create_item_type_dropdown(None, &sender);
+
+        let init_model = SystemSelectInit {
+            view_model_service: Arc::clone(&init_model.view_model_service),
+            repository_manager: Arc::clone(&init_model.repository_manager),
+        };
+
+        let system_selector = SystemSelectModel::builder()
+            .transient_for(&root)
+            .launch(init_model)
+            .forward(sender.input_sender(), |msg| match msg {
+                SystemSelectOutputMsg::SystemSelected(system_list_model) => {
+                    ImportFormMsg::SystemSelected(system_list_model)
+                }
+            });
+
         let model = ImportForm {
             file_path: PathBuf::new(),
-            selected_system_id: None,
+            selected_system: None,
             selected_file_type: None,
             selected_item_type: None,
             file_type_dropdown,
             item_type_dropdown,
             source: String::new(),
+            system_selector,
         };
 
         let file_types_dropdown = model.file_type_dropdown.widget();
@@ -199,6 +239,29 @@ impl Component for ImportForm {
             }
             ImportFormMsg::Show => root.show(),
             ImportFormMsg::Hide => root.hide(),
+            ImportFormMsg::SystemSelected(system) => {
+                self.selected_system = Some(system);
+            }
+            ImportFormMsg::OpenSystemSelector => {
+                let selected_system_ids = if let Some(system) = &self.selected_system {
+                    vec![system.id]
+                } else {
+                    vec![]
+                };
+                self.system_selector.emit(SystemSelectMsg::Show {
+                    selected_system_ids,
+                });
+            }
+            ImportFormMsg::StartImport => {
+                tracing::info!(
+                    "Starting import with file_path: {:?}, source: {}, file_type: {:?}, item_type: {:?}, system: {:?}",
+                    self.file_path,
+                    self.source,
+                    self.selected_file_type,
+                    self.selected_item_type,
+                    self.selected_system,
+                );
+            }
         }
     }
 }

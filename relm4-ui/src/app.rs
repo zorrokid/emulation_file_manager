@@ -23,7 +23,7 @@ use std::{
 };
 
 use crate::{
-    import_form::{ImportForm, ImportFormMsg},
+    import_form::{ImportForm, ImportFormInit, ImportFormMsg},
     release::{ReleaseInitModel, ReleaseModel, ReleaseMsg, ReleaseOutputMsg},
     releases::{ReleasesInit, ReleasesModel, ReleasesMsg, ReleasesOutputMsg},
     settings_form::{SettingsForm, SettingsFormInit, SettingsFormMsg, SettingsFormOutputMsg},
@@ -814,9 +814,21 @@ impl AppModel {
 
     fn open_import_dialog(&self, root: &gtk::Window) {
         if self.import_form.get().is_none() {
+            let import_form_init = ImportFormInit {
+                repository_manager: Arc::clone(
+                    self.repository_manager
+                        .get()
+                        .expect("Repository manager not initialized"),
+                ),
+                view_model_service: Arc::clone(
+                    self.view_model_service
+                        .get()
+                        .expect("View model service not initialized"),
+                ),
+            };
             let import_form = ImportForm::builder()
                 .transient_for(root)
-                .launch(())
+                .launch(import_form_init)
                 .detach();
             self.import_form
                 .set(import_form)
