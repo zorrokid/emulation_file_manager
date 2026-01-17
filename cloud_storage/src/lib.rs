@@ -237,4 +237,25 @@ impl CloudStorageOps for S3CloudStorage {
     ) -> Result<(), CloudStorageError> {
         download_file(&self.bucket, destination_path, cloud_key, progress_tx).await
     }
+
+    async fn move_file(
+        &self,
+        source_cloud_key: &str,
+        destination_cloud_key: &str,
+    ) -> Result<(), CloudStorageError> {
+        // S3 doesn't have a native move operation, so we copy and then delete the original
+        let copy_result = self
+            .bucket
+            .copy_object_internal(source_cloud_key, destination_cloud_key)
+            .await;
+
+        match copy_result {
+            Ok(_) => {
+                // Now delete the original
+                self.delete_file(source_cloud_key).await?;
+                Ok(())
+            }
+            Err(e) => Err(CloudStorageError::S3(e)),
+        }
+    }
 }

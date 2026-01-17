@@ -1,0 +1,579 @@
+use std::sync::Arc;
+
+use core_types::item_type::ItemType;
+use sqlx::{Pool, Row, Sqlite, prelude::FromRow, sqlite::SqliteRow};
+
+use crate::{
+    database_error::Error,
+    models::{FileSet, ReleaseItem},
+};
+
+impl FromRow<'_, SqliteRow> for ReleaseItem {
+    fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
+        let item_type_int: u8 = row.try_get("item_type")?;
+        let item_type: ItemType =
+            ItemType::from_db_int(item_type_int).expect("Invalid item type in DB");
+        Ok(Self {
+            id: row.try_get("id")?,
+            release_id: row.try_get("release_id")?,
+            item_type,
+            notes: row.try_get("notes")?,
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct ReleaseItemRepository {
+    pool: Arc<Pool<Sqlite>>,
+}
+
+impl ReleaseItemRepository {
+    pub fn new(pool: Arc<Pool<Sqlite>>) -> Self {
+        Self { pool }
+    }
+
+    pub async fn create_item(
+        &self,
+        release_id: i64,
+        item_type: ItemType,
+        notes: Option<String>,
+    ) -> Result<i64, Error> {
+        let item_type = item_type.to_db_int();
+        let result = sqlx::query!(
+            "INSERT INTO release_item (
+                release_id,
+                item_type,
+                notes
+            ) VALUES (?, ?, ?)",
+            release_id,
+            item_type,
+            notes
+        )
+        .execute(&*self.pool)
+        .await?;
+        Ok(result.last_insert_rowid())
+    }
+
+    pub async fn get_item(&self, item_id: i64) -> Result<ReleaseItem, Error> {
+        let item = sqlx::query_as::<_, ReleaseItem>(
+            "SELECT 
+                id,
+                release_id,
+                item_type,
+                notes
+            FROM release_item
+            WHERE id = ?",
+        )
+        .bind(item_id)
+        .fetch_one(&*self.pool)
+        .await?;
+        Ok(item)
+    }
+
+    pub async fn get_items_for_release(&self, release_id: i64) -> Result<Vec<ReleaseItem>, Error> {
+        let items = sqlx::query_as::<_, ReleaseItem>(
+            "SELECT 
+                id,
+                release_id,
+                item_type,
+                notes
+            FROM release_item
+            WHERE release_id = ?",
+        )
+        .bind(release_id)
+        .fetch_all(&*self.pool)
+        .await?;
+        Ok(items)
+    }
+
+    pub async fn update_item(
+        &self,
+        item_id: i64,
+        item_type: ItemType,
+        notes: Option<String>,
+    ) -> Result<i64, Error> {
+        let item_type = item_type.to_db_int();
+        sqlx::query!(
+            "UPDATE release_item
+            SET notes = ?,
+                item_type = ?
+            WHERE id = ?",
+            notes,
+            item_type,
+            item_id
+        )
+        .execute(&*self.pool)
+        .await?;
+        Ok(item_id)
+    }
+
+    pub async fn delete_item(&self, item_id: i64) -> Result<(), Error> {
+        let query = sqlx::query("DELETE FROM release_item WHERE id = ?").bind(item_id);
+        query.execute(&*self.pool).await?;
+        Ok(())
+    }
+
+    pub async fn link_file_set_to_release_item(
+        &self,
+        release_item_id: i64,
+        file_set_id: i64,
+    ) -> Result<(), Error> {
+        sqlx::query(
+            "INSERT INTO release_item_file_set (
+                release_item_id,
+                file_set_id
+            ) VALUES (?, ?)",
+        )
+        .bind(release_item_id)
+        .bind(file_set_id)
+        .execute(&*self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /* TODO probably not needed
+     *
+     * pub async fn update_file_set_to_items_links(
+        &self,
+        item_ids: &[i64],
+        file_set_id: i64,
+    ) -> Result<(), Error> {
+        let mut transaction = self.pool.begin().await?;
+
+        // First get existing links for the file_set_id
+        let existing_item_ids: Vec<i64> = sqlx::query!(
+            "SELECT item_type
+            FROM file_set_item
+            WHERE file_set_id = ?",
+            file_set_id
+        )
+        .fetch_all(&mut *transaction)
+        .await?
+        .into_iter()
+        .map(|row| row.item_type)
+        .collect();
+
+        let removed_item_ids: Vec<i64> = existing_item_ids
+            .iter()
+            .cloned()
+            .filter(|id| !item_ids.contains(id))
+            .collect();
+
+        let new_item_ids: Vec<i64> = item_ids
+            .iter()
+            .cloned()
+            .filter(|id| !existing_item_ids.contains(id))
+            .collect();
+
+        if removed_item_ids.is_empty() && new_item_ids.is_empty() {
+            // No changes needed
+            return Ok(());
+        }
+
+        // Remove links that are no longer needed
+        for item_id in removed_item_ids {
+            sqlx::query("DELETE FROM file_set_item WHERE item_id = ?")
+                .bind(item_id)
+                .execute(&mut *transaction)
+                .await?;
+        }
+
+        // Then, insert new links
+        for item_id in new_item_ids {
+            sqlx::query(
+                "INSERT INTO file_set_item (
+                file_set_id,
+                item_id
+            ) VALUES (?, ?)",
+            )
+            .bind(file_set_id)
+            .bind(item_id)
+            .execute(&mut *transaction)
+            .await?;
+        }
+
+        transaction.commit().await?;
+        Ok(())
+    }*/
+
+    pub async fn unlink_file_set_from_item(
+        &self,
+        release_item_id: i64,
+        file_set_id: i64,
+    ) -> Result<(), Error> {
+        sqlx::query(
+            "DELETE FROM release_item_file_set
+            WHERE file_set_id = ? AND release_item_id = ?",
+        )
+        .bind(file_set_id)
+        .bind(release_item_id)
+        .execute(&*self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn get_file_sets_for_item(
+        &self,
+        release_item_id: i64,
+    ) -> Result<Vec<FileSet>, Error> {
+        let file_sets = sqlx::query_as::<_, FileSet>(
+            "SELECT 
+                fs.id,
+                fs.file_name,
+                fs.file_type,
+                fs.name,
+                fs.source
+            FROM file_set fs
+            JOIN release_item_file_set fsi ON fs.id = fsi.file_set_id
+            WHERE fsi.release_item_id = ?",
+        )
+        .bind(release_item_id)
+        .fetch_all(&*self.pool)
+        .await?;
+        Ok(file_sets)
+    }
+
+    pub async fn get_items_for_file_set(
+        &self,
+        file_set_id: i64,
+    ) -> Result<Vec<ReleaseItem>, Error> {
+        let items = sqlx::query_as::<_, ReleaseItem>(
+            "SELECT 
+                ri.id,
+                ri.release_id,
+                ri.item_type,
+                ri.notes
+            FROM release_item ri
+            JOIN release_item_file_set fsi ON ri.id = fsi.release_item_id
+            WHERE fsi.file_set_id = ?",
+        )
+        .bind(file_set_id)
+        .fetch_all(&*self.pool)
+        .await?;
+        Ok(items)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::repository_manager::RepositoryManager;
+    use crate::setup_test_db;
+    use core_types::FileType;
+    use core_types::item_type::ItemType;
+
+    async fn get_repository() -> RepositoryManager {
+        let pool = setup_test_db().await;
+        RepositoryManager::new(Arc::new(pool))
+    }
+
+    async fn create_release(repository: &RepositoryManager) -> i64 {
+        repository
+            .get_release_repository()
+            .add_release("Test Release")
+            .await
+            .unwrap()
+    }
+
+    async fn create_system(repository: &RepositoryManager) -> i64 {
+        repository
+            .get_system_repository()
+            .add_system("Test System")
+            .await
+            .unwrap()
+    }
+
+    async fn create_file_set(repository: &RepositoryManager, system_id: i64) -> i64 {
+        repository
+            .get_file_set_repository()
+            .add_file_set(
+                "test_file_set",
+                "Test File Set",
+                &FileType::Rom,
+                "Source",
+                &[],
+                &[system_id],
+            )
+            .await
+            .unwrap()
+    }
+
+    #[async_std::test]
+    async fn test_create_and_get_item() {
+        let repository = get_repository().await;
+        let release_id = create_release(&repository).await;
+
+        let item_type = ItemType::Book;
+        let notes = "Test notes".to_string();
+
+        let release_item_repo = repository.get_release_item_repository();
+
+        let item_id = release_item_repo
+            .create_item(release_id, item_type, Some(notes.clone()))
+            .await
+            .unwrap();
+
+        let item = release_item_repo.get_item(item_id).await.unwrap();
+        assert_eq!(item.id, item_id);
+        assert_eq!(item.release_id, release_id);
+        assert_eq!(item.item_type, item_type);
+        assert_eq!(item.notes, notes);
+
+        let items = release_item_repo
+            .get_items_for_release(release_id)
+            .await
+            .unwrap();
+        assert_eq!(items.len(), 1);
+
+        release_item_repo
+            .update_item(item_id, item_type, Some("Updated notes".to_string()))
+            .await
+            .unwrap();
+
+        let updated_item = release_item_repo.get_item(item_id).await.unwrap();
+        assert_eq!(updated_item.notes, "Updated notes".to_string());
+
+        let system_id = create_system(&repository).await;
+        let file_set_id = create_file_set(&repository, system_id).await;
+
+        release_item_repo
+            .link_file_set_to_release_item(item_id, file_set_id)
+            .await
+            .unwrap();
+        let file_sets = release_item_repo
+            .get_file_sets_for_item(item_id)
+            .await
+            .unwrap();
+        assert_eq!(file_sets.len(), 1);
+        assert_eq!(file_sets[0].id, file_set_id);
+
+        let items_for_file_set = release_item_repo
+            .get_items_for_file_set(file_set_id)
+            .await
+            .unwrap();
+        assert_eq!(items_for_file_set.len(), 1);
+        assert_eq!(items_for_file_set[0].id, item_id);
+
+        release_item_repo
+            .unlink_file_set_from_item(item_id, file_set_id)
+            .await
+            .unwrap();
+
+        let file_sets_after_unlink = release_item_repo
+            .get_file_sets_for_item(item_id)
+            .await
+            .unwrap();
+        assert_eq!(file_sets_after_unlink.len(), 0);
+
+        release_item_repo.delete_item(item_id).await.unwrap();
+        let items_after_delete = release_item_repo
+            .get_items_for_release(release_id)
+            .await
+            .unwrap();
+        assert_eq!(items_after_delete.len(), 0);
+    }
+
+    #[async_std::test]
+    async fn test_multiple_file_sets_per_item() {
+        let repository = get_repository().await;
+        let release_id = create_release(&repository).await;
+
+        let item_type = ItemType::Manual;
+        let notes = "Test manual".to_string();
+
+        let release_item_repo = repository.get_release_item_repository();
+
+        let item_id = release_item_repo
+            .create_item(release_id, item_type, Some(notes.clone()))
+            .await
+            .unwrap();
+
+        let system_id = create_system(&repository).await;
+        let file_set_id_1 = create_file_set(&repository, system_id).await;
+        let file_set_id_2 = create_file_set(&repository, system_id).await;
+
+        release_item_repo
+            .link_file_set_to_release_item(item_id, file_set_id_1)
+            .await
+            .unwrap();
+        release_item_repo
+            .link_file_set_to_release_item(item_id, file_set_id_2)
+            .await
+            .unwrap();
+
+        let file_sets = release_item_repo
+            .get_file_sets_for_item(item_id)
+            .await
+            .unwrap();
+        assert_eq!(file_sets.len(), 2);
+    }
+
+    #[async_std::test]
+    async fn test_multiple_items_per_file_set() {
+        let repository = get_repository().await;
+
+        let release_id = repository
+            .get_release_repository()
+            .add_release("Test Release")
+            .await
+            .unwrap();
+
+        let release_item_repo = repository.get_release_item_repository();
+
+        let system_id = create_system(&repository).await;
+
+        let file_set_id = create_file_set(&repository, system_id).await;
+
+        let item_id_1 = release_item_repo
+            .create_item(release_id, ItemType::Manual, Some("Item 1".to_string()))
+            .await
+            .unwrap();
+
+        let item_id_2 = release_item_repo
+            .create_item(
+                release_id,
+                ItemType::ReferenceCard,
+                Some("Item 2".to_string()),
+            )
+            .await
+            .unwrap();
+
+        release_item_repo
+            .link_file_set_to_release_item(item_id_1, file_set_id)
+            .await
+            .unwrap();
+        release_item_repo
+            .link_file_set_to_release_item(item_id_2, file_set_id)
+            .await
+            .unwrap();
+
+        let items = release_item_repo
+            .get_items_for_file_set(file_set_id)
+            .await
+            .unwrap();
+
+        assert_eq!(items.len(), 2);
+    }
+
+    #[async_std::test]
+    async fn test_invalid_item_type_in_db() {
+        let repository = get_repository().await;
+        let pool = repository.get_release_item_repository().pool.clone();
+        let result = sqlx::query!(
+            "INSERT INTO release_item (
+                release_id,
+                item_type,
+                notes
+            ) VALUES (?, ?, ?)",
+            1,
+            255, // Invalid item type
+            "Invalid item type"
+        )
+        .execute(&*pool)
+        .await;
+        assert!(result.is_err());
+    }
+
+    #[async_std::test]
+    async fn test_update_item_notes_to_none() {
+        let repository = get_repository().await;
+        let release_id = repository
+            .get_release_repository()
+            .add_release("Test Release")
+            .await
+            .unwrap();
+        let item_type = ItemType::Poster;
+        let notes = "Initial notes".to_string();
+        let release_item_repo = repository.get_release_item_repository();
+        let item_id = release_item_repo
+            .create_item(release_id, item_type, Some(notes.clone()))
+            .await
+            .unwrap();
+        release_item_repo
+            .update_item(item_id, item_type, None)
+            .await
+            .unwrap();
+        let updated_item = release_item_repo.get_item(item_id).await.unwrap();
+        assert_eq!(updated_item.notes, "");
+    }
+
+    #[async_std::test]
+    async fn test_release_delete_deletes_release_items() {
+        let repository = get_repository().await;
+        let release_id = create_release(&repository).await;
+        let item_type = ItemType::Map;
+        let release_item_repo = repository.get_release_item_repository();
+        let item_id = release_item_repo
+            .create_item(release_id, item_type, Some("Test notes".to_string()))
+            .await
+            .unwrap();
+        let delete_result = repository
+            .get_release_repository()
+            .delete_release(release_id)
+            .await;
+        assert!(delete_result.is_ok());
+        let res = release_item_repo.get_item(item_id).await;
+        assert!(res.is_err());
+    }
+
+    #[async_std::test]
+    async fn test_file_set_delete_removes_links() {
+        let repository = get_repository().await;
+        let release_id = create_release(&repository).await;
+        let item_type = ItemType::Manual;
+        let release_item_repo = repository.get_release_item_repository();
+        let item_id = release_item_repo
+            .create_item(release_id, item_type, None)
+            .await
+            .unwrap();
+        let system_id = create_system(&repository).await;
+        let file_set_id = create_file_set(&repository, system_id).await;
+        release_item_repo
+            .link_file_set_to_release_item(item_id, file_set_id)
+            .await
+            .unwrap();
+        let delete_result = repository
+            .get_file_set_repository()
+            .delete_file_set(file_set_id)
+            .await;
+        assert!(delete_result.is_ok());
+        let file_sets = release_item_repo
+            .get_file_sets_for_item(item_id)
+            .await
+            .unwrap();
+        assert_eq!(file_sets.len(), 0);
+    }
+
+    /* TODO probably not needed
+     * #[async_std::test]
+    async fn test_update_file_set_to_items_links() {
+        let repository = get_repository().await;
+        let release_id = create_release(&repository).await;
+        let item_type = ItemType::Book;
+        let release_item_repo = repository.get_release_item_repository();
+        let item_id_1 = release_item_repo
+            .create_item(release_id, item_type, None)
+            .await
+            .unwrap();
+        let item_id_2 = release_item_repo
+            .create_item(release_id, item_type, None)
+            .await
+            .unwrap();
+        let system_id = create_system(&repository).await;
+        let file_set_id = create_file_set(&repository, system_id).await;
+        release_item_repo
+            .link_file_set_to_release_item(item_id_1, file_set_id)
+            .await
+            .unwrap();
+        release_item_repo
+            .update_file_set_to_items_links(&[item_id_2], file_set_id)
+            .await
+            .unwrap();
+        let items = release_item_repo
+            .get_items_for_file_set(file_set_id)
+            .await
+            .unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].id, item_id_2);
+    }*/
+}

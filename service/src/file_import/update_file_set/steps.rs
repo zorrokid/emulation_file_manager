@@ -133,7 +133,7 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileInfoToDatabaseStep {
                     );
                     context.new_files.push(FileInfo {
                         id,
-                        sha1_checksum: imported_file.sha1_checksum.into(),
+                        sha1_checksum: imported_file.sha1_checksum,
                         file_size: imported_file.file_size,
                         archive_file_name: imported_file.archive_file_name.clone(),
                         file_type,
@@ -410,6 +410,47 @@ impl PipelineStep<UpdateFileSetContext> for MarkNewFilesForCloudSyncStep {
     }
 }
 
+// TODO: probably not needed, linking between file set and items is handled by release item
+// management (file sets don't know about items)
+/*pub struct UpdateLinkedItemsStep;
+
+#[async_trait::async_trait]
+impl PipelineStep<UpdateFileSetContext> for UpdateLinkedItemsStep {
+    fn name(&self) -> &'static str {
+        "update_linked_items_step"
+    }
+
+    fn should_execute(&self, context: &UpdateFileSetContext) -> bool {
+        !context.item_ids.is_empty()
+    }
+
+    async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
+        let res = context
+            .repository_manager
+            .get_release_item_repository()
+            .update_file_set_to_items_links(&context.item_ids, context.file_set_id)
+            .await;
+
+        match res {
+            Ok(_) => tracing::info!("File set to item(s) links updated."),
+            Err(err) => {
+                tracing::error!(error = %err,
+                    "Updating links file set to items operation failed.");
+                // No point to abort here, store failed step and continue
+                context.failed_steps.insert(
+                    self.name().to_string(),
+                    Error::DbError(format!(
+                        "Updating links file set to items operation failed: {}",
+                        err
+                    )),
+                );
+            }
+        }
+
+        StepAction::Continue
+    }
+}*/
+
 #[cfg(test)]
 mod tests {
     use std::{collections::HashMap, path::PathBuf, sync::Arc};
@@ -420,8 +461,8 @@ mod tests {
 
     use crate::{
         file_import::{
-            model::{FileImportData, FileImportSource, ImportFileContent},
-            update_file_set::context::UpdateFileSetContext,
+            model::{FileImportData, FileImportSource, FileSetOperationDeps, ImportFileContent},
+            update_file_set::context::{FileSetParams, UpdateFileSetContext},
         },
         file_system_ops::mock::MockFileSystemOps,
         pipeline::pipeline_step::{PipelineStep, StepAction},
@@ -449,23 +490,22 @@ mod tests {
         let file_import_ops = Arc::new(MockFileImportOps::new());
         let file_import_data = create_file_import_data(vec![], vec![]);
 
-        UpdateFileSetContext {
-            repository_manager,
-            settings,
-            fs_ops: file_system_ops,
-            file_import_ops,
-            file_import_data,
-            file_set_id: 0,
-            imported_files: HashMap::new(),
-            existing_files: Vec::new(),
-            new_files: Vec::new(),
-            file_set: None,
-            files_in_file_set: Vec::new(),
-            file_set_name: "Test File Set".to_string(),
-            file_set_file_name: "test_game".to_string(),
-            source: "test_source".to_string(),
-            deletion_results: HashMap::new(),
-        }
+        UpdateFileSetContext::new(
+            FileSetOperationDeps {
+                repository_manager,
+                settings,
+                file_import_ops,
+                fs_ops: file_system_ops,
+            },
+            FileSetParams {
+                file_import_data,
+                file_set_id: 0,
+                file_set_name: "Test File Set".to_string(),
+                file_set_file_name: "test_game".to_string(),
+                source: "test_source".to_string(),
+                item_ids: vec![],
+            },
+        )
     }
 
     async fn create_context_and_test_file_set() -> (UpdateFileSetContext, Sha1Checksum) {
@@ -719,6 +759,15 @@ mod tests {
     #[async_std::test]
     async fn test_update_file_set_step() {
         let (mut context, _) = create_context_and_test_file_set().await;
+
+        let file_set = context
+            .repository_manager
+            .get_file_set_repository()
+            .get_file_set(context.file_set_id)
+            .await
+            .unwrap();
+
+        context.file_set = Some(file_set);
 
         // Update file set metadata
         context.file_set_name = "Updated File Set Name".to_string();

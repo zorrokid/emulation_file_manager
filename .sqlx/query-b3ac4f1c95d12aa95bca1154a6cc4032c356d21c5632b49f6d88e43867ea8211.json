@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT log.file_info_id \n             FROM file_sync_log log\n             INNER JOIN (\n                SELECT file_info_id, MAX(id) AS max_id\n                FROM file_sync_log\n                GROUP BY file_info_id\n             ) latest ON log.file_info_id = latest.file_info_id AND log.id = latest.max_id\n             WHERE log.status = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "file_info_id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b3ac4f1c95d12aa95bca1154a6cc4032c356d21c5632b49f6d88e43867ea8211"
+}

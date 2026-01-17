@@ -10,6 +10,13 @@ LOAD"FILE
 |TAPE
 RUN"
 
+# Dragon 32 / 64
+
+## Loading from Tape
+
+CLOADM
+EXEC
+
 # Sinclair Spectrum
 
 ## Loading from Tape

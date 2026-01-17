@@ -41,30 +41,34 @@ impl FileInfoRepository {
         archive_file_name: &str,
         file_type: FileType,
     ) -> Result<i64, Error> {
-        let query = sqlx::query(
+        let file_type = file_type.to_db_int();
+        let sha1_checksum = sha1_checksum.to_vec();
+        let result = sqlx::query!(
             "INSERT INTO file_info (
                 sha1_checksum, 
                 file_size, 
                 archive_file_name,
                 file_type
                 ) VALUES (?, ?, ?, ?)",
+            sha1_checksum,
+            file_size,
+            archive_file_name,
+            file_type
         )
-        .bind(sha1_checksum.to_vec())
-        .bind(file_size)
-        .bind(archive_file_name)
-        .bind(file_type.to_db_int());
-        let result = query.execute(&*self.pool).await?;
+        .execute(&*self.pool)
+        .await?;
         Ok(result.last_insert_rowid())
     }
 
     pub async fn get_file_info(&self, id: i64) -> Result<FileInfo, Error> {
-        let query = sqlx::query_as::<_, FileInfo>(
+        let result = sqlx::query_as::<_, FileInfo>(
             "SELECT id, sha1_checksum, file_size, archive_file_name, file_type
              FROM file_info WHERE id = ?",
         )
-        .bind(id);
-        let file_info = query.fetch_one(&*self.pool).await?;
-        Ok(file_info)
+        .bind(id)
+        .fetch_one(&*self.pool)
+        .await?;
+        Ok(result)
     }
 
     pub async fn get_file_infos_by_sha1_checksums(
@@ -123,6 +127,14 @@ impl FileInfoRepository {
 
     pub async fn delete_file_info(&self, id: i64) -> Result<(), Error> {
         let query = sqlx::query("DELETE FROM file_info WHERE id = ?").bind(id);
+        query.execute(&*self.pool).await?;
+        Ok(())
+    }
+
+    pub async fn update_file_type(&self, id: i64, new_file_type: FileType) -> Result<(), Error> {
+        let query = sqlx::query("UPDATE file_info SET file_type = ? WHERE id = ?")
+            .bind(new_file_type.to_db_int())
+            .bind(id);
         query.execute(&*self.pool).await?;
         Ok(())
     }

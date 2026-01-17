@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE file_set \n             SET \n                file_type = ? \n             WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "0ceaa460dda8ee5dd6067c7e9aa451c0e2ecd37bb4fb1329814ef652f2c6c93f"
+}

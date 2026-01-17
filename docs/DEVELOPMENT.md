@@ -85,6 +85,135 @@ Other crates would need to add `tracing = "0.1"` to their `Cargo.toml`.
 
 (To be documented)
 
+## Relm4 UI Development
+
+### Using gtk::Entry Widget Correctly
+
+When using `gtk::Entry` widgets in Relm4's `view!` macro, be careful about how you handle text updates to avoid common pitfalls:
+
+#### Problem: Infinite Update Loop
+
+**DON'T do this:**
+```rust
+gtk::Entry {
+    #[watch]
+    set_text: &model.field,  // Sets text when model changes
+    connect_changed[sender] => move |entry| {  // Triggers on text change
+        sender.input(Msg::UpdateField(entry.buffer().text().into()));
+    },
+}
+```
+
+This creates an infinite loop:
+1. User types → `connect_changed` fires → sends `UpdateField` message
+2. Model updates → `#[watch]` triggers → `set_text` called
+3. Text change → `connect_changed` fires again → repeat from step 1
+
+#### Solution: Let Entry Manage Its Own State
+
+**DO this instead:**
+```rust
+#[name = "field_entry"]
+gtk::Entry {
+    set_placeholder_text: Some("Enter value"),
+    connect_changed[sender] => move |entry| {
+        sender.input(Msg::UpdateField(entry.buffer().text().into()));
+    },
+}
+```
+
+Then manually set the text only when needed (e.g., loading data):
+```rust
+fn update_with_view(&mut self, widgets: &mut Self::Widgets, msg: Self::Input, ...) {
+    match msg {
+        Msg::LoadData(data) => {
+            self.field = data.clone();
+            widgets.field_entry.set_text(&data);  // Set text explicitly
+        }
+        Msg::UpdateField(value) => {
+            self.field = value;  // Don't set_text here - Entry already has it
+        }
+    }
+}
+```
+
+#### When to Use Each Signal
+
+**`connect_changed`** - Fires on every keystroke
+- Use for fields that need live updates (search, filters, notes)
+- Model updates immediately as user types
+- Example: Search boxes, notes fields
+
+**`connect_activate`** - Fires only when Enter is pressed
+- Use for fields that should commit on Enter (login, single-line inputs)
+- Model updates only when user explicitly submits
+- Example: Username, password, single-value inputs
+
+**Key Points:**
+- Entry widgets maintain their own text state internally
+- Only use `#[watch]` with `set_text` if the text is controlled externally (rare)
+- Use `connect_changed` for immediate updates, `connect_activate` for Enter-to-submit
+- Always clear entry widgets explicitly when resetting forms
+
+### Loading Forms with Async Data
+
+When opening a form/dialog that needs to load data asynchronously (e.g., editing an existing item), don't show the window until the data is ready.
+
+#### Problem: Showing Window Before Data Loads
+
+**DON'T do this:**
+```rust
+ItemFormMsg::Show { edit_item_id, .. } => {
+    if let Some(edit_item_id) = edit_item_id {
+        sender.oneshot_command(async move {
+            let result = fetch_item(edit_item_id).await;
+            CommandMsg::ItemLoaded(result)
+        });
+    }
+    root.show();  // ❌ Shows window before data loads
+}
+```
+
+**Problem:** The window appears with default/empty values, then visibly updates when data loads. This creates a jarring user experience and can cause issues with widgets like dropdowns showing wrong initial selections.
+
+#### Solution: Show Window After Data Loads
+
+**DO this instead:**
+```rust
+ItemFormMsg::Show { edit_item_id, .. } => {
+    if let Some(edit_item_id) = edit_item_id {
+        // Fetch data first
+        sender.oneshot_command(async move {
+            let result = fetch_item(edit_item_id).await;
+            CommandMsg::ItemLoaded(result)
+        });
+        // Don't show yet - wait for data
+    } else {
+        // For new items, show immediately
+        root.show();
+    }
+}
+
+// In update_cmd:
+CommandMsg::ItemLoaded(Ok(item)) => {
+    self.field = item.field;
+    sender.input(Msg::UpdateFields);
+    root.show();  // ✅ Show after data is loaded and fields are set
+}
+```
+
+**Benefits:**
+- Window appears with correct data already populated
+- No visual "flicker" as fields update
+- Dropdown widgets show correct selection immediately
+- Better user experience
+
+**Key Points:**
+- Only show the window after async data is loaded and processed
+- For "new item" mode, you can show immediately since no data needs loading
+- Apply field updates before showing the window
+- This pattern works for any form that loads data: edit dialogs, detail views, etc.
+
 ## rust-s3 Library Usage
 
 ### Error Handling Differences

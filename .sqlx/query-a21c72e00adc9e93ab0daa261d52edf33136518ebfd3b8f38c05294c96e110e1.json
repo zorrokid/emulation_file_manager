@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT item_type \n             FROM file_set_item_type \n             WHERE file_set_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "item_type",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "a21c72e00adc9e93ab0daa261d52edf33136518ebfd3b8f38c05294c96e110e1"
+}

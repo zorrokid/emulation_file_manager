@@ -1,0 +1,1 @@
+ALTER TABLE file_set_file_info ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;

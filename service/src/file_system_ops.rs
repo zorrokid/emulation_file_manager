@@ -49,7 +49,11 @@ pub trait FileSystemOps: Send + Sync {
     /// Remove a file at the given path
     fn remove_file(&self, path: &Path) -> io::Result<()>;
 
+    /// Check if a file is a zip archive
     fn is_zip_archive(&self, path: &Path) -> Result<bool, Error>;
+
+    /// Move a file from one path to another
+    fn move_file(&self, from: &Path, to: &Path) -> io::Result<()>;
 }
 
 /// Production implementation using std::fs
@@ -68,6 +72,13 @@ impl FileSystemOps for StdFileSystemOps {
     fn is_zip_archive(&self, path: &Path) -> Result<bool, Error> {
         let res = file_util::is_zip_file(path);
         res.map_err(|e| Error::IoError(format!("Failed to check if file is zip archive: {}", e)))
+    }
+
+    fn move_file(&self, from: &Path, to: &Path) -> io::Result<()> {
+        if let Some(parent) = to.parent() {
+            std::fs::create_dir_all(parent)?
+        }
+        std::fs::rename(from, to)
     }
 }
 
@@ -165,6 +176,22 @@ pub mod mock {
             } else {
                 Ok(path_str.ends_with(".zip"))
             }
+        }
+
+        fn move_file(&self, from: &Path, to: &Path) -> io::Result<()> {
+            let from_str = from.to_string_lossy().to_string();
+            let to_str = to.to_string_lossy().to_string();
+
+            if !self.existing_files.lock().unwrap().contains(&from_str) {
+                return Err(io::Error::other(format!(
+                    "Source file does not exist: {}",
+                    from_str
+                )));
+            }
+
+            self.existing_files.lock().unwrap().remove(&from_str);
+            self.existing_files.lock().unwrap().insert(to_str);
+            Ok(())
         }
     }
 }

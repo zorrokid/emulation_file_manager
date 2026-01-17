@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE release_item\n            SET notes = ?,\n                item_type = ?\n            WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "8c0e017a443d1bb238de1f2e3412c325364083970af58b8886780d1576a9530e"
+}

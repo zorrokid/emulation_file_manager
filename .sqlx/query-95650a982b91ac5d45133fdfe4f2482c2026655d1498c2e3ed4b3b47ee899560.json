@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT \n                fs.file_type as file_set_type,\n                fi.file_type as file_info_type\n             FROM file_set fs, file_info fi\n             WHERE fs.id = ? AND fi.id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "file_set_type",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "file_info_type",
+        "ordinal": 1,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "95650a982b91ac5d45133fdfe4f2482c2026655d1498c2e3ed4b3b47ee899560"
+}

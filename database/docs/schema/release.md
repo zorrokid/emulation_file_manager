@@ -18,7 +18,7 @@ CREATE TABLE release (
 
 | Name | Type | Default | Nullable | Children | Parents | Comment |
 | ---- | ---- | ------- | -------- | -------- | ------- | ------- |
-| id | INTEGER |  | false | [release_file_set](release_file_set.md) [release_system](release_system.md) [release_software_title](release_software_title.md) |  |  |
+| id | INTEGER |  | false | [release_file_set](release_file_set.md) [release_system](release_system.md) [release_software_title](release_software_title.md) [release_item](release_item.md) |  |  |
 | name | TEXT |  | false |  |  |  |
 
 ## Constraints

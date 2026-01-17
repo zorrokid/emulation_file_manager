@@ -6,8 +6,9 @@ use crate::repository::{
     document_viewer_repository::DocumentViewerRepository, emulator_repository::EmulatorRepository,
     file_info_repository::FileInfoRepository, file_set_repository::FileSetRepository,
     file_sync_log_repository::FileSyncLogRepository, franchise_repository::FranchiseRepository,
-    release_repository::ReleaseRepository, setting_repository::SettingRepository,
-    software_title_repository::SoftwareTitleRepository, system_repository::SystemRepository,
+    release_item_repository::ReleaseItemRepository, release_repository::ReleaseRepository,
+    setting_repository::SettingRepository, software_title_repository::SoftwareTitleRepository,
+    system_repository::SystemRepository,
 };
 
 #[derive(Debug)]
@@ -22,6 +23,7 @@ pub struct RepositoryManager {
     setting_repository: SettingRepository,
     document_viewer_repository: DocumentViewerRepository,
     file_sync_log_repository: FileSyncLogRepository,
+    release_item_repository: ReleaseItemRepository,
 }
 
 impl RepositoryManager {
@@ -36,6 +38,7 @@ impl RepositoryManager {
         let setting_repository = SettingRepository::new(pool.clone());
         let document_viewer_repository = DocumentViewerRepository::new(pool.clone());
         let file_sync_log_repository = FileSyncLogRepository::new(pool.clone());
+        let release_item_repository = ReleaseItemRepository::new(pool.clone());
 
         Self {
             file_info_repository,
@@ -48,6 +51,7 @@ impl RepositoryManager {
             setting_repository,
             document_viewer_repository,
             file_sync_log_repository,
+            release_item_repository,
         }
     }
 
@@ -89,5 +93,9 @@ impl RepositoryManager {
 
     pub fn get_file_sync_log_repository(&self) -> &FileSyncLogRepository {
         &self.file_sync_log_repository
+    }
+
+    pub fn get_release_item_repository(&self) -> &ReleaseItemRepository {
+        &self.release_item_repository
     }
 }

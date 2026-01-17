@@ -1,4 +1,5 @@
 pub mod events;
+pub mod item_type;
 
 use serde::{Deserialize, Serialize};
 use std::string::ToString;
@@ -78,26 +79,42 @@ pub enum FileType {
     DiskImage = 2,
     #[strum(serialize = "Tape Image")]
     TapeImage = 3,
-    Screenshot = 4,
+    Screenshot = 4, // This file type doesn't have associated ItemType
+    /// Manual document file (e.g. pdf)
+    // TODO: will be deprecated, use generic Document type instead
     Manual = 5,
     #[strum(serialize = "Cover Scan")]
-    CoverScan = 6,
+    // TODO: will be deprecated, use generic Scan type instead
+    CoverScan = 6, // This file type doesn't have associated ItemType (can be from box, inlay,
+    // manual, etc)
     #[strum(serialize = "Memory Snapshot")]
-    MemorySnapshot = 7,
+    MemorySnapshot = 7, // This file type doesn't have associated ItemType
+    // TODO: will be deprecated, use generic Screenshot type instead
     #[strum(serialize = "Loading Screen")]
-    LoadingScreen = 8,
+    LoadingScreen = 8, // This file type doesn't have associated ItemType
+    // TODO: will be deprecated, use generic Screenshot type instead
     #[strum(serialize = "Title Screen")]
-    TitleScreen = 9,
+    TitleScreen = 9, // This file type doesn't have associated ItemType
     #[strum(serialize = "Manual Scan")]
+    // TODO: will be deprecated, use generic Scan type instead
     ManualScan = 10,
     #[strum(serialize = "Media Scan")]
+    // TODO: will be deprecated, use generic Scan type instead
     MediaScan = 11,
-    #[strum(serialize = "Package Scan")]
-    PackageScan = 12,
+    // This is not currently used, use BoxScan or InlayScan instead instead instead instead
+    // #[strum(serialize = "Package Scan")]
+    //PackageScan = 12,
     #[strum(serialize = "Inlay Scan")]
+    // TODO: will be deprecated, use generic Scan type instead
     InlayScan = 13,
     #[strum(serialize = "Box Scan")]
+    // TODO: will be deprecated, use generic Scan type instead
     BoxScan = 14,
+    /// Box document file (e.g. pdf)
+    // TODO: will be deprecated, use generic Document type instead
+    Box = 15,
+    Document = 16, // Generic document type (e.g. pdf)
+    Scan = 17,     // Generic scan type (e.g. jpg, png)
 }
 
 impl FileType {
@@ -114,9 +131,12 @@ impl FileType {
             FileType::TitleScreen => "title_screen",
             FileType::ManualScan => "manual_scan",
             FileType::MediaScan => "media_scan",
-            FileType::PackageScan => "package_scan",
+            //FileType::PackageScan => "package_scan",
             FileType::InlayScan => "inlay_scan",
             FileType::BoxScan => "box_scan",
+            FileType::Box => "box",
+            FileType::Document => "document",
+            FileType::Scan => "scan",
         }
     }
 
@@ -137,9 +157,12 @@ impl FileType {
             9 => Ok(FileType::TitleScreen),
             10 => Ok(FileType::ManualScan),
             11 => Ok(FileType::MediaScan),
-            12 => Ok(FileType::PackageScan),
+            //12 => Ok(FileType::PackageScan),
             13 => Ok(FileType::InlayScan),
             14 => Ok(FileType::BoxScan),
+            15 => Ok(FileType::Box),
+            16 => Ok(FileType::Document),
+            17 => Ok(FileType::Scan),
             _ => Err(CoreTypeError::ConversionError(
                 "Failed convert to FileType".to_string(),
             )),
@@ -168,12 +191,13 @@ pub const IMAGE_FILE_TYPES: &[FileType] = &[
     FileType::MediaScan,
     FileType::LoadingScreen,
     FileType::TitleScreen,
-    FileType::PackageScan,
+    //FileType::PackageScan,
     FileType::InlayScan,
     FileType::BoxScan,
+    FileType::Scan,
 ];
 
-pub const DOCUMENT_FILE_TYPES: &[FileType] = &[FileType::Manual];
+pub const DOCUMENT_FILE_TYPES: &[FileType] = &[FileType::Manual, FileType::Box, FileType::Document];
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Display, Serialize, Deserialize)]
 pub enum ArgumentType {
@@ -345,7 +369,7 @@ mod tests {
         assert!(!FileType::TitleScreen.is_media_type());
         assert!(!FileType::ManualScan.is_media_type());
         assert!(!FileType::MediaScan.is_media_type());
-        assert!(!FileType::PackageScan.is_media_type());
+        //assert!(!FileType::PackageScan.is_media_type());
         assert!(!FileType::InlayScan.is_media_type());
     }
 }
