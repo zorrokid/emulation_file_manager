@@ -241,7 +241,7 @@ impl Component for AppModel {
             AppMsg::ExportAllFiles => self.start_export_all_files(&sender, root),
             AppMsg::ExportFolderSelected(path) => self.export_all_files(&sender, path),
             AppMsg::SyncWithCloud => self.sync_with_cloud(&sender),
-            AppMsg::MigrateFileTypes => self.mirate_file_types(&sender),
+            AppMsg::MigrateFileTypes => self.migrate_file_types(&sender),
             AppMsg::ProcessFileSyncEvent(event) => self.process_file_sync_event(event),
             AppMsg::OpenSettings => self.open_settings(&sender, root),
             AppMsg::UpdateSettings => {
@@ -784,7 +784,7 @@ impl AppModel {
         }
     }
 
-    fn mirate_file_types(&mut self, sender: &ComponentSender<Self>) {
+    fn migrate_file_types(&mut self, sender: &ComponentSender<Self>) {
         let migration_service = self
             .file_type_migration_service
             .get()
