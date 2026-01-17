@@ -279,16 +279,11 @@ impl PipelineStep<DownloadContext> for ExportFilesStep {
             .files_in_set
             .iter()
             .map(|f| {
-                let checksum: Sha1Checksum = f
-                    .sha1_checksum
-                    .clone()
-                    .try_into()
-                    .expect("Failed to convert to Sha1Checksum");
                 (
                     f.archive_file_name.clone(),
                     OutputFile {
                         output_file_name: f.file_name.clone(),
-                        checksum,
+                        checksum: f.sha1_checksum,
                     },
                 )
             })

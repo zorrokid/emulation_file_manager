@@ -562,6 +562,7 @@ impl PipelineStep<FileTypeMigrationContext> for AddItemsToFileSetsStep {
 mod tests {
     use std::sync::Arc;
 
+    use cloud_storage::{CloudStorageOps, mock::MockCloudStorage};
     use core_types::{FileSyncStatus, FileType, ImportedFile, Sha1Checksum};
     use database::{repository_manager::RepositoryManager, setup_test_db};
 
@@ -749,5 +750,78 @@ mod tests {
         assert!(matches!(action, StepAction::Continue));
         assert_eq!(context.moved_local_file_ids.len(), 1);
         assert!(context.moved_local_file_ids.contains(&file_info_id));
+    }
+
+    #[async_std::test]
+    async fn test_move_cloud_files_step() {
+        let mut context = setup_test_context(None).await;
+        let repository_manager = context.repository_manager.clone();
+
+        // create file set with file with file type to be migrated
+        let archive_file_name = "123123.zst".to_string();
+        let sha1_checksum = Sha1Checksum::from([0; 20]);
+        let file_info = FileInfo {
+            id: 1,
+            sha1_checksum,
+            file_size: 1234,
+            archive_file_name: archive_file_name.clone(),
+            file_type: FileType::ManualScan, // to be migrated to FileType::Scan
+        };
+
+        let file_set_id = insert_test_file_set(
+            &repository_manager,
+            &FileType::ManualScan,
+            sha1_checksum,
+            archive_file_name.clone(),
+        )
+        .await;
+
+        // mark the file set for migration
+        context.file_sets_to_migrate.insert(
+            file_set_id,
+            FileTypeMigration {
+                old_file_type: FileType::ManualScan,
+                new_file_type: FileType::Scan,
+                item_type: None,
+            },
+        );
+
+        // "upload" the file to mock cloud storage
+        let file_path = context
+            .settings
+            .get_file_path(&FileType::ManualScan, &archive_file_name);
+        let cloud_ops = Arc::new(MockCloudStorage::new());
+        let cloud_key = file_info.generate_cloud_key();
+
+        cloud_ops
+            .upload_file(&file_path, &cloud_key, None)
+            .await
+            .unwrap();
+
+        context.cloud_ops = Some(cloud_ops.clone());
+
+        // mark the file as synced to cloud
+        context.file_ids_synced_to_cloud.insert(file_info.id);
+
+        let step = MoveCloudFilesStep;
+        let action = step.execute(&mut context).await;
+        assert!(matches!(action, StepAction::Continue));
+        assert_eq!(context.moved_cloud_file_ids.len(), 1);
+        assert!(context.moved_cloud_file_ids.contains(&file_info.id));
+
+        let exists = cloud_ops.file_exists(&cloud_key).await.unwrap_or(false);
+        assert!(!exists, "Old cloud key should not exist after move");
+
+        let new_file = FileInfo {
+            id: file_info.id,
+            sha1_checksum: file_info.sha1_checksum,
+            file_size: file_info.file_size,
+            archive_file_name: file_info.archive_file_name.clone(),
+            file_type: FileType::Scan,
+        };
+
+        let new_cloud_key = new_file.generate_cloud_key();
+        let exists = cloud_ops.file_exists(&new_cloud_key).await.unwrap_or(false);
+        assert!(exists, "New cloud key should exist after move");
     }
 }
