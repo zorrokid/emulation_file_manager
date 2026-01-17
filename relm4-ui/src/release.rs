@@ -23,6 +23,7 @@ use service::{
 use crate::{
     document_file_set_viewer::{DocumentViewer, DocumentViewerInit, DocumentViewerMsg},
     emulator_runner::{EmulatorRunnerInit, EmulatorRunnerModel, EmulatorRunnerMsg},
+    image_fileset_viewer::{ImageFileSetViewerInit, ImageFilesetViewer, ImageFilesetViewerMsg},
     list_item::ListItem,
     tabbed_image_viewer::{
         TabbedImageViewer, TabbedImageViewerInit, TabbedImageViewerMsg, TabbedImageViewerOutputMsg,
@@ -44,6 +45,7 @@ pub struct ReleaseModel {
     selected_image_file_set: Option<FileSetViewModel>,
     selected_document_file_set: Option<FileSetViewModel>,
     emulator_runner: Controller<EmulatorRunnerModel>,
+    image_file_set_viewer: Controller<ImageFilesetViewer>,
     document_file_set_viewer: Controller<DocumentViewer>,
     tabbed_image_viewer: Controller<TabbedImageViewer>,
 }
@@ -64,6 +66,7 @@ pub enum ReleaseMsg {
         id: i64,
     },
     StartEmulatorRunner,
+    StartImageFileSetViewer,
     StartDocumentFileSetViewer,
     UpdateRelease(ReleaseListModel),
     Clear,
@@ -151,6 +154,28 @@ impl Component for ReleaseModel {
                     set_spacing: 5,
 
                     gtk::Label {
+                        set_label: "Image File Sets:",
+                    },
+                    #[local_ref]
+                    image_file_set_list_view -> gtk::ListView {
+                        set_vexpand: true,
+                    },
+
+                    gtk::Button {
+                        set_label: "View Image File Set",
+                        #[watch]
+                        set_sensitive: model.selected_image_file_set.is_some(),
+                        connect_clicked => ReleaseMsg::StartImageFileSetViewer,
+                    },
+                },
+
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Vertical,
+                    set_hexpand: true,
+
+                    set_spacing: 5,
+
+                    gtk::Label {
                         set_label: "Document File Sets:",
                     },
                     #[local_ref]
@@ -198,6 +223,14 @@ impl Component for ReleaseModel {
             .launch(emulator_runner_init_model)
             .detach();
 
+        let image_file_set_viewer_init_model = ImageFileSetViewerInit {
+            download_service: Arc::clone(&download_service),
+        };
+        let image_file_set_viewer = ImageFilesetViewer::builder()
+            .transient_for(&root)
+            .launch(image_file_set_viewer_init_model)
+            .detach();
+
         let document_viewer_init_model = DocumentViewerInit {
             view_model_service: Arc::clone(&init_model.view_model_service),
             repository_manager: Arc::clone(&init_model.repository_manager),
@@ -221,6 +254,7 @@ impl Component for ReleaseModel {
             selected_image_file_set: None,
             selected_document_file_set: None,
             emulator_runner,
+            image_file_set_viewer,
             tabbed_image_viewer,
             document_file_set_viewer,
         };
@@ -235,6 +269,7 @@ impl Component for ReleaseModel {
             }
         ));
 
+        let image_file_set_list_view = &model.image_file_set_list_view_wrapper.view;
         let image_selection_model = &model.image_file_set_list_view_wrapper.selection_model;
         image_selection_model.connect_selected_notify(clone!(
             #[strong]
@@ -279,6 +314,15 @@ impl Component for ReleaseModel {
                         file_set: file_set.clone(),
                         systems: release.systems.clone(),
                     });
+                }
+            }
+            ReleaseMsg::StartImageFileSetViewer => {
+                if let Some(file_set) = &self.selected_image_file_set {
+                    tracing::info!(id = file_set.id, "Starting image file set viewer for file set");
+                    self.image_file_set_viewer
+                        .emit(ImageFilesetViewerMsg::Show {
+                            file_set: file_set.clone(),
+                        });
                 }
             }
             ReleaseMsg::StartDocumentFileSetViewer => {
