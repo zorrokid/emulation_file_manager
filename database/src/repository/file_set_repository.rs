@@ -635,7 +635,7 @@ impl FileSetRepository {
         Ok(())
     }
 
-    async fn get_item_types_for_file_set(
+    pub async fn get_item_types_for_file_set(
         &self,
         file_set_id: i64,
     ) -> Result<Vec<ItemType>, DatabaseError> {

@@ -906,4 +906,39 @@ mod tests {
             .unwrap();
         assert_eq!(file_set.file_type, FileType::Scan);
     }
+
+    #[async_std::test]
+    async fn test_add_items_to_file_sets_step() {
+        let mut context = setup_test_context(None).await;
+        let repository_manager = context.repository_manager.clone();
+        // add file set to be migrated
+        let file_checksum = Sha1Checksum::from([0; 20]);
+        let archive_file_name = "123123.zst".to_string();
+        let file_set_id = insert_test_file_set(
+            &repository_manager,
+            &FileType::ManualScan,
+            file_checksum,
+            archive_file_name.clone(),
+        )
+        .await;
+        context.file_sets_to_migrate.insert(
+            file_set_id,
+            FileTypeMigration {
+                old_file_type: FileType::ManualScan,
+                new_file_type: FileType::Scan,
+                item_type: Some(core_types::item_type::ItemType::Manual),
+            },
+        );
+        let step = AddItemsToFileSetsStep;
+        let action = step.execute(&mut context).await;
+        assert!(matches!(action, StepAction::Continue));
+        let items = repository_manager
+            .get_file_set_repository()
+            .get_item_types_for_file_set(file_set_id)
+            .await
+            .unwrap();
+
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0], core_types::item_type::ItemType::Manual);
+    }
 }
