@@ -75,6 +75,9 @@ impl FileSystemOps for StdFileSystemOps {
     }
 
     fn move_file(&self, from: &Path, to: &Path) -> io::Result<()> {
+        if let Some(parent) = to.parent() {
+            std::fs::create_dir_all(parent)?
+        }
         std::fs::rename(from, to)
     }
 }

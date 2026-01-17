@@ -195,6 +195,7 @@ impl PipelineStep<FileTypeMigrationContext> for MoveLocalFilesStep {
                                         old_path,
                                         new_path
                                     );
+                                    context.non_existing_local_file_ids.insert(file.id);
                                     return StepAction::Abort(Error::IoError(format!(
                                         "Error moving file: {}",
                                         err
