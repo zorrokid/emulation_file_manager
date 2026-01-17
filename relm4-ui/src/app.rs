@@ -23,6 +23,7 @@ use std::{
 };
 
 use crate::{
+    import_form::{ImportForm, ImportFormMsg},
     release::{ReleaseInitModel, ReleaseModel, ReleaseMsg, ReleaseOutputMsg},
     releases::{ReleasesInit, ReleasesModel, ReleasesMsg, ReleasesOutputMsg},
     settings_form::{SettingsForm, SettingsFormInit, SettingsFormMsg, SettingsFormOutputMsg},
@@ -86,6 +87,7 @@ pub struct AppModel {
     release_view: gtk::Box,
     release: OnceCell<Controller<ReleaseModel>>,
     settings_form: OnceCell<Controller<SettingsForm>>,
+    import_form: OnceCell<Controller<ImportForm>>,
     status_bar: Controller<StatusBarModel>,
     // Wrapping the flags in a single Mutex to prevent possible race conditions.
     flags: Arc<Mutex<Flags>>,
@@ -198,6 +200,7 @@ impl Component for AppModel {
             sync_service: OnceCell::new(),
             file_type_migration_service: OnceCell::new(),
             settings_form: OnceCell::new(),
+            import_form: OnceCell::new(),
             status_bar,
             flags,
             cloud_sync_cancel_tx: None,
@@ -810,6 +813,18 @@ impl AppModel {
     }
 
     fn open_import_dialog(&self, root: &gtk::Window) {
-        tracing::info!("Open import dialog requested");
+        if self.import_form.get().is_none() {
+            let import_form = ImportForm::builder()
+                .transient_for(root)
+                .launch(())
+                .detach();
+            self.import_form
+                .set(import_form)
+                .expect("ImportForm already initialized");
+        }
+        self.import_form
+            .get()
+            .expect("ImportForm not initialized")
+            .emit(ImportFormMsg::Show);
     }
 }
