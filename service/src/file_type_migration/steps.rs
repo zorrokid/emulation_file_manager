@@ -824,4 +824,86 @@ mod tests {
         let exists = cloud_ops.file_exists(&new_cloud_key).await.unwrap_or(false);
         assert!(exists, "New cloud key should exist after move");
     }
+
+    #[async_std::test]
+    async fn test_update_file_infos_step() {
+        let mut context = setup_test_context(None).await;
+        let repository_manager = context.repository_manager.clone();
+
+        // add file set with file to be migrated
+        let file_checksum = Sha1Checksum::from([0; 20]);
+        let archive_file_name = "123123.zst".to_string();
+        let file_set_id = insert_test_file_set(
+            &repository_manager,
+            &FileType::ManualScan,
+            file_checksum,
+            archive_file_name.clone(),
+        )
+        .await;
+
+        let file_info_id = repository_manager
+            .get_file_info_repository()
+            .get_file_infos_by_file_set(file_set_id)
+            .await
+            .unwrap()[0]
+            .id;
+
+        context.file_sets_to_migrate.insert(
+            file_set_id,
+            FileTypeMigration {
+                old_file_type: FileType::ManualScan,
+                new_file_type: FileType::Scan,
+                item_type: None,
+            },
+        );
+
+        let step = UpdateFileInfosStep;
+        let action = step.execute(&mut context).await;
+        assert!(matches!(action, StepAction::Continue));
+        assert_eq!(context.updated_file_info_ids.len(), 1);
+
+        let file_info = repository_manager
+            .get_file_info_repository()
+            .get_file_info(file_info_id)
+            .await
+            .unwrap();
+
+        assert_eq!(file_info.file_type, FileType::Scan);
+    }
+
+    #[async_std::test]
+    async fn test_update_file_sets_step() {
+        let mut context = setup_test_context(None).await;
+        let repository_manager = context.repository_manager.clone();
+        // add file set to be migrated
+        let file_checksum = Sha1Checksum::from([0; 20]);
+        let archive_file_name = "123123.zst".to_string();
+        let file_set_id = insert_test_file_set(
+            &repository_manager,
+            &FileType::ManualScan,
+            file_checksum,
+            archive_file_name.clone(),
+        )
+        .await;
+
+        context.file_sets_to_migrate.insert(
+            file_set_id,
+            FileTypeMigration {
+                old_file_type: FileType::ManualScan,
+                new_file_type: FileType::Scan,
+                item_type: None,
+            },
+        );
+
+        let step = UpdateFileSetsStep;
+        let action = step.execute(&mut context).await;
+        assert!(matches!(action, StepAction::Continue));
+        assert_eq!(context.updated_file_set_ids.len(), 1);
+        let file_set = repository_manager
+            .get_file_set_repository()
+            .get_file_set(file_set_id)
+            .await
+            .unwrap();
+        assert_eq!(file_set.file_type, FileType::Scan);
+    }
 }
