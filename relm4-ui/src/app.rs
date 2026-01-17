@@ -791,7 +791,7 @@ impl AppModel {
             .expect("File type migration service not initialized");
         let migration_service = Arc::clone(migration_service);
         sender.oneshot_command(async move {
-            let res = migration_service.migrate_file_types().await;
+            let res = migration_service.migrate_file_types(true).await;
             CommandMsg::MigrationDone(res)
         });
     }

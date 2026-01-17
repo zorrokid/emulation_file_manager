@@ -351,6 +351,7 @@ impl PipelineStep<FileTypeMigrationContext> for UpdateFileInfosStep {
     }
 
     async fn execute(&self, context: &mut FileTypeMigrationContext) -> StepAction {
+        println!("Updating FileInfo entries for migrated FileSets");
         for (file_set_id, file_type_migration) in context.file_sets_to_migrate.iter() {
             tracing::info!(
                 file_set_id = file_set_id,
@@ -442,12 +443,19 @@ impl PipelineStep<FileTypeMigrationContext> for UpdateFileSetsStep {
     }
 
     async fn execute(&self, context: &mut FileTypeMigrationContext) -> StepAction {
+        println!("Updating FileInfo entries for migrated FileSets");
         for (file_set_id, file_type_migration) in context.file_sets_to_migrate.iter() {
+            println!("Updating FileSet id {}", file_set_id);
             tracing::info!(
                 file_set_id = file_set_id,
                 old_file_type = ?file_type_migration.old_file_type,
                 new_file_type = ?file_type_migration.new_file_type,
                 "Updating FileSet entry with new file type"
+            );
+
+            println!(
+                "Updating FileSet id {} from {:?} to {:?}",
+                file_set_id, file_type_migration.old_file_type, file_type_migration.new_file_type
             );
 
             if context.is_dry_run {

@@ -785,7 +785,7 @@ mod tests {
         ];
 
         let system_id = SystemRepository::new(pool.clone())
-            .add_system(&"Test System".to_string())
+            .add_system("Test System")
             .await
             .unwrap();
 
@@ -852,13 +852,13 @@ mod tests {
         let repo = FileSetRepository { pool: pool.clone() };
 
         let system_1_id = SystemRepository::new(pool.clone())
-            .add_system(&"Test System 1".to_string())
+            .add_system("Test System 1")
             .await
             .unwrap();
 
         let _file_set_1_id = repo
             .add_file_set(
-                &"Test File Set 1".to_string(),
+                "Test File Set 1",
                 &file_set_1_name,
                 &file_type,
                 "",
@@ -870,7 +870,7 @@ mod tests {
 
         let _file_set_2_id = repo
             .add_file_set(
-                &"Test File Set 2".to_string(),
+                "Test File Set 2",
                 &file_set_2_name,
                 &file_type,
                 "",
