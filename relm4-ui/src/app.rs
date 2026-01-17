@@ -57,6 +57,7 @@ pub enum AppMsg {
     UpdateSettings,
     CloseRequested,
     ShowError(String),
+    OpenImportDialog,
 }
 
 #[derive(Debug)]
@@ -249,6 +250,7 @@ impl Component for AppModel {
             }
             AppMsg::CloseRequested => self.process_close_requested(root),
             AppMsg::ShowError(error_msg) => show_error_dialog(error_msg, root),
+            AppMsg::OpenImportDialog => self.open_import_dialog(root),
         }
     }
 
@@ -342,6 +344,7 @@ impl AppModel {
 
         let menu = gio::Menu::new();
         menu.append(Some("Settings"), Some("app.settings"));
+        menu.append(Some("Import"), Some("app.import"));
         let popover = gtk::PopoverMenu::from_model(Some(&menu));
 
         menu_button.set_popover(Some(&popover));
@@ -357,8 +360,18 @@ impl AppModel {
                 println!("Settings action activated");
             }
         ));
+        let import_action = gio::SimpleAction::new("import", None);
+        import_action.connect_activate(clone!(
+            #[strong]
+            sender,
+            move |_, _| {
+                sender.input(AppMsg::OpenImportDialog);
+            }
+        ));
+
         let app = relm4::main_application();
         app.add_action(&settings_action);
+        app.add_action(&import_action);
 
         root.set_titlebar(Some(&header_bar));
         sync_button
@@ -794,5 +807,9 @@ impl AppModel {
             let res = migration_service.migrate_file_types(false).await;
             CommandMsg::MigrationDone(res)
         });
+    }
+
+    fn open_import_dialog(&self, root: &gtk::Window) {
+        tracing::info!("Open import dialog requested");
     }
 }
