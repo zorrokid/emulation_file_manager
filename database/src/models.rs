@@ -1,6 +1,6 @@
 use chrono::NaiveDateTime;
 use core::fmt;
-use core_types::{DocumentType, FileSyncStatus, FileType, Sha1Checksum};
+use core_types::{DocumentType, FileSyncStatus, FileType, Sha1Checksum, item_type::ItemType};
 use std::fmt::{Display, Formatter};
 
 use sqlx::FromRow;
@@ -64,6 +64,7 @@ pub struct FileSetFileInfo {
     pub file_size: i64,
     pub archive_file_name: String,
     pub file_type: FileType,
+    pub sort_order: i64,
 }
 
 impl Display for FileSetFileInfo {
@@ -153,4 +154,12 @@ pub struct FileSyncLogWithFileInfo {
     pub file_size: i64,
     pub archive_file_name: String,
     pub file_type: FileType,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReleaseItem {
+    pub id: i64,
+    pub release_id: i64,
+    pub item_type: ItemType,
+    pub notes: String,
 }

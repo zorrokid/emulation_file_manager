@@ -1,12 +1,13 @@
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{
+    error::Error,
     file_import::{
         common_steps::{
             check_existing_files::CheckExistingFilesContext,
             file_deletion_steps::FileDeletionStepsContext,
         },
-        model::FileImportData,
+        model::{FileImportData, FileSetOperationDeps},
     },
     file_set_deletion::model::FileDeletionResult,
 };
@@ -31,6 +32,7 @@ pub struct UpdateFileSetContext {
     pub file_set_name: String,
     pub file_set_file_name: String,
     pub source: String,
+    pub item_ids: Vec<i64>,
 
     pub file_set: Option<FileSet>,
     // files currently associated with the file set
@@ -43,36 +45,44 @@ pub struct UpdateFileSetContext {
     pub imported_files: HashMap<Sha1Checksum, ImportedFile>,
     /// To collect deletion results for files removed from the file set
     pub deletion_results: HashMap<Sha1Checksum, FileDeletionResult>,
+    // There can be steps where failure don't abort the pipeline. Collect those failed steps during deletion, with error message
+    pub failed_steps: HashMap<String, Error>,
+}
+
+pub struct FileSetParams {
+    pub file_set_id: i64,
+    pub file_import_data: FileImportData,
+    pub file_set_name: String,
+    pub file_set_file_name: String,
+    pub source: String,
+    pub item_ids: Vec<i64>,
 }
 
 impl UpdateFileSetContext {
     pub fn new(
-        repository_manager: Arc<RepositoryManager>,
-        settings: Arc<Settings>,
-        file_import_ops: Arc<dyn FileImportOps>,
-        fs_ops: Arc<dyn FileSystemOps>,
-        file_set_id: i64,
-        file_import_data: FileImportData,
-        file_set_name: String,
-        file_set_file_name: String,
-        source: String,
+        file_set_operation_deps: FileSetOperationDeps,
+        file_set_params: FileSetParams,
     ) -> Self {
         Self {
-            repository_manager,
-            settings,
-            file_import_ops,
-            fs_ops,
-            file_set_id,
+            repository_manager: file_set_operation_deps.repository_manager,
+            settings: file_set_operation_deps.settings,
+            file_import_ops: file_set_operation_deps.file_import_ops,
+            fs_ops: file_set_operation_deps.fs_ops,
+
+            file_import_data: file_set_params.file_import_data,
+            file_set_id: file_set_params.file_set_id,
+            file_set_name: file_set_params.file_set_name,
+            file_set_file_name: file_set_params.file_set_file_name,
+            item_ids: file_set_params.item_ids,
+
             file_set: None,
-            file_import_data,
             existing_files: vec![],
             imported_files: HashMap::new(),
             new_files: vec![],
             files_in_file_set: vec![],
-            file_set_name,
-            file_set_file_name,
-            source,
+            source: file_set_params.source,
             deletion_results: HashMap::new(),
+            failed_steps: HashMap::new(),
         }
     }
 
@@ -226,8 +236,8 @@ mod tests {
 
     use crate::{
         file_import::{
-            model::{FileImportData, FileImportSource, ImportFileContent},
-            update_file_set::context::UpdateFileSetContext,
+            model::{FileImportData, FileImportSource, FileSetOperationDeps, ImportFileContent},
+            update_file_set::context::{FileSetParams, UpdateFileSetContext},
         },
         file_system_ops::mock::MockFileSystemOps,
     };
@@ -238,15 +248,20 @@ mod tests {
         let settings = Arc::new(crate::view_models::Settings::default());
 
         UpdateFileSetContext::new(
-            repository_manager,
-            settings,
-            Arc::new(MockFileImportOps::new()),
-            Arc::new(MockFileSystemOps::new()),
-            1,
-            file_import_data,
-            "Test File Set".to_string(),
-            "test_file_set".to_string(),
-            "TMMP".to_string(),
+            FileSetOperationDeps {
+                repository_manager,
+                settings,
+                file_import_ops: Arc::new(MockFileImportOps::new()),
+                fs_ops: Arc::new(MockFileSystemOps::new()),
+            },
+            FileSetParams {
+                file_set_id: 0,
+                file_import_data,
+                file_set_name: "Test File Set".to_string(),
+                file_set_file_name: "test_file_set".to_string(),
+                source: "TMMP".to_string(),
+                item_ids: vec![],
+            },
         )
     }
 
@@ -285,14 +300,14 @@ mod tests {
         let mut context = create_test_context(file_import_data).await;
         context.existing_files.push(FileInfo {
             id: 1,
-            sha1_checksum: file_1_checksum.into(),
+            sha1_checksum: file_1_checksum,
             file_type: FileType::Rom,
             archive_file_name: "archive_file_name_1".to_string(),
             file_size: 1024,
         });
         context.new_files.push(FileInfo {
             id: 2,
-            sha1_checksum: file_2_checksum.into(),
+            sha1_checksum: file_2_checksum,
             file_type: FileType::Rom,
             archive_file_name: "archive_file_name_2".to_string(),
             file_size: 4096,
@@ -328,7 +343,7 @@ mod tests {
         let mut context = create_test_context(file_import_data).await;
         context.existing_files.push(FileInfo {
             id: 1,
-            sha1_checksum: file_1_checksum.into(),
+            sha1_checksum: file_1_checksum,
             file_type: FileType::Rom,
             archive_file_name: "archive_file_name_1".to_string(),
             file_size: 1024,

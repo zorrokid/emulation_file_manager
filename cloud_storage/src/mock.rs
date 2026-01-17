@@ -231,6 +231,23 @@ impl CloudStorageOps for MockCloudStorage {
             )))
         }
     }
+
+    async fn move_file(
+        &self,
+        source_cloud_key: &str,
+        destination_cloud_key: &str,
+    ) -> Result<(), CloudStorageError> {
+        let mut uploaded_files = self.uploaded_files.lock().unwrap();
+        if let Some(content) = uploaded_files.remove(source_cloud_key) {
+            uploaded_files.insert(destination_cloud_key.to_string(), content);
+            Ok(())
+        } else {
+            Err(CloudStorageError::Other(format!(
+                "Mock move failed, source key not found: {}",
+                source_cloud_key
+            )))
+        }
+    }
 }
 
 #[cfg(test)]
@@ -340,5 +357,16 @@ mod tests {
 
         assert_eq!(mock.uploaded_count(), 0);
         assert_eq!(mock.deleted_count(), 0);
+    }
+
+    #[async_std::test]
+    async fn test_move_file() {
+        let mock = MockCloudStorage::new();
+        mock.add_file_dummy("rom/old_game.zst");
+        mock.move_file("rom/old_game.zst", "rom/new_game.zst")
+            .await
+            .unwrap();
+        assert!(!mock.was_uploaded("rom/old_game.zst"));
+        assert!(mock.was_uploaded("rom/new_game.zst"));
     }
 }

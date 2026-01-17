@@ -33,4 +33,11 @@ pub trait CloudStorageOps: Send + Sync {
         destination_path: &Path,
         progress_tx: Option<&Sender<DownloadEvent>>,
     ) -> Result<(), CloudStorageError>;
+
+    /// Move (rename) a file within cloud storage
+    async fn move_file(
+        &self,
+        source_cloud_key: &str,
+        destination_cloud_key: &str,
+    ) -> Result<(), CloudStorageError>;
 }

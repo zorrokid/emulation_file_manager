@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use core_types::FileType;
-use sqlx::{query_as, Pool, Sqlite};
+use sqlx::{Pool, Sqlite, query_as};
 
 use crate::{
     database_error::{DatabaseError, Error},

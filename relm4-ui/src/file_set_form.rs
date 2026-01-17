@@ -794,6 +794,7 @@ impl FileSetFormModel {
             system_ids: self.selected_system_ids.clone(),
             selected_files: self.selected_files_in_picked_files.clone(),
             import_files: self.picked_files.clone(),
+            item_ids: vec![],
         };
 
         let file_import_service = Arc::clone(&self.file_import_service);
@@ -819,6 +820,7 @@ impl FileSetFormModel {
             selected_files: self.selected_files_in_picked_files.clone(),
             import_files: self.picked_files.clone(),
             file_set_id,
+            item_ids: vec![],
         };
 
         let file_import_service = Arc::clone(&self.file_import_service);

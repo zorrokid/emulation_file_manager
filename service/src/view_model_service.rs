@@ -6,8 +6,8 @@ use crate::{
     error::Error,
     view_models::{
         DocumentViewerListModel, DocumentViewerViewModel, EmulatorViewModel, FileInfoViewModel,
-        FileSetFileInfoViewModel, FileSetListModel, FileSetViewModel, ReleaseListModel,
-        ReleaseViewModel, Settings, SoftwareTitleListModel, SystemListModel,
+        FileSetFileInfoViewModel, FileSetListModel, FileSetViewModel, ReleaseItemViewModel,
+        ReleaseListModel, ReleaseViewModel, Settings, SoftwareTitleListModel, SystemListModel,
     },
 };
 
@@ -370,12 +370,23 @@ impl ViewModelService {
             });
         }
 
+        let items = self
+            .repository_manager
+            .get_release_item_repository()
+            .get_items_for_release(release_id)
+            .await
+            .map_err(|err| Error::DbError(err.to_string()))?;
+
+        let items: Vec<ReleaseItemViewModel> =
+            items.into_iter().map(ReleaseItemViewModel::from).collect();
+
         let release_view_model = ReleaseViewModel {
             id: release.id,
             name: release.name.clone(),
             systems,
             software_titles,
             file_sets: file_set_view_models,
+            items,
         };
 
         Ok(release_view_model)

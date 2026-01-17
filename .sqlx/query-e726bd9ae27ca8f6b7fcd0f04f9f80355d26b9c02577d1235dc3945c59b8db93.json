@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE file_set_file_info \n                 SET sort_order = ? \n                 WHERE file_set_id = ? AND file_info_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "e726bd9ae27ca8f6b7fcd0f04f9f80355d26b9c02577d1235dc3945c59b8db93"
+}

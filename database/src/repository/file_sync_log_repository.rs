@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use core_types::FileSyncStatus;
 use sqlx::{Pool, Row, Sqlite, prelude::FromRow, sqlite::SqliteRow};
@@ -70,11 +70,10 @@ impl FileSyncLogRepository {
         Ok(logs)
     }
 
-    /// Fetches the most recent log entries for each file_info_id where the status is either
-    /// UploadPending or UploadFailed, with pagination support.
+    /// Fetches the most recent log entries for each file_info_id where the status is
+    /// one of the given statuses, with pagination support.
     /// This is useful for identifying files that need to be retried for upload.
-    /// Note: if user has a later log entry with different status it will be excluded from result
-    /// set.
+    /// Note: if file has a later log entry with different status it will be excluded from result set.
     pub async fn get_logs_and_file_info_by_sync_status(
         &self,
         statuses: &[FileSyncStatus],
@@ -185,6 +184,27 @@ impl FileSyncLogRepository {
         .execute(&*self.pool)
         .await?;
         Ok(result.rows_affected())
+    }
+
+    pub async fn get_all_synced_file_set_ids(&self) -> Result<HashSet<i64>, sqlx::Error> {
+        let upload_completed_status = FileSyncStatus::UploadCompleted.to_db_int();
+        // include only file_info_ids where the latest log entry indicates upload completed
+        let rows = sqlx::query!(
+            "SELECT log.file_info_id 
+             FROM file_sync_log log
+             INNER JOIN (
+                SELECT file_info_id, MAX(id) AS max_id
+                FROM file_sync_log
+                GROUP BY file_info_id
+             ) latest ON log.file_info_id = latest.file_info_id AND log.id = latest.max_id
+             WHERE log.status = ?",
+            upload_completed_status
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        let file_set_ids = rows.into_iter().map(|row| row.file_info_id).collect();
+        Ok(file_set_ids)
     }
 }
 
@@ -397,5 +417,78 @@ mod tests {
         .unwrap();
 
         result.last_insert_rowid()
+    }
+
+    #[async_std::test]
+    async fn test_get_all_synced_file_set_ids() {
+        let pool = Arc::new(setup_test_db().await);
+        let repository = FileSyncLogRepository::new(Arc::clone(&pool));
+        let file_info_id_1 = insert_file_info(&pool).await;
+        let file_info_id_2 = insert_file_info(&pool).await;
+
+        // Add log entries
+        repository
+            .add_log_entry(
+                file_info_id_1,
+                FileSyncStatus::UploadPending,
+                "",
+                "cloud_key_1",
+            )
+            .await
+            .unwrap();
+
+        repository
+            .add_log_entry(
+                file_info_id_1,
+                FileSyncStatus::UploadInProgress,
+                "",
+                "cloud_key_1",
+            )
+            .await
+            .unwrap();
+
+        repository
+            .add_log_entry(
+                file_info_id_1,
+                FileSyncStatus::UploadCompleted,
+                "",
+                "cloud_key_1",
+            )
+            .await
+            .unwrap();
+
+        repository
+            .add_log_entry(
+                file_info_id_2,
+                FileSyncStatus::UploadPending,
+                "",
+                "cloud_key_2",
+            )
+            .await
+            .unwrap();
+
+        repository
+            .add_log_entry(
+                file_info_id_2,
+                FileSyncStatus::UploadInProgress,
+                "",
+                "cloud_key_2",
+            )
+            .await
+            .unwrap();
+
+        repository
+            .add_log_entry(
+                file_info_id_2,
+                FileSyncStatus::UploadFailed,
+                "",
+                "cloud_key_2",
+            )
+            .await
+            .unwrap();
+
+        let synced_file_set_ids = repository.get_all_synced_file_set_ids().await.unwrap();
+        assert_eq!(synced_file_set_ids.len(), 1);
+        assert!(synced_file_set_ids.contains(&file_info_id_1));
     }
 }

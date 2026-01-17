@@ -12,6 +12,8 @@ impl Pipeline<AddFileSetContext> {
             Box::new(CheckExistingFilesStep::<AddFileSetContext>::new()),
             Box::new(ImportFilesStep::<AddFileSetContext>::new()),
             Box::new(UpdateDatabaseStep),
+            // TODO: probably not needed
+            //Box::new(AddFileSetItemsStep),
         ])
     }
 }

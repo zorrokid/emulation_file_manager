@@ -40,6 +40,8 @@ impl Pipeline<UpdateFileSetContext> {
             Box::new(UpdateFileSetFilesStep),
             Box::new(UpdateFileSetStep),
             Box::new(MarkNewFilesForCloudSyncStep),
+            // TODO: probably not needed
+            // Box::new(UpdateLinkedItemsStep),
         ])
     }
 }

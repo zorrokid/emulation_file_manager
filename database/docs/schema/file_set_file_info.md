@@ -10,7 +10,7 @@ CREATE TABLE file_set_file_info (
     file_set_id INTEGER NOT NULL,
     file_info_id INTEGER NOT NULL,
     -- same file can have different names in different file sets 
-    file_name TEXT NOT NULL,
+    file_name TEXT NOT NULL, sort_order INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (file_set_id, file_info_id),
     FOREIGN KEY (file_set_id) REFERENCES file_set(id),
     FOREIGN KEY (file_info_id) REFERENCES file_info(id)
@@ -26,6 +26,7 @@ CREATE TABLE file_set_file_info (
 | file_set_id | INTEGER |  | false |  | [file_set](file_set.md) |  |
 | file_info_id | INTEGER |  | false |  | [file_info](file_info.md) |  |
 | file_name | TEXT |  | false |  |  |  |
+| sort_order | INTEGER | 0 | false |  |  |  |
 
 ## Constraints
 

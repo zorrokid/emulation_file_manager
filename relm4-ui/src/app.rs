@@ -13,6 +13,7 @@ use relm4::{
 };
 use service::{
     cloud_sync::service::{CloudStorageSyncService, SyncResult},
+    file_type_migration::service::FileTypeMigrationService,
     view_model_service::ViewModelService,
     view_models::{Settings, SoftwareTitleListModel},
 };
@@ -50,6 +51,7 @@ pub enum AppMsg {
     ExportAllFiles,
     ExportFolderSelected(PathBuf),
     SyncWithCloud,
+    MigrateFileTypes,
     ProcessFileSyncEvent(SyncEvent),
     OpenSettings,
     UpdateSettings,
@@ -62,6 +64,7 @@ pub enum CommandMsg {
     InitializationDone(InitResult),
     ExportFinished(Result<(), service::error::Error>),
     SyncToCloudCompleted(Result<SyncResult, service::error::Error>),
+    MigrationDone(Result<(), service::error::Error>),
 }
 
 struct Flags {
@@ -75,6 +78,7 @@ pub struct AppModel {
     view_model_service: OnceCell<Arc<ViewModelService>>,
     settings: OnceCell<Arc<Settings>>,
     sync_service: OnceCell<Arc<CloudStorageSyncService>>,
+    file_type_migration_service: OnceCell<Arc<FileTypeMigrationService>>,
     software_titles: OnceCell<Controller<SoftwareTitlesList>>,
     releases_view: gtk::Box,
     releases: OnceCell<Controller<ReleasesModel>>,
@@ -191,6 +195,7 @@ impl Component for AppModel {
             release: OnceCell::new(),
             software_titles: OnceCell::new(),
             sync_service: OnceCell::new(),
+            file_type_migration_service: OnceCell::new(),
             settings_form: OnceCell::new(),
             status_bar,
             flags,
@@ -236,6 +241,7 @@ impl Component for AppModel {
             AppMsg::ExportAllFiles => self.start_export_all_files(&sender, root),
             AppMsg::ExportFolderSelected(path) => self.export_all_files(&sender, path),
             AppMsg::SyncWithCloud => self.sync_with_cloud(&sender),
+            AppMsg::MigrateFileTypes => self.migrate_file_types(&sender),
             AppMsg::ProcessFileSyncEvent(event) => self.process_file_sync_event(event),
             AppMsg::OpenSettings => self.open_settings(&sender, root),
             AppMsg::UpdateSettings => {
@@ -260,6 +266,13 @@ impl Component for AppModel {
             CommandMsg::SyncToCloudCompleted(result) => {
                 self.process_sync_to_cloud_completed(result, root)
             }
+            CommandMsg::MigrationDone(result) => match result {
+                Ok(_) => show_info_dialog(
+                    "File type migration completed successfully.".to_string(),
+                    root,
+                ),
+                Err(e) => show_error_dialog(format!("File type migration failed: {}", e), root),
+            },
         }
     }
 
@@ -304,9 +317,23 @@ impl AppModel {
             }
         ));
 
+        let migrate_button = gtk::Button::builder()
+            .icon_name("document-revert-symbolic")
+            .tooltip_text("Migrate File Types")
+            .build();
+
+        migrate_button.connect_clicked(clone!(
+            #[strong]
+            sender,
+            move |_| {
+                sender.input(AppMsg::MigrateFileTypes);
+            }
+        ));
+
         sync_button.set_sensitive(false);
 
         header_bar.pack_end(&sync_button);
+        header_bar.pack_end(&migrate_button);
 
         let menu_button = gtk::MenuButton::builder()
             .icon_name("open-menu-symbolic")
@@ -665,6 +692,11 @@ impl AppModel {
             Arc::clone(&init_result.settings),
         ));
 
+        let file_type_migration_service = Arc::new(FileTypeMigrationService::new(
+            Arc::clone(&init_result.repository_manager),
+            Arc::clone(&init_result.settings),
+        ));
+
         self.view_model_service
             .set(init_result.view_model_service)
             .expect("view model service already initialized?");
@@ -677,6 +709,9 @@ impl AppModel {
         self.sync_service
             .set(sync_service)
             .expect("Sync service already initialized");
+        self.file_type_migration_service
+            .set(file_type_migration_service)
+            .expect("File type migration service already initialized");
         self.release
             .set(release_model)
             .expect("ReleaseModel already initialized");
@@ -747,5 +782,17 @@ impl AppModel {
                 eprintln!("Export failed: {}", e);
             }
         }
+    }
+
+    fn migrate_file_types(&mut self, sender: &ComponentSender<Self>) {
+        let migration_service = self
+            .file_type_migration_service
+            .get()
+            .expect("File type migration service not initialized");
+        let migration_service = Arc::clone(migration_service);
+        sender.oneshot_command(async move {
+            let res = migration_service.migrate_file_types(false).await;
+            CommandMsg::MigrationDone(res)
+        });
     }
 }
