@@ -8,6 +8,7 @@ pub mod file_set_deletion;
 pub mod file_set_download;
 pub mod file_system_ops;
 pub mod file_type_migration;
+pub mod mass_import;
 pub mod pipeline;
 pub mod settings_service;
 pub mod view_model_service;

@@ -14,7 +14,10 @@ use relm4::{
         },
     },
 };
-use service::{view_model_service::ViewModelService, view_models::SystemListModel};
+use service::{
+    error::Error, mass_import::service::MassImportService, view_model_service::ViewModelService,
+    view_models::SystemListModel,
+};
 use ui_components::{
     DropDownOutputMsg, FileTypeDropDown, FileTypeSelectedMsg,
     drop_down::{ItemTypeDropDown, ItemTypeSelectedMsg},
@@ -26,7 +29,8 @@ use crate::system_selector::{
 
 #[derive(Debug)]
 pub struct ImportForm {
-    file_path: PathBuf,
+    directory_path: Option<PathBuf>,
+    dat_file_path: Option<PathBuf>,
     selected_system: Option<SystemListModel>,
     selected_file_type: Option<FileType>,
     selected_item_type: Option<ItemType>,
@@ -34,6 +38,7 @@ pub struct ImportForm {
     file_type_dropdown: Controller<FileTypeDropDown>,
     item_type_dropdown: Controller<ItemTypeDropDown>,
     system_selector: Controller<SystemSelectModel>,
+    mass_import_service: Arc<MassImportService>,
 }
 
 #[derive(Debug)]
@@ -50,6 +55,11 @@ pub enum ImportFormMsg {
     Hide,
     OpenSystemSelector,
     StartImport,
+}
+
+#[derive(Debug)]
+pub enum CommandMsg {
+    ProcessImportResult(Result<(), Error>),
 }
 
 pub struct ImportFormInit {
@@ -91,7 +101,7 @@ impl ImportForm {
 impl Component for ImportForm {
     type Input = ImportFormMsg;
     type Output = ();
-    type CommandOutput = ();
+    type CommandOutput = CommandMsg;
     type Init = ImportFormInit;
 
     view! {
@@ -133,7 +143,7 @@ impl Component for ImportForm {
                 },
                  gtk::Button {
                     set_label: "Select folder for source files",
-                    connect_clicked => ImportFormMsg::OpenFileSelector,
+                    connect_clicked => ImportFormMsg::OpenDirectorySelector,
                     #[watch]
                     set_sensitive: model.selected_file_type.is_some(),
                 },
@@ -161,6 +171,10 @@ impl Component for ImportForm {
                 gtk::Button {
                     set_label: "Start Import",
                     connect_clicked => ImportFormMsg::StartImport,
+                    #[watch]
+                    set_sensitive: model.directory_path.is_some()
+                        && model.selected_system.is_some()
+                        && model.selected_file_type.is_some()
                 },
 
             }
@@ -174,6 +188,10 @@ impl Component for ImportForm {
     ) -> ComponentParts<Self> {
         let file_type_dropdown = Self::create_file_type_dropdown(None, &sender);
         let item_type_dropdown = Self::create_item_type_dropdown(None, &sender);
+
+        let mass_import_service = Arc::new(MassImportService::new(Arc::clone(
+            &init_model.repository_manager,
+        )));
 
         let init_model = SystemSelectInit {
             view_model_service: Arc::clone(&init_model.view_model_service),
@@ -190,7 +208,8 @@ impl Component for ImportForm {
             });
 
         let model = ImportForm {
-            file_path: PathBuf::new(),
+            directory_path: None,
+            dat_file_path: None,
             selected_system: None,
             selected_file_type: None,
             selected_item_type: None,
@@ -198,6 +217,7 @@ impl Component for ImportForm {
             item_type_dropdown,
             source: String::new(),
             system_selector,
+            mass_import_service,
         };
 
         let file_types_dropdown = model.file_type_dropdown.widget();
@@ -222,9 +242,11 @@ impl Component for ImportForm {
                     #[strong]
                     sender,
                     move |dialog, response| {
+                        tracing::info!("Directory selection dialog response: {:?}", response);
                         if response == gtk::ResponseType::Accept
                             && let Some(path) = dialog.file().and_then(|f| f.path())
                         {
+                            tracing::info!("Selected directory path: {:?}", path);
                             sender.input(ImportFormMsg::DirectorySelected(path));
                         }
                         dialog.close();
@@ -263,22 +285,31 @@ impl Component for ImportForm {
                 dialog.present();
             }
             ImportFormMsg::DirectorySelected(path) => {
-                self.file_path = path;
+                tracing::info!("Directory selected: {:?}", path);
+                self.directory_path = Some(path);
+            }
+            ImportFormMsg::DatFileSelected(path) => {
+                tracing::info!("DAT file selected: {:?}", path);
+                self.dat_file_path = Some(path);
             }
             ImportFormMsg::SourceChanged(source) => {
+                tracing::info!("Source changed: {}", source);
                 self.source = source;
             }
             ImportFormMsg::FileTypeChanged(file_type) => {
+                tracing::info!("File type changed: {:?}", file_type);
                 self.selected_file_type = Some(file_type);
             }
             ImportFormMsg::ItemTypeChanged(item_type) => {
+                tracing::info!("Item type changed: {:?}", item_type);
                 self.selected_item_type = Some(item_type);
+            }
+            ImportFormMsg::SystemSelected(system) => {
+                tracing::info!("System selected: {:?}", system);
+                self.selected_system = Some(system);
             }
             ImportFormMsg::Show => root.show(),
             ImportFormMsg::Hide => root.hide(),
-            ImportFormMsg::SystemSelected(system) => {
-                self.selected_system = Some(system);
-            }
             ImportFormMsg::OpenSystemSelector => {
                 let selected_system_ids = if let Some(system) = &self.selected_system {
                     vec![system.id]
@@ -290,18 +321,52 @@ impl Component for ImportForm {
                 });
             }
             ImportFormMsg::StartImport => {
-                tracing::info!(
-                    "Starting import with file_path: {:?}, source: {}, file_type: {:?}, item_type: {:?}, system: {:?}",
-                    self.file_path,
-                    self.source,
+                if let (Some(selected_system), Some(directory_path), Some(file_type)) = (
+                    &self.selected_system,
+                    &self.directory_path,
                     self.selected_file_type,
-                    self.selected_item_type,
-                    self.selected_system,
-                );
+                ) {
+                    tracing::info!(
+                        "Starting import with file_path: {:?}, source: {}, file_type: {:?}, item_type: {:?}, system: {:?}",
+                        self.directory_path,
+                        self.source,
+                        self.selected_file_type,
+                        self.selected_item_type,
+                        selected_system,
+                    );
+
+                    let dat_file_path = self.dat_file_path.clone();
+                    let directory_path = directory_path.clone();
+                    let system_id = selected_system.id;
+                    let mass_import_service = Arc::clone(&self.mass_import_service);
+                    sender.oneshot_command(async move {
+                        let result = mass_import_service
+                            .import(system_id, directory_path, dat_file_path, file_type)
+                            .await;
+                        CommandMsg::ProcessImportResult(result)
+                    });
+                }
             }
-            ImportFormMsg::DatFileSelected(path) => {
-                self.file_path = path;
-            }
+        }
+    }
+
+    fn update_cmd(
+        &mut self,
+        message: Self::CommandOutput,
+        _sender: ComponentSender<Self>,
+        root: &Self::Root,
+    ) {
+        match message {
+            CommandMsg::ProcessImportResult(result) => match result {
+                Ok(_) => {
+                    tracing::info!("Import completed successfully.");
+                    root.hide();
+                }
+                Err(e) => {
+                    tracing::error!("Import failed: {:?}", e);
+                    // Here you could show an error dialog to the user
+                }
+            },
         }
     }
 }
