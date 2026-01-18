@@ -3,12 +3,12 @@ use std::sync::Arc;
 use sqlx::{Pool, Sqlite};
 
 use crate::repository::{
-    document_viewer_repository::DocumentViewerRepository, emulator_repository::EmulatorRepository,
-    file_info_repository::FileInfoRepository, file_set_repository::FileSetRepository,
-    file_sync_log_repository::FileSyncLogRepository, franchise_repository::FranchiseRepository,
-    release_item_repository::ReleaseItemRepository, release_repository::ReleaseRepository,
-    setting_repository::SettingRepository, software_title_repository::SoftwareTitleRepository,
-    system_repository::SystemRepository,
+    dat_repository::DatRepository, document_viewer_repository::DocumentViewerRepository,
+    emulator_repository::EmulatorRepository, file_info_repository::FileInfoRepository,
+    file_set_repository::FileSetRepository, file_sync_log_repository::FileSyncLogRepository,
+    franchise_repository::FranchiseRepository, release_item_repository::ReleaseItemRepository,
+    release_repository::ReleaseRepository, setting_repository::SettingRepository,
+    software_title_repository::SoftwareTitleRepository, system_repository::SystemRepository,
 };
 
 #[derive(Debug)]
@@ -24,6 +24,7 @@ pub struct RepositoryManager {
     document_viewer_repository: DocumentViewerRepository,
     file_sync_log_repository: FileSyncLogRepository,
     release_item_repository: ReleaseItemRepository,
+    dat_repository: DatRepository,
 }
 
 impl RepositoryManager {
@@ -39,6 +40,7 @@ impl RepositoryManager {
         let document_viewer_repository = DocumentViewerRepository::new(pool.clone());
         let file_sync_log_repository = FileSyncLogRepository::new(pool.clone());
         let release_item_repository = ReleaseItemRepository::new(pool.clone());
+        let dat_repository = DatRepository::new(pool.clone());
 
         Self {
             file_info_repository,
@@ -52,6 +54,7 @@ impl RepositoryManager {
             document_viewer_repository,
             file_sync_log_repository,
             release_item_repository,
+            dat_repository,
         }
     }
 
@@ -97,5 +100,9 @@ impl RepositoryManager {
 
     pub fn get_release_item_repository(&self) -> &ReleaseItemRepository {
         &self.release_item_repository
+    }
+
+    pub fn get_dat_repository(&self) -> &DatRepository {
+        &self.dat_repository
     }
 }
