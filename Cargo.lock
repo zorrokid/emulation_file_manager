@@ -1050,6 +1050,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "dat_file_parser"
+version = "0.1.0"
+
+[[package]]
 name = "database"
 version = "0.1.0"
 dependencies = [

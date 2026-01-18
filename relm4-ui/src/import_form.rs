@@ -38,8 +38,10 @@ pub struct ImportForm {
 
 #[derive(Debug)]
 pub enum ImportFormMsg {
+    OpenDirectorySelector,
     OpenFileSelector,
     DirectorySelected(PathBuf),
+    DatFileSelected(PathBuf),
     FileTypeChanged(FileType),
     ItemTypeChanged(ItemType),
     SourceChanged(String),
@@ -130,10 +132,16 @@ impl Component for ImportForm {
                     item_types_dropdown -> gtk::Box,
                 },
                  gtk::Button {
-                    set_label: "Open File Picker",
+                    set_label: "Select folder for source files",
                     connect_clicked => ImportFormMsg::OpenFileSelector,
                     #[watch]
                     set_sensitive: model.selected_file_type.is_some(),
+                },
+                gtk::Button {
+                    set_label: "Select optional DAT file",
+                    connect_clicked => ImportFormMsg::OpenFileSelector,
+                    #[watch]
+                    set_sensitive: model.selected_item_type.is_some(),
                 },
                 gtk::Button {
                     set_label: "Select System",
@@ -199,16 +207,16 @@ impl Component for ImportForm {
     }
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         match msg {
-            ImportFormMsg::OpenFileSelector => {
+            ImportFormMsg::OpenDirectorySelector => {
                 let dialog = FileChooserDialog::builder()
-                    .title("Select Files")
-                    .action(gtk::FileChooserAction::Open)
+                    .title("Select Directory")
+                    .action(gtk::FileChooserAction::SelectFolder)
                     .modal(true)
                     .transient_for(root)
                     .build();
 
                 dialog.add_button("Cancel", gtk::ResponseType::Cancel);
-                dialog.add_button("Open", gtk::ResponseType::Accept);
+                dialog.add_button("Select", gtk::ResponseType::Accept);
 
                 dialog.connect_response(clone!(
                     #[strong]
@@ -218,6 +226,35 @@ impl Component for ImportForm {
                             && let Some(path) = dialog.file().and_then(|f| f.path())
                         {
                             sender.input(ImportFormMsg::DirectorySelected(path));
+                        }
+                        dialog.close();
+                    }
+                ));
+
+                dialog.present();
+            }
+            ImportFormMsg::OpenFileSelector => {
+                let dialog = FileChooserDialog::builder()
+                    .title("Select File")
+                    .action(gtk::FileChooserAction::SelectFolder)
+                    .modal(true)
+                    .transient_for(root)
+                    .build();
+
+                dialog.add_button("Cancel", gtk::ResponseType::Cancel);
+                dialog.add_button("Select", gtk::ResponseType::Accept);
+
+                dialog.connect_response(clone!(
+                    #[strong]
+                    sender,
+                    move |dialog, response| {
+                        if response == gtk::ResponseType::Accept
+                            && let Some(path) = dialog.file().and_then(|f| f.path())
+                            // TODO: add more thorough file type checking and support for other
+                            // data file types
+                            && path.extension().and_then(|ext| ext.to_str()) == Some("dat")
+                        {
+                            sender.input(ImportFormMsg::DatFileSelected(path));
                         }
                         dialog.close();
                     }
@@ -261,6 +298,9 @@ impl Component for ImportForm {
                     self.selected_item_type,
                     self.selected_system,
                 );
+            }
+            ImportFormMsg::DatFileSelected(path) => {
+                self.file_path = path;
             }
         }
     }
