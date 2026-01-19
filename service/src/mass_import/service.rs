@@ -3,7 +3,9 @@ use std::{path::PathBuf, sync::Arc};
 use core_types::FileType;
 use database::repository_manager::RepositoryManager;
 
-use crate::error::Error;
+use crate::{
+    error::Error, mass_import::context::MassImportContext, pipeline::generic_pipeline::Pipeline,
+};
 
 #[derive(Debug)]
 pub struct MassImportService {
@@ -28,7 +30,11 @@ impl MassImportService {
             dat_file_path = ?dat_file_path,
             file_type = ?file_type,
             "Starting mass import process...");
-        // Implementation of mass import logic goes here
+        let mut context = MassImportContext::new(source_path);
+        let pipeline = Pipeline::<MassImportContext>::new();
+        tracing::info!("Mass import process completed.");
+        let res = pipeline.execute(&mut context).await;
+
         Ok(())
     }
 }

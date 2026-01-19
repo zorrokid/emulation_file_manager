@@ -35,11 +35,16 @@
 //! ```
 
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use utils::file_util;
 
 use crate::error::Error;
+
+#[derive(Debug, Clone)]
+pub struct SimpleDirEntry {
+    pub path: PathBuf,
+}
 
 /// Trait for file system operations to enable testing
 pub trait FileSystemOps: Send + Sync {
@@ -54,6 +59,13 @@ pub trait FileSystemOps: Send + Sync {
 
     /// Move a file from one path to another
     fn move_file(&self, from: &Path, to: &Path) -> io::Result<()>;
+
+    // For easier mocking we use our own SimpleDirEntry instead of std::fs::DirEntry and return
+    // boxed iterator to avoid associated type complications.
+    fn read_dir(
+        &self,
+        path: &Path,
+    ) -> io::Result<Box<dyn Iterator<Item = Result<SimpleDirEntry, Error>>>>;
 }
 
 /// Production implementation using std::fs
@@ -80,6 +92,17 @@ impl FileSystemOps for StdFileSystemOps {
         }
         std::fs::rename(from, to)
     }
+
+    fn read_dir(
+        &self,
+        path: &Path,
+    ) -> io::Result<Box<dyn Iterator<Item = Result<SimpleDirEntry, Error>>>> {
+        let iter = std::fs::read_dir(path)?;
+        Ok(Box::new(iter.map(|res| {
+            res.map_err(Error::from)
+                .map(|entry| SimpleDirEntry { path: entry.path() })
+        })))
+    }
 }
 
 #[cfg(test)]
@@ -94,6 +117,8 @@ pub mod mock {
         existing_files: Arc<Mutex<HashSet<String>>>,
         deleted_files: Arc<Mutex<Vec<String>>>,
         fail_on_delete: Arc<Mutex<Option<String>>>,
+
+        entries: Vec<Result<SimpleDirEntry, Error>>,
     }
 
     impl MockFileSystemOps {
@@ -134,6 +159,10 @@ pub mod mock {
             self.existing_files.lock().unwrap().clear();
             self.deleted_files.lock().unwrap().clear();
             *self.fail_on_delete.lock().unwrap() = None;
+        }
+
+        pub fn add_entry(&mut self, entry: Result<SimpleDirEntry, Error>) {
+            self.entries.push(entry);
         }
     }
 
@@ -193,5 +222,71 @@ pub mod mock {
             self.existing_files.lock().unwrap().insert(to_str);
             Ok(())
         }
+
+        fn read_dir(
+            &self,
+            _path: &Path, // if needed could be mapped to entries
+        ) -> io::Result<Box<dyn Iterator<Item = Result<SimpleDirEntry, Error>>>> {
+            Ok(Box::new(self.entries.clone().into_iter()))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::file_system_ops::mock::MockFileSystemOps;
+
+    use super::*;
+
+    #[test]
+    fn test_mock_file_system_ops() {
+        let mock_fs = MockFileSystemOps::new();
+        mock_fs.add_file("/test/file1.txt");
+        assert!(mock_fs.exists(Path::new("/test/file1.txt")));
+        assert!(!mock_fs.exists(Path::new("/test/file2.txt")));
+        mock_fs.remove_file(Path::new("/test/file1.txt")).unwrap();
+        assert!(!mock_fs.exists(Path::new("/test/file1.txt")));
+
+        mock_fs.add_file("/test/archive.zip");
+        let is_zip = mock_fs
+            .is_zip_archive(Path::new("/test/archive.zip"))
+            .unwrap();
+        assert!(is_zip);
+
+        mock_fs.add_file("/test/move_source.txt");
+        mock_fs
+            .move_file(
+                Path::new("/test/move_source.txt"),
+                Path::new("/test/move_dest.txt"),
+            )
+            .unwrap();
+        assert!(!mock_fs.exists(Path::new("/test/move_source.txt")));
+        assert!(mock_fs.exists(Path::new("/test/move_dest.txt")));
+
+        mock_fs.fail_delete_with("Simulated delete failure");
+        let result = mock_fs.remove_file(Path::new("/test/move_dest.txt"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_read_dir_mock() {
+        let mut mock_fs = MockFileSystemOps::new();
+        mock_fs.add_entry(Ok(SimpleDirEntry {
+            path: PathBuf::from("/test/file1.txt"),
+        }));
+        mock_fs.add_entry(Ok(SimpleDirEntry {
+            path: PathBuf::from("/test/file2.txt"),
+        }));
+
+        let entries: Vec<_> = mock_fs.read_dir(Path::new("/test")).unwrap().collect();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(
+            entries[0].as_ref().unwrap().path,
+            PathBuf::from("/test/file1.txt")
+        );
+        assert_eq!(
+            entries[1].as_ref().unwrap().path,
+            PathBuf::from("/test/file2.txt")
+        );
     }
 }
