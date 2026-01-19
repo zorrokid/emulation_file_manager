@@ -132,21 +132,52 @@ impl Component for ImportForm {
                     }
 
                 },
-                 gtk::Button {
-                    set_label: "Select folder for source files",
-                    connect_clicked => ImportFormMsg::OpenDirectorySelector,
-                    #[watch]
-                    set_sensitive: model.selected_file_type.is_some(),
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    set_spacing: 5,
+
+                    gtk::Button {
+                       set_label: "Select folder for source files",
+                       connect_clicked => ImportFormMsg::OpenDirectorySelector,
+                       #[watch]
+                       set_sensitive: model.selected_file_type.is_some(),
+                    },
+
+                    gtk::Label {
+                        #[watch]
+                        set_label: &model.directory_path.as_ref()
+                            .map(|p| p.to_string_lossy().to_string())
+                            .unwrap_or_else(|| "No directory selected".to_string()),
+                    },
                 },
-                gtk::Button {
-                    set_label: "Select optional DAT file",
-                    connect_clicked => ImportFormMsg::OpenFileSelector,
-                    #[watch]
-                    set_sensitive: model.selected_item_type.is_some(),
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    set_spacing: 5,
+                    gtk::Button {
+                         set_label: "Select optional DAT file",
+                         connect_clicked => ImportFormMsg::OpenFileSelector,
+                     },
+                    gtk::Label {
+                        #[watch]
+                        set_label: &model.dat_file_path.as_ref()
+                            .map(|p| p.to_string_lossy().to_string())
+                            .unwrap_or_else(|| "No DAT file selected".to_string()),
+                    },
                 },
-                gtk::Button {
-                    set_label: "Select System",
-                    connect_clicked => ImportFormMsg::OpenSystemSelector,
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    set_spacing: 5,
+                    gtk::Button {
+
+                        set_label: "Select System",
+                        connect_clicked => ImportFormMsg::OpenSystemSelector,
+                    },
+                    gtk::Label {
+                        #[watch]
+                        set_label: &model.selected_system.as_ref()
+                            .map(|s| s.name.clone())
+                            .unwrap_or_else(|| "No system selected".to_string()),
+                    },
                 },
                 gtk::Entry {
                     set_placeholder_text: Some("Source (e.g. website URL)"),
@@ -268,9 +299,13 @@ impl Component for ImportForm {
                 dialog.present();
             }
             ImportFormMsg::OpenFileSelector => {
+                let filter = gtk::FileFilter::new();
+                filter.add_suffix("dat");
+                filter.set_name(Some("DAT files"));
                 let dialog = FileChooserDialog::builder()
                     .title("Select File")
-                    .action(gtk::FileChooserAction::SelectFolder)
+                    .action(gtk::FileChooserAction::Open)
+                    .filter(&filter)
                     .modal(true)
                     .transient_for(root)
                     .build();
