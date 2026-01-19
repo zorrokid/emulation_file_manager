@@ -39,6 +39,8 @@ pub struct ImportForm {
     item_type_dropdown: Controller<ItemTypeDropDown>,
     system_selector: Controller<SystemSelectModel>,
     mass_import_service: Arc<MassImportService>,
+    simple_clearable_dropdown: gtk::DropDown,
+    simple_selection_index: Option<u32>,
 }
 
 #[derive(Debug)]
@@ -55,6 +57,8 @@ pub enum ImportFormMsg {
     Hide,
     OpenSystemSelector,
     StartImport,
+    SimpleDropdownChanged(u32),
+    ClearSimpleDropdownSelection,
 }
 
 #[derive(Debug)]
@@ -141,6 +145,23 @@ impl Component for ImportForm {
                     #[local_ref]
                     item_types_dropdown -> gtk::Box,
                 },
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    set_spacing: 5,
+
+                    gtk::Label {
+                        set_label: "Test:",
+                    },
+                    #[local_ref]
+                    simple_clearable_dropdown -> gtk::DropDown,
+                    gtk::Button {
+                        set_label: "Clear Selection",
+                        connect_clicked[sender] => move |_| {
+                            sender.input(ImportFormMsg::ClearSimpleDropdownSelection);
+                        }
+                    }
+
+                },
                  gtk::Button {
                     set_label: "Select folder for source files",
                     connect_clicked => ImportFormMsg::OpenDirectorySelector,
@@ -207,6 +228,20 @@ impl Component for ImportForm {
                 }
             });
 
+        let drop_down_list_model = gtk::StringList::new(&["Option 1", "Option 2", "Option 3"]);
+        let simple_clearable_dropdown =
+            gtk::DropDown::new(Some(drop_down_list_model), None::<gtk::Expression>);
+        simple_clearable_dropdown.set_selected(gtk::INVALID_LIST_POSITION);
+        simple_clearable_dropdown.connect_selected_notify(clone!(
+            #[strong]
+            sender,
+            move |dropdown| {
+                let selected_index = dropdown.selected();
+                tracing::info!("Simple clearable dropdown selected: {}", selected_index);
+                sender.input(ImportFormMsg::SimpleDropdownChanged(selected_index));
+            }
+        ));
+
         let model = ImportForm {
             directory_path: None,
             dat_file_path: None,
@@ -218,10 +253,13 @@ impl Component for ImportForm {
             source: String::new(),
             system_selector,
             mass_import_service,
+            simple_clearable_dropdown,
+            simple_selection_index: None,
         };
 
         let file_types_dropdown = model.file_type_dropdown.widget();
         let item_types_dropdown = model.item_type_dropdown.widget();
+        let simple_clearable_dropdown = &model.simple_clearable_dropdown;
         let widgets = view_output!();
         ComponentParts { model, widgets }
     }
@@ -346,6 +384,15 @@ impl Component for ImportForm {
                         CommandMsg::ProcessImportResult(result)
                     });
                 }
+            }
+            ImportFormMsg::SimpleDropdownChanged(index) => {
+                tracing::info!("Simple clearable dropdown changed: {}", index);
+                self.simple_selection_index = Some(index);
+            }
+            ImportFormMsg::ClearSimpleDropdownSelection => {
+                tracing::info!("Clearing simple clearable dropdown selection");
+                self.simple_clearable_dropdown
+                    .set_selected(gtk::INVALID_LIST_POSITION);
             }
         }
     }
