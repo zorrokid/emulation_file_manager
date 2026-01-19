@@ -19,7 +19,7 @@ use service::{
     view_models::SystemListModel,
 };
 use ui_components::{
-    DropDownOutputMsg, FileTypeDropDown, FileTypeSelectedMsg,
+    DropDownItem, DropDownOutputMsg, FileTypeDropDown, FileTypeSelectedMsg,
     drop_down::{ItemTypeDropDown, ItemTypeSelectedMsg},
 };
 
@@ -40,7 +40,7 @@ pub struct ImportForm {
     system_selector: Controller<SystemSelectModel>,
     mass_import_service: Arc<MassImportService>,
     simple_clearable_dropdown: gtk::DropDown,
-    simple_selection_index: Option<u32>,
+    items: Vec<ItemType>,
 }
 
 #[derive(Debug)]
@@ -228,9 +228,17 @@ impl Component for ImportForm {
                 }
             });
 
-        let drop_down_list_model = gtk::StringList::new(&["Option 1", "Option 2", "Option 3"]);
+        let items: Vec<ItemType> = ItemType::all_items();
+        let items_for_dropdown = items
+            .iter()
+            .map(|item| item.to_string())
+            .collect::<Vec<String>>();
+        let items_for_dropdown: Vec<&str> = items_for_dropdown.iter().map(|s| s.as_str()).collect();
+
+        let items_string_list = gtk::StringList::new(&items_for_dropdown);
         let simple_clearable_dropdown =
-            gtk::DropDown::new(Some(drop_down_list_model), None::<gtk::Expression>);
+            gtk::DropDown::new(Some(items_string_list), None::<gtk::Expression>);
+
         simple_clearable_dropdown.set_selected(gtk::INVALID_LIST_POSITION);
         simple_clearable_dropdown.connect_selected_notify(clone!(
             #[strong]
@@ -254,7 +262,7 @@ impl Component for ImportForm {
             system_selector,
             mass_import_service,
             simple_clearable_dropdown,
-            simple_selection_index: None,
+            items,
         };
 
         let file_types_dropdown = model.file_type_dropdown.widget();
@@ -387,7 +395,17 @@ impl Component for ImportForm {
             }
             ImportFormMsg::SimpleDropdownChanged(index) => {
                 tracing::info!("Simple clearable dropdown changed: {}", index);
-                self.simple_selection_index = Some(index);
+                let selected_item = if index != gtk::INVALID_LIST_POSITION {
+                    Some(self.items.get(index as usize).cloned())
+                } else {
+                    None
+                };
+                if let Some(item) = selected_item {
+                    tracing::info!("Selected item: {:?}", item);
+                    self.selected_item_type = item;
+                } else {
+                    tracing::info!("No item selected");
+                }
             }
             ImportFormMsg::ClearSimpleDropdownSelection => {
                 tracing::info!("Clearing simple clearable dropdown selection");
