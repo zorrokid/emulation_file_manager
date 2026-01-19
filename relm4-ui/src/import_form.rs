@@ -18,10 +18,7 @@ use service::{
     error::Error, mass_import::service::MassImportService, view_model_service::ViewModelService,
     view_models::SystemListModel,
 };
-use ui_components::{
-    DropDownItem, DropDownOutputMsg, FileTypeDropDown, FileTypeSelectedMsg,
-    drop_down::{ItemTypeDropDown, ItemTypeSelectedMsg},
-};
+use ui_components::{DropDownItem, DropDownOutputMsg, FileTypeDropDown, FileTypeSelectedMsg};
 
 use crate::system_selector::{
     SystemSelectInit, SystemSelectModel, SystemSelectMsg, SystemSelectOutputMsg,
@@ -36,10 +33,9 @@ pub struct ImportForm {
     selected_item_type: Option<ItemType>,
     source: String,
     file_type_dropdown: Controller<FileTypeDropDown>,
-    item_type_dropdown: Controller<ItemTypeDropDown>,
     system_selector: Controller<SystemSelectModel>,
     mass_import_service: Arc<MassImportService>,
-    simple_clearable_dropdown: gtk::DropDown,
+    item_type_dropdown: gtk::DropDown,
     items: Vec<ItemType>,
 }
 
@@ -50,15 +46,14 @@ pub enum ImportFormMsg {
     DirectorySelected(PathBuf),
     DatFileSelected(PathBuf),
     FileTypeChanged(FileType),
-    ItemTypeChanged(ItemType),
     SourceChanged(String),
     SystemSelected(SystemListModel),
     Show,
     Hide,
     OpenSystemSelector,
     StartImport,
-    SimpleDropdownChanged(u32),
-    ClearSimpleDropdownSelection,
+    ItemTypeChanged(u32),
+    ClearItemTypeSelection,
 }
 
 #[derive(Debug)]
@@ -82,20 +77,6 @@ impl ImportForm {
                 DropDownOutputMsg::ItemSelected(FileTypeSelectedMsg::FileTypeSelected(
                     file_type,
                 )) => ImportFormMsg::FileTypeChanged(file_type),
-                _ => unreachable!(),
-            })
-    }
-
-    fn create_item_type_dropdown(
-        initial_selection: Option<ItemType>,
-        sender: &ComponentSender<Self>,
-    ) -> Controller<ItemTypeDropDown> {
-        ItemTypeDropDown::builder()
-            .launch(initial_selection)
-            .forward(sender.input_sender(), |msg| match msg {
-                DropDownOutputMsg::ItemSelected(ItemTypeSelectedMsg::ItemTypeSelected(
-                    file_type,
-                )) => ImportFormMsg::ItemTypeChanged(file_type),
                 _ => unreachable!(),
             })
     }
@@ -141,23 +122,12 @@ impl Component for ImportForm {
                     gtk::Label {
                         set_label: "Item Type:",
                     },
-
                     #[local_ref]
-                    item_types_dropdown -> gtk::Box,
-                },
-                gtk::Box {
-                    set_orientation: gtk::Orientation::Horizontal,
-                    set_spacing: 5,
-
-                    gtk::Label {
-                        set_label: "Test:",
-                    },
-                    #[local_ref]
-                    simple_clearable_dropdown -> gtk::DropDown,
+                    item_type_dropdown -> gtk::DropDown,
                     gtk::Button {
                         set_label: "Clear Selection",
                         connect_clicked[sender] => move |_| {
-                            sender.input(ImportFormMsg::ClearSimpleDropdownSelection);
+                            sender.input(ImportFormMsg::ClearItemTypeSelection);
                         }
                     }
 
@@ -208,7 +178,6 @@ impl Component for ImportForm {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let file_type_dropdown = Self::create_file_type_dropdown(None, &sender);
-        let item_type_dropdown = Self::create_item_type_dropdown(None, &sender);
 
         let mass_import_service = Arc::new(MassImportService::new(Arc::clone(
             &init_model.repository_manager,
@@ -236,20 +205,19 @@ impl Component for ImportForm {
         let items_for_dropdown: Vec<&str> = items_for_dropdown.iter().map(|s| s.as_str()).collect();
 
         let items_string_list = gtk::StringList::new(&items_for_dropdown);
-        let simple_clearable_dropdown =
+        let item_type_dropdown =
             gtk::DropDown::new(Some(items_string_list), None::<gtk::Expression>);
 
-        simple_clearable_dropdown.set_selected(gtk::INVALID_LIST_POSITION);
-        simple_clearable_dropdown.connect_selected_notify(clone!(
+        item_type_dropdown.set_selected(gtk::INVALID_LIST_POSITION);
+        item_type_dropdown.connect_selected_notify(clone!(
             #[strong]
             sender,
             move |dropdown| {
                 let selected_index = dropdown.selected();
                 tracing::info!("Simple clearable dropdown selected: {}", selected_index);
-                sender.input(ImportFormMsg::SimpleDropdownChanged(selected_index));
+                sender.input(ImportFormMsg::ItemTypeChanged(selected_index));
             }
         ));
-
         let model = ImportForm {
             directory_path: None,
             dat_file_path: None,
@@ -257,17 +225,15 @@ impl Component for ImportForm {
             selected_file_type: None,
             selected_item_type: None,
             file_type_dropdown,
-            item_type_dropdown,
             source: String::new(),
             system_selector,
             mass_import_service,
-            simple_clearable_dropdown,
+            item_type_dropdown,
             items,
         };
 
         let file_types_dropdown = model.file_type_dropdown.widget();
-        let item_types_dropdown = model.item_type_dropdown.widget();
-        let simple_clearable_dropdown = &model.simple_clearable_dropdown;
+        let item_type_dropdown = &model.item_type_dropdown;
         let widgets = view_output!();
         ComponentParts { model, widgets }
     }
@@ -346,10 +312,6 @@ impl Component for ImportForm {
                 tracing::info!("File type changed: {:?}", file_type);
                 self.selected_file_type = Some(file_type);
             }
-            ImportFormMsg::ItemTypeChanged(item_type) => {
-                tracing::info!("Item type changed: {:?}", item_type);
-                self.selected_item_type = Some(item_type);
-            }
             ImportFormMsg::SystemSelected(system) => {
                 tracing::info!("System selected: {:?}", system);
                 self.selected_system = Some(system);
@@ -393,7 +355,7 @@ impl Component for ImportForm {
                     });
                 }
             }
-            ImportFormMsg::SimpleDropdownChanged(index) => {
+            ImportFormMsg::ItemTypeChanged(index) => {
                 tracing::info!("Simple clearable dropdown changed: {}", index);
                 let selected_item = if index != gtk::INVALID_LIST_POSITION {
                     Some(self.items.get(index as usize).cloned())
@@ -407,9 +369,9 @@ impl Component for ImportForm {
                     tracing::info!("No item selected");
                 }
             }
-            ImportFormMsg::ClearSimpleDropdownSelection => {
+            ImportFormMsg::ClearItemTypeSelection => {
                 tracing::info!("Clearing simple clearable dropdown selection");
-                self.simple_clearable_dropdown
+                self.item_type_dropdown
                     .set_selected(gtk::INVALID_LIST_POSITION);
             }
         }
