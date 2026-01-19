@@ -197,6 +197,16 @@ pub const IMAGE_FILE_TYPES: &[FileType] = &[
     FileType::Scan,
 ];
 
+pub const ACTIVE_FILE_TYPES: &[FileType] = &[
+    FileType::DiskImage,
+    FileType::TapeImage,
+    FileType::Rom,
+    FileType::MemorySnapshot,
+    FileType::Screenshot,
+    FileType::Document,
+    FileType::Scan,
+];
+
 pub const DOCUMENT_FILE_TYPES: &[FileType] = &[FileType::Manual, FileType::Box, FileType::Document];
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Display, Serialize, Deserialize)]

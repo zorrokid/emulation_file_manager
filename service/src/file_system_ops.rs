@@ -118,6 +118,7 @@ pub mod mock {
         deleted_files: Arc<Mutex<Vec<String>>>,
         fail_on_delete: Arc<Mutex<Option<String>>>,
 
+        // TODO: unify, maybe existing files could be in entries?
         entries: Vec<Result<SimpleDirEntry, Error>>,
     }
 

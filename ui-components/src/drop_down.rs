@@ -158,12 +158,12 @@ where
 }
 
 // FileType-specific implementation
-use core_types::FileType;
+use core_types::{ACTIVE_FILE_TYPES, FileType};
 use strum::IntoEnumIterator;
 
 impl DropDownItem for FileType {
     fn all_items() -> Vec<Self> {
-        FileType::iter().collect()
+        ACTIVE_FILE_TYPES.to_vec()
     }
 }
 
