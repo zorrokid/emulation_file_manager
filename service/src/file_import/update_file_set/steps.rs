@@ -410,6 +410,45 @@ impl PipelineStep<UpdateFileSetContext> for MarkNewFilesForCloudSyncStep {
     }
 }
 
+pub struct UpdateFileSetItemTypesStep;
+
+#[async_trait::async_trait]
+impl PipelineStep<UpdateFileSetContext> for UpdateFileSetItemTypesStep {
+    fn name(&self) -> &'static str {
+        "update_file_set_item_types"
+    }
+
+    fn should_execute(&self, context: &UpdateFileSetContext) -> bool {
+        !context.item_types.is_empty()
+    }
+
+    async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
+        let res = context
+            .repository_manager
+            .get_file_set_repository()
+            .update_item_types_to_file_set(&context.file_set_id, &context.item_types)
+            .await;
+
+        match res {
+            Ok(_) => tracing::info!("File set item types updated."),
+            Err(err) => {
+                tracing::error!(error = %err,
+                    "Updating file set item types operation failed.");
+                // No point to abort here, store failed step and continue
+                context.failed_steps.insert(
+                    self.name().to_string(),
+                    Error::DbError(format!(
+                        "Updating file set item types operation failed: {}",
+                        err
+                    )),
+                );
+            }
+        }
+
+        StepAction::Continue
+    }
+}
+
 // TODO: probably not needed, linking between file set and items is handled by release item
 // management (file sets don't know about items)
 /*pub struct UpdateLinkedItemsStep;
@@ -455,7 +494,7 @@ impl PipelineStep<UpdateFileSetContext> for UpdateLinkedItemsStep {
 mod tests {
     use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
-    use core_types::{FileType, ImportedFile, Sha1Checksum};
+    use core_types::{FileType, ImportedFile, Sha1Checksum, item_type::ItemType};
     use database::{models::FileSet, repository_manager::RepositoryManager, setup_test_db};
     use file_import::mock::MockFileImportOps;
 
@@ -792,5 +831,27 @@ mod tests {
         assert_eq!(updated_file_set.name, "Updated File Set Name");
         assert_eq!(updated_file_set.source, "updated_source");
         assert_eq!(updated_file_set.file_type, FileType::Rom);
+    }
+
+    #[async_std::test]
+    async fn test_update_file_set_item_types_step() {
+        let (mut context, _) = create_context_and_test_file_set().await;
+
+        context.item_types = vec![ItemType::DiskOrSetOfDisks, ItemType::Manual];
+
+        let step = super::UpdateFileSetItemTypesStep;
+        let action = step.execute(&mut context).await;
+        assert!(matches!(action, StepAction::Continue));
+
+        let item_types_in_db = context
+            .repository_manager
+            .get_file_set_repository()
+            .get_item_types_for_file_set(context.file_set_id)
+            .await
+            .unwrap();
+
+        assert_eq!(item_types_in_db.len(), 2);
+        assert!(item_types_in_db.contains(&ItemType::DiskOrSetOfDisks));
+        assert!(item_types_in_db.contains(&ItemType::Manual));
     }
 }

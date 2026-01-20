@@ -658,6 +658,55 @@ impl FileSetRepository {
         Ok(())
     }
 
+    pub async fn update_item_types_to_file_set(
+        &self,
+        file_set_id: &i64,
+        item_types: &[ItemType],
+    ) -> Result<(), DatabaseError> {
+        let mut transaction = self.pool.begin().await?;
+
+        let existing_item_types = self.get_item_types_for_file_set(*file_set_id).await?;
+
+        let new_item_types: Vec<_> = item_types
+            .iter()
+            .filter(|it| !existing_item_types.contains(it))
+            .cloned()
+            .collect();
+
+        let removed_item_types: Vec<_> = existing_item_types
+            .iter()
+            .filter(|it| !item_types.contains(it))
+            .cloned()
+            .collect();
+
+        for item_type in removed_item_types {
+            let item_type_db_int = item_type.to_db_int();
+            sqlx::query!(
+                "DELETE FROM file_set_item_type 
+                 WHERE file_set_id = ? AND item_type = ?",
+                file_set_id,
+                item_type_db_int
+            )
+            .execute(&mut *transaction)
+            .await?;
+        }
+
+        for item_type in new_item_types {
+            let item_type_db_int = item_type.to_db_int();
+            sqlx::query!(
+                "INSERT INTO file_set_item_type (file_set_id, item_type) 
+                 VALUES (?, ?)",
+                file_set_id,
+                item_type_db_int
+            )
+            .execute(&mut *transaction)
+            .await?;
+        }
+
+        transaction.commit().await?;
+        Ok(())
+    }
+
     pub async fn get_item_types_for_file_set(
         &self,
         file_set_id: i64,
@@ -1638,5 +1687,38 @@ mod tests {
         assert_eq!(item_types.len(), 2);
         assert!(item_types.contains(&ItemType::Box));
         assert!(item_types.contains(&ItemType::Manual));
+    }
+
+    #[async_std::test]
+    async fn test_update_item_types_to_file_set() {
+        let pool = setup_test_db().await;
+        let pool = Arc::new(pool);
+        let file_set_repository = FileSetRepository { pool: pool.clone() };
+
+        let file_set_id = file_set_repository
+            .add_file_set("Test File Set", "test.zip", &FileType::Rom, "", &[], &[])
+            .await
+            .unwrap();
+
+        file_set_repository
+            .add_item_type_to_file_set(&file_set_id, &ItemType::Box)
+            .await
+            .unwrap();
+        file_set_repository
+            .add_item_type_to_file_set(&file_set_id, &ItemType::Manual)
+            .await
+            .unwrap();
+
+        file_set_repository
+            .update_item_types_to_file_set(&file_set_id, &[ItemType::Manual, ItemType::InlayCard])
+            .await
+            .unwrap();
+        let item_types = file_set_repository
+            .get_item_types_for_file_set(file_set_id)
+            .await
+            .unwrap();
+        assert_eq!(item_types.len(), 2);
+        assert!(item_types.contains(&ItemType::Manual));
+        assert!(item_types.contains(&ItemType::InlayCard));
     }
 }
