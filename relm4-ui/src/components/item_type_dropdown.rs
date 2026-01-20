@@ -38,7 +38,7 @@ impl Component for ItemTypeDropdown {
     view! {
         #[root]
         gtk::Box {
-            set_orientation: gtk::Orientation::Vertical,
+            set_orientation: gtk::Orientation::Horizontal,
             set_spacing: 5,
             gtk::Label {
                 set_label: "Item Type:",
