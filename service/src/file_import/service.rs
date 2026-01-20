@@ -119,6 +119,7 @@ impl FileImportService {
                 source: import_model.source,
                 item_ids: import_model.item_ids,
                 system_ids: import_model.system_ids,
+                item_types: import_model.item_types,
             },
         );
 
@@ -165,6 +166,7 @@ impl FileImportService {
                 source: import_model.source,
                 item_ids: import_model.item_ids,
                 file_import_data,
+                item_types: import_model.item_types,
             },
         );
         let pipeline = Pipeline::<UpdateFileSetContext>::new();

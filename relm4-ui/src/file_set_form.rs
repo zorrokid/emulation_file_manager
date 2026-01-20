@@ -816,6 +816,11 @@ impl Component for FileSetFormModel {
 impl FileSetFormModel {
     fn create_file_set(&self, sender: ComponentSender<Self>, file_type: FileType) {
         tracing::info!("Creating new file set");
+        let item_types = if let Some(item_type) = self.selected_item_type {
+            vec![item_type]
+        } else {
+            vec![]
+        };
         let file_import_model = FileSetImportModel {
             file_set_name: self.file_set_name.clone(),
             file_set_file_name: self.file_set_file_name.clone(),
@@ -825,6 +830,7 @@ impl FileSetFormModel {
             selected_files: self.selected_files_in_picked_files.clone(),
             import_files: self.picked_files.clone(),
             item_ids: vec![],
+            item_types,
         };
 
         let file_import_service = Arc::clone(&self.file_import_service);
@@ -842,6 +848,11 @@ impl FileSetFormModel {
         file_set_id: i64,
     ) {
         tracing::info!(file_set_id = file_set_id, "Updating file set");
+        let item_types = if let Some(item_type) = self.selected_item_type {
+            vec![item_type]
+        } else {
+            vec![]
+        };
         let update_model = UpdateFileSetModel {
             file_set_name: self.file_set_name.clone(),
             file_set_file_name: self.file_set_file_name.clone(),
@@ -851,6 +862,7 @@ impl FileSetFormModel {
             import_files: self.picked_files.clone(),
             file_set_id,
             item_ids: vec![],
+            item_types,
         };
 
         let file_import_service = Arc::clone(&self.file_import_service);

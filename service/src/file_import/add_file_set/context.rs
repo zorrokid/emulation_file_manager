@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use core_types::{ImportedFile, Sha1Checksum};
+use core_types::{ImportedFile, Sha1Checksum, item_type::ItemType};
 use database::{models::FileInfo, repository_manager::RepositoryManager};
 use file_import::FileImportOps;
 
@@ -43,7 +43,9 @@ pub struct FileSetParams {
     pub file_set_name: String,
     pub file_set_file_name: String,
     pub source: String,
+    // TODO: remove?
     pub item_ids: Vec<i64>,
+    pub item_types: Vec<ItemType>,
     pub system_ids: Vec<i64>,
 }
 

@@ -4,7 +4,7 @@ use std::{
     sync::Arc,
 };
 
-use core_types::{FileSize, FileType, ImportedFile, Sha1Checksum};
+use core_types::{FileSize, FileType, ImportedFile, Sha1Checksum, item_type::ItemType};
 use database::{models::FileInfo, repository_manager::RepositoryManager};
 use file_import::{FileImportModel, FileImportOps};
 
@@ -159,6 +159,7 @@ pub struct FileSetImportModel {
     pub file_set_file_name: String,
     pub file_type: FileType,
     pub item_ids: Vec<i64>,
+    pub item_types: Vec<ItemType>,
 }
 
 #[derive(Debug)]
@@ -174,7 +175,9 @@ pub struct UpdateFileSetModel {
     pub file_set_name: String,
     pub file_set_file_name: String,
     pub file_type: FileType,
+    // TODO: remove?
     pub item_ids: Vec<i64>,
+    pub item_types: Vec<ItemType>,
 }
 
 #[cfg(test)]

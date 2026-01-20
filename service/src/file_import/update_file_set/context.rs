@@ -11,7 +11,7 @@ use crate::{
     },
     file_set_deletion::model::FileDeletionResult,
 };
-use core_types::{FileType, ImportedFile, Sha1Checksum};
+use core_types::{FileType, ImportedFile, Sha1Checksum, item_type::ItemType};
 use database::{
     models::{FileInfo, FileSet},
     repository_manager::RepositoryManager,
@@ -56,6 +56,7 @@ pub struct FileSetParams {
     pub file_set_file_name: String,
     pub source: String,
     pub item_ids: Vec<i64>,
+    pub item_types: Vec<ItemType>,
 }
 
 impl UpdateFileSetContext {
