@@ -35,7 +35,9 @@ pub struct ImportForm {
     file_type_dropdown: Controller<FileTypeDropDown>,
     system_selector: Controller<SystemSelectModel>,
     mass_import_service: Arc<MassImportService>,
+    // TODO: remove
     item_type_dropdown: gtk::DropDown,
+    // TODO: remove
     items: Vec<ItemType>,
 }
 
@@ -122,6 +124,7 @@ impl Component for ImportForm {
                     gtk::Label {
                         set_label: "Item Type:",
                     },
+                    // TODO replace with component
                     #[local_ref]
                     item_type_dropdown -> gtk::DropDown,
                     gtk::Button {
@@ -228,6 +231,7 @@ impl Component for ImportForm {
                 }
             });
 
+        // remove
         let items: Vec<ItemType> = ItemType::all_items();
         let items_for_dropdown = items
             .iter()
@@ -236,6 +240,8 @@ impl Component for ImportForm {
         let items_for_dropdown: Vec<&str> = items_for_dropdown.iter().map(|s| s.as_str()).collect();
 
         let items_string_list = gtk::StringList::new(&items_for_dropdown);
+
+        // TODO: replace with component
         let item_type_dropdown =
             gtk::DropDown::new(Some(items_string_list), None::<gtk::Expression>);
 
@@ -390,6 +396,7 @@ impl Component for ImportForm {
                     });
                 }
             }
+            // TODO: remove / replace with component
             ImportFormMsg::ItemTypeChanged(index) => {
                 tracing::info!("Simple clearable dropdown changed: {}", index);
                 let selected_item = if index != gtk::INVALID_LIST_POSITION {
@@ -404,6 +411,7 @@ impl Component for ImportForm {
                     tracing::info!("No item selected");
                 }
             }
+            // TODO: remove / replace with component
             ImportFormMsg::ClearItemTypeSelection => {
                 tracing::info!("Clearing simple clearable dropdown selection");
                 self.item_type_dropdown

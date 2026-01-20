@@ -243,6 +243,9 @@ impl Component for FileSetFormModel {
                     file_types_dropdown -> gtk::Box,
                 },
 
+                // TODO: add item type selection
+                // and ensure that item type is selected for certain file types
+
                 gtk::Button {
                     set_label: "Open File Picker",
                     connect_clicked => FileSetFormMsg::OpenFileSelector,
