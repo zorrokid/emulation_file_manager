@@ -38,7 +38,7 @@ pub struct ImportForm {
     file_type_dropdown: Controller<FileTypeDropDown>,
     system_selector: Controller<SystemSelectModel>,
     mass_import_service: Arc<MassImportService>,
-    item_type_dropdown_new: Controller<ItemTypeDropdown>,
+    item_type_dropdown: Controller<ItemTypeDropdown>,
 }
 
 #[derive(Debug)]
@@ -54,7 +54,7 @@ pub enum ImportFormMsg {
     Hide,
     OpenSystemSelector,
     StartImport,
-    ItemTypeChangedNew(Option<ItemType>),
+    ItemTypeChanged(Option<ItemType>),
 }
 
 #[derive(Debug)]
@@ -117,7 +117,7 @@ impl Component for ImportForm {
                     file_types_dropdown -> gtk::Box,
                 },
                 #[local_ref]
-                item_type_dropdown_new -> gtk::Box,
+                item_type_dropdown -> gtk::Box,
                 gtk::Box {
                     set_orientation: gtk::Orientation::Horizontal,
                     set_spacing: 5,
@@ -214,11 +214,11 @@ impl Component for ImportForm {
                 }
             });
 
-        let item_type_dropdown_new = ItemTypeDropdown::builder().launch(()).forward(
+        let item_type_dropdown = ItemTypeDropdown::builder().launch(()).forward(
             sender.input_sender(),
             |msg| match msg {
                 ItemTypeDropDownOutputMsg::ItemTypeChanged(opt_item_type) => {
-                    ImportFormMsg::ItemTypeChangedNew(opt_item_type)
+                    ImportFormMsg::ItemTypeChanged(opt_item_type)
                 }
             },
         );
@@ -233,11 +233,11 @@ impl Component for ImportForm {
             source: String::new(),
             system_selector,
             mass_import_service,
-            item_type_dropdown_new,
+            item_type_dropdown,
         };
 
         let file_types_dropdown = model.file_type_dropdown.widget();
-        let item_type_dropdown_new = model.item_type_dropdown_new.widget();
+        let item_type_dropdown = model.item_type_dropdown.widget();
         let widgets = view_output!();
         ComponentParts { model, widgets }
     }
@@ -363,7 +363,7 @@ impl Component for ImportForm {
                     });
                 }
             }
-            ImportFormMsg::ItemTypeChangedNew(opt_item_type) => {
+            ImportFormMsg::ItemTypeChanged(opt_item_type) => {
                 tracing::info!("Item type changed (new component): {:?}", opt_item_type);
                 self.selected_item_type = opt_item_type;
             }
