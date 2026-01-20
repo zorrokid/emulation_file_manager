@@ -635,6 +635,29 @@ impl FileSetRepository {
         Ok(())
     }
 
+    pub async fn add_item_types_to_file_set(
+        &self,
+        file_set_id: &i64,
+        item_types: &[ItemType],
+    ) -> Result<(), DatabaseError> {
+        let mut transaction = self.pool.begin().await?;
+
+        for item_type in item_types {
+            let item_type_db_int = item_type.to_db_int();
+            sqlx::query!(
+                "INSERT INTO file_set_item_type (file_set_id, item_type) 
+                 VALUES (?, ?)",
+                file_set_id,
+                item_type_db_int
+            )
+            .execute(&mut *transaction)
+            .await?;
+        }
+
+        transaction.commit().await?;
+        Ok(())
+    }
+
     pub async fn get_item_types_for_file_set(
         &self,
         file_set_id: i64,

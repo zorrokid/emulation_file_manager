@@ -504,6 +504,7 @@ mod tests {
                 file_set_file_name: "test_game".to_string(),
                 source: "test_source".to_string(),
                 item_ids: vec![],
+                item_types: vec![],
             },
         )
     }

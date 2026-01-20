@@ -79,6 +79,43 @@ impl PipelineStep<AddFileSetContext> for UpdateDatabaseStep {
     }
 }
 
+pub struct AddFileSetItemTypesStep;
+
+#[async_trait::async_trait]
+impl PipelineStep<AddFileSetContext> for AddFileSetItemTypesStep {
+    fn name(&self) -> &'static str {
+        "add_file_set_item_types"
+    }
+
+    fn should_execute(&self, context: &AddFileSetContext) -> bool {
+        !context.item_types.is_empty() && context.file_set_id.is_some()
+    }
+
+    async fn execute(&self, context: &mut AddFileSetContext) -> StepAction {
+        let file_set_id = context.file_set_id.unwrap();
+        let res = context
+            .repository_manager
+            .get_file_set_repository()
+            .add_item_types_to_file_set(&file_set_id, &context.item_types)
+            .await;
+
+        match res {
+            Ok(_) => tracing::info!("Item types added to file set"),
+            Err(err) => {
+                tracing::error!(error = %err,
+                    "Add item types to file set operation failed.");
+                // No point to abort here, add to failed steps and continue
+                context.failed_steps.insert(
+                    self.name().to_string(),
+                    Error::DbError(format!("Error adding item types to file set: {}", err)),
+                );
+            }
+        }
+
+        StepAction::Continue
+    }
+}
+
 /* TODO: probably not needed, link items to file set when creating release items
  *
  * pub struct AddFileSetItemsStep;
@@ -154,6 +191,7 @@ mod tests {
                 file_set_name: "Test Game".to_string(),
                 file_set_file_name: "test_game.zip".to_string(),
                 item_ids: vec![],
+                item_types: vec![],
             },
         )
     }
@@ -313,4 +351,33 @@ mod tests {
         let step = AddFileSetItemsStep;
         assert!(!step.should_execute(&context));
     }*/
+
+    #[async_std::test]
+    async fn test_add_file_set_item_types_step() {
+        let mut context = create_test_context(None).await;
+        context.item_types = vec![ItemType::Manual, ItemType::Box];
+        let file_set_id = context
+            .repository_manager
+            .get_file_set_repository()
+            .add_file_set("", "", &FileType::Rom, "", &[], &[])
+            .await
+            .unwrap();
+        context.file_set_id = Some(file_set_id);
+
+        let step = AddFileSetItemTypesStep;
+        assert!(step.should_execute(&context));
+
+        let res = step.execute(&mut context).await;
+        assert_eq!(res, StepAction::Continue);
+
+        let item_types_in_db = context
+            .repository_manager
+            .get_file_set_repository()
+            .get_item_types_for_file_set(file_set_id)
+            .await
+            .unwrap();
+        assert_eq!(item_types_in_db.len(), 2);
+        assert!(item_types_in_db.contains(&ItemType::Manual));
+        assert!(item_types_in_db.contains(&ItemType::Box));
+    }
 }

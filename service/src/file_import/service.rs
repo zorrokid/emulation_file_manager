@@ -271,6 +271,7 @@ mod tests {
             file_set_name: file_set_name.clone(),
             file_set_file_name: "test_game.zip".to_string(),
             item_ids: vec![],
+            item_types: vec![],
         };
 
         let result = service.create_file_set(file_set_import_model).await;
@@ -374,6 +375,7 @@ mod tests {
             file_set_name: "".to_string(),
             file_set_file_name: "".to_string(),
             item_ids: vec![],
+            item_types: vec![],
         };
 
         // Perform the addition
@@ -483,6 +485,7 @@ mod tests {
             file_set_name: "".to_string(),
             file_set_file_name: "".to_string(),
             item_ids: vec![],
+            item_types: vec![],
         };
 
         // Perform the addition
@@ -606,6 +609,7 @@ mod tests {
             file_set_name: "".to_string(),
             file_set_file_name: "".to_string(),
             item_ids: vec![],
+            item_types: vec![],
         };
 
         // Perform the addition

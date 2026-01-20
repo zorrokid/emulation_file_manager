@@ -29,7 +29,9 @@ pub struct AddFileSetContext {
     pub file_set_name: String,
     pub file_set_file_name: String,
     pub source: String,
+    // TODO: remove?
     pub item_ids: Vec<i64>,
+    pub item_types: Vec<ItemType>,
 
     pub imported_files: HashMap<Sha1Checksum, ImportedFile>,
     pub file_set_id: Option<i64>,
@@ -64,6 +66,7 @@ impl AddFileSetContext {
             file_set_name: file_set_params.file_set_name,
             file_set_file_name: file_set_params.file_set_file_name,
             item_ids: file_set_params.item_ids,
+            item_types: file_set_params.item_types,
             source: file_set_params.source,
             system_ids: file_set_params.system_ids,
 
@@ -243,6 +246,7 @@ mod tests {
             existing_files: vec![],
             item_ids: vec![],
             failed_steps: HashMap::new(),
+            item_types: vec![],
         }
     }
 

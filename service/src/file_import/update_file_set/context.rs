@@ -32,7 +32,9 @@ pub struct UpdateFileSetContext {
     pub file_set_name: String,
     pub file_set_file_name: String,
     pub source: String,
+    // TODO: rmove?
     pub item_ids: Vec<i64>,
+    pub item_types: Vec<ItemType>,
 
     pub file_set: Option<FileSet>,
     // files currently associated with the file set
@@ -75,6 +77,7 @@ impl UpdateFileSetContext {
             file_set_name: file_set_params.file_set_name,
             file_set_file_name: file_set_params.file_set_file_name,
             item_ids: file_set_params.item_ids,
+            item_types: file_set_params.item_types,
 
             file_set: None,
             existing_files: vec![],
@@ -262,6 +265,7 @@ mod tests {
                 file_set_file_name: "test_file_set".to_string(),
                 source: "TMMP".to_string(),
                 item_ids: vec![],
+                item_types: vec![],
             },
         )
     }
