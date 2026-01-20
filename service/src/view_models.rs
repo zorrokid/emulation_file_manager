@@ -196,6 +196,7 @@ pub struct FileSetViewModel {
     pub file_name: String,
     pub source: String,
     pub can_delete: bool,
+    pub item_types: Vec<ItemType>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

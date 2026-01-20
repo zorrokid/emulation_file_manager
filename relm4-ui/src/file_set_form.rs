@@ -35,7 +35,9 @@ use service::{
 use ui_components::{DropDownMsg, DropDownOutputMsg, FileTypeDropDown, FileTypeSelectedMsg};
 
 use crate::{
-    components::item_type_dropdown::{ItemTypeDropDownOutputMsg, ItemTypeDropdown},
+    components::item_type_dropdown::{
+        ItemTypeDropDownMsg, ItemTypeDropDownOutputMsg, ItemTypeDropdown,
+    },
     utils::{dialog_utils::show_error_dialog, string_utils::format_bytes},
 };
 
@@ -791,6 +793,16 @@ impl Component for FileSetFormModel {
                 self.file_set_name = file_set_view_model.file_set_name.clone();
                 self.file_set_file_name = file_set_view_model.file_name.clone();
                 self.source = file_set_view_model.source.clone();
+                // TODO: support multiple item types
+                self.selected_item_type = file_set_view_model.item_types.first().cloned();
+                tracing::info!(
+                    "Setting selected item type in item type dropdown: {:?}",
+                    self.selected_item_type
+                );
+                self.item_type_dropdown
+                    .emit(ItemTypeDropDownMsg::SetSelectedItemType(
+                        self.selected_item_type,
+                    ));
                 self.files.guard().clear();
                 for file in file_set_view_model.files.iter() {
                     self.files.guard().push_back(ReadFile {
