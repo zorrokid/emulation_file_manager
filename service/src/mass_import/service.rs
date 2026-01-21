@@ -30,7 +30,7 @@ impl MassImportService {
             dat_file_path = ?dat_file_path,
             file_type = ?file_type,
             "Starting mass import process...");
-        let mut context = MassImportContext::new(source_path);
+        let mut context = MassImportContext::new(source_path, dat_file_path);
         let pipeline = Pipeline::<MassImportContext>::new();
         tracing::info!("Mass import process completed.");
         let res = pipeline.execute(&mut context).await;

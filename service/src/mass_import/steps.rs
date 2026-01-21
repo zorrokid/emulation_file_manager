@@ -4,6 +4,25 @@ use crate::{
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
 
+pub struct ImportDatFileStep;
+
+#[async_trait::async_trait]
+impl PipelineStep<MassImportContext> for ImportDatFileStep {
+    fn name(&self) -> &'static str {
+        "import_dat_file_step"
+    }
+    fn should_execute(&self, context: &MassImportContext) -> bool {
+        context.dat_file_path.is_some()
+    }
+    async fn execute(&self, context: &mut MassImportContext) -> StepAction {
+        let dat_path = context
+            .dat_file_path
+            .as_ref()
+            .expect("Dat file path should be present");
+        StepAction::Continue
+    }
+}
+
 pub struct ReadFilesStep;
 #[async_trait::async_trait]
 impl PipelineStep<MassImportContext> for ReadFilesStep {

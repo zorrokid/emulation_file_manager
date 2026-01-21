@@ -3,7 +3,43 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 
-#[derive(Debug, Deserialize, PartialEq)]
+pub trait DatFileParserOps {
+    fn parse_dat_file(&self, path: &Path) -> Result<DatFile, DatFileParserError>;
+}
+
+pub struct DefaultDatParser;
+
+impl DatFileParserOps for DefaultDatParser {
+    fn parse_dat_file(&self, path: &Path) -> Result<DatFile, DatFileParserError> {
+        parse_dat_file(path).map_err(|err| {
+            DatFileParserError::IoError(format!("Error while parsing path {:?}: {:?}", path, err))
+        })
+    }
+}
+
+pub struct MockDatParser {
+    parse_result: Result<DatFile, DatFileParserError>,
+}
+
+impl MockDatParser {
+    pub fn set_parse_result(&mut self, parse_result: Result<DatFile, DatFileParserError>) {
+        self.parse_result = parse_result;
+    }
+}
+
+impl DatFileParserOps for MockDatParser {
+    fn parse_dat_file(&self, path: &Path) -> Result<DatFile, DatFileParserError> {
+        self.parse_result.clone()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum DatFileParserError {
+    IoError(String),
+    ParseError(String),
+}
+
+#[derive(Debug, Deserialize, PartialEq, Clone)]
 #[serde(rename = "datafile")]
 pub struct DatFile {
     pub header: DatHeader,
@@ -11,7 +47,7 @@ pub struct DatFile {
     pub games: Vec<DatGame>,
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Deserialize, PartialEq, Clone)]
 pub struct DatHeader {
     pub id: i32,
     pub name: String,
@@ -28,7 +64,7 @@ pub struct DatHeader {
     pub subset: Option<String>,
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Deserialize, PartialEq, Clone)]
 pub struct DatGame {
     #[serde(rename = "@name")]
     pub name: String,
@@ -47,7 +83,7 @@ pub struct DatGame {
     pub releases: Vec<DatRelease>,
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Deserialize, PartialEq, Clone)]
 pub struct DatRom {
     #[serde(rename = "@name")]
     pub name: String,
@@ -69,7 +105,7 @@ pub struct DatRom {
     pub header: Option<String>,
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Deserialize, PartialEq, Clone)]
 pub struct DatRelease {
     #[serde(rename = "@name")]
     pub name: String,
@@ -77,10 +113,14 @@ pub struct DatRelease {
     pub region: String,
 }
 
-pub fn parse_dat_file<P: AsRef<Path>>(path: P) -> Result<DatFile, Box<dyn std::error::Error>> {
-    let file = File::open(path)?;
+pub fn parse_dat_file(path: &Path) -> Result<DatFile, DatFileParserError> {
+    let file = File::open(path).map_err(|e| {
+        DatFileParserError::IoError(format!("Failed opening path {:?}: {}", path, e))
+    })?;
     let reader = BufReader::new(file);
-    let dat_file: DatFile = quick_xml::de::from_reader(reader)?;
+    let dat_file: DatFile = quick_xml::de::from_reader(reader).map_err(|e| {
+        DatFileParserError::ParseError(format!("Failed parsing file {:?}: {}", path, e))
+    })?;
     Ok(dat_file)
 }
 
@@ -90,7 +130,8 @@ mod tests {
 
     #[test]
     fn test_parse_example_dat() {
-        let result = parse_dat_file("example-data/coleco.dat");
+        let path = Path::new("example-data/coleco.dat");
+        let result = parse_dat_file(path);
         assert!(result.is_ok(), "Failed to parse: {:?}", result.err());
 
         let dat = result.unwrap();
