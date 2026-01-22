@@ -11,14 +11,32 @@ impl PipelineStep<MassImportContext> for ImportDatFileStep {
     fn name(&self) -> &'static str {
         "import_dat_file_step"
     }
+
     fn should_execute(&self, context: &MassImportContext) -> bool {
         context.dat_file_path.is_some()
     }
+
     async fn execute(&self, context: &mut MassImportContext) -> StepAction {
         let dat_path = context
             .dat_file_path
             .as_ref()
             .expect("Dat file path should be present");
+
+        let parse_res = context.dat_file_parser_ops.parse_dat_file(dat_path);
+        match parse_res {
+            Ok(dat_file) => {
+                println!("Successfully parsed DAT file: {:?}", dat_file);
+                // Further processing can be done here
+            }
+            Err(e) => {
+                return StepAction::Abort(Error::ParseError(format!(
+                    "Failed to parse DAT file {}: {}",
+                    dat_path.display(),
+                    e
+                )));
+            }
+        }
+
         StepAction::Continue
     }
 }

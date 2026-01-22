@@ -1,14 +1,18 @@
+use async_trait::async_trait;
 use serde::Deserialize;
+use std::fmt::Display;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 
-pub trait DatFileParserOps {
+#[async_trait]
+pub trait DatFileParserOps: Send + Sync {
     fn parse_dat_file(&self, path: &Path) -> Result<DatFile, DatFileParserError>;
 }
 
 pub struct DefaultDatParser;
 
+#[async_trait]
 impl DatFileParserOps for DefaultDatParser {
     fn parse_dat_file(&self, path: &Path) -> Result<DatFile, DatFileParserError> {
         parse_dat_file(path).map_err(|err| {
@@ -37,6 +41,15 @@ impl DatFileParserOps for MockDatParser {
 pub enum DatFileParserError {
     IoError(String),
     ParseError(String),
+}
+
+impl Display for DatFileParserError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DatFileParserError::IoError(message) => write!(f, "IO error: {}", message),
+            DatFileParserError::ParseError(message) => write!(f, "Parse error: {}", message),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, PartialEq, Clone)]

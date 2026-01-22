@@ -14,6 +14,7 @@ pub enum Error {
     FileImportError(String),
     OperationCancelled,
     InvalidInput(String),
+    ParseError(String),
 }
 
 impl Display for Error {
@@ -29,6 +30,7 @@ impl Display for Error {
             Error::FileImportError(message) => write!(f, "File import error: {}", message),
             Error::OperationCancelled => write!(f, "Operation was cancelled"),
             Error::InvalidInput(message) => write!(f, "Invalid input: {}", message),
+            Error::ParseError(message) => write!(f, "Parse error: {}", message),
         }
     }
 }

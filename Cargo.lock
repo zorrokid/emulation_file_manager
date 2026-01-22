@@ -1053,6 +1053,8 @@ dependencies = [
 name = "dat_file_parser"
 version = "0.1.0"
 dependencies = [
+ "async-std",
+ "async-trait",
  "quick-xml 0.36.2",
  "serde",
 ]
@@ -3951,6 +3953,7 @@ dependencies = [
  "cloud_storage",
  "core_types",
  "credentials_storage",
+ "dat_file_parser",
  "database",
  "executable_runner",
  "file_export",
