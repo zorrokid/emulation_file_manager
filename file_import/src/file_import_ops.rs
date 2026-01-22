@@ -24,6 +24,8 @@ pub trait FileImportOps: Send + Sync {
         file_path: &Path,
     ) -> Result<HashMap<Sha1Checksum, ReadFile>, FileImportError>;
 
+    ////fn get_file_metadata_reader(&self) -> &dyn std::io::Read;
+
     /// Import files based on the provided model
     ///
     /// Reads files from disk, optionally extracts from ZIP, and writes them to the output directory.

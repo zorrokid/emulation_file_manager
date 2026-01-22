@@ -1432,6 +1432,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "file_metadata"
+version = "0.1.0"
+dependencies = [
+ "core_types",
+ "file_system",
+ "utils",
+]
+
+[[package]]
 name = "file_system"
 version = "0.1.0"
 dependencies = [

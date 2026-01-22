@@ -64,19 +64,49 @@ impl PipelineStep<MassImportContext> for ReadFilesStep {
         for file_res in files {
             match file_res {
                 Ok(file) => {
-                    println!("Found file: {}", file.path.display());
-                    // Further processing can be done here
+                    tracing::info!("Found file: {}", file.path.display());
+                    context.files.push(file.path);
                 }
                 Err(e) => {
-                    return StepAction::Abort(Error::IoError(format!(
-                        "Error reading file entry: {}",
-                        e
-                    )));
+                    tracing::error!(
+                        error = ?e,
+                        path = %context.source_path.display(),
+                        "Failed to read a file entry"
+                    );
+                    context.failed_files.push((
+                        context.source_path.clone(),
+                        format!("Failed to read file entry: {}", e),
+                    ));
                 }
             }
         }
 
         // Implementation for reading files goes here
+        StepAction::Continue
+    }
+}
+
+pub struct CheckFilesStep;
+
+#[async_trait::async_trait]
+impl PipelineStep<MassImportContext> for CheckFilesStep {
+    fn name(&self) -> &'static str {
+        "check_files_step"
+    }
+
+    fn should_execute(&self, context: &MassImportContext) -> bool {
+        !context.files.is_empty()
+    }
+
+    async fn execute(&self, context: &mut MassImportContext) -> StepAction {
+        // Implementation for checking files goes here
+        println!(
+            "Checking files in source path: {}",
+            context.source_path.display()
+        );
+        for file in &context.files {
+            println!("Checking file: {}", file.display());
+        }
         StepAction::Continue
     }
 }
