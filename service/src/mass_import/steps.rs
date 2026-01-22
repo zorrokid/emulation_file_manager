@@ -26,9 +26,10 @@ impl PipelineStep<MassImportContext> for ImportDatFileStep {
         match parse_res {
             Ok(dat_file) => {
                 println!("Successfully parsed DAT file: {:?}", dat_file);
-                // Further processing can be done here
+                context.dat_file = Some(dat_file);
             }
             Err(e) => {
+                // Abort since dat file was explicitly provided
                 return StepAction::Abort(Error::ParseError(format!(
                     "Failed to parse DAT file {}: {}",
                     dat_path.display(),

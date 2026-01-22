@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use dat_file_parser::DatFileParserOps;
+use dat_file_parser::{DatFile, DatFileParserOps};
 
 use crate::file_system_ops::{FileSystemOps, StdFileSystemOps};
 
@@ -9,6 +9,7 @@ pub struct MassImportContext {
     pub dat_file_path: Option<PathBuf>,
     pub fs_ops: Box<dyn FileSystemOps>,
     pub dat_file_parser_ops: Box<dyn DatFileParserOps>,
+    pub dat_file: Option<DatFile>,
 }
 
 impl MassImportContext {
@@ -21,6 +22,7 @@ impl MassImportContext {
             fs_ops,
             dat_file_path,
             dat_file_parser_ops,
+            dat_file: None,
         }
     }
 
@@ -35,6 +37,7 @@ impl MassImportContext {
             fs_ops,
             dat_file_path,
             dat_file_parser_ops,
+            dat_file: None,
         }
     }
 }
