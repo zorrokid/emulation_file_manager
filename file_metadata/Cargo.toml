@@ -5,6 +5,9 @@ edition = "2024"
 
 [dependencies]
 core_types = { path = "../core_types" }
-file_system = { path = "../file_system" }
+thiserror = "2.0.18"
 utils = { path = "../utils" }
+zip = "2.6.0"
+sha1 = "0.10.6"
+
 
