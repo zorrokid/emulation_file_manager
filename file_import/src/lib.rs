@@ -280,6 +280,7 @@ pub fn read_zip_contents_with_checksums(
     Ok(sha1_to_file_name_map)
 }
 
+// TODO: remove from here
 pub fn read_file_checksum(
     file_path: &PathBuf,
 ) -> Result<HashMap<Sha1Checksum, ReadFile>, FileImportError> {

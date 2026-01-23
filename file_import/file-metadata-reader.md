@@ -20,9 +20,13 @@ Extract file metadata (checksums, sizes, paths) from various file types (single 
 ```toml
 [dependencies]
 core_types = { path = "../core_types" }
-file_system = { path = "../file_system" }
 utils = { path = "../utils" }
+sha1 = "0.10"
+zip = "0.6"
+thiserror = "1.0"
 ```
+
+**Note:** We don't depend on `file_system` crate since it doesn't have the checksum functions yet. Instead, we'll implement checksum calculation directly using `sha1` crate, or move those functions from `file_import` to this new crate.
 
 **Dependents:**
 - `file_import` - Uses metadata reading to validate files before import
@@ -50,19 +54,67 @@ utils = { path = "../utils" }
 
 ## Design
 
-### Core Types
+### Using Existing Core Types
 
-**Note:** Consider moving `FileMetadata` to `core_types` crate for reusability across export, cloud sync, etc.
+The `core_types` crate already defines `ReadFile`:
 
 ```rust
-/// Represents metadata for a single file entry
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct FileMetadata {
-    pub checksum: Sha1Checksum,
-    pub size: u64,
-    pub relative_path: String, // Path within archive, or filename for single files
+pub struct ReadFile {
+    pub file_name: String,        // File name or relative path within archive
+    pub sha1_checksum: Sha1Checksum,
+    pub file_size: FileSize,      // FileSize is type alias for u64
 }
+```
 
+**We reuse `ReadFile` from `core_types` instead of creating a new `FileMetadata` struct.** This maintains consistency across the codebase and avoids duplicate types for the same concept. The `file_metadata` crate returns `Vec<ReadFile>` from all metadata reading operations.
+
+### Error Type
+
+```rust
+use std::path::PathBuf;
+
+#[derive(Debug, thiserror::Error)]
+pub enum FileMetadataError {
+    #[error("File not found: {0}")]
+    FileNotFound(PathBuf),
+    
+    #[error("Invalid path: {0}")]
+    InvalidPath(PathBuf),
+    
+    #[error("Checksum error for {path}: {source}")]
+    ChecksumError {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    
+    #[error("File I/O error for {path}: {source}")]
+    FileIoError {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    
+    #[error("Zip error for {path}: {source}")]
+    ZipError {
+        path: PathBuf,
+        #[source]
+        source: zip::result::ZipError,
+    },
+    
+    #[error("Unsupported file format: {0}")]
+    UnsupportedFormat(String),
+}
+```
+
+**Important:** 
+- Uses `PathBuf` (owned, sized) instead of `Path` (borrowed, unsized) because enum variants require sized types
+- Uses `std::io::Error` for file I/O and checksum errors
+- Uses `zip::result::ZipError` for zip-specific errors (requires `zip` crate dependency)
+
+### File Type Detection
+
+```rust
 /// Supported file types for metadata extraction
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FileType {
@@ -80,7 +132,7 @@ pub trait FileMetadataReader: Send + Sync {
     /// 
     /// Note: This is a blocking operation. Checksumming large files may take time.
     /// Future enhancement: async version with progress callbacks.
-    fn read_metadata(&self) -> Result<Vec<FileMetadata>, FileMetadataError>;
+    fn read_metadata(&self) -> Result<Vec<ReadFile>, FileMetadataError>;
 }
 ```
 
@@ -126,9 +178,9 @@ impl SingleFileMetadataReader {
 }
 
 impl FileMetadataReader for SingleFileMetadataReader {
-    fn read_metadata(&self) -> Result<Vec<FileMetadata>, FileMetadataError> {
+    fn read_metadata(&self) -> Result<Vec<ReadFile>, FileMetadataError> {
         // Uses file_system::read_file_checksum() - ensure dependency is added
-        let checksum = read_file_checksum(&self.path)
+        let sha1_checksum = read_file_checksum(&self.path)
             .map_err(|e| FileMetadataError::ChecksumError {
                 path: self.path.clone(),
                 source: e,
@@ -140,16 +192,16 @@ impl FileMetadataReader for SingleFileMetadataReader {
                 source: e,
             })?;
             
-        let filename = self.path
+        let file_name = self.path
             .file_name()
             .ok_or_else(|| FileMetadataError::InvalidPath(self.path.clone()))?
             .to_string_lossy()
             .to_string();
         
-        Ok(vec![FileMetadata {
-            checksum,
-            size: metadata.len(),
-            relative_path: filename,
+        Ok(vec![ReadFile {
+            file_name,
+            sha1_checksum,
+            file_size: metadata.len(),
         }])
     }
 }
@@ -172,15 +224,15 @@ impl ZipFileMetadataReader {
 }
 
 impl FileMetadataReader for ZipFileMetadataReader {
-    fn read_metadata(&self) -> Result<Vec<FileMetadata>, FileMetadataError> {
+    fn read_metadata(&self) -> Result<Vec<ReadFile>, FileMetadataError> {
         let entries = read_zip_contents_with_checksums(&self.path)?;
         
         Ok(entries
             .into_iter()
-            .map(|(path, checksum, size)| FileMetadata {
-                checksum,
-                size,
-                relative_path: path,
+            .map(|(file_name, sha1_checksum, file_size)| ReadFile {
+                file_name,
+                sha1_checksum,
+                file_size,
             })
             .collect())
     }
@@ -311,12 +363,12 @@ Create test fixtures in `file_metadata/tests/fixtures/`:
 #[cfg(test)]
 #[derive(Clone)]
 pub struct MockFileMetadataReader {
-    pub metadata: Vec<FileMetadata>,
+    pub metadata: Vec<ReadFile>,
 }
 
 #[cfg(test)]
 impl FileMetadataReader for MockFileMetadataReader {
-    fn read_metadata(&self) -> Result<Vec<FileMetadata>, FileMetadataError> {
+    fn read_metadata(&self) -> Result<Vec<ReadFile>, FileMetadataError> {
         Ok(self.metadata.clone())
     }
 }
@@ -339,7 +391,7 @@ Usage:
 #[test]
 fn test_batch_import() {
     let mock = MockFileMetadataReader {
-        metadata: vec![FileMetadata { /* ... */ }],
+        metadata: vec![ReadFile { /* ... */ }],
     };
     let factory = create_mock_factory(mock);
     
@@ -358,7 +410,7 @@ fn test_batch_import() {
 
 ## Open Questions
 
-1. Should `FileMetadata` include timestamps (modified date)?
+1. Should `ReadFile` include timestamps (modified date)? (Would need to extend the core type)
 2. Should we validate checksums against expected values in this layer?
 3. How should we handle password-protected archives?
 4. Should nested archives be extracted recursively or treated as single files?
@@ -368,24 +420,24 @@ fn test_batch_import() {
 ## Implementation Task List
 
 ### Phase 1: Crate Setup
-- [ ] Create `file_metadata/` directory structure
-- [ ] Create `file_metadata/Cargo.toml` with dependencies (core_types, file_system, utils)
-- [ ] Create `file_metadata/src/lib.rs` with module structure
-- [ ] Add workspace member to root `Cargo.toml`
-- [ ] Verify `cargo build` succeeds for empty crate
+- [x] Create `file_metadata/` directory structure
+- [x] Create `file_metadata/Cargo.toml` with dependencies (core_types, file_system, utils)
+- [x] Create `file_metadata/src/lib.rs` with module structure
+- [x] Add workspace member to root `Cargo.toml`
+- [x] Verify `cargo build` succeeds for empty crate
 
 ### Phase 2: Core Types & Traits
-- [ ] Define `FileMetadata` struct in `lib.rs`
-- [ ] Define `FileType` enum (Single, Zip)
-- [ ] Define `FileMetadataError` enum with path context
-- [ ] Define `FileMetadataReader` trait
-- [ ] Define `ReaderFactoryFn` type alias
+- [ ] Import `ReadFile` from `core_types` (use existing type, don't define new struct)
+- [x] Define `FileType` enum (Single, Zip)
+- [x] Define `FileMetadataError` enum with path context
+- [x] Define `FileMetadataReader` trait (returns `Result<Vec<ReadFile>, FileMetadataError>`)
+- [x] Define `ReaderFactoryFn` type alias
 - [ ] Add comprehensive documentation to all public items
 - [ ] Run `cargo doc --open` to verify docs
 
 ### Phase 3: SingleFileMetadataReader
-- [ ] Create `SingleFileMetadataReader` struct
-- [ ] Implement `new()` constructor with validation
+- [x] Create `SingleFileMetadataReader` struct
+- [x] Implement `new()` constructor with validation
 - [ ] Implement `FileMetadataReader` trait
 - [ ] Add unit tests for single file reading
 - [ ] Add unit tests for error cases (missing file, invalid path)

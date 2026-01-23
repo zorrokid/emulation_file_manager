@@ -6,6 +6,11 @@ use std::string::ToString;
 use strum_macros::{Display, EnumIter};
 
 pub type Sha1Checksum = [u8; 20];
+
+pub fn sha1_bytes_to_hex_string(checksum: &Sha1Checksum) -> String {
+    checksum.iter().map(|b| format!("{:02x}", b)).collect()
+}
+
 pub type FileSize = u64;
 
 #[derive(Debug, Clone)]

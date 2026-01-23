@@ -466,7 +466,7 @@ dependencies = [
  "quick-xml 0.38.3",
  "rust-ini",
  "serde",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "time 0.3.41",
  "url",
 ]
@@ -499,7 +499,7 @@ version = "0.28.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "838b36c8dc927b6db1b6c6b8f5d05865f2213550b9e83bf92fa99ed6525472c0"
 dependencies = [
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -767,7 +767,7 @@ dependencies = [
  "async-trait",
  "core_types",
  "rust-s3",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uuid",
 ]
 
@@ -924,7 +924,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serial_test",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -1071,7 +1071,7 @@ dependencies = [
  "file_system",
  "serde_json",
  "sqlx",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -1353,7 +1353,7 @@ dependencies = [
  "async-trait",
  "core_types",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "tracing",
 ]
 
@@ -1436,8 +1436,10 @@ name = "file_metadata"
 version = "0.1.0"
 dependencies = [
  "core_types",
- "file_system",
+ "sha1 0.10.6",
+ "thiserror 2.0.18",
  "utils",
+ "zip",
 ]
 
 [[package]]
@@ -3673,7 +3675,7 @@ dependencies = [
  "sha2 0.10.8",
  "surf",
  "sysinfo",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "time 0.3.41",
  "url",
 ]
@@ -4200,7 +4202,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.8",
  "smallvec",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "tracing",
  "url",
 ]
@@ -4281,7 +4283,7 @@ dependencies = [
  "smallvec",
  "sqlx-core",
  "stringprep",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "tracing",
  "whoami",
 ]
@@ -4319,7 +4321,7 @@ dependencies = [
  "smallvec",
  "sqlx-core",
  "stringprep",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "tracing",
  "whoami",
 ]
@@ -4344,7 +4346,7 @@ dependencies = [
  "serde",
  "serde_urlencoded",
  "sqlx-core",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "tracing",
  "url",
 ]
@@ -4587,11 +4589,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.17"
+version = "2.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f63587ca0f12b72a0600bcba1d40081f830876000bb46dd2337a3051618f4fc8"
+checksum = "4288b5bcbc7920c07a1149a35cf9590a2aa808e0bc1eafaade0b80947865fbc4"
 dependencies = [
- "thiserror-impl 2.0.17",
+ "thiserror-impl 2.0.18",
 ]
 
 [[package]]
@@ -4607,9 +4609,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.17"
+version = "2.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ff15c8ecd7de3849db632e14d18d2571fa09dfc5ed93479bc4485c7a517c913"
+checksum = "ebc4ee7f67670e9b64d05fa4253e753e016c6c95ff35b89b7941d6b856dec1d5"
 dependencies = [
  "proc-macro2",
  "quote",

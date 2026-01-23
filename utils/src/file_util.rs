@@ -7,11 +7,13 @@ use std::{
 use core_types::Sha1Checksum;
 use sha1::digest::{consts::U20, generic_array::GenericArray};
 
+pub const ZIP_SIGNATURE: [u8; 4] = [0x50, 0x4B, 0x03, 0x04];
+
 pub fn is_zip_file(path: &Path) -> Result<bool, Box<dyn std::error::Error>> {
     let mut file = File::open(path)?;
     let mut signature = [0u8; 4];
-    file.read_exact(&mut signature)?;
-    Ok(signature == [0x50, 0x4B, 0x03, 0x04]) // ZIP file signature
+    let bytes_read = file.read(&mut signature)?;
+    Ok(bytes_read == 4 && signature == ZIP_SIGNATURE)
 }
 
 pub fn get_file_sha1(path: &PathBuf) -> Result<Sha1Checksum, Box<dyn std::error::Error>> {
