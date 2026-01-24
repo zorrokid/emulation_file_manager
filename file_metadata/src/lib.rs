@@ -1,7 +1,7 @@
 pub mod file_metadata_ops;
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs::File,
     io::Read,
     path::{Path, PathBuf},
@@ -133,6 +133,15 @@ impl FileMetadataReader for ZipFileMetadataReader {
     }
 }
 
+/// Get the contents of a zip file and calculate sha1 checksum and size for each file.
+///
+/// # Arguments
+///
+/// * `file_path` - The path to the zip file.
+///
+/// # Returns
+///
+/// A `Result` containing hash map from sha1 key to ImportFile with file name, sha1 checksum and size from files in the archive or an error if the operation fails.
 pub fn read_zip_contents_with_checksums(
     file_path: &PathBuf,
 ) -> Result<HashMap<Sha1Checksum, ReadFile>, FileMetadataError> {
@@ -212,6 +221,32 @@ fn detect_file_type(path: &Path) -> Result<FileType, FileMetadataError> {
     }
 }
 
+/// Get the contents of a zip file.
+///
+/// # Arguments
+///
+/// * `file_path` - The path to the zip file.
+///
+/// # Returns
+///
+/// A `Result` containing a list of file names in the archive or an error if the operation fails.
+pub fn read_zip_contents(file_path: &Path) -> Result<HashSet<String>, FileMetadataError> {
+    let file = File::open(file_path).map_err(|e| FileMetadataError::FileIoError {
+        path: file_path.to_path_buf(),
+        message: format!("Failed opening file: {}", e),
+    })?;
+    let archive = ZipArchive::new(file).map_err(|e| FileMetadataError::ZipError {
+        path: file_path.to_path_buf(),
+        message: format!("Failed reading Zip file: {}", e),
+    })?;
+    let zip_contents = archive
+        .file_names()
+        .map(|name| name.to_string())
+        .collect::<HashSet<_>>();
+
+    Ok(zip_contents)
+}
+
 #[cfg(test)]
 #[derive(Clone)]
 pub struct MockFileMetadataReader {
@@ -229,9 +264,12 @@ impl FileMetadataReader for MockFileMetadataReader {
 mod tests {
 
     use core_types::sha1_bytes_to_hex_string;
+    use tempfile::tempdir;
+    use utils::test_utils::get_sha1_and_size;
+    use zip::write::FileOptions;
 
     use super::*;
-    use std::path::Path;
+    use std::{io::Write, path::Path};
 
     pub fn create_mock_factory(
         reader: MockFileMetadataReader,
@@ -436,5 +474,55 @@ mod tests {
         let metadata = reader.read_metadata().unwrap();
         assert_eq!(metadata, mock_metadata);
     }
-}
 
+    const TEST_ZIP_ARCHIVE_NAME: &str = "test.zip";
+    const TEST_FILE_NAME: &str = "test_file";
+    const TEST_FILE_CONTENT: &str = "Hello, world!";
+
+    #[test]
+    fn test_read_zip_contents() {
+        let temp_dir = tempdir().unwrap();
+        let output_path = temp_dir.path();
+
+        let zip_file_path = output_path.join(TEST_ZIP_ARCHIVE_NAME);
+        let zip_file = File::create(&zip_file_path).unwrap();
+        let mut zip_writer = zip::ZipWriter::new(zip_file);
+        let file_options: FileOptions<'_, ()> = FileOptions::default();
+        zip_writer.start_file(TEST_FILE_NAME, file_options).unwrap();
+        zip_writer.write_all(TEST_FILE_CONTENT.as_bytes()).unwrap();
+        zip_writer.finish().unwrap();
+
+        let result = read_zip_contents(&zip_file_path);
+        assert!(result.is_ok());
+        let hash_set = result.unwrap();
+        assert_eq!(hash_set.len(), 1);
+        assert!(hash_set.contains(TEST_FILE_NAME));
+    }
+
+    #[test]
+    fn test_read_zip_contents_with_checksums() {
+        let temp_dir = tempdir().unwrap();
+        let output_path = temp_dir.path();
+
+        let zip_file_path = output_path.join(TEST_ZIP_ARCHIVE_NAME);
+        let zip_file = File::create(&zip_file_path).unwrap();
+        let mut zip_writer = zip::ZipWriter::new(zip_file);
+        let file_options: FileOptions<'_, ()> = FileOptions::default();
+        zip_writer.start_file(TEST_FILE_NAME, file_options).unwrap();
+        zip_writer.write_all(TEST_FILE_CONTENT.as_bytes()).unwrap();
+        zip_writer.finish().unwrap();
+
+        let result = read_zip_contents_with_checksums(&zip_file_path);
+        assert!(result.is_ok());
+        let hash_map = result.unwrap();
+        assert_eq!(hash_map.len(), 1);
+        let (checksum, _) = get_sha1_and_size(TEST_FILE_CONTENT);
+        assert!(hash_map.contains_key(&checksum));
+        let expected_file = ReadFile {
+            file_name: TEST_FILE_NAME.to_string(),
+            sha1_checksum: checksum,
+            file_size: TEST_FILE_CONTENT.len() as u64,
+        };
+        assert_eq!(hash_map[&checksum], expected_file);
+    }
+}

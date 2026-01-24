@@ -9,5 +9,6 @@ thiserror = "2.0.18"
 utils = { path = "../utils" }
 zip = "2.6.0"
 sha1 = "0.10.6"
+tempfile = "3.19.1"
 
 
