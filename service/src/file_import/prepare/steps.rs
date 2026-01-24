@@ -65,6 +65,7 @@ mod tests {
     use core_types::FileType;
     use database::{repository_manager::RepositoryManager, setup_test_db};
     use file_import::file_import_ops::mock::MockFileImportOps;
+    use file_metadata::file_metadata_ops::mock::MockFileMetadataOps;
 
     use crate::{
         file_import::prepare::context::PrepareFileImportContext,
@@ -76,8 +77,8 @@ mod tests {
         let test_path = Path::new("/test/roms/game.zip");
         let fs_ops = Arc::new(MockFileSystemOps::new());
         fs_ops.add_file(test_path.to_string_lossy().to_string());
-        let file_import_ops = Arc::new(MockFileImportOps::new());
-        let mut context = initialize_context(test_path, fs_ops, file_import_ops).await;
+        let file_metadata_ops = Arc::new(MockFileMetadataOps::new());
+        let mut context = initialize_context(test_path, fs_ops, file_metadata_ops).await;
 
         let step = super::CollectFileMetadataStep;
         let action = step.execute(&mut context).await;
@@ -93,7 +94,7 @@ mod tests {
     async fn initialize_context(
         path: &Path,
         fs_ops: Arc<MockFileSystemOps>,
-        file_import_ops: Arc<MockFileImportOps>,
+        file_metadata_ops: Arc<MockFileMetadataOps>,
     ) -> PrepareFileImportContext {
         let pool = Arc::new(setup_test_db().await);
         let repository_manager = Arc::new(RepositoryManager::new(pool));
@@ -103,7 +104,7 @@ mod tests {
             path,
             FileType::Rom,
             fs_ops,
-            file_import_ops,
+            file_metadata_ops,
         )
     }
 }

@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use core_types::{ReadFile, Sha1Checksum};
-use file_import::FileImportOps;
+use file_metadata::file_metadata_ops::FileMetadataOps;
 
 use crate::{
     error::Error,
@@ -10,7 +10,7 @@ use crate::{
 };
 
 pub trait CollectFileInfoContext {
-    fn file_import_ops(&self) -> Arc<dyn FileImportOps>;
+    fn file_metadata_ops(&self) -> Arc<dyn FileMetadataOps>;
     fn set_file_info(&mut self, file_info: HashMap<Sha1Checksum, ReadFile>);
     fn file_path(&self) -> &std::path::PathBuf;
     fn fs_ops(&self) -> Arc<dyn FileSystemOps>;
@@ -64,11 +64,11 @@ impl<T: CollectFileInfoContext + Send + Sync> PipelineStep<T> for CollectFileInf
 
         let file_contents_res = if is_zip {
             context
-                .file_import_ops()
+                .file_metadata_ops()
                 .read_zip_contents_with_checksums(context.file_path())
         } else {
             context
-                .file_import_ops()
+                .file_metadata_ops()
                 .read_file_checksum(context.file_path())
         };
 
@@ -100,6 +100,7 @@ mod tests {
 
     use core_types::{ReadFile, Sha1Checksum};
     use file_import::{FileImportOps, mock::MockFileImportOps};
+    use file_metadata::file_metadata_ops::{FileMetadataOps, mock::MockFileMetadataOps};
 
     use crate::{
         file_import::common_steps::collect_file_info::{
@@ -110,15 +111,15 @@ mod tests {
     };
 
     struct CollectFileInfoContextTestImpl {
-        file_import_ops: Arc<dyn FileImportOps>,
+        file_metadata_ops: Arc<dyn FileMetadataOps>,
         file_info: HashMap<Sha1Checksum, ReadFile>,
         file_path: std::path::PathBuf,
         fs_ops: Arc<dyn FileSystemOps>,
     }
 
     impl CollectFileInfoContext for CollectFileInfoContextTestImpl {
-        fn file_import_ops(&self) -> Arc<dyn FileImportOps> {
-            self.file_import_ops.clone()
+        fn file_metadata_ops(&self) -> Arc<dyn FileMetadataOps> {
+            self.file_metadata_ops.clone()
         }
 
         fn set_file_info(&mut self, file_info: HashMap<Sha1Checksum, ReadFile>) {
@@ -135,11 +136,11 @@ mod tests {
 
     async fn initialize_context(
         file_path: &Path,
-        file_import_ops: Arc<MockFileImportOps>,
+        file_metadata_ops: Arc<MockFileMetadataOps>,
         fs_ops: Arc<dyn FileSystemOps>,
     ) -> CollectFileInfoContextTestImpl {
         CollectFileInfoContextTestImpl {
-            file_import_ops,
+            file_metadata_ops,
             file_info: HashMap::new(),
             file_path: file_path.to_path_buf(),
             fs_ops,
@@ -150,9 +151,9 @@ mod tests {
     async fn test_collect_file_info_step() {
         let path_str = "/test/roms/game.zip";
         let test_path = Path::new(path_str);
-        let file_import_ops = Arc::new(MockFileImportOps::new());
+        let file_metadata_ops = Arc::new(MockFileMetadataOps::new());
         let checksum: Sha1Checksum = [0u8; 20];
-        file_import_ops.add_zip_file(
+        file_metadata_ops.add_zip_file(
             checksum,
             ReadFile {
                 file_name: "game.rom".into(),
@@ -162,7 +163,7 @@ mod tests {
         );
         let fs_ops = Arc::new(MockFileSystemOps::new());
         fs_ops.add_file(path_str);
-        let mut context = initialize_context(test_path, file_import_ops, fs_ops).await;
+        let mut context = initialize_context(test_path, file_metadata_ops, fs_ops).await;
 
         let step = CollectFileInfoStep::<CollectFileInfoContextTestImpl>::new();
         let action = step.execute(&mut context).await;

@@ -1,3 +1,5 @@
+pub mod file_metadata_ops;
+
 use std::{
     collections::HashMap,
     fs::File,
@@ -211,12 +213,32 @@ fn detect_file_type(path: &Path) -> Result<FileType, FileMetadataError> {
 }
 
 #[cfg(test)]
+#[derive(Clone)]
+pub struct MockFileMetadataReader {
+    pub metadata: Vec<ReadFile>,
+}
+
+#[cfg(test)]
+impl FileMetadataReader for MockFileMetadataReader {
+    fn read_metadata(&self) -> Result<Vec<ReadFile>, FileMetadataError> {
+        Ok(self.metadata.clone())
+    }
+}
+
+#[cfg(test)]
 mod tests {
 
     use core_types::sha1_bytes_to_hex_string;
 
     use super::*;
     use std::path::Path;
+
+    pub fn create_mock_factory(
+        reader: MockFileMetadataReader,
+    ) -> impl Fn(&Path) -> Result<Box<dyn FileMetadataReader>, FileMetadataError> {
+        move |_path: &Path| Ok(Box::new(reader.clone()))
+    }
+
     #[test]
     fn test_single_file_metadata_reader() {
         let test_file_path = Path::new("example-data/one_byte_255.bin");
@@ -375,6 +397,44 @@ mod tests {
             }
             _ => panic!("Expected UnsupportedFormat error"),
         }
+    }
+
+    #[test]
+    fn test_mock_file_metadata_reader() {
+        let mock_metadata = vec![
+            ReadFile {
+                file_name: "file1.bin".to_string(),
+                sha1_checksum: [0u8; 20],
+                file_size: 123,
+            },
+            ReadFile {
+                file_name: "file2.bin".to_string(),
+                sha1_checksum: [1u8; 20],
+                file_size: 456,
+            },
+        ];
+        let mock_reader = MockFileMetadataReader {
+            metadata: mock_metadata.clone(),
+        };
+        let metadata = mock_reader.read_metadata().unwrap();
+        assert_eq!(metadata, mock_metadata);
+    }
+
+    #[test]
+    fn test_with_mock_factory() {
+        let mock_metadata = vec![ReadFile {
+            file_name: "mock_file.bin".to_string(),
+            sha1_checksum: [2u8; 20],
+            file_size: 789,
+        }];
+        let mock_reader = MockFileMetadataReader {
+            metadata: mock_metadata.clone(),
+        };
+        let factory = create_mock_factory(mock_reader);
+        let test_path = Path::new("any_path.bin");
+        let reader = factory(test_path).unwrap();
+        let metadata = reader.read_metadata().unwrap();
+        assert_eq!(metadata, mock_metadata);
     }
 }
 

@@ -3,6 +3,7 @@ use std::{path::Path, sync::Arc};
 use core_types::{FileType, ImportedFile};
 use database::repository_manager::RepositoryManager;
 use file_import::FileImportOps;
+use file_metadata::file_metadata_ops::{FileMetadataOps, StdFileMetadataOps};
 
 use crate::{
     error::Error,
@@ -24,6 +25,7 @@ pub struct FileImportService {
     repository_manager: Arc<RepositoryManager>,
     fs_ops: Arc<dyn FileSystemOps>,
     file_import_ops: Arc<dyn FileImportOps>,
+    file_metadata_ops: Arc<dyn FileMetadataOps>,
     settings: Arc<Settings>,
 }
 
@@ -39,6 +41,7 @@ impl FileImportService {
             repository_manager,
             Arc::new(StdFileSystemOps),
             Arc::new(file_import::StdFileImportOps),
+            Arc::new(StdFileMetadataOps),
             settings,
         )
     }
@@ -47,12 +50,14 @@ impl FileImportService {
         repository_manager: Arc<RepositoryManager>,
         fs_ops: Arc<dyn FileSystemOps>,
         file_import_ops: Arc<dyn FileImportOps>,
+        file_metadata_ops: Arc<dyn FileMetadataOps>,
         settings: Arc<Settings>,
     ) -> Self {
         Self {
             repository_manager,
             fs_ops,
             file_import_ops,
+            file_metadata_ops,
             settings,
         }
     }
@@ -67,7 +72,7 @@ impl FileImportService {
             file_path,
             file_type,
             self.fs_ops.clone(),
-            self.file_import_ops.clone(),
+            self.file_metadata_ops.clone(),
         );
         let pipeline = Pipeline::<PrepareFileImportContext>::new();
         match pipeline.execute(&mut context).await {
@@ -193,6 +198,7 @@ mod tests {
     use core_types::{FileSyncStatus, ImportedFile, ReadFile};
     use database::setup_test_db;
     use file_import::mock::MockFileImportOps;
+    use file_metadata::file_metadata_ops::mock::MockFileMetadataOps;
 
     use crate::{
         file_import::model::{FileImportSource, ImportFileContent},
@@ -245,6 +251,8 @@ mod tests {
             },
         );
 
+        let file_metadata_ops = Arc::new(MockFileMetadataOps::new());
+
         let fs_ops = Arc::new(MockFileSystemOps::new());
         fs_ops.add_file(path_str);
 
@@ -252,6 +260,7 @@ mod tests {
             repository_manager: repository_manager.clone(),
             fs_ops,
             file_import_ops,
+            file_metadata_ops,
             settings,
         };
 
@@ -346,6 +355,8 @@ mod tests {
             },
         );
 
+        let file_metadata_ops = Arc::new(MockFileMetadataOps::new());
+
         let fs_ops = Arc::new(MockFileSystemOps::new());
         fs_ops.add_file(new_file_path_str);
 
@@ -353,6 +364,7 @@ mod tests {
             repository_manager: repository_manager.clone(),
             fs_ops,
             file_import_ops,
+            file_metadata_ops,
             settings,
         };
 
@@ -464,6 +476,7 @@ mod tests {
             .unwrap();
 
         let file_import_ops = Arc::new(MockFileImportOps::new());
+        let file_metadata_ops = Arc::new(MockFileMetadataOps::new());
 
         let fs_ops = Arc::new(MockFileSystemOps::new());
 
@@ -471,6 +484,7 @@ mod tests {
             repository_manager: repository_manager.clone(),
             fs_ops,
             file_import_ops,
+            file_metadata_ops,
             settings,
         };
 
@@ -588,6 +602,7 @@ mod tests {
             .unwrap();
 
         let file_import_ops = Arc::new(MockFileImportOps::new());
+        let file_metadata_ops = Arc::new(MockFileMetadataOps::new());
 
         let fs_ops = Arc::new(MockFileSystemOps::new());
 
@@ -595,6 +610,7 @@ mod tests {
             repository_manager: repository_manager.clone(),
             fs_ops,
             file_import_ops,
+            file_metadata_ops,
             settings,
         };
 
@@ -666,12 +682,14 @@ mod tests {
         let fs_ops = Arc::new(MockFileSystemOps::new());
         fs_ops.add_file(file_path_str);
         let file_import_ops = Arc::new(MockFileImportOps::new());
-        file_import_ops.add_zip_file(file_in_zip_archive.sha1_checksum, file_in_zip_archive);
+        let file_metadata_ops = Arc::new(MockFileMetadataOps::new());
+        file_metadata_ops.add_zip_file(file_in_zip_archive.sha1_checksum, file_in_zip_archive);
 
         let service = FileImportService {
             repository_manager,
             fs_ops,
             file_import_ops,
+            file_metadata_ops,
             settings,
         };
         let result = service

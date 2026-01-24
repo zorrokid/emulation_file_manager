@@ -3969,6 +3969,7 @@ dependencies = [
  "executable_runner",
  "file_export",
  "file_import",
+ "file_metadata",
  "file_system",
  "http_downloader",
  "serde_json",

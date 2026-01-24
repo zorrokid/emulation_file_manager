@@ -438,7 +438,7 @@ fn test_batch_import() {
 ### Phase 3: SingleFileMetadataReader
 - [x] Create `SingleFileMetadataReader` struct
 - [x] Implement `new()` constructor with validation
-- [ ] Implement `FileMetadataReader` trait
+- [x] Implement `FileMetadataReader` trait
 - [ ] Add unit tests for single file reading
 - [ ] Add unit tests for error cases (missing file, invalid path)
 - [ ] Test with various file sizes (empty, small, large)
@@ -465,8 +465,8 @@ fn test_batch_import() {
 - [ ] Add `archive.zip` fixture (multiple files)
 - [ ] Add `nested.zip` fixture (directory structure)
 - [ ] Create integration tests using fixtures
-- [ ] Implement `MockFileMetadataReader` in test module
-- [ ] Implement `create_mock_factory()` helper
+- [x] Implement `MockFileMetadataReader` in test module
+- [x] Implement `create_mock_factory()` helper
 - [ ] Add tests demonstrating mock usage
 
 ### Phase 7: Documentation & Examples
