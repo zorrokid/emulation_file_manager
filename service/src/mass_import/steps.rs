@@ -106,6 +106,28 @@ impl PipelineStep<MassImportContext> for CheckFilesStep {
         );
         for file in &context.files {
             println!("Checking file: {}", file.display());
+            let reader_res = (context.reader_factory_fn)(file);
+            match reader_res {
+                Ok(reader) => {
+                    println!(
+                        "Successfully created metadata reader for file: {}",
+                        file.display()
+                    );
+                    let res = reader.read_metadata();
+                    println!("Metadata for file {}: {:?}", file.display(), res);
+                }
+                Err(e) => {
+                    println!(
+                        "Failed to create metadata reader for file {}: {}",
+                        file.display(),
+                        e
+                    );
+                    context.failed_files.push((
+                        file.clone(),
+                        format!("Failed to create metadata reader: {}", e),
+                    ));
+                }
+            }
         }
         StepAction::Continue
     }

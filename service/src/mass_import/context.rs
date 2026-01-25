@@ -2,8 +2,15 @@ use std::{collections::HashMap, path::PathBuf};
 
 use dat_file_parser::{DatFile, DatFileParserOps};
 use file_import::FileImportOps;
+use file_metadata::reader_factory::create_metadata_reader;
 
 use crate::file_system_ops::{FileSystemOps, StdFileSystemOps};
+
+/// Type alias for a Send-able metadata reader factory function
+type SendReaderFactoryFn = dyn Fn(
+        &std::path::Path,
+    ) -> Result<Box<dyn file_metadata::FileMetadataReader>, file_metadata::FileMetadataError>
+    + Send;
 
 pub struct MassImportContext {
     pub source_path: PathBuf,
@@ -14,6 +21,7 @@ pub struct MassImportContext {
     pub dat_file: Option<DatFile>,
     pub files: Vec<PathBuf>,
     pub failed_files: Vec<(PathBuf, String)>,
+    pub reader_factory_fn: Box<SendReaderFactoryFn>,
 }
 
 impl MassImportContext {
@@ -22,6 +30,7 @@ impl MassImportContext {
         let dat_file_parser_ops: Box<dyn DatFileParserOps> =
             Box::new(dat_file_parser::DefaultDatParser);
         let file_import_ops: Box<dyn FileImportOps> = Box::new(file_import::StdFileImportOps);
+        let reader_factory_fn: Box<SendReaderFactoryFn> = Box::new(create_metadata_reader);
         MassImportContext {
             source_path,
             fs_ops,
@@ -31,6 +40,7 @@ impl MassImportContext {
             files: Vec::new(),
             failed_files: Vec::new(),
             file_import_ops,
+            reader_factory_fn,
         }
     }
 
@@ -40,6 +50,7 @@ impl MassImportContext {
         dat_file_path: Option<PathBuf>,
         dat_file_parser_ops: Box<dyn DatFileParserOps>,
         file_import_ops: Box<dyn FileImportOps>,
+        reader_factory_fn: Box<SendReaderFactoryFn>,
     ) -> Self {
         MassImportContext {
             source_path,
@@ -50,6 +61,7 @@ impl MassImportContext {
             files: Vec::new(),
             failed_files: Vec::new(),
             file_import_ops,
+            reader_factory_fn,
         }
     }
 
