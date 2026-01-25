@@ -1,7 +1,7 @@
 use crate::{
     mass_import::{
         context::MassImportContext,
-        steps::{CheckFilesStep, ImportDatFileStep, ReadFilesStep},
+        steps::{ImportDatFileStep, ReadFileMetadataStep, ReadFilesStep},
     },
     pipeline::generic_pipeline::Pipeline,
 };
@@ -11,7 +11,7 @@ impl Pipeline<MassImportContext> {
         Self::with_steps(vec![
             Box::new(ImportDatFileStep),
             Box::new(ReadFilesStep),
-            Box::new(CheckFilesStep),
+            Box::new(ReadFileMetadataStep),
         ])
     }
 }

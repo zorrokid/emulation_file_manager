@@ -1,6 +1,8 @@
+use core_types::{Sha1Checksum, sha1_from_hex_string};
+
 use crate::{
     error::Error,
-    mass_import::context::{ImportItem, ImportItemStatus, MassImportContext},
+    mass_import::context::{ImportItem, MassImportContext},
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
 
@@ -65,13 +67,7 @@ impl PipelineStep<MassImportContext> for ReadFilesStep {
             match file_res {
                 Ok(file) => {
                     tracing::info!("Found file: {}", file.path.display());
-                    context.import_items.push(ImportItem {
-                        path: file.path.clone(),
-                        status: ImportItemStatus::Pending,
-                        release_name: String::new(),
-                        software_title_name: String::new(),
-                        file_set: None,
-                    });
+                    context.files.push(file.path.clone());
                 }
                 Err(e) => {
                     tracing::error!(
@@ -89,44 +85,58 @@ impl PipelineStep<MassImportContext> for ReadFilesStep {
     }
 }
 
-pub struct CheckFilesStep;
+pub struct ReadFileMetadataStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<MassImportContext> for CheckFilesStep {
+impl PipelineStep<MassImportContext> for ReadFileMetadataStep {
     fn name(&self) -> &'static str {
-        "check_files_step"
+        "read_file_metadata_step"
     }
 
     fn should_execute(&self, context: &MassImportContext) -> bool {
-        !context.import_items.is_empty()
+        !context.get_non_failed_files().is_empty()
     }
 
     async fn execute(&self, context: &mut MassImportContext) -> StepAction {
-        // Implementation for checking files goes here
-        println!(
-            "Checking files in source path: {}",
-            context.source_path.display()
+        tracing::info!(
+            len = %context.get_non_failed_files().len(),
+            "Reading metadata for files...",
         );
-        for import_item in &mut context.import_items {
-            let file = &import_item.path;
-            println!("Checking file: {}", file.display());
+        for file in &mut context.get_non_failed_files() {
+            tracing::info!("Creating metadata reader for file: {}", file.display());
             let reader_res = (context.reader_factory_fn)(file);
             match reader_res {
                 Ok(reader) => {
-                    println!(
-                        "Successfully created metadata reader for file: {}",
-                        file.display()
+                    tracing::info!(
+                        file = %file.display(),
+                        "Successfully created metadata reader",
                     );
                     let res = reader.read_metadata();
-                    println!("Metadata for file {}: {:?}", file.display(), res);
+                    tracing::info!(
+                        file = %file.display(),
+                        "Successfully read metadata",
+                    );
+                    match res {
+                        Ok(metadata_entries) => {
+                            context.file_metadata.insert(file.clone(), metadata_entries);
+                        }
+                        Err(e) => {
+                            tracing::error!(
+                                error = ?e,
+                                file = %file.display(),
+                                "Failed to read metadata",
+                            );
+                            context.failed_files.push(file.clone());
+                        }
+                    }
                 }
                 Err(e) => {
-                    println!(
-                        "Failed to create metadata reader for file {}: {}",
-                        file.display(),
-                        e
+                    tracing::error!(
+                        error = ?e,
+                        file = %file.display(),
+                        "Failed to create metadata reader",
                     );
-                    import_item.status = ImportItemStatus::Failed(format!("Reader error: {}", e));
+                    context.failed_files.push(file.clone());
                 }
             }
         }
@@ -134,42 +144,61 @@ impl PipelineStep<MassImportContext> for CheckFilesStep {
     }
 }
 
-pub struct CollectExistingFilesStep;
+pub struct MapDatEntriesToImportItemsStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<MassImportContext> for CollectExistingFilesStep {
+impl PipelineStep<MassImportContext> for MapDatEntriesToImportItemsStep {
     fn name(&self) -> &'static str {
-        "collect_existing_files_step"
+        "map_dat_entries_to_import_items_step"
     }
     fn should_execute(&self, context: &MassImportContext) -> bool {
-        context.dat_file.is_some() && !context.import_items.is_empty()
+        context.dat_file.is_some() && !context.file_metadata.is_empty()
     }
+
     async fn execute(&self, context: &mut MassImportContext) -> StepAction {
-        // Implementation for collecting existing files goes here
-        println!("Collecting existing files...");
-        // TODO: check each file if they exist in the database
+        // Implementation for mapping DAT entries to import items goes here
+        println!("Mapping DAT entries to import items...");
+        let dat_games = context
+            .dat_file
+            .as_ref()
+            .expect("DAT file should be present")
+            .games
+            .clone();
+
+        let sha1_to_file_map = context.build_sha1_to_file_map();
+
+        for game in &dat_games {
+            println!("DAT Game: {:?}", game);
+
+            let mut import_item = ImportItem::new(game.clone());
+            for rom in &game.roms {
+                println!("ROM: {:?}", rom);
+
+                let sha1_bytes_res: Sha1Checksum =
+                    sha1_from_hex_string(rom.sha1.as_str()).expect("Invalid SHA1 in DAT");
+
+                // TODO: create FileSetImportModel
+                // import_item.file_set = ...;
+                let source_file_opt = sha1_to_file_map.get(&sha1_bytes_res);
+                match source_file_opt {
+                    Some(source_file) => {
+                        println!(
+                            "Matched ROM SHA1 {} to source file {}",
+                            rom.sha1,
+                            source_file.display()
+                        );
+                        import_item.dat_roms_available.push(rom.clone());
+                    }
+                    None => {
+                        println!("No match found for ROM SHA1 {}", rom.sha1);
+                        import_item.dat_roms_missing.push(rom.clone());
+                    }
+                }
+            }
+
+            // TODO: find which file metadata entries match this game and collect them into
+            // ImportItems
+        }
         StepAction::Continue
     }
 }
-pub struct CollectFilesMatchingDatFileStep;
-
-#[async_trait::async_trait]
-impl PipelineStep<MassImportContext> for CollectFilesMatchingDatFileStep {
-    fn name(&self) -> &'static str {
-        "collect_files_matching_dat_file_step"
-    }
-    fn should_execute(&self, context: &MassImportContext) -> bool {
-        context.dat_file.is_some() && !context.import_items.is_empty()
-    }
-    async fn execute(&self, context: &mut MassImportContext) -> StepAction {
-        // Implementation for collecting matching files goes here
-        println!("Collecting matching files...");
-        // TODO: check each file against the dat file entries
-        // get file set name and name for each from dat file
-        StepAction::Continue
-    }
-}
-
-pub struct CreateFileSetsStep;
-
-pub struct CreateReleasesStep;

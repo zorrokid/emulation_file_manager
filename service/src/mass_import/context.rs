@@ -1,6 +1,10 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
-use dat_file_parser::{DatFile, DatFileParserOps};
+use core_types::{ReadFile, Sha1Checksum};
+use dat_file_parser::{DatFile, DatFileParserOps, DatGame, DatRom};
 use file_import::FileImportOps;
 use file_metadata::reader_factory::create_metadata_reader;
 
@@ -22,13 +26,31 @@ pub enum ImportItemStatus {
 }
 
 pub struct ImportItem {
-    pub path: PathBuf,
+    pub dat_game: DatGame,
+    pub dat_roms_available: Vec<DatRom>,
+    pub dat_roms_missing: Vec<DatRom>,
     pub release_name: String,
     pub software_title_name: String,
     // This can be passed directly to create_file_set in file_import service to proceed with
-    // actual creation of file sets
+    // actual creation of file sets.
     pub file_set: Option<FileSetImportModel>,
     pub status: ImportItemStatus,
+}
+
+impl ImportItem {
+    pub fn new(dat_game: DatGame) -> Self {
+        let software_title_name = dat_game.name.clone();
+        let release_name = dat_game.description.clone();
+        ImportItem {
+            dat_game,
+            dat_roms_available: Vec::new(),
+            dat_roms_missing: Vec::new(),
+            release_name,
+            software_title_name,
+            file_set: None,
+            status: ImportItemStatus::Pending,
+        }
+    }
 }
 pub struct MassImportContext {
     pub source_path: PathBuf,
@@ -39,7 +61,9 @@ pub struct MassImportContext {
     pub dat_file: Option<DatFile>,
     pub reader_factory_fn: Box<SendReaderFactoryFn>,
     pub import_items: Vec<ImportItem>,
+    pub files: Vec<PathBuf>,
     pub failed_files: Vec<PathBuf>,
+    pub file_metadata: HashMap<PathBuf, Vec<ReadFile>>,
 }
 
 impl MassImportContext {
@@ -59,6 +83,8 @@ impl MassImportContext {
             reader_factory_fn,
             import_items: Vec::new(),
             failed_files: Vec::new(),
+            files: Vec::new(),
+            file_metadata: HashMap::new(),
         }
     }
 
@@ -80,6 +106,8 @@ impl MassImportContext {
             reader_factory_fn,
             import_items: Vec::new(),
             failed_files: Vec::new(),
+            files: Vec::new(),
+            file_metadata: HashMap::new(),
         }
     }
 
@@ -100,5 +128,24 @@ impl MassImportContext {
             })
             .unwrap_or_default();
         map
+    }
+
+    pub fn get_non_failed_files(&self) -> Vec<PathBuf> {
+        self.files
+            .iter()
+            .filter(|file| !self.failed_files.contains(file))
+            .cloned()
+            .collect()
+    }
+
+    pub fn build_sha1_to_file_map(&self) -> HashMap<Sha1Checksum, PathBuf> {
+        self.file_metadata
+            .iter()
+            .flat_map(|(path, metadata_entries)| {
+                metadata_entries
+                    .iter()
+                    .map(move |entry| (entry.sha1_checksum, path.clone()))
+            })
+            .collect()
     }
 }
