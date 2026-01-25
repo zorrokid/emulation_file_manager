@@ -4,7 +4,10 @@ use dat_file_parser::{DatFile, DatFileParserOps};
 use file_import::FileImportOps;
 use file_metadata::reader_factory::create_metadata_reader;
 
-use crate::file_system_ops::{FileSystemOps, StdFileSystemOps};
+use crate::{
+    file_import::model::FileSetImportModel,
+    file_system_ops::{FileSystemOps, StdFileSystemOps},
+};
 
 /// Type alias for a Send-able metadata reader factory function
 type SendReaderFactoryFn = dyn Fn(
@@ -12,6 +15,21 @@ type SendReaderFactoryFn = dyn Fn(
     ) -> Result<Box<dyn file_metadata::FileMetadataReader>, file_metadata::FileMetadataError>
     + Send;
 
+pub enum ImportItemStatus {
+    Pending,
+    Success,
+    Failed(String), // Error message
+}
+
+pub struct ImportItem {
+    pub path: PathBuf,
+    pub release_name: String,
+    pub software_title_name: String,
+    // This can be passed directly to create_file_set in file_import service to proceed with
+    // actual creation of file sets
+    pub file_set: Option<FileSetImportModel>,
+    pub status: ImportItemStatus,
+}
 pub struct MassImportContext {
     pub source_path: PathBuf,
     pub dat_file_path: Option<PathBuf>,
@@ -19,9 +37,9 @@ pub struct MassImportContext {
     pub dat_file_parser_ops: Box<dyn DatFileParserOps>,
     pub file_import_ops: Box<dyn FileImportOps>,
     pub dat_file: Option<DatFile>,
-    pub files: Vec<PathBuf>,
-    pub failed_files: Vec<(PathBuf, String)>,
     pub reader_factory_fn: Box<SendReaderFactoryFn>,
+    pub import_items: Vec<ImportItem>,
+    pub failed_files: Vec<PathBuf>,
 }
 
 impl MassImportContext {
@@ -37,10 +55,10 @@ impl MassImportContext {
             dat_file_path,
             dat_file_parser_ops,
             dat_file: None,
-            files: Vec::new(),
-            failed_files: Vec::new(),
             file_import_ops,
             reader_factory_fn,
+            import_items: Vec::new(),
+            failed_files: Vec::new(),
         }
     }
 
@@ -58,10 +76,10 @@ impl MassImportContext {
             dat_file_path,
             dat_file_parser_ops,
             dat_file: None,
-            files: Vec::new(),
-            failed_files: Vec::new(),
             file_import_ops,
             reader_factory_fn,
+            import_items: Vec::new(),
+            failed_files: Vec::new(),
         }
     }
 

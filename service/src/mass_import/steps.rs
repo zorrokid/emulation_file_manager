@@ -1,6 +1,6 @@
 use crate::{
     error::Error,
-    mass_import::context::MassImportContext,
+    mass_import::context::{ImportItem, ImportItemStatus, MassImportContext},
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
 
@@ -65,7 +65,13 @@ impl PipelineStep<MassImportContext> for ReadFilesStep {
             match file_res {
                 Ok(file) => {
                     tracing::info!("Found file: {}", file.path.display());
-                    context.files.push(file.path);
+                    context.import_items.push(ImportItem {
+                        path: file.path.clone(),
+                        status: ImportItemStatus::Pending,
+                        release_name: String::new(),
+                        software_title_name: String::new(),
+                        file_set: None,
+                    });
                 }
                 Err(e) => {
                     tracing::error!(
@@ -73,10 +79,7 @@ impl PipelineStep<MassImportContext> for ReadFilesStep {
                         path = %context.source_path.display(),
                         "Failed to read a file entry"
                     );
-                    context.failed_files.push((
-                        context.source_path.clone(),
-                        format!("Failed to read file entry: {}", e),
-                    ));
+                    context.failed_files.push(context.source_path.clone());
                 }
             }
         }
@@ -95,7 +98,7 @@ impl PipelineStep<MassImportContext> for CheckFilesStep {
     }
 
     fn should_execute(&self, context: &MassImportContext) -> bool {
-        !context.files.is_empty()
+        !context.import_items.is_empty()
     }
 
     async fn execute(&self, context: &mut MassImportContext) -> StepAction {
@@ -104,7 +107,8 @@ impl PipelineStep<MassImportContext> for CheckFilesStep {
             "Checking files in source path: {}",
             context.source_path.display()
         );
-        for file in &context.files {
+        for import_item in &mut context.import_items {
+            let file = &import_item.path;
             println!("Checking file: {}", file.display());
             let reader_res = (context.reader_factory_fn)(file);
             match reader_res {
@@ -122,13 +126,50 @@ impl PipelineStep<MassImportContext> for CheckFilesStep {
                         file.display(),
                         e
                     );
-                    context.failed_files.push((
-                        file.clone(),
-                        format!("Failed to create metadata reader: {}", e),
-                    ));
+                    import_item.status = ImportItemStatus::Failed(format!("Reader error: {}", e));
                 }
             }
         }
         StepAction::Continue
     }
 }
+
+pub struct CollectExistingFilesStep;
+
+#[async_trait::async_trait]
+impl PipelineStep<MassImportContext> for CollectExistingFilesStep {
+    fn name(&self) -> &'static str {
+        "collect_existing_files_step"
+    }
+    fn should_execute(&self, context: &MassImportContext) -> bool {
+        context.dat_file.is_some() && !context.import_items.is_empty()
+    }
+    async fn execute(&self, context: &mut MassImportContext) -> StepAction {
+        // Implementation for collecting existing files goes here
+        println!("Collecting existing files...");
+        // TODO: check each file if they exist in the database
+        StepAction::Continue
+    }
+}
+pub struct CollectFilesMatchingDatFileStep;
+
+#[async_trait::async_trait]
+impl PipelineStep<MassImportContext> for CollectFilesMatchingDatFileStep {
+    fn name(&self) -> &'static str {
+        "collect_files_matching_dat_file_step"
+    }
+    fn should_execute(&self, context: &MassImportContext) -> bool {
+        context.dat_file.is_some() && !context.import_items.is_empty()
+    }
+    async fn execute(&self, context: &mut MassImportContext) -> StepAction {
+        // Implementation for collecting matching files goes here
+        println!("Collecting matching files...");
+        // TODO: check each file against the dat file entries
+        // get file set name and name for each from dat file
+        StepAction::Continue
+    }
+}
+
+pub struct CreateFileSetsStep;
+
+pub struct CreateReleasesStep;
