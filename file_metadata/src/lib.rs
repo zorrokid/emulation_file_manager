@@ -1,7 +1,7 @@
 pub mod file_metadata_ops;
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fs::File,
     io::Read,
     path::{Path, PathBuf},
