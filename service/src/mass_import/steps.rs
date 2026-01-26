@@ -1,7 +1,10 @@
+use std::{collections::HashMap, path::PathBuf};
+
 use core_types::{Sha1Checksum, sha1_from_hex_string};
 
 use crate::{
     error::Error,
+    file_import::model::{FileImportSource, FileSetImportModel, ImportFileContent},
     mass_import::context::{ImportItem, MassImportContext},
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
@@ -158,12 +161,11 @@ impl PipelineStep<MassImportContext> for MapDatEntriesToImportItemsStep {
     async fn execute(&self, context: &mut MassImportContext) -> StepAction {
         // Implementation for mapping DAT entries to import items goes here
         println!("Mapping DAT entries to import items...");
-        let dat_games = context
+        let dat_file = context
             .dat_file
             .as_ref()
-            .expect("DAT file should be present")
-            .games
-            .clone();
+            .expect("DAT file should be present");
+        let dat_games = dat_file.games.clone();
 
         let sha1_to_file_map = context.build_sha1_to_file_map();
 
@@ -171,33 +173,62 @@ impl PipelineStep<MassImportContext> for MapDatEntriesToImportItemsStep {
             println!("DAT Game: {:?}", game);
 
             let mut import_item = ImportItem::new(game.clone());
+            let mut import_files: HashMap<PathBuf, Vec<ImportFileContent>> = HashMap::new();
             for rom in &game.roms {
-                println!("ROM: {:?}", rom);
-
                 let sha1_bytes_res: Sha1Checksum =
-                    sha1_from_hex_string(rom.sha1.as_str()).expect("Invalid SHA1 in DAT");
+                    sha1_from_hex_string(&rom.sha1).expect("Invalid SHA1 in DAT");
 
-                // TODO: create FileSetImportModel
-                // import_item.file_set = ...;
-                let source_file_opt = sha1_to_file_map.get(&sha1_bytes_res);
-                match source_file_opt {
-                    Some(source_file) => {
-                        println!(
-                            "Matched ROM SHA1 {} to source file {}",
-                            rom.sha1,
-                            source_file.display()
-                        );
-                        import_item.dat_roms_available.push(rom.clone());
-                    }
-                    None => {
-                        println!("No match found for ROM SHA1 {}", rom.sha1);
-                        import_item.dat_roms_missing.push(rom.clone());
-                    }
+                if let Some(source_file) = sha1_to_file_map.get(&sha1_bytes_res) {
+                    println!(
+                        "Matched ROM SHA1 {} to source file {}",
+                        rom.sha1,
+                        source_file.display()
+                    );
+                    import_item.dat_roms_available.push(rom.clone());
+                    import_files
+                        .entry(source_file.clone())
+                        .or_insert_with(Vec::new)
+                        .push(ImportFileContent {
+                            file_name: rom.name.clone(),
+                            sha1_checksum: sha1_bytes_res,
+                            file_size: rom.size,
+                        });
+                } else {
+                    println!("No matching source file found for ROM SHA1 {}", rom.sha1);
+                    import_item.dat_roms_missing.push(rom.clone());
                 }
             }
 
-            // TODO: find which file metadata entries match this game and collect them into
-            // ImportItems
+            let item_types = context
+                .item_type
+                .map_or_else(Vec::new, |item_type| vec![item_type]);
+
+            let import_files: Vec<FileImportSource> = import_files
+                .into_iter()
+                .map(|(path, contents)| FileImportSource {
+                    path,
+                    content: contents
+                        .iter()
+                        .map(|c| (c.sha1_checksum, c.clone()))
+                        .collect(),
+                })
+                .collect();
+
+            import_item.file_set = Some(FileSetImportModel {
+                import_files,
+                selected_files: vec![],
+
+                system_ids: vec![context.system_id],
+                file_type: context.file_type,
+
+                source: format!("{} {}", dat_file.header.name, dat_file.header.version),
+                file_set_name: game.name.clone(),
+                file_set_file_name: game.name.clone(),
+
+                item_ids: vec![],
+                item_types,
+            });
+            context.import_items.push(import_item);
         }
         StepAction::Continue
     }

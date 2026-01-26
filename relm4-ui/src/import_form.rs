@@ -354,10 +354,17 @@ impl Component for ImportForm {
                     let dat_file_path = self.dat_file_path.clone();
                     let directory_path = directory_path.clone();
                     let system_id = selected_system.id;
+                    let item_type = self.selected_item_type;
                     let mass_import_service = Arc::clone(&self.mass_import_service);
                     sender.oneshot_command(async move {
                         let result = mass_import_service
-                            .import(system_id, directory_path, dat_file_path, file_type)
+                            .import(
+                                system_id,
+                                directory_path,
+                                dat_file_path,
+                                file_type,
+                                item_type,
+                            )
                             .await;
                         CommandMsg::ProcessImportResult(result)
                     });

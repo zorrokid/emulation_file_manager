@@ -1,6 +1,7 @@
 pub mod events;
 pub mod item_type;
 
+use hex::FromHex;
 use serde::{Deserialize, Serialize};
 use std::string::ToString;
 use strum_macros::{Display, EnumIter};
@@ -9,6 +10,13 @@ pub type Sha1Checksum = [u8; 20];
 
 pub fn sha1_bytes_to_hex_string(checksum: &Sha1Checksum) -> String {
     checksum.iter().map(|b| format!("{:02x}", b)).collect()
+}
+
+pub fn sha1_from_hex_string(hex_str: &str) -> Result<Sha1Checksum, CoreTypeError> {
+    let bytes = <[u8; 20]>::from_hex(hex_str).map_err(|_| {
+        CoreTypeError::ConversionError("Failed to convert hex string to Sha1Checksum".to_string())
+    })?;
+    Ok(bytes)
 }
 
 pub type FileSize = u64;

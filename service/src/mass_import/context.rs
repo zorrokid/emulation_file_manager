@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use core_types::{ReadFile, Sha1Checksum};
+use core_types::{FileType, ReadFile, Sha1Checksum, item_type::ItemType};
 use dat_file_parser::{DatFile, DatFileParserOps, DatGame, DatRom};
 use file_import::FileImportOps;
 use file_metadata::reader_factory::create_metadata_reader;
@@ -64,10 +64,19 @@ pub struct MassImportContext {
     pub files: Vec<PathBuf>,
     pub failed_files: Vec<PathBuf>,
     pub file_metadata: HashMap<PathBuf, Vec<ReadFile>>,
+    pub file_type: FileType,
+    pub item_type: Option<ItemType>,
+    pub system_id: i64,
 }
 
 impl MassImportContext {
-    pub fn new(source_path: PathBuf, dat_file_path: Option<PathBuf>) -> Self {
+    pub fn new(
+        source_path: PathBuf,
+        dat_file_path: Option<PathBuf>,
+        file_type: FileType,
+        item_type: Option<ItemType>,
+        system_id: i64,
+    ) -> Self {
         let fs_ops: Box<dyn FileSystemOps> = Box::new(StdFileSystemOps);
         let dat_file_parser_ops: Box<dyn DatFileParserOps> =
             Box::new(dat_file_parser::DefaultDatParser);
@@ -85,6 +94,9 @@ impl MassImportContext {
             failed_files: Vec::new(),
             files: Vec::new(),
             file_metadata: HashMap::new(),
+            file_type,
+            item_type,
+            system_id,
         }
     }
 
@@ -95,6 +107,9 @@ impl MassImportContext {
         dat_file_parser_ops: Box<dyn DatFileParserOps>,
         file_import_ops: Box<dyn FileImportOps>,
         reader_factory_fn: Box<SendReaderFactoryFn>,
+        file_type: FileType,
+        item_type: Option<ItemType>,
+        system_id: i64,
     ) -> Self {
         MassImportContext {
             source_path,
@@ -108,6 +123,9 @@ impl MassImportContext {
             failed_files: Vec::new(),
             files: Vec::new(),
             file_metadata: HashMap::new(),
+            file_type,
+            item_type,
+            system_id,
         }
     }
 

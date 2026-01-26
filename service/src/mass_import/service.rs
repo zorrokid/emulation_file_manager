@@ -1,6 +1,6 @@
 use std::{path::PathBuf, sync::Arc};
 
-use core_types::FileType;
+use core_types::{FileType, item_type::ItemType};
 use database::repository_manager::RepositoryManager;
 
 use crate::{
@@ -39,6 +39,7 @@ impl MassImportService {
         source_path: PathBuf,
         dat_file_path: Option<PathBuf>,
         file_type: FileType,
+        item_type: Option<ItemType>,
     ) -> Result<(), Error> {
         tracing::info!(
             system_id = system_id,
@@ -46,7 +47,8 @@ impl MassImportService {
             dat_file_path = ?dat_file_path,
             file_type = ?file_type,
             "Starting mass import process...");
-        let mut context = MassImportContext::new(source_path, dat_file_path);
+        let mut context =
+            MassImportContext::new(source_path, dat_file_path, file_type, item_type, system_id);
         let pipeline = Pipeline::<MassImportContext>::new();
         tracing::info!("Mass import process completed.");
         let res = pipeline.execute(&mut context).await;
