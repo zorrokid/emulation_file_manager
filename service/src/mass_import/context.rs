@@ -235,7 +235,7 @@ impl MassImportContext {
     }
 
     pub fn get_import_items(&self) -> Vec<ImportItem> {
-        if let Some(dat_file) = &self.dat_file {
+        self.dat_file.as_ref().map_or(Vec::new(), |dat_file| {
             let mut import_items: Vec<ImportItem> = Vec::new();
             tracing::info!("Mapping DAT entries to import items...");
             let sha1_to_file_map = self.build_sha1_to_file_map();
@@ -243,10 +243,7 @@ impl MassImportContext {
                 import_items.push(self.get_import_item(game, &dat_file.header, &sha1_to_file_map));
             });
             import_items
-        } else {
-            tracing::warn!("No DAT file present in context; returning empty import items.");
-            vec![]
-        }
+        })
     }
 }
 
