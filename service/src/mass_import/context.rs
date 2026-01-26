@@ -1,7 +1,7 @@
 use std::{collections::HashMap, path::PathBuf};
 
 use core_types::{FileType, ReadFile, Sha1Checksum, item_type::ItemType, sha1_from_hex_string};
-use dat_file_parser::{DatFile, DatFileParserOps, DatGame, DatRom};
+use dat_file_parser::{DatFile, DatFileParserOps, DatGame, DatHeader, DatRom};
 use file_import::FileImportOps;
 use file_metadata::reader_factory::create_metadata_reader;
 
@@ -164,76 +164,84 @@ impl MassImportContext {
             .collect()
     }
 
+    fn get_import_item(
+        &self,
+        game: &DatGame,
+        header: &DatHeader,
+        sha1_to_file_map: &HashMap<Sha1Checksum, PathBuf>,
+    ) -> ImportItem {
+        tracing::info!(game = game.name.as_str(), "Processing DAT game");
+
+        let mut import_item = ImportItem::new(game.clone());
+        let mut import_files: HashMap<PathBuf, Vec<ImportFileContent>> = HashMap::new();
+        for rom in &game.roms {
+            let sha1_bytes_res: Sha1Checksum =
+                sha1_from_hex_string(&rom.sha1).expect("Invalid SHA1 in DAT");
+
+            if let Some(source_file) = sha1_to_file_map.get(&sha1_bytes_res) {
+                tracing::info!(
+                    rom_sha1 = rom.sha1.as_str(),
+                    source_file = source_file.display().to_string().as_str(),
+                    "Matched ROM to source file"
+                );
+                import_item.dat_roms_available.push(rom.clone());
+                import_files
+                    .entry(source_file.clone())
+                    .or_default()
+                    .push(ImportFileContent {
+                        file_name: rom.name.clone(),
+                        sha1_checksum: sha1_bytes_res,
+                        file_size: rom.size,
+                    });
+            } else {
+                tracing::warn!(
+                    rom_sha1 = rom.sha1.as_str(),
+                    "No matching source file found for ROM"
+                );
+                import_item.dat_roms_missing.push(rom.clone());
+            }
+        }
+
+        let item_types = self
+            .item_type
+            .map_or_else(Vec::new, |item_type| vec![item_type]);
+
+        let import_files: Vec<FileImportSource> = import_files
+            .into_iter()
+            .map(|(path, contents)| FileImportSource {
+                path,
+                content: contents
+                    .iter()
+                    .map(|c| (c.sha1_checksum, c.clone()))
+                    .collect(),
+            })
+            .collect();
+
+        import_item.file_set = Some(FileSetImportModel {
+            import_files,
+            selected_files: vec![],
+
+            system_ids: vec![self.system_id],
+            file_type: self.file_type,
+
+            source: format!("{} {}", header.name, header.version),
+            file_set_name: game.name.clone(),
+            file_set_file_name: game.name.clone(),
+
+            item_ids: vec![],
+            item_types,
+        });
+        import_item
+    }
+
     pub fn get_import_items(&self) -> Vec<ImportItem> {
         if let Some(dat_file) = &self.dat_file {
             let mut import_items: Vec<ImportItem> = Vec::new();
             tracing::info!("Mapping DAT entries to import items...");
-
             let sha1_to_file_map = self.build_sha1_to_file_map();
-
-            for game in &dat_file.games {
-                tracing::info!(game = game.name.as_str(), "Processing DAT game");
-
-                let mut import_item = ImportItem::new(game.clone());
-                let mut import_files: HashMap<PathBuf, Vec<ImportFileContent>> = HashMap::new();
-                for rom in &game.roms {
-                    let sha1_bytes_res: Sha1Checksum =
-                        sha1_from_hex_string(&rom.sha1).expect("Invalid SHA1 in DAT");
-
-                    if let Some(source_file) = sha1_to_file_map.get(&sha1_bytes_res) {
-                        tracing::info!(
-                            rom_sha1 = rom.sha1.as_str(),
-                            source_file = source_file.display().to_string().as_str(),
-                            "Matched ROM to source file"
-                        );
-                        import_item.dat_roms_available.push(rom.clone());
-                        import_files.entry(source_file.clone()).or_default().push(
-                            ImportFileContent {
-                                file_name: rom.name.clone(),
-                                sha1_checksum: sha1_bytes_res,
-                                file_size: rom.size,
-                            },
-                        );
-                    } else {
-                        tracing::warn!(
-                            rom_sha1 = rom.sha1.as_str(),
-                            "No matching source file found for ROM"
-                        );
-                        import_item.dat_roms_missing.push(rom.clone());
-                    }
-                }
-
-                let item_types = self
-                    .item_type
-                    .map_or_else(Vec::new, |item_type| vec![item_type]);
-
-                let import_files: Vec<FileImportSource> = import_files
-                    .into_iter()
-                    .map(|(path, contents)| FileImportSource {
-                        path,
-                        content: contents
-                            .iter()
-                            .map(|c| (c.sha1_checksum, c.clone()))
-                            .collect(),
-                    })
-                    .collect();
-
-                import_item.file_set = Some(FileSetImportModel {
-                    import_files,
-                    selected_files: vec![],
-
-                    system_ids: vec![self.system_id],
-                    file_type: self.file_type,
-
-                    source: format!("{} {}", dat_file.header.name, dat_file.header.version),
-                    file_set_name: game.name.clone(),
-                    file_set_file_name: game.name.clone(),
-
-                    item_ids: vec![],
-                    item_types,
-                });
-                import_items.push(import_item);
-            }
+            dat_file.games.iter().for_each(|game| {
+                import_items.push(self.get_import_item(game, &dat_file.header, &sha1_to_file_map));
+            });
             import_items
         } else {
             tracing::warn!("No DAT file present in context; returning empty import items.");
