@@ -187,7 +187,7 @@ impl PipelineStep<MassImportContext> for MapDatEntriesToImportItemsStep {
                     import_item.dat_roms_available.push(rom.clone());
                     import_files
                         .entry(source_file.clone())
-                        .or_insert_with(Vec::new)
+                        .or_default()
                         .push(ImportFileContent {
                             file_name: rom.name.clone(),
                             sha1_checksum: sha1_bytes_res,
