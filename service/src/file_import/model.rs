@@ -160,6 +160,8 @@ pub struct FileSetImportModel {
     pub file_type: FileType,
     pub item_ids: Vec<i64>,
     pub item_types: Vec<ItemType>,
+    /// Creates a release and links file set to it, creates also a new software title and links the release to it.
+    pub create_release: bool,
 }
 
 #[derive(Debug)]

@@ -147,6 +147,9 @@ impl PipelineStep<MassImportContext> for ReadFileMetadataStep {
     }
 }
 
-// TODO: import file sets
-//
-// TODO: create software titles and releases
+// TODO: import file sets and create software titles and releases
+// - add file set needs optional create software title and release flags
+// - better do that at the same time so rollback is easier if something fails
+// - 1. write files to storage
+// - 2. if ok create file set, software title, release in a transaction
+// - 3. if ok commit transaction otherwise delete written files

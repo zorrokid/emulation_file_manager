@@ -35,16 +35,21 @@ pub struct ImportItem {
 }
 
 impl ImportItem {
-    pub fn new(dat_game: DatGame) -> Self {
+    pub fn new(
+        dat_game: DatGame,
+        file_set: Option<FileSetImportModel>,
+        dat_roms_available: Vec<DatRom>,
+        dat_roms_missing: Vec<DatRom>,
+    ) -> Self {
         let software_title_name = dat_game.name.clone();
         let release_name = dat_game.description.clone();
         ImportItem {
             dat_game,
-            dat_roms_available: Vec::new(),
-            dat_roms_missing: Vec::new(),
+            dat_roms_available,
+            dat_roms_missing,
             release_name,
             software_title_name,
-            file_set: None,
+            file_set,
             status: ImportItemStatus::Pending,
         }
     }
@@ -172,8 +177,10 @@ impl MassImportContext {
     ) -> ImportItem {
         tracing::info!(game = game.name.as_str(), "Processing DAT game");
 
-        let mut import_item = ImportItem::new(game.clone());
         let mut import_files: HashMap<PathBuf, Vec<ImportFileContent>> = HashMap::new();
+
+        let mut available_roms = vec![];
+        let mut missing_roms = vec![];
         for rom in &game.roms {
             let sha1_bytes_res: Sha1Checksum =
                 sha1_from_hex_string(&rom.sha1).expect("Invalid SHA1 in DAT");
@@ -184,7 +191,7 @@ impl MassImportContext {
                     source_file = source_file.display().to_string().as_str(),
                     "Matched ROM to source file"
                 );
-                import_item.dat_roms_available.push(rom.clone());
+                available_roms.push(rom.clone());
                 import_files
                     .entry(source_file.clone())
                     .or_default()
@@ -198,27 +205,21 @@ impl MassImportContext {
                     rom_sha1 = rom.sha1.as_str(),
                     "No matching source file found for ROM"
                 );
-                import_item.dat_roms_missing.push(rom.clone());
+                missing_roms.push(rom.clone());
             }
         }
 
-        let item_types = self
-            .item_type
-            .map_or_else(Vec::new, |item_type| vec![item_type]);
-
-        let import_files: Vec<FileImportSource> = import_files
-            .into_iter()
-            .map(|(path, contents)| FileImportSource {
-                path,
-                content: contents
-                    .iter()
-                    .map(|c| (c.sha1_checksum, c.clone()))
-                    .collect(),
-            })
-            .collect();
-
-        import_item.file_set = Some(FileSetImportModel {
-            import_files,
+        let file_set = Some(FileSetImportModel {
+            import_files: import_files
+                .into_iter()
+                .map(|(path, contents)| FileImportSource {
+                    path,
+                    content: contents
+                        .iter()
+                        .map(|c| (c.sha1_checksum, c.clone()))
+                        .collect(),
+                })
+                .collect(),
             selected_files: vec![],
 
             system_ids: vec![self.system_id],
@@ -229,9 +230,12 @@ impl MassImportContext {
             file_set_file_name: game.name.clone(),
 
             item_ids: vec![],
-            item_types,
+            item_types: self
+                .item_type
+                .map_or_else(Vec::new, |item_type| vec![item_type]),
+            create_release: true,
         });
-        import_item
+        ImportItem::new(game.clone(), file_set, available_roms, missing_roms)
     }
 
     pub fn get_import_items(&self) -> Vec<ImportItem> {
