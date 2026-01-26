@@ -389,9 +389,6 @@ mod tests {
         assert_eq!(file_set_2.import_files[0].path, file2_path);
 
         // Verify: Missing ROM
-        assert_eq!(
-            import_items[1].dat_roms_missing[0].name,
-            "game2b.rom"
-        );
+        assert_eq!(import_items[1].dat_roms_missing[0].name, "game2b.rom");
     }
 }
