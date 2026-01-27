@@ -228,10 +228,6 @@ impl FileSetRepository {
         let file_sets = query_builder.fetch_all(&*self.pool).await?;
         Ok(file_sets)
     }
-
-    /// Adds a new file set along with its associated files and system links.
-    /// Checks for existing file info entries to avoid duplicates.
-    /// Returns the ID of the newly created file set.
     pub async fn add_file_set(
         &self,
         file_set_name: &str,
@@ -241,13 +237,40 @@ impl FileSetRepository {
         files_in_fileset: &[ImportedFile],
         system_ids: &[i64],
     ) -> Result<i64, Error> {
+        let mut transaction = self.pool.begin().await?;
+        let file_set_id = self
+            .add_file_set_with_tx(
+                file_set_name,
+                file_set_file_name,
+                file_type,
+                source,
+                files_in_fileset,
+                system_ids,
+                &mut transaction,
+            )
+            .await?;
+        transaction.commit().await?;
+        Ok(file_set_id)
+    }
+
+    /// Adds a new file set along with its associated files and system links.
+    /// Checks for existing file info entries to avoid duplicates.
+    /// Returns the ID of the newly created file set.
+    pub async fn add_file_set_with_tx(
+        &self,
+        file_set_name: &str,
+        file_set_file_name: &str,
+        file_type: &FileType,
+        source: &str,
+        files_in_fileset: &[ImportedFile],
+        system_ids: &[i64],
+        transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    ) -> Result<i64, Error> {
         println!(
             "Adding file set: {}, {} file type: {:?}, files: {:?}, systems: {:?}",
             file_set_name, file_set_file_name, file_type, files_in_fileset, system_ids
         );
         let file_type = file_type.to_db_int();
-
-        let mut transaction = self.pool.begin().await?;
 
         // First create the file set
 
@@ -263,7 +286,7 @@ impl FileSetRepository {
             file_set_name,
             source,
         )
-        .execute(&mut *transaction)
+        .execute(&mut **transaction)
         .await?;
         let file_set_id = result.last_insert_rowid();
         println!("File set created with ID: {}", file_set_id);
@@ -278,7 +301,7 @@ impl FileSetRepository {
                 checksum,
                 file_type
             )
-            .fetch_optional(&mut *transaction)
+            .fetch_optional(&mut **transaction)
             .await?;
 
             println!(
@@ -304,7 +327,7 @@ impl FileSetRepository {
                         archive_file_name,
                         file_type
                     )
-                    .execute(&mut *transaction)
+                    .execute(&mut **transaction)
                     .await?;
 
                     file_info_result.last_insert_rowid()
@@ -326,7 +349,7 @@ impl FileSetRepository {
                  WHERE file_info_id = ?",
                 file_info_id
             )
-            .fetch_all(&mut *transaction)
+            .fetch_all(&mut **transaction)
             .await?
             .into_iter()
             .map(|row| row.system_id)
@@ -353,14 +376,14 @@ impl FileSetRepository {
                     file_info_id,
                     system_id
                 )
-                .execute(&mut *transaction)
+                .execute(&mut **transaction)
                 .await?;
             }
 
             // insert file_set_file_info
 
             // Validate that file_type matches between FileSet and FileInfo
-            self.validate_file_type_consistency(&mut transaction, file_set_id, file_info_id)
+            self.validate_file_type_consistency(transaction, file_set_id, file_info_id)
                 .await
                 .map_err(|e| Error::DbError(e.to_string()))?;
 
@@ -376,11 +399,9 @@ impl FileSetRepository {
                 file.original_file_name,
                 0 // TODO: get sort order from UI
             )
-            .execute(&mut *transaction)
+            .execute(&mut **transaction)
             .await?;
         }
-
-        transaction.commit().await?;
 
         println!("File set with ID {} added successfully", file_set_id);
 
