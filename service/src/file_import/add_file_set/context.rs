@@ -24,6 +24,7 @@ pub struct AddFileSetContext {
 
     pub system_ids: Vec<i64>,
     pub file_import_data: FileImportData,
+    pub create_release: bool,
 
     // File set name and file name for file set that will be created from the set of import files.
     pub file_set_name: String,
@@ -49,6 +50,7 @@ pub struct FileSetParams {
     pub item_ids: Vec<i64>,
     pub item_types: Vec<ItemType>,
     pub system_ids: Vec<i64>,
+    pub create_release: bool,
 }
 
 impl AddFileSetContext {
@@ -69,6 +71,7 @@ impl AddFileSetContext {
             item_types: file_set_params.item_types,
             source: file_set_params.source,
             system_ids: file_set_params.system_ids,
+            create_release: file_set_params.create_release,
 
             imported_files: HashMap::new(),
             file_set_id: None,
@@ -124,7 +127,7 @@ impl AddFileSetContext {
 
                 let original_file_name = match import_files
                     .get(&file_info.sha1_checksum)
-                    // TODO: fix this
+                    // TODO: fix this // NOTE 27.1.2026: This haven't happened for a whle now.
                     // - I was importing a single file, it shouldn't be in both imported and
                     // existing files?
                     // - Another thing is that when file is in existing files, it's checksum should
@@ -247,6 +250,7 @@ mod tests {
             item_ids: vec![],
             failed_steps: HashMap::new(),
             item_types: vec![],
+            create_release: false,
         }
     }
 

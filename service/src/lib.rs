@@ -6,6 +6,7 @@ pub mod external_executable_runner;
 pub mod file_import;
 pub mod file_set_deletion;
 pub mod file_set_download;
+pub mod file_set_service;
 pub mod file_system_ops;
 pub mod file_type_migration;
 pub mod mass_import;

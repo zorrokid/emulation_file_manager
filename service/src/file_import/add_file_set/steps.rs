@@ -21,6 +21,8 @@ impl PipelineStep<AddFileSetContext> for UpdateDatabaseStep {
         }
 
         let file_type = context.get_file_import_model().file_type;
+        // TODO: check if release should be created, create release with software title if needed
+        // and link file set to the release in the same transaction
         match context
             .repository_manager
             .get_file_set_repository()
@@ -116,44 +118,6 @@ impl PipelineStep<AddFileSetContext> for AddFileSetItemTypesStep {
     }
 }
 
-/* TODO: probably not needed, link items to file set when creating release items
- *
- * pub struct AddFileSetItemsStep;
-
-#[async_trait::async_trait]
-impl PipelineStep<AddFileSetContext> for AddFileSetItemsStep {
-    fn name(&self) -> &'static str {
-        "add_file_set_items"
-    }
-
-    fn should_execute(&self, context: &AddFileSetContext) -> bool {
-        !context.item_ids.is_empty() && context.file_set_id.is_some()
-    }
-
-    async fn execute(&self, context: &mut AddFileSetContext) -> StepAction {
-        let res = context
-            .repository_manager
-            .get_release_item_repository()
-            .link_file_set_to_items(&context.item_ids, context.file_set_id.unwrap())
-            .await;
-
-        match res {
-            Ok(_) => tracing::info!("File set linked to item(s)"),
-            Err(err) => {
-                tracing::error!(error = %err,
-                    "Link file set to items operation failed.");
-                // No point to abort here, add to failed steps and continue
-                context.failed_steps.insert(
-                    self.name().to_string(),
-                    Error::DbError(format!("Error linking file set to items: {}", err)),
-                );
-            }
-        }
-
-        StepAction::Continue
-    }
-}*/
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -192,6 +156,7 @@ mod tests {
                 file_set_file_name: "test_game.zip".to_string(),
                 item_ids: vec![],
                 item_types: vec![],
+                create_release: false,
             },
         )
     }
@@ -302,55 +267,6 @@ mod tests {
         let file_set_id = context.file_set_id.unwrap();
         assert!(file_set_id > 0);
     }
-
-    /* TODO: probably not needed, link items to file set when creating release items
-     *
-     * #[async_std::test]
-    async fn test_add_file_set_items_step() {
-        let pool = Arc::new(setup_test_db().await);
-        let repository_manager = Arc::new(RepositoryManager::new(pool));
-
-        // insert release, need for release_item
-
-        let release_id = repository_manager
-            .get_release_repository()
-            .add_release("")
-            .await
-            .unwrap();
-
-        // insert file set, need file set id for linking
-        let file_set_id = repository_manager
-            .get_file_set_repository()
-            .add_file_set("", "", &FileType::Rom, "", &[], &[])
-            .await
-            .unwrap();
-
-        // insert release item, need for linking
-        let release_item = repository_manager
-            .get_release_item_repository()
-            .create_item(release_id, ItemType::Manual, None)
-            .await
-            .unwrap();
-
-        let mut context = create_test_context(None).await;
-        context.item_ids = vec![release_item];
-        context.file_set_id = Some(file_set_id);
-
-        let step = AddFileSetItemsStep;
-        assert!(step.should_execute(&context));
-
-        let res = step.execute(&mut context).await;
-        assert_eq!(res, StepAction::Continue);
-    }
-
-    #[async_std::test]
-    async fn test_add_file_set_items_step_without_items() {
-        let mut context = create_test_context(None).await;
-        context.item_ids = vec![];
-        context.file_set_id = Some(123);
-        let step = AddFileSetItemsStep;
-        assert!(!step.should_execute(&context));
-    }*/
 
     #[async_std::test]
     async fn test_add_file_set_item_types_step() {

@@ -125,6 +125,7 @@ impl FileImportService {
                 item_ids: import_model.item_ids,
                 system_ids: import_model.system_ids,
                 item_types: import_model.item_types,
+                create_release: import_model.create_release,
             },
         );
 
