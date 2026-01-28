@@ -13,6 +13,7 @@ use crate::repository::{
 
 #[derive(Debug)]
 pub struct RepositoryManager {
+    pool: Arc<Pool<Sqlite>>,
     file_info_repository: FileInfoRepository,
     file_set_repository: FileSetRepository,
     emulator_repository: EmulatorRepository,
@@ -55,7 +56,12 @@ impl RepositoryManager {
             file_sync_log_repository,
             release_item_repository,
             dat_repository,
+            pool,
         }
+    }
+
+    pub async fn begin_transaction(&self) -> Result<sqlx::Transaction<'_, Sqlite>, sqlx::Error> {
+        self.pool.begin().await
     }
 
     pub fn get_file_info_repository(&self) -> &FileInfoRepository {

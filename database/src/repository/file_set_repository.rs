@@ -5,17 +5,9 @@ use sqlx::{FromRow, Pool, Row, Sqlite, sqlite::SqliteRow};
 
 use crate::{
     database_error::{DatabaseError, Error},
+    helper::AddFileSetParams,
     models::{FileSet, FileSetFileInfo},
 };
-
-pub struct AddFileSetParams<'a> {
-    pub file_set_name: &'a str,
-    pub file_set_file_name: &'a str,
-    pub file_type: &'a FileType,
-    pub source: &'a str,
-    pub files_in_fileset: &'a [ImportedFile],
-    pub system_ids: &'a [i64],
-}
 
 #[derive(Debug)]
 pub struct FileSetRepository {
@@ -261,7 +253,7 @@ impl FileSetRepository {
             files_in_fileset,
             system_ids,
         };
-        let file_set_id = self.add_file_set_with_tx(params, &mut transaction).await?;
+        let file_set_id = self.add_file_set_with_tx(&mut transaction, params).await?;
         transaction.commit().await?;
         Ok(file_set_id)
     }
@@ -271,8 +263,8 @@ impl FileSetRepository {
     /// Returns the ID of the newly created file set.
     pub async fn add_file_set_with_tx(
         &self,
-        params: AddFileSetParams<'_>,
         transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        params: AddFileSetParams<'_>,
     ) -> Result<i64, Error> {
         let AddFileSetParams {
             file_set_name,

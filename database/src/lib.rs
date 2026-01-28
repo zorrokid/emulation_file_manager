@@ -1,5 +1,6 @@
 pub mod database_error;
 mod database_path;
+pub mod helper;
 pub mod models;
 mod repository;
 pub mod repository_manager;
@@ -7,7 +8,7 @@ pub mod repository_manager;
 use std::sync::Arc;
 
 use database_path::get_database_file_path;
-use sqlx::{migrate, sqlite::SqliteConnectOptions, Pool, Sqlite, SqlitePool};
+use sqlx::{Pool, Sqlite, SqlitePool, migrate, sqlite::SqliteConnectOptions};
 
 pub async fn get_db_pool() -> Result<Arc<Pool<Sqlite>>, sqlx::Error> {
     let db_file_path = get_database_file_path();
