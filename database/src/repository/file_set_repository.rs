@@ -8,6 +8,15 @@ use crate::{
     models::{FileSet, FileSetFileInfo},
 };
 
+pub struct AddFileSetParams<'a> {
+    pub file_set_name: &'a str,
+    pub file_set_file_name: &'a str,
+    pub file_type: &'a FileType,
+    pub source: &'a str,
+    pub files_in_fileset: &'a [ImportedFile],
+    pub system_ids: &'a [i64],
+}
+
 #[derive(Debug)]
 pub struct FileSetRepository {
     pool: Arc<Pool<Sqlite>>,
@@ -20,12 +29,18 @@ impl FileSetRepository {
 
     /// Validates that file_type of FileInfo matches FileSet.
     /// This ensures consistency between the file_type stored in both tables.
-    async fn validate_file_type_consistency(
+    ///
+    /// Can we called with Exectutor e.g. pool (&self.pool) or executor from transaction (&mut *transaction),
+    /// anything that implements Executor (avoids overlapping mutable borrows).
+    async fn validate_file_type_consistency<'e, E>(
         &self,
-        transaction: &mut sqlx::Transaction<'_, Sqlite>,
+        executor: E,
         file_set_id: i64,
         file_info_id: i64,
-    ) -> Result<(), DatabaseError> {
+    ) -> Result<(), DatabaseError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+    {
         let result = sqlx::query!(
             "SELECT 
                 fs.file_type as file_set_type,
@@ -35,7 +50,7 @@ impl FileSetRepository {
             file_set_id,
             file_info_id
         )
-        .fetch_optional(&mut **transaction)
+        .fetch_optional(executor)
         .await?;
 
         if let Some(row) = result {
@@ -238,17 +253,15 @@ impl FileSetRepository {
         system_ids: &[i64],
     ) -> Result<i64, Error> {
         let mut transaction = self.pool.begin().await?;
-        let file_set_id = self
-            .add_file_set_with_tx(
-                file_set_name,
-                file_set_file_name,
-                file_type,
-                source,
-                files_in_fileset,
-                system_ids,
-                &mut transaction,
-            )
-            .await?;
+        let params = AddFileSetParams {
+            file_set_name,
+            file_set_file_name,
+            file_type,
+            source,
+            files_in_fileset,
+            system_ids,
+        };
+        let file_set_id = self.add_file_set_with_tx(params, &mut transaction).await?;
         transaction.commit().await?;
         Ok(file_set_id)
     }
@@ -258,19 +271,22 @@ impl FileSetRepository {
     /// Returns the ID of the newly created file set.
     pub async fn add_file_set_with_tx(
         &self,
-        file_set_name: &str,
-        file_set_file_name: &str,
-        file_type: &FileType,
-        source: &str,
-        files_in_fileset: &[ImportedFile],
-        system_ids: &[i64],
+        params: AddFileSetParams<'_>,
         transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     ) -> Result<i64, Error> {
-        println!(
-            "Adding file set: {}, {} file type: {:?}, files: {:?}, systems: {:?}",
-            file_set_name, file_set_file_name, file_type, files_in_fileset, system_ids
-        );
+        let AddFileSetParams {
+            file_set_name,
+            file_set_file_name,
+            file_type,
+            source,
+            files_in_fileset,
+            system_ids,
+        } = params;
+
         let file_type = file_type.to_db_int();
+
+        // bind trasaction connection (tx is &mut SqliteConnection)
+        let tx = &mut **transaction;
 
         // First create the file set
 
@@ -286,7 +302,7 @@ impl FileSetRepository {
             file_set_name,
             source,
         )
-        .execute(&mut **transaction)
+        .execute(&mut *tx)
         .await?;
         let file_set_id = result.last_insert_rowid();
         println!("File set created with ID: {}", file_set_id);
@@ -301,7 +317,7 @@ impl FileSetRepository {
                 checksum,
                 file_type
             )
-            .fetch_optional(&mut **transaction)
+            .fetch_optional(&mut *tx)
             .await?;
 
             println!(
@@ -327,7 +343,7 @@ impl FileSetRepository {
                         archive_file_name,
                         file_type
                     )
-                    .execute(&mut **transaction)
+                    .execute(&mut *tx)
                     .await?;
 
                     file_info_result.last_insert_rowid()
@@ -349,7 +365,7 @@ impl FileSetRepository {
                  WHERE file_info_id = ?",
                 file_info_id
             )
-            .fetch_all(&mut **transaction)
+            .fetch_all(&mut *tx)
             .await?
             .into_iter()
             .map(|row| row.system_id)
@@ -376,14 +392,14 @@ impl FileSetRepository {
                     file_info_id,
                     system_id
                 )
-                .execute(&mut **transaction)
+                .execute(&mut *tx)
                 .await?;
             }
 
             // insert file_set_file_info
 
             // Validate that file_type matches between FileSet and FileInfo
-            self.validate_file_type_consistency(transaction, file_set_id, file_info_id)
+            self.validate_file_type_consistency(&mut *tx, file_set_id, file_info_id)
                 .await
                 .map_err(|e| Error::DbError(e.to_string()))?;
 
@@ -399,7 +415,7 @@ impl FileSetRepository {
                 file.original_file_name,
                 0 // TODO: get sort order from UI
             )
-            .execute(&mut **transaction)
+            .execute(&mut *tx)
             .await?;
         }
 
@@ -428,7 +444,7 @@ impl FileSetRepository {
 
         for (file_info_id, file_name) in file_info_ids_and_names {
             // Validate that file_type matches between FileSet and FileInfo
-            self.validate_file_type_consistency(&mut transaction, file_set_id, *file_info_id)
+            self.validate_file_type_consistency(&mut *transaction, file_set_id, *file_info_id)
                 .await
                 .map_err(|e| Error::DbError(e.to_string()))?;
 
