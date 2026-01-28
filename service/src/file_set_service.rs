@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use core_types::{FileType, ImportedFile};
 use database::{helper::AddFileSetParams, repository_manager::RepositoryManager};
 
@@ -24,7 +25,8 @@ pub enum FileSetServiceError {
     DatabaseError(String),
 }
 
-pub trait FileSetServiceOps {
+#[async_trait]
+pub trait FileSetServiceOps: Send + Sync {
     async fn create_file_set(
         &self,
         file_set_params: CreateFileSetParams,
@@ -42,6 +44,7 @@ impl FileSetService {
     }
 }
 
+#[async_trait]
 impl FileSetServiceOps for FileSetService {
     async fn create_file_set(
         &self,
