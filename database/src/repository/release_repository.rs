@@ -156,12 +156,34 @@ impl ReleaseRepository {
         system_ids: &[i64],
     ) -> Result<i64, Error> {
         let mut transaction = self.pool.begin().await?;
+        let res = self
+            .add_release_full_with_tx(
+                &mut transaction,
+                release_name,
+                software_title_ids,
+                file_set_ids,
+                system_ids,
+            )
+            .await;
+        transaction.commit().await?;
+        res
+    }
 
+    pub async fn add_release_full_with_tx(
+        &self,
+        transaction: &mut sqlx::Transaction<'_, Sqlite>,
+        release_name: &str,
+        software_title_ids: &[i64],
+        file_set_ids: &[i64],
+        system_ids: &[i64],
+    ) -> Result<i64, Error> {
         let result = sqlx::query!("INSERT INTO release (name) VALUES (?)", release_name)
-            .execute(&mut *transaction)
+            .execute(&mut **transaction)
             .await?;
 
         let release_id = result.last_insert_rowid();
+
+        let tx = &mut **transaction;
 
         for software_title_id in software_title_ids {
             sqlx::query!(
@@ -169,7 +191,7 @@ impl ReleaseRepository {
                 release_id,
                 software_title_id
             )
-            .execute(&mut *transaction)
+            .execute(&mut *tx)
             .await?;
         }
 
@@ -179,7 +201,7 @@ impl ReleaseRepository {
                 release_id,
                 file_id
             )
-            .execute(&mut *transaction)
+            .execute(&mut *tx)
             .await?;
         }
 
@@ -189,11 +211,9 @@ impl ReleaseRepository {
                 release_id,
                 system_id
             )
-            .execute(&mut *transaction)
+            .execute(&mut *tx)
             .await?;
         }
-
-        transaction.commit().await?;
 
         Ok(release_id)
     }
