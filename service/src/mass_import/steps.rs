@@ -153,3 +153,21 @@ impl PipelineStep<MassImportContext> for ReadFileMetadataStep {
 // - 1. write files to storage
 // - 2. if ok create file set, software title, release in a transaction
 // - 3. if ok commit transaction otherwise delete written files
+
+pub struct ImportFileSetsStep;
+
+#[async_trait::async_trait]
+impl PipelineStep<MassImportContext> for ImportFileSetsStep {
+    fn name(&self) -> &'static str {
+        "import_file_sets_step"
+    }
+    fn should_execute(&self, context: &MassImportContext) -> bool {
+        !context.get_non_failed_files().is_empty()
+    }
+
+    async fn execute(&self, context: &mut MassImportContext) -> StepAction {
+        let import_items = context.get_import_items();
+
+        StepAction::Continue
+    }
+}

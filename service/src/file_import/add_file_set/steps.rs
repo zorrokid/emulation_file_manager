@@ -3,6 +3,7 @@ use crate::{
     file_import::{
         add_file_set::context::AddFileSetContext, common_steps::import::AddFileSetContextOps,
     },
+    file_set_service::FileSetServiceOps,
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
 
@@ -21,22 +22,14 @@ impl PipelineStep<AddFileSetContext> for UpdateDatabaseStep {
         }
 
         let file_type = context.get_file_import_model().file_type;
-        // TODO: check if release should be created, create release with software title if needed
-        // and link file set to the release in the same transaction
-        match context
-            .repository_manager
-            .get_file_set_repository()
-            .add_file_set(
-                &context.file_set_name,
-                &context.file_set_file_name,
-                &file_type,
-                &context.source,
-                &context.get_files_in_file_set(),
-                &context.system_ids,
-            )
-            .await
-        {
-            Ok(id) => {
+        let file_set_service = context.get_file_set_service();
+        let file_set_service_result = file_set_service
+            .create_file_set(context.to_create_file_set_params())
+            .await;
+
+        match file_set_service_result {
+            Ok(res) => {
+                let id = res.file_set_id;
                 tracing::info!(
                     "File set '{}' with id {} added to database",
                     context.file_set_name,

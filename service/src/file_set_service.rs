@@ -5,13 +5,13 @@ use core_types::{FileType, ImportedFile};
 use database::{helper::AddFileSetParams, repository_manager::RepositoryManager};
 
 pub struct CreateFileSetParams {
-    file_set_name: String,
-    file_set_file_name: String,
-    source: String,
-    file_type: FileType,
-    system_ids: Vec<i64>,
-    files_in_file_set: Vec<ImportedFile>,
-    create_release: bool,
+    pub file_set_name: String,
+    pub file_set_file_name: String,
+    pub source: String,
+    pub file_type: FileType,
+    pub system_ids: Vec<i64>,
+    pub files_in_file_set: Vec<ImportedFile>,
+    pub create_release: bool,
 }
 
 #[derive(Debug)]
@@ -23,6 +23,14 @@ pub struct CreateFileSetResult {
 #[derive(Debug)]
 pub enum FileSetServiceError {
     DatabaseError(String),
+}
+
+impl std::fmt::Display for FileSetServiceError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FileSetServiceError::DatabaseError(msg) => write!(f, "Database error: {}", msg),
+        }
+    }
 }
 
 #[async_trait]

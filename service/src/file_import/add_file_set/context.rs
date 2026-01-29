@@ -12,6 +12,7 @@ use crate::{
         },
         model::{FileImportData, FileSetOperationDeps, ImportFileContent},
     },
+    file_set_service::{CreateFileSetParams, FileSetService},
     file_system_ops::FileSystemOps,
     view_models::Settings,
 };
@@ -166,6 +167,22 @@ impl AddFileSetContext {
                 })
             }))
             .collect()
+    }
+
+    pub fn get_file_set_service(&self) -> FileSetService {
+        FileSetService::new(self.repository_manager.clone())
+    }
+
+    pub fn to_create_file_set_params(&self) -> CreateFileSetParams {
+        CreateFileSetParams {
+            file_set_name: self.file_set_name.clone(),
+            file_set_file_name: self.file_set_file_name.clone(),
+            source: self.source.clone(),
+            file_type: self.file_import_data.file_type,
+            system_ids: self.system_ids.clone(),
+            files_in_file_set: self.get_files_in_file_set(),
+            create_release: self.create_release,
+        }
     }
 }
 
