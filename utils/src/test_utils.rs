@@ -1,7 +1,7 @@
 use core_types::{FileSize, Sha1Checksum};
 use sha1::{
-    digest::{consts::U20, generic_array::GenericArray},
     Digest, Sha1,
+    digest::{consts::U20, generic_array::GenericArray},
 };
 
 pub fn get_sha1_and_size(str: &str) -> (Sha1Checksum, FileSize) {
@@ -13,4 +13,9 @@ pub fn get_sha1_and_size(str: &str) -> (Sha1Checksum, FileSize) {
 
     let expected_size: FileSize = str.len() as u64;
     (expected_checksum, expected_size)
+}
+
+pub fn generate_random_uuid() -> String {
+    use uuid::Uuid;
+    Uuid::new_v4().to_string()
 }

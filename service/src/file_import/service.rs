@@ -134,6 +134,7 @@ impl FileImportService {
         match (result, context.file_set_id) {
             (Ok(_), Some(id)) => Ok(FileImportResult {
                 file_set_id: id,
+                release_id: context.release_id,
                 imported_new_files: context
                     .imported_files
                     .values()
@@ -180,6 +181,7 @@ impl FileImportService {
         match res {
             Ok(_) => Ok(FileImportResult {
                 file_set_id: import_model.file_set_id,
+                release_id: None,
                 imported_new_files: context
                     .imported_files
                     .values()

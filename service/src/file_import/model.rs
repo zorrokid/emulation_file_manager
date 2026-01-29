@@ -144,6 +144,7 @@ pub struct FileImportPrepareResult {
 #[derive(Debug)]
 pub struct FileImportResult {
     pub file_set_id: i64,
+    pub release_id: Option<i64>,
     pub imported_new_files: Vec<ImportedFile>,
     pub failed_steps: HashMap<String, Error>,
 }

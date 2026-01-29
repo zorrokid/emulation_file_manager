@@ -37,6 +37,8 @@ pub struct AddFileSetContext {
 
     pub imported_files: HashMap<Sha1Checksum, ImportedFile>,
     pub file_set_id: Option<i64>,
+    pub release_id: Option<i64>,
+
     pub existing_files: Vec<FileInfo>,
     // There can be steps where failure don't abort the pipeline. Collect those failed steps during deletion, with error message
     pub failed_steps: HashMap<String, Error>,
@@ -76,6 +78,7 @@ impl AddFileSetContext {
 
             imported_files: HashMap::new(),
             file_set_id: None,
+            release_id: None,
             existing_files: Vec::new(),
             failed_steps: HashMap::new(),
         }
@@ -261,6 +264,7 @@ mod tests {
             file_set_file_name: "test_game.zip".to_string(),
             imported_files: HashMap::new(),
             file_set_id: None,
+            release_id: None,
             file_import_ops,
             file_system_ops,
             existing_files: vec![],

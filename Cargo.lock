@@ -5018,6 +5018,7 @@ version = "0.1.0"
 dependencies = [
  "core_types",
  "sha1 0.10.6",
+ "uuid",
 ]
 
 [[package]]

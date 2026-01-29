@@ -36,6 +36,7 @@ impl PipelineStep<AddFileSetContext> for UpdateDatabaseStep {
                     id
                 );
                 context.file_set_id = Some(id);
+                context.release_id = res.release_id;
             }
             Err(err) => {
                 tracing::error!(

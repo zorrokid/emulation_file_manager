@@ -7,3 +7,4 @@ license = "GPL-3.0-or-later"
 [dependencies]
 sha1 = "0.10.6"
 core_types = { path = "../core_types" }
+uuid = { version="1.17.0", features = ["v4"] }
