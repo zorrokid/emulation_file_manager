@@ -108,3 +108,76 @@ impl FileSetServiceOps for FileSetService {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use core_types::{ImportedFile, Sha1Checksum};
+    use database::{repository_manager::RepositoryManager, setup_test_db};
+
+    use crate::file_set_service::FileSetServiceOps;
+
+    #[async_std::test]
+    async fn test_create_file_set() {
+        let pool = Arc::new(setup_test_db().await);
+        let repository_manager = Arc::new(RepositoryManager::new(pool));
+
+        let system_id = repository_manager
+            .get_system_repository()
+            .add_system("Test System")
+            .await
+            .unwrap();
+
+        let file_set_service = super::FileSetService::new(Arc::clone(&repository_manager));
+        let file_1_sha1: Sha1Checksum = [0u8; 20];
+        let file_2_sha1: Sha1Checksum = [1u8; 20];
+        let files_in_fileset: Vec<ImportedFile> = vec![
+            ImportedFile {
+                original_file_name: "test_file_1.rom".to_string(),
+                archive_file_name: "archive_file_name".to_string(),
+                sha1_checksum: file_1_sha1,
+                file_size: 1024,
+            },
+            ImportedFile {
+                original_file_name: "test_file_2.rom".to_string(),
+                archive_file_name: "archive_file_name_2".to_string(),
+                sha1_checksum: file_2_sha1,
+                file_size: 2048,
+            },
+        ];
+        let create_params = super::CreateFileSetParams {
+            file_set_name: "Test File Set".to_string(),
+            file_set_file_name: "test_file_set.zip".to_string(),
+            source: "Unit Test".to_string(),
+            file_type: core_types::FileType::Rom,
+            system_ids: vec![system_id],
+            files_in_file_set: files_in_fileset,
+            create_release: true,
+        };
+        let result = file_set_service
+            .create_file_set(create_params)
+            .await
+            .unwrap();
+        assert!(result.file_set_id > 0);
+        assert!(result.release_id.is_some());
+
+        let release = repository_manager
+            .get_release_repository()
+            .get_release(result.release_id.unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(release.id, result.release_id.unwrap());
+        assert_eq!(release.name, "Test File Set");
+
+        let software_titles = repository_manager
+            .get_software_title_repository()
+            .get_software_titles_by_release(release.id)
+            .await
+            .unwrap();
+
+        assert_eq!(software_titles.len(), 1);
+        assert_eq!(software_titles[0].name, "Test File Set");
+    }
+}
