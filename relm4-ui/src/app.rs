@@ -825,6 +825,7 @@ impl AppModel {
                         .get()
                         .expect("View model service not initialized"),
                 ),
+                settings: Arc::clone(self.settings.get().expect("Settings not initialized")),
             };
             let import_form = ImportForm::builder()
                 .transient_for(root)

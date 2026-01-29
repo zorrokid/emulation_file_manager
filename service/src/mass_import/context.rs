@@ -1,13 +1,18 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use core_types::{FileType, ReadFile, Sha1Checksum, item_type::ItemType, sha1_from_hex_string};
 use dat_file_parser::{DatFile, DatFileParserOps, DatGame, DatHeader, DatRom};
-use file_import::FileImportOps;
+use database::repository_manager::RepositoryManager;
 use file_metadata::reader_factory::create_metadata_reader;
 
 use crate::{
-    file_import::model::{FileImportSource, FileSetImportModel, ImportFileContent},
+    file_import::{
+        file_import_service_ops::FileImportServiceOps,
+        model::{FileImportSource, FileSetImportModel, ImportFileContent},
+        service::FileImportService,
+    },
     file_system_ops::{FileSystemOps, StdFileSystemOps},
+    view_models::Settings,
 };
 
 /// Type alias for a Send-able metadata reader factory function
@@ -59,7 +64,7 @@ pub struct MassImportContext {
     pub dat_file_path: Option<PathBuf>,
     pub fs_ops: Box<dyn FileSystemOps>,
     pub dat_file_parser_ops: Box<dyn DatFileParserOps>,
-    pub file_import_ops: Box<dyn FileImportOps>,
+    pub file_import_service_ops: Box<dyn FileImportServiceOps>,
     pub dat_file: Option<DatFile>,
     pub reader_factory_fn: Box<SendReaderFactoryFn>,
     pub import_items: Vec<ImportItem>,
@@ -78,19 +83,23 @@ impl MassImportContext {
         file_type: FileType,
         item_type: Option<ItemType>,
         system_id: i64,
+        repository_manager: Arc<RepositoryManager>,
+        settings: Arc<Settings>,
     ) -> Self {
         let fs_ops: Box<dyn FileSystemOps> = Box::new(StdFileSystemOps);
         let dat_file_parser_ops: Box<dyn DatFileParserOps> =
             Box::new(dat_file_parser::DefaultDatParser);
-        let file_import_ops: Box<dyn FileImportOps> = Box::new(file_import::StdFileImportOps);
         let reader_factory_fn: Box<SendReaderFactoryFn> = Box::new(create_metadata_reader);
+        let file_import_service_ops: Box<dyn FileImportServiceOps> = Box::new(
+            FileImportService::new(repository_manager.clone(), settings.clone()),
+        );
         MassImportContext {
             source_path,
             fs_ops,
             dat_file_path,
             dat_file_parser_ops,
+            file_import_service_ops,
             dat_file: None,
-            file_import_ops,
             reader_factory_fn,
             import_items: Vec::new(),
             failed_files: Vec::new(),
@@ -102,13 +111,13 @@ impl MassImportContext {
         }
     }
 
-    pub fn with_fs_ops(
+    pub fn with_ops(
         source_path: PathBuf,
         fs_ops: Box<dyn FileSystemOps>,
         dat_file_path: Option<PathBuf>,
         dat_file_parser_ops: Box<dyn DatFileParserOps>,
-        file_import_ops: Box<dyn FileImportOps>,
         reader_factory_fn: Box<SendReaderFactoryFn>,
+        file_import_service_ops: Box<dyn FileImportServiceOps>,
         file_type: FileType,
         item_type: Option<ItemType>,
         system_id: i64,
@@ -119,7 +128,7 @@ impl MassImportContext {
             dat_file_path,
             dat_file_parser_ops,
             dat_file: None,
-            file_import_ops,
+            file_import_service_ops,
             reader_factory_fn,
             import_items: Vec::new(),
             failed_files: Vec::new(),
@@ -253,6 +262,16 @@ impl MassImportContext {
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
+    use dat_file_parser::MockDatParser;
+    use file_metadata::{FileMetadataError, FileMetadataReader, MockFileMetadataReader};
+
+    use crate::{
+        file_import::file_import_service_ops::MockFileImportServiceOps,
+        file_system_ops::mock::MockFileSystemOps,
+    };
+
     use super::*;
 
     #[test]
@@ -352,10 +371,28 @@ mod tests {
             }],
         );
 
+        let fs_ops = Box::new(MockFileSystemOps::new());
+        let file_import_service_ops = Box::new(MockFileImportServiceOps::new());
+        let mock_dat_parser: Box<dyn DatFileParserOps> =
+            Box::new(MockDatParser::new(Ok(dat_file.clone())));
+
+        // Mock factory always returns the same mock reader
+        let mock_factory: Box<SendReaderFactoryFn> = Box::new(
+            |_path: &Path| -> Result<Box<dyn FileMetadataReader>, FileMetadataError> {
+                Ok(Box::new(MockFileMetadataReader {
+                    metadata: vec![/* test data */],
+                }))
+            },
+        );
+
         // Create context with test data
-        let mut context = MassImportContext::new(
+        let mut context = MassImportContext::with_ops(
             PathBuf::from("/test"),
+            fs_ops,
             None,
+            mock_dat_parser,
+            mock_factory,
+            file_import_service_ops,
             FileType::Rom,
             Some(ItemType::Cartridge),
             42,

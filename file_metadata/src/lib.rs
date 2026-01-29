@@ -195,13 +195,11 @@ fn read_zip_contents_with_checksums(
     Ok(sha1_to_file_name_map)
 }
 
-#[cfg(test)]
 #[derive(Clone)]
 pub struct MockFileMetadataReader {
     pub metadata: Vec<ReadFile>,
 }
 
-#[cfg(test)]
 impl FileMetadataReader for MockFileMetadataReader {
     fn read_metadata(&self) -> Result<Vec<ReadFile>, FileMetadataError> {
         Ok(self.metadata.clone())

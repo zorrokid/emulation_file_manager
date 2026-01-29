@@ -14,7 +14,7 @@ use crate::{
 };
 
 #[async_trait::async_trait]
-pub trait FileImportOps: Send + Sync {
+pub trait FileImportServiceOps: Send + Sync {
     async fn prepare_import(
         &self,
         file_path: &Path,
@@ -33,7 +33,7 @@ pub trait FileImportOps: Send + Sync {
 }
 
 #[async_trait::async_trait]
-impl FileImportOps for FileImportService {
+impl FileImportServiceOps for FileImportService {
     async fn prepare_import(
         &self,
         file_path: &Path,
@@ -62,7 +62,7 @@ pub struct CreateMockState {
     pub release_id: Option<i64>,
 }
 
-pub struct MockFileImportOps {
+pub struct MockFileImportServiceOps {
     pub should_fail: bool,
     pub create_calls: Vec<FileSetImportModel>,
     pub update_calls: Vec<UpdateFileSetModel>,
@@ -70,7 +70,16 @@ pub struct MockFileImportOps {
     pub setup_create_mock: Option<CreateMockState>,
 }
 
-impl MockFileImportOps {
+impl MockFileImportServiceOps {
+    pub fn new() -> Self {
+        Self {
+            should_fail: false,
+            create_calls: Vec::new(),
+            update_calls: Vec::new(),
+            prepare_calls: Vec::new(),
+            setup_create_mock: None,
+        }
+    }
     pub fn with_create_mock(setup: CreateMockState) -> Self {
         Self {
             should_fail: false,
@@ -83,7 +92,7 @@ impl MockFileImportOps {
 }
 
 #[async_trait::async_trait]
-impl FileImportOps for MockFileImportOps {
+impl FileImportServiceOps for MockFileImportServiceOps {
     async fn prepare_import(
         &self,
         _file_path: &Path,

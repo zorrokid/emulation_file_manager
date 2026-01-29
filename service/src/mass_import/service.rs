@@ -5,16 +5,21 @@ use database::repository_manager::RepositoryManager;
 
 use crate::{
     error::Error, mass_import::context::MassImportContext, pipeline::generic_pipeline::Pipeline,
+    view_models::Settings,
 };
 
 #[derive(Debug)]
 pub struct MassImportService {
     repository_manager: Arc<RepositoryManager>,
+    settings: Arc<Settings>,
 }
 
 impl MassImportService {
-    pub fn new(repository_manager: Arc<RepositoryManager>) -> Self {
-        MassImportService { repository_manager }
+    pub fn new(repository_manager: Arc<RepositoryManager>, settings: Arc<Settings>) -> Self {
+        MassImportService {
+            repository_manager,
+            settings,
+        }
     }
 
     /// Starts the mass import process for the given system ID and source path.
@@ -47,8 +52,16 @@ impl MassImportService {
             dat_file_path = ?dat_file_path,
             file_type = ?file_type,
             "Starting mass import process...");
-        let mut context =
-            MassImportContext::new(source_path, dat_file_path, file_type, item_type, system_id);
+
+        let mut context = MassImportContext::new(
+            source_path,
+            dat_file_path,
+            file_type,
+            item_type,
+            system_id,
+            self.repository_manager.clone(),
+            self.settings.clone(),
+        );
         let pipeline = Pipeline::<MassImportContext>::new();
         tracing::info!("Mass import process completed.");
         let res = pipeline.execute(&mut context).await;

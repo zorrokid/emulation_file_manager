@@ -2,6 +2,8 @@ use core_types::{ReadFile, Sha1Checksum};
 use std::{collections::HashMap, path::Path};
 
 use crate::FileMetadataError;
+#[cfg(test)]
+use crate::FileMetadataReader;
 
 /// Trait for file import operations to enable testing
 ///
@@ -42,6 +44,19 @@ impl FileMetadataOps for StdFileMetadataOps {
         file_path: &Path,
     ) -> Result<HashMap<Sha1Checksum, ReadFile>, FileMetadataError> {
         crate::read_file_checksum(&file_path.to_path_buf())
+    }
+}
+
+#[cfg(test)]
+#[derive(Clone)]
+pub struct MockFileMetadataReader {
+    pub metadata: Vec<ReadFile>,
+}
+
+#[cfg(test)]
+impl FileMetadataReader for MockFileMetadataReader {
+    fn read_metadata(&self) -> Result<Vec<ReadFile>, FileMetadataError> {
+        Ok(self.metadata.clone())
     }
 }
 

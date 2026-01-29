@@ -26,6 +26,9 @@ pub struct MockDatParser {
 }
 
 impl MockDatParser {
+    pub fn new(parse_result: Result<DatFile, DatFileParserError>) -> Self {
+        Self { parse_result }
+    }
     pub fn set_parse_result(&mut self, parse_result: Result<DatFile, DatFileParserError>) {
         self.parse_result = parse_result;
     }

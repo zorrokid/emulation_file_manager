@@ -15,8 +15,10 @@ use relm4::{
     },
 };
 use service::{
-    error::Error, mass_import::service::MassImportService, view_model_service::ViewModelService,
-    view_models::SystemListModel,
+    error::Error,
+    mass_import::service::MassImportService,
+    view_model_service::ViewModelService,
+    view_models::{Settings, SystemListModel},
 };
 use ui_components::{DropDownOutputMsg, FileTypeDropDown, FileTypeSelectedMsg};
 
@@ -65,6 +67,7 @@ pub enum CommandMsg {
 pub struct ImportFormInit {
     pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
+    pub settings: Arc<Settings>,
 }
 
 impl ImportForm {
@@ -196,9 +199,10 @@ impl Component for ImportForm {
     ) -> ComponentParts<Self> {
         let file_type_dropdown = Self::create_file_type_dropdown(None, &sender);
 
-        let mass_import_service = Arc::new(MassImportService::new(Arc::clone(
-            &init_model.repository_manager,
-        )));
+        let mass_import_service = Arc::new(MassImportService::new(
+            Arc::clone(&init_model.repository_manager),
+            Arc::clone(&init_model.settings),
+        ));
 
         let init_model = SystemSelectInit {
             view_model_service: Arc::clone(&init_model.view_model_service),
