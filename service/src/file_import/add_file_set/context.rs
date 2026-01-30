@@ -10,19 +10,24 @@ use crate::{
         common_steps::{
             check_existing_files::CheckExistingFilesContext, import::AddFileSetContextOps,
         },
-        model::{FileImportData, FileSetOperationDeps, ImportFileContent},
+        model::{FileImportData, ImportFileContent},
     },
     file_set_service::{CreateFileSetParams, FileSetService},
     file_system_ops::FileSystemOps,
     view_models::Settings,
 };
 
-pub struct AddFileSetContext {
+pub struct AddFileSetDeps {
     pub repository_manager: Arc<RepositoryManager>,
     pub settings: Arc<Settings>,
-    pub file_import_ops: Arc<dyn FileImportOps>,
-    pub file_system_ops: Arc<dyn FileSystemOps>,
+}
 
+pub struct AddFileSetOps {
+    pub file_import_ops: Arc<dyn FileImportOps>,
+    pub fs_ops: Arc<dyn FileSystemOps>,
+}
+
+pub struct AddFileSetInput {
     pub system_ids: Vec<i64>,
     pub file_import_data: FileImportData,
     pub create_release: bool,
@@ -31,7 +36,10 @@ pub struct AddFileSetContext {
     pub file_set_name: String,
     pub file_set_file_name: String,
     pub source: String,
-    // TODO: remove?
+}
+
+#[derive(Default)]
+pub struct AddFileSetState {
     pub item_ids: Vec<i64>,
     pub item_types: Vec<ItemType>,
 
@@ -44,57 +52,34 @@ pub struct AddFileSetContext {
     pub failed_steps: HashMap<String, Error>,
 }
 
-pub struct FileSetParams {
-    pub file_import_data: FileImportData,
-    pub file_set_name: String,
-    pub file_set_file_name: String,
-    pub source: String,
-    // TODO: remove?
-    pub item_ids: Vec<i64>,
-    pub item_types: Vec<ItemType>,
-    pub system_ids: Vec<i64>,
-    pub create_release: bool,
+pub struct AddFileSetContext {
+    pub deps: AddFileSetDeps,
+    pub ops: AddFileSetOps,
+    pub input: AddFileSetInput,
+    pub state: AddFileSetState,
 }
 
 impl AddFileSetContext {
-    pub fn new(
-        file_set_operation_deps: FileSetOperationDeps,
-        file_set_params: FileSetParams,
-    ) -> Self {
+    pub fn new(ops: AddFileSetOps, deps: AddFileSetDeps, input: AddFileSetInput) -> Self {
         Self {
-            repository_manager: file_set_operation_deps.repository_manager,
-            settings: file_set_operation_deps.settings,
-            file_import_ops: file_set_operation_deps.file_import_ops,
-            file_system_ops: file_set_operation_deps.fs_ops,
-
-            file_import_data: file_set_params.file_import_data,
-            file_set_name: file_set_params.file_set_name,
-            file_set_file_name: file_set_params.file_set_file_name,
-            item_ids: file_set_params.item_ids,
-            item_types: file_set_params.item_types,
-            source: file_set_params.source,
-            system_ids: file_set_params.system_ids,
-            create_release: file_set_params.create_release,
-
-            imported_files: HashMap::new(),
-            file_set_id: None,
-            release_id: None,
-            existing_files: Vec::new(),
-            failed_steps: HashMap::new(),
+            deps,
+            ops,
+            input,
+            state: AddFileSetState::default(),
         }
     }
 
     pub fn get_files_in_file_set(&self) -> Vec<ImportedFile> {
         println!(
             "Getting files in file set. Imported files count: {}, Existing files count: {}",
-            self.imported_files.len(),
-            self.existing_files.len()
+            self.state.imported_files.len(),
+            self.state.existing_files.len()
         );
 
-        dbg!("existing files", &self.existing_files);
+        dbg!("existing files", &self.state.existing_files);
 
         // conbine newly imported files and existing files that were selected for import
-        self.imported_files
+        self.state.imported_files
             .values()
             .cloned()
             // TODO: in this case there shouldn't have been any existing files!! only newly
@@ -102,9 +87,10 @@ impl AddFileSetContext {
             // 2026-01-03T22:27:40.305488Z  INFO Executing step: check_existing_files
             // Checking for existing files in the database...
             // 2026-01-03T22:27:40.306318Z  INFO Fetched existing file info from repository existing_file_count=1
-            .chain(self.existing_files.iter().filter_map(|file_info| {
+            .chain(self.state.existing_files.iter().filter_map(|file_info| {
                 // TODO : this should never happen, fix the root cause
                 if !self
+                    .input
                     .file_import_data
                     .selected_files
                     .contains(&file_info.sha1_checksum)
@@ -112,7 +98,7 @@ impl AddFileSetContext {
                     tracing::warn!(
                      existing_checksum = ?file_info.sha1_checksum,
                      archive_file_name = %file_info.archive_file_name,
-                     selected_files = ?self.file_import_data.selected_files,
+                     selected_files = ?self.input.file_import_data.selected_files,
 
                         "File with checksum in existing files that was not selected for import!",
                     );
@@ -120,6 +106,7 @@ impl AddFileSetContext {
                 }
 
                 let import_files: HashMap<Sha1Checksum, ImportFileContent> = self
+                    .input
                     .file_import_data
                     .import_files
                     .iter()
@@ -173,52 +160,54 @@ impl AddFileSetContext {
     }
 
     pub fn get_file_set_service(&self) -> FileSetService {
-        FileSetService::new(self.repository_manager.clone())
+        FileSetService::new(self.deps.repository_manager.clone())
     }
 
     pub fn to_create_file_set_params(&self) -> CreateFileSetParams {
         CreateFileSetParams {
-            file_set_name: self.file_set_name.clone(),
-            file_set_file_name: self.file_set_file_name.clone(),
-            source: self.source.clone(),
-            file_type: self.file_import_data.file_type,
-            system_ids: self.system_ids.clone(),
+            file_set_name: self.input.file_set_name.clone(),
+            file_set_file_name: self.input.file_set_file_name.clone(),
+            source: self.input.source.clone(),
+            file_type: self.input.file_import_data.file_type,
+            system_ids: self.input.system_ids.clone(),
             files_in_file_set: self.get_files_in_file_set(),
-            create_release: self.create_release,
+            create_release: self.input.create_release,
         }
     }
 }
 
 impl AddFileSetContextOps for AddFileSetContext {
     fn set_imported_files(&mut self, imported_files: HashMap<Sha1Checksum, ImportedFile>) {
-        self.imported_files = imported_files;
+        self.state.imported_files = imported_files;
     }
 
     fn file_import_ops(&self) -> &Arc<dyn FileImportOps> {
-        &self.file_import_ops
+        &self.ops.file_import_ops
     }
     fn get_file_import_model(&self) -> file_import::FileImportModel {
-        self.file_import_data
-            .get_file_import_model(&self.existing_files)
+        self.input
+            .file_import_data
+            .get_file_import_model(&self.state.existing_files)
     }
     fn is_new_files_to_be_imported(&self) -> bool {
-        self.file_import_data
-            .is_new_files_to_be_imported(&self.existing_files)
+        self.input
+            .file_import_data
+            .is_new_files_to_be_imported(&self.state.existing_files)
     }
 }
 
 impl CheckExistingFilesContext for AddFileSetContext {
     fn get_sha1_checksums(&self) -> Vec<Sha1Checksum> {
-        self.file_import_data.selected_files.clone()
+        self.input.file_import_data.selected_files.clone()
     }
     fn file_type(&self) -> core_types::FileType {
-        self.file_import_data.file_type
+        self.input.file_import_data.file_type
     }
     fn repository_manager(&self) -> Arc<RepositoryManager> {
-        self.repository_manager.clone()
+        self.deps.repository_manager.clone()
     }
     fn set_existing_files(&mut self, existing_files: Vec<FileInfo>) {
-        self.existing_files = existing_files;
+        self.state.existing_files = existing_files;
     }
 }
 
@@ -254,24 +243,32 @@ mod tests {
         let file_import_ops = Arc::new(MockFileImportOps::new());
         let file_system_ops = Arc::new(MockFileSystemOps::new());
 
-        AddFileSetContext {
-            repository_manager,
-            settings,
-            file_import_data,
+        let deps = AddFileSetDeps {
+            repository_manager: repository_manager.clone(),
+            settings: settings.clone(),
+        };
+
+        let ops = AddFileSetOps {
+            file_import_ops,
+            fs_ops: file_system_ops,
+        };
+
+        let input = AddFileSetInput {
             system_ids: vec![],
-            source: "test_source".to_string(),
+            file_import_data,
+            create_release: false,
             file_set_name: "Test Game".to_string(),
             file_set_file_name: "test_game.zip".to_string(),
-            imported_files: HashMap::new(),
-            file_set_id: None,
-            release_id: None,
-            file_import_ops,
-            file_system_ops,
-            existing_files: vec![],
-            item_ids: vec![],
-            failed_steps: HashMap::new(),
-            item_types: vec![],
-            create_release: false,
+            source: "test_source".to_string(),
+        };
+
+        let state = AddFileSetState::default();
+
+        AddFileSetContext {
+            deps,
+            ops,
+            input,
+            state,
         }
     }
 
@@ -288,7 +285,7 @@ mod tests {
         let checksum: Sha1Checksum = [1u8; 20];
         let file_import_data = create_file_import_data(vec![checksum], vec![]);
         let mut context = create_test_context(file_import_data);
-        context.imported_files.insert(
+        context.state.imported_files.insert(
             checksum,
             ImportedFile {
                 original_file_name: "game.rom".to_string(),
@@ -335,7 +332,7 @@ mod tests {
             }],
         );
         let mut context = create_test_context(file_import_data);
-        context.existing_files.push(FileInfo {
+        context.state.existing_files.push(FileInfo {
             id: 1,
             sha1_checksum: checksum1,
             file_size: 2048,
@@ -383,7 +380,7 @@ mod tests {
             }],
         );
         let mut context = create_test_context(file_import_data);
-        context.existing_files.push(FileInfo {
+        context.state.existing_files.push(FileInfo {
             id: 1,
             sha1_checksum: checksum2,
             file_size: 2048,
@@ -391,7 +388,7 @@ mod tests {
             file_type: FileType::Rom,
         });
         // Add a newly imported file
-        context.imported_files.insert(
+        context.state.imported_files.insert(
             checksum1,
             ImportedFile {
                 original_file_name: "new_game.rom".to_string(),

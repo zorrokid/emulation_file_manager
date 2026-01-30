@@ -32,24 +32,25 @@ impl PipelineStep<AddFileSetContext> for UpdateDatabaseStep {
                 let id = res.file_set_id;
                 tracing::info!(
                     "File set '{}' with id {} added to database",
-                    context.file_set_name,
+                    context.input.file_set_name,
                     id
                 );
-                context.file_set_id = Some(id);
-                context.release_id = res.release_id;
+                context.state.file_set_id = Some(id);
+                context.state.release_id = res.release_id;
             }
             Err(err) => {
                 tracing::error!(
                     "Error adding file set '{}' to database: {}",
-                    context.file_set_name,
+                    context.input.file_set_name,
                     err
                 );
 
-                for imported_file in context.imported_files.values() {
+                for imported_file in context.state.imported_files.values() {
                     let file_path = context
+                        .deps
                         .settings
                         .get_file_path(&file_type, &imported_file.archive_file_name);
-                    if let Err(e) = context.file_system_ops.remove_file(&file_path) {
+                    if let Err(e) = context.ops.fs_ops.remove_file(&file_path) {
                         tracing::error!(
                             "Error deleting imported file '{}' after database failure: {}",
                             file_path.display(),
@@ -84,15 +85,16 @@ impl PipelineStep<AddFileSetContext> for AddFileSetItemTypesStep {
     }
 
     fn should_execute(&self, context: &AddFileSetContext) -> bool {
-        !context.item_types.is_empty() && context.file_set_id.is_some()
+        !context.state.item_types.is_empty() && context.state.file_set_id.is_some()
     }
 
     async fn execute(&self, context: &mut AddFileSetContext) -> StepAction {
-        let file_set_id = context.file_set_id.unwrap();
+        let file_set_id = context.state.file_set_id.unwrap();
         let res = context
+            .deps
             .repository_manager
             .get_file_set_repository()
-            .add_item_types_to_file_set(&file_set_id, &context.item_types)
+            .add_item_types_to_file_set(&file_set_id, &context.state.item_types)
             .await;
 
         match res {
@@ -101,7 +103,7 @@ impl PipelineStep<AddFileSetContext> for AddFileSetItemTypesStep {
                 tracing::error!(error = %err,
                     "Add item types to file set operation failed.");
                 // No point to abort here, add to failed steps and continue
-                context.failed_steps.insert(
+                context.state.failed_steps.insert(
                     self.name().to_string(),
                     Error::DbError(format!("Error adding item types to file set: {}", err)),
                 );
@@ -115,10 +117,10 @@ impl PipelineStep<AddFileSetContext> for AddFileSetItemTypesStep {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::file_import::add_file_set::context::FileSetParams;
-    use crate::file_import::model::{
-        FileImportData, FileImportSource, FileSetOperationDeps, ImportFileContent,
+    use crate::file_import::add_file_set::context::{
+        AddFileSetDeps, AddFileSetInput, AddFileSetOps,
     };
+    use crate::file_import::model::{FileImportData, FileImportSource, ImportFileContent};
     use crate::file_system_ops::mock::MockFileSystemOps;
     use core_types::item_type::ItemType;
     use core_types::{FileType, ImportedFile, Sha1Checksum};
@@ -134,25 +136,26 @@ mod tests {
         let settings = Arc::new(crate::view_models::Settings::default());
         let file_system_ops = Arc::new(MockFileSystemOps::new());
 
-        AddFileSetContext::new(
-            FileSetOperationDeps {
-                repository_manager,
-                settings,
-                fs_ops: file_system_ops,
-                file_import_ops: Arc::new(MockFileImportOps::new()),
-            },
-            FileSetParams {
-                file_import_data: file_import_data
-                    .unwrap_or(create_file_import_data(vec![], vec![])),
-                system_ids: vec![],
-                source: "test_source".to_string(),
-                file_set_name: "Test Game".to_string(),
-                file_set_file_name: "test_game.zip".to_string(),
-                item_ids: vec![],
-                item_types: vec![],
-                create_release: false,
-            },
-        )
+        let ops = AddFileSetOps {
+            file_import_ops: Arc::new(MockFileImportOps::new()),
+            fs_ops: file_system_ops.clone(),
+        };
+
+        let input = AddFileSetInput {
+            file_import_data: file_import_data.unwrap_or(create_file_import_data(vec![], vec![])),
+            system_ids: vec![],
+            source: "test_source".to_string(),
+            file_set_name: "Test Game".to_string(),
+            file_set_file_name: "test_game.zip".to_string(),
+            create_release: false,
+        };
+
+        let deps = AddFileSetDeps {
+            repository_manager: repository_manager.clone(),
+            settings: settings.clone(),
+        };
+
+        AddFileSetContext::new(ops, deps, input)
     }
 
     fn create_file_import_data(
@@ -175,15 +178,16 @@ mod tests {
 
         // Add system to database first
         let system_id = context
+            .deps
             .repository_manager
             .get_system_repository()
             .add_system("Test System")
             .await
             .unwrap();
 
-        context.system_ids = vec![system_id];
+        context.input.system_ids = vec![system_id];
 
-        context.imported_files.insert(
+        context.state.imported_files.insert(
             checksum,
             ImportedFile {
                 original_file_name: "game.rom".to_string(),
@@ -199,8 +203,8 @@ mod tests {
         if !matches!(result, StepAction::Continue) {
             panic!("Expected Continue, got: {:?}", result);
         }
-        assert!(context.file_set_id.is_some());
-        assert!(context.file_set_id.unwrap() > 0);
+        assert!(context.state.file_set_id.is_some());
+        assert!(context.state.file_set_id.unwrap() > 0);
     }
 
     #[async_std::test]
@@ -230,16 +234,17 @@ mod tests {
         let mut context = create_test_context(Some(file_import_data)).await;
         // Add system to database first
         let system_id = context
+            .deps
             .repository_manager
             .get_system_repository()
             .add_system("Test System")
             .await
             .unwrap();
 
-        context.system_ids = vec![system_id];
+        context.input.system_ids = vec![system_id];
 
         // Add one newly imported file
-        context.imported_files.insert(
+        context.state.imported_files.insert(
             checksum1,
             ImportedFile {
                 original_file_name: "new_game.rom".to_string(),
@@ -255,24 +260,25 @@ mod tests {
         if !matches!(result, StepAction::Continue) {
             panic!("Expected Continue, got: {:?}", result);
         }
-        assert!(context.file_set_id.is_some());
+        assert!(context.state.file_set_id.is_some());
 
         // Verify both files were added - just check the file set was created
-        let file_set_id = context.file_set_id.unwrap();
+        let file_set_id = context.state.file_set_id.unwrap();
         assert!(file_set_id > 0);
     }
 
     #[async_std::test]
     async fn test_add_file_set_item_types_step() {
         let mut context = create_test_context(None).await;
-        context.item_types = vec![ItemType::Manual, ItemType::Box];
+        context.state.item_types = vec![ItemType::Manual, ItemType::Box];
         let file_set_id = context
+            .deps
             .repository_manager
             .get_file_set_repository()
             .add_file_set("", "", &FileType::Rom, "", &[], &[])
             .await
             .unwrap();
-        context.file_set_id = Some(file_set_id);
+        context.state.file_set_id = Some(file_set_id);
 
         let step = AddFileSetItemTypesStep;
         assert!(step.should_execute(&context));
@@ -281,6 +287,7 @@ mod tests {
         assert_eq!(res, StepAction::Continue);
 
         let item_types_in_db = context
+            .deps
             .repository_manager
             .get_file_set_repository()
             .get_item_types_for_file_set(file_set_id)

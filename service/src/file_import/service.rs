@@ -8,7 +8,9 @@ use file_metadata::file_metadata_ops::{FileMetadataOps, StdFileMetadataOps};
 use crate::{
     error::Error,
     file_import::{
-        add_file_set::context::{AddFileSetContext, FileSetParams as AddFileSetParams},
+        add_file_set::context::{
+            AddFileSetContext, AddFileSetDeps, AddFileSetInput, AddFileSetOps,
+        },
         model::{
             FileImportData, FileImportPrepareResult, FileImportResult, FileSetImportModel,
             FileSetOperationDeps, UpdateFileSetModel,
@@ -110,37 +112,40 @@ impl FileImportService {
             import_files: import_model.import_files,
         };
 
-        let mut context = AddFileSetContext::new(
-            FileSetOperationDeps {
-                repository_manager: self.repository_manager.clone(),
-                settings: self.settings.clone(),
-                file_import_ops: self.file_import_ops.clone(),
-                fs_ops: self.fs_ops.clone(),
-            },
-            AddFileSetParams {
-                file_import_data,
-                file_set_name: import_model.file_set_name,
-                file_set_file_name: import_model.file_set_file_name,
-                source: import_model.source,
-                item_ids: import_model.item_ids,
-                system_ids: import_model.system_ids,
-                item_types: import_model.item_types,
-                create_release: import_model.create_release,
-            },
-        );
+        let ops = AddFileSetOps {
+            file_import_ops: self.file_import_ops.clone(),
+            fs_ops: self.fs_ops.clone(),
+        };
+
+        let deps = AddFileSetDeps {
+            repository_manager: self.repository_manager.clone(),
+            settings: self.settings.clone(),
+        };
+
+        let input = AddFileSetInput {
+            file_import_data,
+            file_set_name: import_model.file_set_name,
+            file_set_file_name: import_model.file_set_file_name,
+            source: import_model.source,
+            system_ids: import_model.system_ids,
+            create_release: import_model.create_release,
+        };
+
+        let mut context = AddFileSetContext::new(ops, deps, input);
 
         let pipeline = Pipeline::<AddFileSetContext>::new();
         let result = pipeline.execute(&mut context).await;
-        match (result, context.file_set_id) {
+        match (result, context.state.file_set_id) {
             (Ok(_), Some(id)) => Ok(FileImportResult {
                 file_set_id: id,
-                release_id: context.release_id,
+                release_id: context.state.release_id,
                 imported_new_files: context
+                    .state
                     .imported_files
                     .values()
                     .cloned()
                     .collect::<Vec<ImportedFile>>(),
-                failed_steps: context.failed_steps,
+                failed_steps: context.state.failed_steps,
             }),
             (Err(err), _) => Err(err),
             (_, None) => Err(Error::FileImportError(
