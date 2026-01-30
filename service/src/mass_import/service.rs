@@ -42,15 +42,7 @@ impl MassImportService {
     /// software title.
     /// - when merging two releases, all linked file sets will be moved to the target release.
     ///
-    pub async fn import(
-        &self,
-        input: MassImportInput,
-        /*system_id: i64,
-        source_path: PathBuf,
-        dat_file_path: Option<PathBuf>,
-        file_type: FileType,
-        item_type: Option<ItemType>,*/
-    ) -> Result<(), Error> {
+    pub async fn import(&self, input: MassImportInput) -> Result<(), Error> {
         tracing::info!(
             input = ?input,
             "Starting mass import process...");
@@ -60,17 +52,7 @@ impl MassImportService {
             settings: self.settings.clone(),
         };
 
-        let mut context = MassImportContext::new(
-            input,
-            deps,
-            /*source_path,
-            dat_file_path,
-            file_type,
-            item_type,
-            system_id,
-            self.repository_manager.clone(),
-            self.settings.clone(),*/
-        );
+        let mut context = MassImportContext::new(input, deps);
         let pipeline = Pipeline::<MassImportContext>::new();
         tracing::info!("Mass import process completed.");
         let res = pipeline.execute(&mut context).await;

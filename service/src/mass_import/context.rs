@@ -62,22 +62,8 @@ impl ImportItem {
 }
 pub struct MassImportContext {
     pub input: MassImportInput,
-    //pub deps: MassImportDependencies,
     pub state: MassImporState,
     pub ops: MassImportOps,
-    //pub source_path: PathBuf,
-    //pub dat_file_path: Option<PathBuf>,
-    //pub fs_ops: Box<dyn FileSystemOps>,
-    //pub dat_file_parser_ops: Box<dyn DatFileParserOps>,
-    //pub file_import_service_ops: Box<dyn FileImportServiceOps>,
-    //pub reader_factory_fn: Box<SendReaderFactoryFn>,
-    //pub import_items: Vec<ImportItem>,
-    //pub files: Vec<PathBuf>,
-    //pub failed_files: Vec<PathBuf>,
-    //pub file_metadata: HashMap<PathBuf, Vec<ReadFile>>,
-    //pub file_type: FileType,
-    //pub item_type: Option<ItemType>,
-    //pub system_id: i64,
 }
 
 pub struct MassImportOps {
@@ -87,24 +73,13 @@ pub struct MassImportOps {
     pub reader_factory_fn: Box<SendReaderFactoryFn>,
 }
 
+#[derive(Default)]
 pub struct MassImporState {
     pub import_items: Vec<ImportItem>,
     pub files: Vec<PathBuf>,
     pub failed_files: Vec<PathBuf>,
     pub file_metadata: HashMap<PathBuf, Vec<ReadFile>>,
     pub dat_file: Option<DatFile>,
-}
-
-impl Default for MassImporState {
-    fn default() -> Self {
-        MassImporState {
-            import_items: Vec::new(),
-            files: Vec::new(),
-            failed_files: Vec::new(),
-            file_metadata: HashMap::new(),
-            dat_file: None,
-        }
-    }
 }
 
 pub struct MassImportDependencies {
@@ -123,7 +98,6 @@ impl MassImportContext {
         );
         MassImportContext {
             input,
-            //deps,
             state: MassImporState::default(),
             ops: MassImportOps {
                 fs_ops,
@@ -131,54 +105,14 @@ impl MassImportContext {
                 file_import_service_ops,
                 reader_factory_fn,
             },
-            /*source_path,
-            fs_ops,
-            dat_file_path,
-            dat_file_parser_ops,
-            file_import_service_ops,
-            dat_file: None,
-            reader_factory_fn,
-            import_items: Vec::new(),
-            failed_files: Vec::new(),
-            files: Vec::new(),
-            file_metadata: HashMap::new(),
-            file_type,
-            item_type,
-            system_id,*/
         }
     }
 
-    pub fn with_ops(
-        input: MassImportInput,
-        ops: MassImportOps,
-        //source_path: PathBuf,
-        //fs_ops: Box<dyn FileSystemOps>,
-        //dat_file_path: Option<PathBuf>,
-        /*dat_file_parser_ops: Box<dyn DatFileParserOps>,
-        reader_factory_fn: Box<SendReaderFactoryFn>,
-        file_import_service_ops: Box<dyn FileImportServiceOps>,*/
-        /*file_type: FileType,
-        item_type: Option<ItemType>,
-        system_id: i64,*/
-    ) -> Self {
+    pub fn with_ops(input: MassImportInput, ops: MassImportOps) -> Self {
         MassImportContext {
             input,
             ops,
             state: MassImporState::default(),
-            /*source_path,
-            fs_ops,
-            dat_file_path,
-            dat_file_parser_ops,
-            dat_file: None,
-            file_import_service_ops,
-            reader_factory_fn,
-            import_items: Vec::new(),
-            failed_files: Vec::new(),
-            files: Vec::new(),
-            file_metadata: HashMap::new(),
-            file_type,
-            item_type,
-            system_id,*/
         }
     }
 
@@ -441,19 +375,7 @@ mod tests {
             file_import_service_ops: Box::new(MockFileImportServiceOps::new()),
             reader_factory_fn: mock_factory,
         };
-        let mut context = MassImportContext::with_ops(
-            input,
-            ops,
-            /*PathBuf::from("/test"),
-            fs_ops,
-            None,
-            mock_dat_parser,
-            mock_factory,
-            file_import_service_ops,
-            FileType::Rom,
-            Some(ItemType::Cartridge),
-            42,*/
-        );
+        let mut context = MassImportContext::with_ops(input, ops);
         context.state.dat_file = Some(dat_file);
         context.state.file_metadata = file_metadata;
 
