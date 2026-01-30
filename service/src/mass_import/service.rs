@@ -1,10 +1,14 @@
-use std::{path::PathBuf, sync::Arc};
+use std::sync::Arc;
 
-use core_types::{FileType, item_type::ItemType};
 use database::repository_manager::RepositoryManager;
 
 use crate::{
-    error::Error, mass_import::context::MassImportContext, pipeline::generic_pipeline::Pipeline,
+    error::Error,
+    mass_import::{
+        context::{MassImportContext, MassImportDependencies},
+        models::MassImportInput,
+    },
+    pipeline::generic_pipeline::Pipeline,
     view_models::Settings,
 };
 
@@ -40,27 +44,32 @@ impl MassImportService {
     ///
     pub async fn import(
         &self,
-        system_id: i64,
+        input: MassImportInput,
+        /*system_id: i64,
         source_path: PathBuf,
         dat_file_path: Option<PathBuf>,
         file_type: FileType,
-        item_type: Option<ItemType>,
+        item_type: Option<ItemType>,*/
     ) -> Result<(), Error> {
         tracing::info!(
-            system_id = system_id,
-            source_path = ?source_path,
-            dat_file_path = ?dat_file_path,
-            file_type = ?file_type,
+            input = ?input,
             "Starting mass import process...");
 
+        let deps = MassImportDependencies {
+            repository_manager: self.repository_manager.clone(),
+            settings: self.settings.clone(),
+        };
+
         let mut context = MassImportContext::new(
-            source_path,
+            input,
+            deps,
+            /*source_path,
             dat_file_path,
             file_type,
             item_type,
             system_id,
             self.repository_manager.clone(),
-            self.settings.clone(),
+            self.settings.clone(),*/
         );
         let pipeline = Pipeline::<MassImportContext>::new();
         tracing::info!("Mass import process completed.");

@@ -16,7 +16,7 @@ use relm4::{
 };
 use service::{
     error::Error,
-    mass_import::service::MassImportService,
+    mass_import::{models::MassImportInput, service::MassImportService},
     view_model_service::ViewModelService,
     view_models::{Settings, SystemListModel},
 };
@@ -355,21 +355,18 @@ impl Component for ImportForm {
                         selected_system,
                     );
 
-                    let dat_file_path = self.dat_file_path.clone();
-                    let directory_path = directory_path.clone();
-                    let system_id = selected_system.id;
-                    let item_type = self.selected_item_type;
                     let mass_import_service = Arc::clone(&self.mass_import_service);
+
+                    let input = MassImportInput {
+                        source_path: directory_path.clone(),
+                        dat_file_path: self.dat_file_path.clone(),
+                        file_type,
+                        item_type: self.selected_item_type,
+                        system_id: selected_system.id,
+                    };
+
                     sender.oneshot_command(async move {
-                        let result = mass_import_service
-                            .import(
-                                system_id,
-                                directory_path,
-                                dat_file_path,
-                                file_type,
-                                item_type,
-                            )
-                            .await;
+                        let result = mass_import_service.import(input).await;
                         CommandMsg::ProcessImportResult(result)
                     });
                 }

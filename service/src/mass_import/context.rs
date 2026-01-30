@@ -1,6 +1,7 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
-use core_types::{FileType, ReadFile, Sha1Checksum, item_type::ItemType, sha1_from_hex_string};
+use crate::mass_import::models::MassImportInput;
+use core_types::{ReadFile, Sha1Checksum, sha1_from_hex_string};
 use dat_file_parser::{DatFile, DatFileParserOps, DatGame, DatHeader, DatRom};
 use database::repository_manager::RepositoryManager;
 use file_metadata::reader_factory::create_metadata_reader;
@@ -60,41 +61,77 @@ impl ImportItem {
     }
 }
 pub struct MassImportContext {
-    pub source_path: PathBuf,
-    pub dat_file_path: Option<PathBuf>,
+    pub input: MassImportInput,
+    //pub deps: MassImportDependencies,
+    pub state: MassImporState,
+    pub ops: MassImportOps,
+    //pub source_path: PathBuf,
+    //pub dat_file_path: Option<PathBuf>,
+    //pub fs_ops: Box<dyn FileSystemOps>,
+    //pub dat_file_parser_ops: Box<dyn DatFileParserOps>,
+    //pub file_import_service_ops: Box<dyn FileImportServiceOps>,
+    //pub reader_factory_fn: Box<SendReaderFactoryFn>,
+    //pub import_items: Vec<ImportItem>,
+    //pub files: Vec<PathBuf>,
+    //pub failed_files: Vec<PathBuf>,
+    //pub file_metadata: HashMap<PathBuf, Vec<ReadFile>>,
+    //pub file_type: FileType,
+    //pub item_type: Option<ItemType>,
+    //pub system_id: i64,
+}
+
+pub struct MassImportOps {
     pub fs_ops: Box<dyn FileSystemOps>,
     pub dat_file_parser_ops: Box<dyn DatFileParserOps>,
     pub file_import_service_ops: Box<dyn FileImportServiceOps>,
-    pub dat_file: Option<DatFile>,
     pub reader_factory_fn: Box<SendReaderFactoryFn>,
+}
+
+pub struct MassImporState {
     pub import_items: Vec<ImportItem>,
     pub files: Vec<PathBuf>,
     pub failed_files: Vec<PathBuf>,
     pub file_metadata: HashMap<PathBuf, Vec<ReadFile>>,
-    pub file_type: FileType,
-    pub item_type: Option<ItemType>,
-    pub system_id: i64,
+    pub dat_file: Option<DatFile>,
+}
+
+impl Default for MassImporState {
+    fn default() -> Self {
+        MassImporState {
+            import_items: Vec::new(),
+            files: Vec::new(),
+            failed_files: Vec::new(),
+            file_metadata: HashMap::new(),
+            dat_file: None,
+        }
+    }
+}
+
+pub struct MassImportDependencies {
+    pub repository_manager: Arc<RepositoryManager>,
+    pub settings: Arc<Settings>,
 }
 
 impl MassImportContext {
-    pub fn new(
-        source_path: PathBuf,
-        dat_file_path: Option<PathBuf>,
-        file_type: FileType,
-        item_type: Option<ItemType>,
-        system_id: i64,
-        repository_manager: Arc<RepositoryManager>,
-        settings: Arc<Settings>,
-    ) -> Self {
+    pub fn new(input: MassImportInput, deps: MassImportDependencies) -> Self {
         let fs_ops: Box<dyn FileSystemOps> = Box::new(StdFileSystemOps);
         let dat_file_parser_ops: Box<dyn DatFileParserOps> =
             Box::new(dat_file_parser::DefaultDatParser);
         let reader_factory_fn: Box<SendReaderFactoryFn> = Box::new(create_metadata_reader);
         let file_import_service_ops: Box<dyn FileImportServiceOps> = Box::new(
-            FileImportService::new(repository_manager.clone(), settings.clone()),
+            FileImportService::new(deps.repository_manager.clone(), deps.settings.clone()),
         );
         MassImportContext {
-            source_path,
+            input,
+            //deps,
+            state: MassImporState::default(),
+            ops: MassImportOps {
+                fs_ops,
+                dat_file_parser_ops,
+                file_import_service_ops,
+                reader_factory_fn,
+            },
+            /*source_path,
             fs_ops,
             dat_file_path,
             dat_file_parser_ops,
@@ -107,23 +144,28 @@ impl MassImportContext {
             file_metadata: HashMap::new(),
             file_type,
             item_type,
-            system_id,
+            system_id,*/
         }
     }
 
     pub fn with_ops(
-        source_path: PathBuf,
-        fs_ops: Box<dyn FileSystemOps>,
-        dat_file_path: Option<PathBuf>,
-        dat_file_parser_ops: Box<dyn DatFileParserOps>,
+        input: MassImportInput,
+        ops: MassImportOps,
+        //source_path: PathBuf,
+        //fs_ops: Box<dyn FileSystemOps>,
+        //dat_file_path: Option<PathBuf>,
+        /*dat_file_parser_ops: Box<dyn DatFileParserOps>,
         reader_factory_fn: Box<SendReaderFactoryFn>,
-        file_import_service_ops: Box<dyn FileImportServiceOps>,
-        file_type: FileType,
+        file_import_service_ops: Box<dyn FileImportServiceOps>,*/
+        /*file_type: FileType,
         item_type: Option<ItemType>,
-        system_id: i64,
+        system_id: i64,*/
     ) -> Self {
         MassImportContext {
-            source_path,
+            input,
+            ops,
+            state: MassImporState::default(),
+            /*source_path,
             fs_ops,
             dat_file_path,
             dat_file_parser_ops,
@@ -136,12 +178,13 @@ impl MassImportContext {
             file_metadata: HashMap::new(),
             file_type,
             item_type,
-            system_id,
+            system_id,*/
         }
     }
 
     pub fn get_sha1_checksum_to_game_name_map(&self) -> HashMap<String, String> {
         let map: HashMap<String, String> = self
+            .state
             .dat_file
             .as_ref()
             .map(|dat_file| {
@@ -160,15 +203,17 @@ impl MassImportContext {
     }
 
     pub fn get_non_failed_files(&self) -> Vec<PathBuf> {
-        self.files
+        self.state
+            .files
             .iter()
-            .filter(|file| !self.failed_files.contains(file))
+            .filter(|file| !self.state.failed_files.contains(file))
             .cloned()
             .collect()
     }
 
     pub fn build_sha1_to_file_map(&self) -> HashMap<Sha1Checksum, PathBuf> {
-        self.file_metadata
+        self.state
+            .file_metadata
             .iter()
             .flat_map(|(path, metadata_entries)| {
                 metadata_entries
@@ -231,8 +276,8 @@ impl MassImportContext {
                 .collect(),
             selected_files: vec![],
 
-            system_ids: vec![self.system_id],
-            file_type: self.file_type,
+            system_ids: vec![self.input.system_id],
+            file_type: self.input.file_type,
 
             source: format!("{} {}", header.name, header.version),
             file_set_name: game.name.clone(),
@@ -240,6 +285,7 @@ impl MassImportContext {
 
             item_ids: vec![],
             item_types: self
+                .input
                 .item_type
                 .map_or_else(Vec::new, |item_type| vec![item_type]),
             create_release: true,
@@ -248,7 +294,7 @@ impl MassImportContext {
     }
 
     pub fn get_import_items(&self) -> Vec<ImportItem> {
-        self.dat_file.as_ref().map_or(Vec::new(), |dat_file| {
+        self.state.dat_file.as_ref().map_or(Vec::new(), |dat_file| {
             let mut import_items: Vec<ImportItem> = Vec::new();
             tracing::info!("Mapping DAT entries to import items...");
             let sha1_to_file_map = self.build_sha1_to_file_map();
@@ -264,6 +310,7 @@ impl MassImportContext {
 mod tests {
     use std::path::Path;
 
+    use core_types::{FileType, item_type::ItemType};
     use dat_file_parser::MockDatParser;
     use file_metadata::{FileMetadataError, FileMetadataReader, MockFileMetadataReader};
 
@@ -371,11 +418,6 @@ mod tests {
             }],
         );
 
-        let fs_ops = Box::new(MockFileSystemOps::new());
-        let file_import_service_ops = Box::new(MockFileImportServiceOps::new());
-        let mock_dat_parser: Box<dyn DatFileParserOps> =
-            Box::new(MockDatParser::new(Ok(dat_file.clone())));
-
         // Mock factory always returns the same mock reader
         let mock_factory: Box<SendReaderFactoryFn> = Box::new(
             |_path: &Path| -> Result<Box<dyn FileMetadataReader>, FileMetadataError> {
@@ -386,8 +428,23 @@ mod tests {
         );
 
         // Create context with test data
+        let input = MassImportInput {
+            source_path: PathBuf::from("/test"),
+            dat_file_path: None,
+            file_type: FileType::Rom,
+            item_type: Some(ItemType::Cartridge),
+            system_id: 42,
+        };
+        let ops = MassImportOps {
+            fs_ops: Box::new(MockFileSystemOps::new()),
+            dat_file_parser_ops: Box::new(MockDatParser::new(Ok(dat_file.clone()))),
+            file_import_service_ops: Box::new(MockFileImportServiceOps::new()),
+            reader_factory_fn: mock_factory,
+        };
         let mut context = MassImportContext::with_ops(
-            PathBuf::from("/test"),
+            input,
+            ops,
+            /*PathBuf::from("/test"),
             fs_ops,
             None,
             mock_dat_parser,
@@ -395,10 +452,10 @@ mod tests {
             file_import_service_ops,
             FileType::Rom,
             Some(ItemType::Cartridge),
-            42,
+            42,*/
         );
-        context.dat_file = Some(dat_file);
-        context.file_metadata = file_metadata;
+        context.state.dat_file = Some(dat_file);
+        context.state.file_metadata = file_metadata;
 
         // Execute: Get import items
         let import_items = context.get_import_items();
