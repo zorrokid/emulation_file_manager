@@ -10,12 +10,12 @@ use file_import::{FileImportModel, FileImportOps};
 
 use crate::{error::Error, file_system_ops::FileSystemOps, view_models::Settings};
 
-pub struct FileSetOperationDeps {
+/*pub struct FileSetOperationDeps {
     pub repository_manager: Arc<RepositoryManager>,
     pub settings: Arc<Settings>,
     pub file_import_ops: Arc<dyn FileImportOps>,
     pub fs_ops: Arc<dyn FileSystemOps>,
-}
+}*/
 
 #[derive(Debug, Clone)]
 pub struct FileImportMetadata {

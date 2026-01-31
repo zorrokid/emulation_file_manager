@@ -19,26 +19,27 @@ impl PipelineStep<UpdateFileSetContext> for FetchFileSetStep {
     }
 
     async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
-        println!("Fetching file set with id {}", context.file_set_id);
+        println!("Fetching file set with id {}", context.input.file_set_id);
         // TODO: add test with non existing file set
         let file_set_result = context
+            .deps
             .repository_manager
             .get_file_set_repository()
-            .get_file_set(context.file_set_id)
+            .get_file_set(context.input.file_set_id)
             .await;
 
         match file_set_result {
             Ok(file_set) => {
                 tracing::info!(
-                    file_set_id = %context.file_set_id,
+                    file_set_id = %context.input.file_set_id,
                     "File set exists in database"
                 );
-                context.file_set = Some(file_set);
+                context.state.file_set = Some(file_set);
             }
             Err(err) => {
                 tracing::error!(
                     error = %err,
-                    file_set_id = %context.file_set_id,
+                    file_set_id = %context.input.file_set_id,
                     "Error checking if file set exists in database"
                 );
                 return StepAction::Abort(Error::DbError(format!(
@@ -60,26 +61,30 @@ impl PipelineStep<UpdateFileSetContext> for FetchFilesInFileSetStep {
     }
 
     async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
-        println!("Fetching files in file set with id {}", context.file_set_id);
+        println!(
+            "Fetching files in file set with id {}",
+            context.input.file_set_id
+        );
         let files_result = context
+            .deps
             .repository_manager
             .get_file_info_repository()
-            .get_file_infos_by_file_set(context.file_set_id)
+            .get_file_infos_by_file_set(context.input.file_set_id)
             .await;
 
         match files_result {
             Ok(files) => {
                 tracing::info!(
-                    file_set_id = %context.file_set_id,
+                    file_set_id = %context.input.file_set_id,
                     file_count = files.len(),
                     "Fetched files in file set from database"
                 );
-                context.files_in_file_set = files;
+                context.state.files_in_file_set = files;
             }
             Err(err) => {
                 tracing::error!(
                     error = %err,
-                    file_set_id = %context.file_set_id,
+                    file_set_id = %context.input.file_set_id,
                     "Error fetching files in file set from database"
                 );
                 return StepAction::Abort(Error::DbError(format!(
@@ -103,15 +108,16 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileInfoToDatabaseStep {
 
     fn should_execute(&self, context: &UpdateFileSetContext) -> bool {
         context.is_new_files_to_be_imported()
-            && !context.imported_files.is_empty()
-            && context.file_set.is_some()
+            && !context.state.imported_files.is_empty()
+            && context.state.file_set.is_some()
     }
 
     async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
         println!("Adding file info records to database...");
-        let file_type = context.file_set.as_ref().unwrap().file_type;
-        for imported_file in context.imported_files.values() {
+        let file_type = context.state.file_set.as_ref().unwrap().file_type;
+        for imported_file in context.state.imported_files.values() {
             let add_file_info_result = context
+                .deps
                 .repository_manager
                 .get_file_info_repository()
                 .add_file_info(
@@ -128,10 +134,10 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileInfoToDatabaseStep {
                         id, imported_file.archive_file_name
                     );
                     tracing::info!(
-                        file_count = context.imported_files.len(),
+                        file_count = context.state.imported_files.len(),
                         "Added file info records to database"
                     );
-                    context.new_files.push(FileInfo {
+                    context.state.new_files.push(FileInfo {
                         id,
                         sha1_checksum: imported_file.sha1_checksum,
                         file_size: imported_file.file_size,
@@ -165,12 +171,16 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileSetFilesStep {
     }
 
     async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
-        println!("Adding files to file set with id {}", context.file_set_id);
+        println!(
+            "Adding files to file set with id {}",
+            context.input.file_set_id
+        );
         let file_info_ids_with_file_names = context.get_file_info_ids_with_file_names();
         let result = context
+            .deps
             .repository_manager
             .get_file_set_repository()
-            .add_files_to_file_set(context.file_set_id, &file_info_ids_with_file_names)
+            .add_files_to_file_set(context.input.file_set_id, &file_info_ids_with_file_names)
             .await;
 
         match result {
@@ -180,7 +190,7 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileSetFilesStep {
                     file_info_ids_with_file_names.len()
                 );
                 tracing::info!(
-                    file_set_id = %context.file_set_id,
+                    file_set_id = %context.input.file_set_id,
                     added_file_count = file_info_ids_with_file_names.len(),
                     "Added files to file set in database"
                 );
@@ -191,7 +201,7 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileSetFilesStep {
                 println!("Error adding files to file set in database: {}", err);
                 tracing::error!(
                     error = %err,
-                    file_set_id = %context.file_set_id,
+                    file_set_id = %context.input.file_set_id,
                     "Error adding files to file set in database"
                 );
                 // TODO: should files and file infos be removed?
@@ -219,7 +229,7 @@ impl PipelineStep<UpdateFileSetContext> for CollectDeletionCandidatesStep {
     async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
         println!(
             "Collecting files unlinked from file set with id {} for deletion candidates",
-            context.file_set_id
+            context.input.file_set_id
         );
         let removed_files = context
             .get_removed_files()
@@ -227,21 +237,21 @@ impl PipelineStep<UpdateFileSetContext> for CollectDeletionCandidatesStep {
             .map(|file| file.sha1_checksum)
             .collect::<Vec<Sha1Checksum>>();
 
-        let repository = context.repository_manager.get_file_info_repository();
+        let repository = context.deps.repository_manager.get_file_info_repository();
         let result = repository
             .get_file_infos_by_sha1_checksums(
                 &removed_files,
-                context.file_set.as_ref().unwrap().file_type,
+                context.state.file_set.as_ref().unwrap().file_type,
             )
             .await;
         match result {
             Ok(files) => {
                 tracing::info!(
-                    file_set_id = %context.file_set_id,
+                    file_set_id = %context.input.file_set_id,
                     removed_file_count = files.len(),
                     "Collected files unlinked from file set for deletion candidates"
                 );
-                context.deletion_results = files
+                context.state.deletion_results = files
                     .into_iter()
                     .map(|file| (file.sha1_checksum, FileDeletionResult::new(file)))
                     .collect();
@@ -249,7 +259,7 @@ impl PipelineStep<UpdateFileSetContext> for CollectDeletionCandidatesStep {
             Err(err) => {
                 tracing::error!(
                     error = %err,
-                    file_set_id = %context.file_set_id,
+                    file_set_id = %context.input.file_set_id,
                     "Error collecting files unlinked from file set for deletion candidates"
                 );
                 return StepAction::Abort(Error::DbError(format!(
@@ -277,7 +287,7 @@ impl PipelineStep<UpdateFileSetContext> for UnlinkFilesFromFileSetStep {
     async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
         println!(
             "Unlinking files from file set with id {}",
-            context.file_set_id
+            context.input.file_set_id
         );
         let removed_files = context
             .get_removed_files()
@@ -286,15 +296,16 @@ impl PipelineStep<UpdateFileSetContext> for UnlinkFilesFromFileSetStep {
             .collect::<Vec<i64>>();
 
         let result = context
+            .deps
             .repository_manager
             .get_file_set_repository()
-            .remove_files_from_file_set(context.file_set_id, &removed_files)
+            .remove_files_from_file_set(context.input.file_set_id, &removed_files)
             .await;
 
         match result {
             Ok(_) => {
                 tracing::info!(
-                    file_set_id = %context.file_set_id,
+                    file_set_id = %context.input.file_set_id,
                     removed_file_count = removed_files.len(),
                     "Unlinked files from file set in database"
                 );
@@ -303,7 +314,7 @@ impl PipelineStep<UpdateFileSetContext> for UnlinkFilesFromFileSetStep {
             Err(err) => {
                 tracing::error!(
                     error = %err,
-                    file_set_id = %context.file_set_id,
+                    file_set_id = %context.input.file_set_id,
                     "Error unlinking files from file set in database"
                 );
                 StepAction::Abort(Error::DbError(format!(
@@ -324,18 +335,18 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileSetStep {
     }
 
     fn should_execute(&self, context: &UpdateFileSetContext) -> bool {
-        context.file_set.is_some()
+        context.state.file_set.is_some()
     }
 
     async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
-        let repository = context.repository_manager.get_file_set_repository();
-        let original_file_type = context.file_set.as_ref().unwrap().file_type;
+        let repository = context.deps.repository_manager.get_file_set_repository();
+        let original_file_type = context.state.file_set.as_ref().unwrap().file_type;
         let result = repository
             .update_file_set(
-                context.file_set_id,
-                &context.file_set_file_name,
-                &context.file_set_name,
-                &context.source,
+                context.input.file_set_id,
+                &context.input.file_set_file_name,
+                &context.input.file_set_name,
+                &context.input.source,
                 // TODO: currently we cannot update the file type because of the folder structure
                 // in local storage and S3. We need to implement a way to move files when the file
                 // type is changed. For now, we just keep the original file type and if file type
@@ -346,7 +357,7 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileSetStep {
         match result {
             Ok(_) => {
                 tracing::info!(
-                    file_set_id = %context.file_set_id,
+                    file_set_id = %context.input.file_set_id,
                     "Updated file set metadata in database"
                 );
                 StepAction::Continue
@@ -354,7 +365,7 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileSetStep {
             Err(err) => {
                 tracing::error!(
                     error = %err,
-                    file_set_id = %context.file_set_id,
+                    file_set_id = %context.input.file_set_id,
                     "Error updating file set metadata in database"
                 );
                 StepAction::Abort(Error::DbError(format!("Error updating file set: {}", err,)))
@@ -372,17 +383,19 @@ impl PipelineStep<UpdateFileSetContext> for MarkNewFilesForCloudSyncStep {
     }
 
     fn should_execute(&self, context: &UpdateFileSetContext) -> bool {
-        context.settings.s3_sync_enabled && !context.imported_files.is_empty()
+        context.deps.settings.s3_sync_enabled && !context.state.imported_files.is_empty()
     }
     async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
         println!("Marking new files for cloud sync...");
         let file_info_ids: Vec<(i64, String)> = context
+            .state
             .new_files
             .iter()
             .map(|file| (file.id, file.generate_cloud_key()))
             .collect();
 
         let result = context
+            .deps
             .repository_manager
             .get_file_sync_log_repository()
             .mark_files_for_cloud_sync(&file_info_ids)
@@ -419,14 +432,15 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileSetItemTypesStep {
     }
 
     fn should_execute(&self, context: &UpdateFileSetContext) -> bool {
-        !context.item_types.is_empty()
+        !context.input.item_types.is_empty()
     }
 
     async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
         let res = context
+            .deps
             .repository_manager
             .get_file_set_repository()
-            .update_item_types_to_file_set(&context.file_set_id, &context.item_types)
+            .update_item_types_to_file_set(&context.input.file_set_id, &context.input.item_types)
             .await;
 
         match res {
@@ -435,7 +449,7 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileSetItemTypesStep {
                 tracing::error!(error = %err,
                     "Updating file set item types operation failed.");
                 // No point to abort here, store failed step and continue
-                context.failed_steps.insert(
+                context.state.failed_steps.insert(
                     self.name().to_string(),
                     Error::DbError(format!(
                         "Updating file set item types operation failed: {}",
@@ -449,50 +463,9 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileSetItemTypesStep {
     }
 }
 
-// TODO: probably not needed, linking between file set and items is handled by release item
-// management (file sets don't know about items)
-/*pub struct UpdateLinkedItemsStep;
-
-#[async_trait::async_trait]
-impl PipelineStep<UpdateFileSetContext> for UpdateLinkedItemsStep {
-    fn name(&self) -> &'static str {
-        "update_linked_items_step"
-    }
-
-    fn should_execute(&self, context: &UpdateFileSetContext) -> bool {
-        !context.item_ids.is_empty()
-    }
-
-    async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
-        let res = context
-            .repository_manager
-            .get_release_item_repository()
-            .update_file_set_to_items_links(&context.item_ids, context.file_set_id)
-            .await;
-
-        match res {
-            Ok(_) => tracing::info!("File set to item(s) links updated."),
-            Err(err) => {
-                tracing::error!(error = %err,
-                    "Updating links file set to items operation failed.");
-                // No point to abort here, store failed step and continue
-                context.failed_steps.insert(
-                    self.name().to_string(),
-                    Error::DbError(format!(
-                        "Updating links file set to items operation failed: {}",
-                        err
-                    )),
-                );
-            }
-        }
-
-        StepAction::Continue
-    }
-}*/
-
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, path::PathBuf, sync::Arc};
+    use std::{path::PathBuf, sync::Arc};
 
     use core_types::{FileType, ImportedFile, Sha1Checksum, item_type::ItemType};
     use database::{models::FileSet, repository_manager::RepositoryManager, setup_test_db};
@@ -500,8 +473,10 @@ mod tests {
 
     use crate::{
         file_import::{
-            model::{FileImportData, FileImportSource, FileSetOperationDeps, ImportFileContent},
-            update_file_set::context::{FileSetParams, UpdateFileSetContext},
+            model::{FileImportData, FileImportSource, ImportFileContent},
+            update_file_set::context::{
+                UpdateFileSetContext, UpdateFileSetDeps, UpdateFileSetInput, UpdateFileSetOps,
+            },
         },
         file_system_ops::mock::MockFileSystemOps,
         pipeline::pipeline_step::{PipelineStep, StepAction},
@@ -529,23 +504,27 @@ mod tests {
         let file_import_ops = Arc::new(MockFileImportOps::new());
         let file_import_data = create_file_import_data(vec![], vec![]);
 
-        UpdateFileSetContext::new(
-            FileSetOperationDeps {
-                repository_manager,
-                settings,
-                file_import_ops,
-                fs_ops: file_system_ops,
-            },
-            FileSetParams {
-                file_import_data,
-                file_set_id: 0,
-                file_set_name: "Test File Set".to_string(),
-                file_set_file_name: "test_game".to_string(),
-                source: "test_source".to_string(),
-                item_ids: vec![],
-                item_types: vec![],
-            },
-        )
+        let deps = UpdateFileSetDeps {
+            repository_manager,
+            settings,
+        };
+
+        let ops = UpdateFileSetOps {
+            file_import_ops,
+            fs_ops: file_system_ops,
+        };
+
+        let input = UpdateFileSetInput {
+            file_import_data,
+            file_set_id: 0,
+            file_set_name: "Test File Set".to_string(),
+            file_set_file_name: "test_game".to_string(),
+            source: "test_source".to_string(),
+            item_ids: vec![],
+            item_types: vec![],
+        };
+
+        UpdateFileSetContext::new(deps, ops, input)
     }
 
     async fn create_context_and_test_file_set() -> (UpdateFileSetContext, Sha1Checksum) {
@@ -555,7 +534,7 @@ mod tests {
         let path = "/test/games.zip".to_string();
         file_system_ops.add_file(path.clone());
         let mut context = create_test_context(Some(file_system_ops)).await;
-        let repository_manager = context.repository_manager.clone();
+        let repository_manager = context.deps.repository_manager.clone();
         let _file_info_1_id = repository_manager
             .get_file_info_repository()
             .add_file_info(&file_1_checksum, 1024, "test_archive_name_1", FileType::Rom)
@@ -588,7 +567,7 @@ mod tests {
             .await
             .unwrap();
 
-        context.file_set_id = file_set_id;
+        context.input.file_set_id = file_set_id;
 
         let file_import_data = FileImportData::new(FileType::Rom, PathBuf::from("/imported/files"))
             .with_selected_file(file_1_checksum)
@@ -600,7 +579,7 @@ mod tests {
                 },
             ));
 
-        context.file_import_data = file_import_data;
+        context.input.file_import_data = file_import_data;
         (context, file_1_checksum)
     }
 
@@ -610,7 +589,7 @@ mod tests {
         let step = super::FetchFileSetStep;
         let action = step.execute(&mut context).await;
         assert!(matches!(action, StepAction::Continue));
-        assert!(context.file_set.is_some());
+        assert!(context.state.file_set.is_some());
     }
 
     #[async_std::test]
@@ -621,6 +600,7 @@ mod tests {
         assert!(matches!(action, StepAction::Continue));
         assert!(
             context
+                .state
                 .files_in_file_set
                 .iter()
                 .any(|f| f.sha1_checksum == file_1_checksum)
@@ -630,7 +610,7 @@ mod tests {
     #[async_std::test]
     async fn test_update_file_info_to_database_step() {
         let mut context = create_test_context(None).await;
-        context.file_set = Some(FileSet {
+        context.state.file_set = Some(FileSet {
             id: 1,
             name: "Test File Set".to_string(),
             file_name: "test_game".to_string(),
@@ -640,7 +620,7 @@ mod tests {
 
         let file_1_checksum: Sha1Checksum = [1u8; 20];
 
-        context.imported_files.insert(
+        context.state.imported_files.insert(
             file_1_checksum,
             ImportedFile {
                 original_file_name: "game1.rom".to_string(),
@@ -653,8 +633,8 @@ mod tests {
         let step = super::UpdateFileInfoToDatabaseStep;
         let action = step.execute(&mut context).await;
         assert!(matches!(action, StepAction::Continue));
-        assert!(!context.new_files.is_empty());
-        assert_eq!(context.new_files[0].sha1_checksum, file_1_checksum);
+        assert!(!context.state.new_files.is_empty());
+        assert_eq!(context.state.new_files[0].sha1_checksum, file_1_checksum);
     }
 
     #[async_std::test]
@@ -663,6 +643,7 @@ mod tests {
 
         // Fetch the existing file info for file_1
         let file_1_infos = context
+            .deps
             .repository_manager
             .get_file_info_repository()
             .get_file_infos_by_sha1_checksums(&[file_1_checksum], FileType::Rom)
@@ -670,18 +651,19 @@ mod tests {
             .unwrap();
 
         // Add file_1 to existing_files
-        context.existing_files = file_1_infos;
+        context.state.existing_files = file_1_infos;
 
         // Add a new file to be imported
         let file_2_checksum: Sha1Checksum = [2u8; 20];
         let file_2_id = context
+            .deps
             .repository_manager
             .get_file_info_repository()
             .add_file_info(&file_2_checksum, 2048, "test_archive_name_2", FileType::Rom)
             .await
             .unwrap();
 
-        context.new_files.push(database::models::FileInfo {
+        context.state.new_files.push(database::models::FileInfo {
             id: file_2_id,
             sha1_checksum: file_2_checksum.into(),
             file_size: 2048,
@@ -691,7 +673,7 @@ mod tests {
 
         // Update file_import_data to only include the new file (file_2)
         // file_1 is already in the file set
-        context.file_import_data =
+        context.input.file_import_data =
             FileImportData::new(FileType::Rom, PathBuf::from("/imported/files"))
                 .with_selected_file(file_2_checksum)
                 .with_file_import_source(
@@ -710,9 +692,10 @@ mod tests {
 
         // Verify the new file was added to the file set (total should be 2)
         let files_in_set = context
+            .deps
             .repository_manager
             .get_file_info_repository()
-            .get_file_infos_by_file_set(context.file_set_id)
+            .get_file_infos_by_file_set(context.input.file_set_id)
             .await
             .unwrap();
         assert_eq!(files_in_set.len(), 2);
@@ -741,7 +724,7 @@ mod tests {
         let _ = step_fetch.execute(&mut context).await;
 
         // Swet file_import_data without selected files (simulating removal)
-        context.file_import_data =
+        context.input.file_import_data =
             FileImportData::new(FileType::Rom, PathBuf::from("/imported/files"));
 
         let step = super::CollectDeletionCandidatesStep;
@@ -753,8 +736,13 @@ mod tests {
         assert!(matches!(action, StepAction::Continue));
 
         // Verify deletion results were collected
-        assert_eq!(context.deletion_results.len(), 1);
-        assert!(context.deletion_results.contains_key(&file_1_checksum));
+        assert_eq!(context.state.deletion_results.len(), 1);
+        assert!(
+            context
+                .state
+                .deletion_results
+                .contains_key(&file_1_checksum)
+        );
     }
 
     #[async_std::test]
@@ -766,7 +754,7 @@ mod tests {
         let _ = step_fetch.execute(&mut context).await;
 
         // Update file_import_data to have no selected files (simulating removal)
-        context.file_import_data =
+        context.input.file_import_data =
             FileImportData::new(FileType::Rom, PathBuf::from("/imported/files"));
 
         let step = super::UnlinkFilesFromFileSetStep;
@@ -779,15 +767,17 @@ mod tests {
 
         // Verify files were removed from the file set
         let files_in_set = context
+            .deps
             .repository_manager
             .get_file_info_repository()
-            .get_file_infos_by_file_set(context.file_set_id)
+            .get_file_infos_by_file_set(context.input.file_set_id)
             .await
             .unwrap();
         assert_eq!(files_in_set.len(), 0);
 
         // Verify the file info still exists in database (only unlinked from file set)
         let file_info = context
+            .deps
             .repository_manager
             .get_file_info_repository()
             .get_file_infos_by_sha1_checksums(&[file_1_checksum], FileType::Rom)
@@ -801,19 +791,20 @@ mod tests {
         let (mut context, _) = create_context_and_test_file_set().await;
 
         let file_set = context
+            .deps
             .repository_manager
             .get_file_set_repository()
-            .get_file_set(context.file_set_id)
+            .get_file_set(context.input.file_set_id)
             .await
             .unwrap();
 
-        context.file_set = Some(file_set);
+        context.state.file_set = Some(file_set);
 
         // Update file set metadata
-        context.file_set_name = "Updated File Set Name".to_string();
-        context.file_set_file_name = "updated_game".to_string();
-        context.source = "updated_source".to_string();
-        context.file_import_data.file_type = FileType::Rom;
+        context.input.file_set_name = "Updated File Set Name".to_string();
+        context.input.file_set_file_name = "updated_game".to_string();
+        context.input.source = "updated_source".to_string();
+        context.input.file_import_data.file_type = FileType::Rom;
 
         let step = super::UpdateFileSetStep;
         let action = step.execute(&mut context).await;
@@ -821,9 +812,10 @@ mod tests {
 
         // Verify file set was updated
         let updated_file_set = context
+            .deps
             .repository_manager
             .get_file_set_repository()
-            .get_file_set(context.file_set_id)
+            .get_file_set(context.input.file_set_id)
             .await
             .unwrap();
 
@@ -837,16 +829,17 @@ mod tests {
     async fn test_update_file_set_item_types_step() {
         let (mut context, _) = create_context_and_test_file_set().await;
 
-        context.item_types = vec![ItemType::DiskOrSetOfDisks, ItemType::Manual];
+        context.input.item_types = vec![ItemType::DiskOrSetOfDisks, ItemType::Manual];
 
         let step = super::UpdateFileSetItemTypesStep;
         let action = step.execute(&mut context).await;
         assert!(matches!(action, StepAction::Continue));
 
         let item_types_in_db = context
+            .deps
             .repository_manager
             .get_file_set_repository()
-            .get_item_types_for_file_set(context.file_set_id)
+            .get_item_types_for_file_set(context.input.file_set_id)
             .await
             .unwrap();
 

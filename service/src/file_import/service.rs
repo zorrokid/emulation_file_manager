@@ -13,10 +13,12 @@ use crate::{
         },
         model::{
             FileImportData, FileImportPrepareResult, FileImportResult, FileSetImportModel,
-            FileSetOperationDeps, UpdateFileSetModel,
+            UpdateFileSetModel,
         },
         prepare::context::PrepareFileImportContext,
-        update_file_set::context::{FileSetParams as UpdateFileSetParams, UpdateFileSetContext},
+        update_file_set::context::{
+            UpdateFileSetContext, UpdateFileSetDeps, UpdateFileSetInput, UpdateFileSetOps,
+        },
     },
     file_system_ops::{FileSystemOps, StdFileSystemOps},
     pipeline::generic_pipeline::Pipeline,
@@ -164,23 +166,24 @@ impl FileImportService {
             selected_files: import_model.selected_files,
             import_files: import_model.import_files,
         };
-        let mut context = UpdateFileSetContext::new(
-            FileSetOperationDeps {
-                repository_manager: self.repository_manager.clone(),
-                settings: self.settings.clone(),
-                file_import_ops: self.file_import_ops.clone(),
-                fs_ops: self.fs_ops.clone(),
-            },
-            UpdateFileSetParams {
-                file_set_id: import_model.file_set_id,
-                file_set_name: import_model.file_set_name,
-                file_set_file_name: import_model.file_set_file_name,
-                source: import_model.source,
-                item_ids: import_model.item_ids,
-                file_import_data,
-                item_types: import_model.item_types,
-            },
-        );
+        let deps = UpdateFileSetDeps {
+            repository_manager: self.repository_manager.clone(),
+            settings: self.settings.clone(),
+        };
+        let ops = UpdateFileSetOps {
+            file_import_ops: self.file_import_ops.clone(),
+            fs_ops: self.fs_ops.clone(),
+        };
+        let input = UpdateFileSetInput {
+            file_set_id: import_model.file_set_id,
+            file_set_name: import_model.file_set_name,
+            file_set_file_name: import_model.file_set_file_name,
+            source: import_model.source,
+            item_ids: import_model.item_ids,
+            file_import_data,
+            item_types: import_model.item_types,
+        };
+        let mut context = UpdateFileSetContext::new(deps, ops, input);
         let pipeline = Pipeline::<UpdateFileSetContext>::new();
         let res = pipeline.execute(&mut context).await;
         match res {
@@ -188,11 +191,12 @@ impl FileImportService {
                 file_set_id: import_model.file_set_id,
                 release_id: None,
                 imported_new_files: context
+                    .state
                     .imported_files
                     .values()
                     .cloned()
                     .collect::<Vec<ImportedFile>>(),
-                failed_steps: context.failed_steps,
+                failed_steps: context.state.failed_steps,
             }),
             Err(err) => Err(err),
         }
