@@ -17,7 +17,7 @@ use crate::{
 };
 
 /// Type alias for a Send-able metadata reader factory function
-type SendReaderFactoryFn = dyn Fn(
+pub type SendReaderFactoryFn = dyn Fn(
         &std::path::Path,
     ) -> Result<Box<dyn file_metadata::FileMetadataReader>, file_metadata::FileMetadataError>
     + Send;

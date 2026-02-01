@@ -43,6 +43,9 @@ pub enum FileMetadataError {
 
     #[error("Unsupported file format: {0}")]
     UnsupportedFormat(PathBuf),
+
+    #[error("General error for {path}: {message}")]
+    GeneralError { path: PathBuf, message: String },
 }
 
 /// Trait for reading file metadata from various sources

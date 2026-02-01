@@ -244,6 +244,7 @@ impl PipelineStep<MassImportContext> for ImportFileSetsStep {
 #[cfg(test)]
 mod tests {
     use std::{
+        collections::HashMap,
         path::{Path, PathBuf},
         sync::Arc,
     };
@@ -261,26 +262,34 @@ mod tests {
         file_import::file_import_service_ops::MockFileImportServiceOps,
         file_system_ops::{FileSystemOps, SimpleDirEntry, mock::MockFileSystemOps},
         mass_import::{
-            context::{MassImportDependencies, MassImportOps},
+            context::{MassImportDependencies, MassImportOps, SendReaderFactoryFn},
             models::MassImportInput,
         },
     };
 
     use super::*;
 
-    pub fn create_mock_reader_factory()
-    -> impl Fn(&Path) -> Result<Box<dyn FileMetadataReader>, FileMetadataError> {
-        let mock_metadata = vec![ReadFile {
-            file_name: "mock_file.bin".to_string(),
-            sha1_checksum: [2u8; 20],
-            file_size: 789,
-        }];
+    pub fn create_mock_reader_factory(
+        per_path: HashMap<PathBuf, Vec<ReadFile>>,
+    ) -> impl Fn(&Path) -> Result<Box<dyn FileMetadataReader>, FileMetadataError> + Send {
+        move |path: &Path| {
+            let metadata =
+                per_path
+                    .get(path)
+                    .cloned()
+                    .ok_or_else(|| FileMetadataError::GeneralError {
+                        path: path.to_path_buf(),
+                        message: "No mock metadata for this path".to_string(),
+                    })?;
 
+            let mock_reader = MockFileMetadataReader { metadata };
+            Ok(Box::new(mock_reader))
+        }
+        /*let mock_metadata = meta_data.unwrap_or_default();
         let mock_reader = MockFileMetadataReader {
             metadata: mock_metadata.clone(),
         };
-
-        create_mock_factory(mock_reader)
+        create_mock_factory(mock_reader)*/
     }
 
     async fn get_deps() -> MassImportDependencies {
@@ -297,9 +306,9 @@ mod tests {
     fn get_ops(
         dat_file_parser_ops: Option<Box<dyn DatFileParserOps>>,
         fs_ops: Option<Box<dyn FileSystemOps>>,
+        reader_factory_fn: Option<Box<SendReaderFactoryFn>>,
     ) -> MassImportOps {
         let file_import_service_ops = Box::new(MockFileImportServiceOps::new());
-        let reader_factory_fn = Box::new(create_mock_reader_factory());
         let parse_result: Result<DatFile, DatFileParserError> = Ok(DatFile {
             header: DatHeader::default(),
             games: vec![],
@@ -307,6 +316,8 @@ mod tests {
         let dat_file_parser_ops =
             dat_file_parser_ops.unwrap_or(Box::new(MockDatParser::new(parse_result)));
         let fs_ops = fs_ops.unwrap_or(Box::new(MockFileSystemOps::new()));
+        let reader_factory_fn =
+            reader_factory_fn.unwrap_or(Box::new(create_mock_reader_factory(HashMap::new())));
         MassImportOps {
             fs_ops,
             file_import_service_ops,
@@ -331,7 +342,7 @@ mod tests {
                 item_type: None,
                 system_id: 1,
             },
-            get_ops(Some(dat_file_parser_ops), None),
+            get_ops(Some(dat_file_parser_ops), None, None),
         );
 
         let step = ImportDatFileStep;
@@ -360,7 +371,7 @@ mod tests {
         mock_fs_ops.add_entry(entry2);
         mock_fs_ops.add_entry(entry3);
 
-        let ops = get_ops(None, Some(Box::new(mock_fs_ops)));
+        let ops = get_ops(None, Some(Box::new(mock_fs_ops)), None);
 
         let mut context = MassImportContext::with_ops(
             MassImportInput {
@@ -381,5 +392,107 @@ mod tests {
         assert!(context.state.read_ok_files.contains(&PathBuf::from(&file1)));
         assert!(context.state.read_ok_files.contains(&PathBuf::from(&file2)));
         assert!(context.state.dir_scan_errors.contains(&entry3_error));
+    }
+
+    #[async_std::test]
+    async fn test_read_file_metadata_step() {
+        let mock_metadata = vec![
+            ReadFile {
+                file_name: "file1.bin".to_string(),
+                sha1_checksum: [1u8; 20],
+                file_size: 123,
+            },
+            ReadFile {
+                file_name: "file2.bin".to_string(),
+                sha1_checksum: [2u8; 20],
+                file_size: 456,
+            },
+        ];
+        // TODO: mock metadata should be provided for each file separately
+        // factory returns reader for each file, and each reader should return different metadata
+        let mut metadata_by_path = HashMap::new();
+        metadata_by_path.insert(
+            PathBuf::from("/mock/file1.zip"),
+            vec![
+                ReadFile {
+                    file_name: "file1.bin".to_string(),
+                    sha1_checksum: [1u8; 20],
+                    file_size: 123,
+                },
+                ReadFile {
+                    file_name: "file2.bin".to_string(),
+                    sha1_checksum: [3u8; 20],
+                    file_size: 456,
+                },
+            ],
+        );
+        metadata_by_path.insert(
+            PathBuf::from("/mock/file2.zip"),
+            vec![ReadFile {
+                file_name: "file2.bin".to_string(),
+                sha1_checksum: [2u8; 20],
+                file_size: 456,
+            }],
+        );
+        let reader_factory = create_mock_reader_factory(metadata_by_path);
+        let ops = get_ops(None, None, Some(Box::new(reader_factory)));
+        let mut context = MassImportContext::with_ops(
+            MassImportInput {
+                source_path: PathBuf::from("/mock"),
+                dat_file_path: None,
+                file_type: core_types::FileType::Rom,
+                item_type: None,
+                system_id: 1,
+            },
+            ops,
+        );
+
+        context
+            .state
+            .read_ok_files
+            .push(PathBuf::from("/mock/file1.zip"));
+        context
+            .state
+            .read_ok_files
+            .push(PathBuf::from("/mock/file2.zip"));
+
+        let step = ReadFileMetadataStep;
+        let res = step.execute(&mut context).await;
+        assert!(matches!(res, StepAction::Continue));
+        assert_eq!(context.state.file_metadata.len(), 2);
+        assert!(
+            context
+                .state
+                .file_metadata
+                .contains_key(&PathBuf::from("/mock/file1.zip"))
+        );
+        assert!(
+            context
+                .state
+                .file_metadata
+                .contains_key(&PathBuf::from("/mock/file2.zip"))
+        );
+        assert!(context.state.read_failed_files.is_empty());
+        let file_1_metadata = context
+            .state
+            .file_metadata
+            .get(&PathBuf::from("/mock/file1.zip"))
+            .unwrap();
+        assert_eq!(file_1_metadata.len(), 2);
+        assert_eq!(file_1_metadata[0].file_name, "file1.bin");
+        assert_eq!(file_1_metadata[0].file_size, 123);
+        assert_eq!(file_1_metadata[0].sha1_checksum, [1u8; 20]);
+        assert_eq!(file_1_metadata[1].file_name, "file2.bin");
+        assert_eq!(file_1_metadata[1].file_size, 456);
+        assert_eq!(file_1_metadata[1].sha1_checksum, [3u8; 20]);
+        let file_2_metadata = context
+            .state
+            .file_metadata
+            .get(&PathBuf::from("/mock/file2.zip"))
+            .unwrap();
+        assert_eq!(file_2_metadata.len(), 1);
+        assert_eq!(file_2_metadata[0].file_name, "file2.bin");
+        assert_eq!(file_2_metadata[0].file_size, 456);
+        assert_eq!(file_2_metadata[0].sha1_checksum, [2u8; 20]);
     }
 }
