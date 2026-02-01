@@ -1,12 +1,13 @@
 use std::sync::Arc;
 
+use async_std::channel::Sender;
 use database::repository_manager::RepositoryManager;
 
 use crate::{
     error::Error,
     mass_import::{
         context::{MassImportContext, MassImportDependencies, MassImportState},
-        models::{MassImportInput, MassImportResult},
+        models::{MassImportInput, MassImportResult, MassImportSyncEvent},
     },
     pipeline::generic_pipeline::Pipeline,
     view_models::Settings,
@@ -42,7 +43,11 @@ impl MassImportService {
     /// software title.
     /// - when merging two releases, all linked file sets will be moved to the target release.
     ///
-    pub async fn import(&self, input: MassImportInput) -> Result<MassImportResult, Error> {
+    pub async fn import(
+        &self,
+        input: MassImportInput,
+        progress_tx: Sender<MassImportSyncEvent>,
+    ) -> Result<MassImportResult, Error> {
         tracing::info!(
             input = ?input,
             "Starting mass import process...");
@@ -52,7 +57,7 @@ impl MassImportService {
             settings: self.settings.clone(),
         };
 
-        let mut context = MassImportContext::new(input, deps);
+        let mut context = MassImportContext::new(input, deps, progress_tx);
         let pipeline = Pipeline::<MassImportContext>::new();
         pipeline.execute(&mut context).await?;
         tracing::info!("Mass import process completed.");

@@ -1,5 +1,6 @@
 use std::{path::PathBuf, sync::Arc};
 
+use async_std::{channel::unbounded, task};
 use core_types::{FileType, item_type::ItemType};
 use database::repository_manager::RepositoryManager;
 use relm4::{
@@ -13,11 +14,12 @@ use relm4::{
             FileChooserExt, GtkWindowExt, OrientableExt, WidgetExt,
         },
     },
+    typed_view::list::TypedListView,
 };
 use service::{
     error::Error,
     mass_import::{
-        models::{MassImportInput, MassImportResult},
+        models::{FileSetImportStatus, MassImportInput, MassImportResult, MassImportSyncEvent},
         service::MassImportService,
     },
     view_model_service::ViewModelService,
@@ -30,7 +32,41 @@ use crate::{
     system_selector::{
         SystemSelectInit, SystemSelectModel, SystemSelectMsg, SystemSelectOutputMsg,
     },
+    utils::dialog_utils::{show_error_dialog, show_info_dialog},
 };
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportListItem {
+    pub name: String,
+}
+
+pub struct ListItemWidgets {
+    label: gtk::Label,
+}
+
+impl relm4::typed_view::list::RelmListItem for ImportListItem {
+    type Root = gtk::Box;
+    type Widgets = ListItemWidgets;
+
+    fn setup(_item: &gtk::ListItem) -> (gtk::Box, ListItemWidgets) {
+        relm4::view! {
+            my_box = gtk::Box {
+                set_orientation: gtk::Orientation::Horizontal,
+                #[name = "label"]
+                gtk::Label,
+            }
+        }
+
+        let widgets = ListItemWidgets { label };
+
+        (my_box, widgets)
+    }
+
+    fn bind(&mut self, widgets: &mut Self::Widgets, _root: &mut Self::Root) {
+        let ListItemWidgets { label } = widgets;
+        label.set_label(self.name.as_str());
+    }
+}
 
 #[derive(Debug)]
 pub struct ImportForm {
@@ -44,6 +80,7 @@ pub struct ImportForm {
     system_selector: Controller<SystemSelectModel>,
     mass_import_service: Arc<MassImportService>,
     item_type_dropdown: Controller<ItemTypeDropdown>,
+    imported_sets_list_view_wrapper: TypedListView<ImportListItem, gtk::NoSelection>,
 }
 
 #[derive(Debug)]
@@ -60,6 +97,7 @@ pub enum ImportFormMsg {
     OpenSystemSelector,
     StartImport,
     ItemTypeChanged(Option<ItemType>),
+    ProcessSyncEvent(MassImportSyncEvent),
 }
 
 #[derive(Debug)]
@@ -190,6 +228,11 @@ impl Component for ImportForm {
                         && model.selected_system.is_some()
                         && model.selected_file_type.is_some()
                 },
+                gtk::ScrolledWindow {
+                    set_vexpand: true,
+                    #[local_ref]
+                    imported_files_list -> gtk::ListView {},
+                },
 
             }
         }
@@ -201,6 +244,9 @@ impl Component for ImportForm {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let file_type_dropdown = Self::create_file_type_dropdown(None, &sender);
+
+        let imported_sets_list_view_wrapper =
+            TypedListView::<ImportListItem, gtk::NoSelection>::new();
 
         let mass_import_service = Arc::new(MassImportService::new(
             Arc::clone(&init_model.repository_manager),
@@ -241,10 +287,12 @@ impl Component for ImportForm {
             system_selector,
             mass_import_service,
             item_type_dropdown,
+            imported_sets_list_view_wrapper,
         };
 
         let file_types_dropdown = model.file_type_dropdown.widget();
         let item_type_dropdown = model.item_type_dropdown.widget();
+        let imported_files_list = &model.imported_sets_list_view_wrapper.view;
         let widgets = view_output!();
         ComponentParts { model, widgets }
     }
@@ -332,7 +380,10 @@ impl Component for ImportForm {
                 self.selected_system = Some(system);
             }
             ImportFormMsg::Show => root.show(),
-            ImportFormMsg::Hide => root.hide(),
+            ImportFormMsg::Hide => {
+                self.imported_sets_list_view_wrapper.clear();
+                root.hide()
+            }
             ImportFormMsg::OpenSystemSelector => {
                 let selected_system_ids = if let Some(system) = &self.selected_system {
                     vec![system.id]
@@ -367,16 +418,33 @@ impl Component for ImportForm {
                         item_type: self.selected_item_type,
                         system_id: selected_system.id,
                     };
+                    let (progress_tx, progress_rx) = unbounded::<MassImportSyncEvent>();
+                    let ui_sender = sender.clone();
+
+                    // Spawn task to forward progress messages to UI
+                    task::spawn(async move {
+                        while let Ok(event) = progress_rx.recv().await {
+                            ui_sender.input(ImportFormMsg::ProcessSyncEvent(event));
+                        }
+                    });
 
                     sender.oneshot_command(async move {
-                        let result = mass_import_service.import(input).await;
+                        let result = mass_import_service.import(input, progress_tx).await;
                         CommandMsg::ProcessImportResult(result)
                     });
                 }
             }
             ImportFormMsg::ItemTypeChanged(opt_item_type) => {
-                tracing::info!("Item type changed (new component): {:?}", opt_item_type);
+                tracing::info!(
+                    opt_item_type = ?opt_item_type,
+                    "Item type changed (new component)");
                 self.selected_item_type = opt_item_type;
+            }
+            ImportFormMsg::ProcessSyncEvent(event) => {
+                tracing::info!(event = ?event, "Received sync event");
+                self.imported_sets_list_view_wrapper.append(ImportListItem {
+                    name: event.file_set_name,
+                });
             }
         }
     }
@@ -389,16 +457,81 @@ impl Component for ImportForm {
     ) {
         match message {
             CommandMsg::ProcessImportResult(result) => match result {
-                Ok(_) => {
-                    // TODO: Show summary dialog with import results
-                    tracing::info!("Import completed successfully.");
+                Ok(mass_import_result) => {
+                    self.show_import_summary_dialog(&mass_import_result, root);
                     root.hide();
                 }
                 Err(e) => {
                     tracing::error!("Import failed: {:?}", e);
-                    // Here you could show an error dialog to the user
+                    show_error_dialog(format!("The import process failed: {:?}", e), root);
                 }
             },
         }
+    }
+}
+
+impl ImportForm {
+    fn show_import_summary_dialog(&self, result: &MassImportResult, root: &gtk::Window) {
+        // TODO: improve the summary details
+        let successful_imports = result
+            .import_results
+            .iter()
+            .filter(|r| matches!(r.status, FileSetImportStatus::Success))
+            .count();
+        let failed_imports = result
+            .import_results
+            .iter()
+            .filter(|r| matches!(r.status, FileSetImportStatus::Failed(_)))
+            .collect::<Vec<_>>();
+        let successful_with_warnings = result
+            .import_results
+            .iter()
+            .filter(|r| matches!(r.status, FileSetImportStatus::SucessWithWarnings(_)))
+            .collect::<Vec<_>>();
+        let error_messages = failed_imports
+            .iter()
+            .map(|r| {
+                if let FileSetImportStatus::Failed(err_msg) = &r.status {
+                    err_msg.clone()
+                } else {
+                    String::new()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        let warning_messages = successful_with_warnings
+            .iter()
+            .flat_map(|r| {
+                if let FileSetImportStatus::SucessWithWarnings(warnings) = &r.status {
+                    warnings.clone()
+                } else {
+                    vec![]
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        let message = format!(
+            "Import Summary:\n\
+            Successful imports: {}\n\
+            Imports with warnings: {}\n\
+            Failed imports: {}\n\n\
+            {}\
+            {}",
+            successful_imports,
+            successful_with_warnings.len(),
+            failed_imports.len(),
+            if !warning_messages.is_empty() {
+                format!("Warnings:\n{}\n\n", warning_messages)
+            } else {
+                String::new()
+            },
+            if !error_messages.is_empty() {
+                format!("Errors:\n{}", error_messages)
+            } else {
+                String::new()
+            },
+        );
+
+        show_info_dialog(message, root);
     }
 }

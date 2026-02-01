@@ -1,6 +1,9 @@
 use crate::{
     error::Error,
-    mass_import::context::{FileSetImportResult, FileSetImportStatus, MassImportContext},
+    mass_import::{
+        context::MassImportContext,
+        models::{FileSetImportResult, FileSetImportStatus},
+    },
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
 

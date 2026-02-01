@@ -1,6 +1,10 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
-use crate::{error::Error, mass_import::models::MassImportInput};
+use crate::{
+    error::Error,
+    mass_import::models::{FileSetImportResult, MassImportInput, MassImportSyncEvent},
+};
+use async_std::channel::Sender;
 use core_types::{ReadFile, Sha1Checksum, sha1_from_hex_string};
 use dat_file_parser::{DatFile, DatFileParserOps, DatGame, DatHeader, DatRom};
 use database::repository_manager::RepositoryManager;
@@ -67,6 +71,7 @@ pub struct MassImportContext {
     pub input: MassImportInput,
     pub state: MassImportState,
     pub ops: MassImportOps,
+    pub progress_tx: Option<Sender<MassImportSyncEvent>>,
 }
 
 pub struct MassImportOps {
@@ -74,19 +79,6 @@ pub struct MassImportOps {
     pub dat_file_parser_ops: Box<dyn DatFileParserOps>,
     pub file_import_service_ops: Box<dyn FileImportServiceOps>,
     pub reader_factory_fn: Box<SendReaderFactoryFn>,
-}
-
-#[derive(Debug, Clone)]
-pub enum FileSetImportStatus {
-    Success,
-    SucessWithWarnings(Vec<String>), // Warning message
-    Failed(String),                  // Error message
-}
-
-#[derive(Debug, Clone)]
-pub struct FileSetImportResult {
-    pub status: FileSetImportStatus,
-    pub file_set_id: Option<i64>,
 }
 
 #[derive(Default)]
@@ -106,7 +98,11 @@ pub struct MassImportDependencies {
 }
 
 impl MassImportContext {
-    pub fn new(input: MassImportInput, deps: MassImportDependencies) -> Self {
+    pub fn new(
+        input: MassImportInput,
+        deps: MassImportDependencies,
+        progress_tx: Sender<MassImportSyncEvent>,
+    ) -> Self {
         let fs_ops: Box<dyn FileSystemOps> = Box::new(StdFileSystemOps);
         let dat_file_parser_ops: Box<dyn DatFileParserOps> =
             Box::new(dat_file_parser::DefaultDatParser);
@@ -123,6 +119,7 @@ impl MassImportContext {
                 file_import_service_ops,
                 reader_factory_fn,
             },
+            progress_tx: Some(progress_tx),
         }
     }
 
@@ -131,6 +128,7 @@ impl MassImportContext {
             input,
             ops,
             state: MassImportState::default(),
+            progress_tx: None,
         }
     }
 

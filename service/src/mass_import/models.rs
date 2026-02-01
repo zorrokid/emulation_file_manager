@@ -5,7 +5,7 @@ use dat_file_parser::DatFile;
 
 use crate::{
     error::Error,
-    mass_import::context::{FileSetImportResult, ImportItem, MassImportState},
+    mass_import::context::{ImportItem, MassImportState},
 };
 
 #[derive(Debug, Clone)]
@@ -18,6 +18,11 @@ pub struct MassImportInput {
 }
 
 #[derive(Debug, Clone)]
+pub struct MassImportSyncEvent {
+    pub file_set_name: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct MassImportResult {
     pub import_items: Vec<ImportItem>,
     pub read_ok_files: Vec<PathBuf>,
@@ -26,6 +31,19 @@ pub struct MassImportResult {
     pub file_metadata: HashMap<PathBuf, Vec<ReadFile>>,
     pub dat_file: Option<DatFile>,
     pub import_results: Vec<FileSetImportResult>,
+}
+
+#[derive(Debug, Clone)]
+pub enum FileSetImportStatus {
+    Success,
+    SucessWithWarnings(Vec<String>), // Warning message
+    Failed(String),                  // Error message
+}
+
+#[derive(Debug, Clone)]
+pub struct FileSetImportResult {
+    pub status: FileSetImportStatus,
+    pub file_set_id: Option<i64>,
 }
 
 impl From<MassImportState> for MassImportResult {
