@@ -16,7 +16,10 @@ use relm4::{
 };
 use service::{
     error::Error,
-    mass_import::{models::MassImportInput, service::MassImportService},
+    mass_import::{
+        models::{MassImportInput, MassImportResult},
+        service::MassImportService,
+    },
     view_model_service::ViewModelService,
     view_models::{Settings, SystemListModel},
 };
@@ -61,7 +64,7 @@ pub enum ImportFormMsg {
 
 #[derive(Debug)]
 pub enum CommandMsg {
-    ProcessImportResult(Result<(), Error>),
+    ProcessImportResult(Result<MassImportResult, Error>),
 }
 
 pub struct ImportFormInit {
@@ -387,6 +390,7 @@ impl Component for ImportForm {
         match message {
             CommandMsg::ProcessImportResult(result) => match result {
                 Ok(_) => {
+                    // TODO: Show summary dialog with import results
                     tracing::info!("Import completed successfully.");
                     root.hide();
                 }

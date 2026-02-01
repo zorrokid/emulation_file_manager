@@ -5,8 +5,8 @@ use database::repository_manager::RepositoryManager;
 use crate::{
     error::Error,
     mass_import::{
-        context::{MassImportContext, MassImportDependencies},
-        models::MassImportInput,
+        context::{MassImportContext, MassImportDependencies, MassImportState},
+        models::{MassImportInput, MassImportResult},
     },
     pipeline::generic_pipeline::Pipeline,
     view_models::Settings,
@@ -28,7 +28,7 @@ impl MassImportService {
 
     /// Starts the mass import process for the given system ID and source path.
     /// For each file or archive found in the source path, it will attempt to read metadata,
-    /// match against the DAT file (if provided), and import the files into the collection and
+    /// match against the provided DAT file and import the files into the collection and
     /// database. It will create a file set for each file or archive successfully imported and a
     /// release with software title linked to the file sets.
     ///
@@ -42,7 +42,7 @@ impl MassImportService {
     /// software title.
     /// - when merging two releases, all linked file sets will be moved to the target release.
     ///
-    pub async fn import(&self, input: MassImportInput) -> Result<(), Error> {
+    pub async fn import(&self, input: MassImportInput) -> Result<MassImportResult, Error> {
         tracing::info!(
             input = ?input,
             "Starting mass import process...");
@@ -54,9 +54,8 @@ impl MassImportService {
 
         let mut context = MassImportContext::new(input, deps);
         let pipeline = Pipeline::<MassImportContext>::new();
+        pipeline.execute(&mut context).await?;
         tracing::info!("Mass import process completed.");
-        let res = pipeline.execute(&mut context).await;
-
-        Ok(())
+        Ok(MassImportResult::from(context.state))
     }
 }

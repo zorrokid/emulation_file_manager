@@ -22,12 +22,14 @@ pub type SendReaderFactoryFn = dyn Fn(
     ) -> Result<Box<dyn file_metadata::FileMetadataReader>, file_metadata::FileMetadataError>
     + Send;
 
+#[derive(Debug, Clone)]
 pub enum ImportItemStatus {
     Pending,
     Success,
     Failed(String), // Error message
 }
 
+#[derive(Debug, Clone)]
 pub struct ImportItem {
     pub dat_game: DatGame,
     pub dat_roms_available: Vec<DatRom>,
@@ -60,9 +62,10 @@ impl ImportItem {
         }
     }
 }
+
 pub struct MassImportContext {
     pub input: MassImportInput,
-    pub state: MassImporState,
+    pub state: MassImportState,
     pub ops: MassImportOps,
 }
 
@@ -73,20 +76,21 @@ pub struct MassImportOps {
     pub reader_factory_fn: Box<SendReaderFactoryFn>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum FileSetImportStatus {
     Success,
     SucessWithWarnings(Vec<String>), // Warning message
     Failed(String),                  // Error message
 }
 
+#[derive(Debug, Clone)]
 pub struct FileSetImportResult {
     pub status: FileSetImportStatus,
     pub file_set_id: Option<i64>,
 }
 
 #[derive(Default)]
-pub struct MassImporState {
+pub struct MassImportState {
     pub import_items: Vec<ImportItem>,
     pub read_ok_files: Vec<PathBuf>,
     pub read_failed_files: Vec<PathBuf>,
@@ -112,7 +116,7 @@ impl MassImportContext {
         );
         MassImportContext {
             input,
-            state: MassImporState::default(),
+            state: MassImportState::default(),
             ops: MassImportOps {
                 fs_ops,
                 dat_file_parser_ops,
@@ -126,7 +130,7 @@ impl MassImportContext {
         MassImportContext {
             input,
             ops,
-            state: MassImporState::default(),
+            state: MassImportState::default(),
         }
     }
 

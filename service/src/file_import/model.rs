@@ -149,7 +149,7 @@ pub struct FileImportResult {
     pub failed_steps: HashMap<String, Error>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FileSetImportModel {
     pub import_files: Vec<FileImportSource>,
     pub selected_files: Vec<Sha1Checksum>,
