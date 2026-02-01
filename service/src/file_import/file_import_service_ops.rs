@@ -62,6 +62,7 @@ pub struct CreateMockState {
     pub release_id: Option<i64>,
 }
 
+#[derive(Default)]
 pub struct MockFileImportServiceOps {
     pub should_fail: bool,
     pub create_calls: Vec<FileSetImportModel>,
@@ -72,21 +73,12 @@ pub struct MockFileImportServiceOps {
 
 impl MockFileImportServiceOps {
     pub fn new() -> Self {
-        Self {
-            should_fail: false,
-            create_calls: Vec::new(),
-            update_calls: Vec::new(),
-            prepare_calls: Vec::new(),
-            setup_create_mock: None,
-        }
+        Default::default()
     }
     pub fn with_create_mock(setup: CreateMockState) -> Self {
         Self {
-            should_fail: false,
-            create_calls: Vec::new(),
-            update_calls: Vec::new(),
-            prepare_calls: Vec::new(),
             setup_create_mock: Some(setup),
+            ..Default::default()
         }
     }
 }

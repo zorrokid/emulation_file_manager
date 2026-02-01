@@ -73,6 +73,7 @@ pub struct MassImportOps {
     pub reader_factory_fn: Box<SendReaderFactoryFn>,
 }
 
+#[derive(Debug)]
 pub enum FileSetImportStatus {
     Success,
     SucessWithWarnings(Vec<String>), // Warning message

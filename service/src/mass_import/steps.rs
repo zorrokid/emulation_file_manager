@@ -249,9 +249,9 @@ mod tests {
         sync::Arc,
     };
 
-    use core_types::ReadFile;
+    use core_types::{ReadFile, sha1_from_hex_string};
     use dat_file_parser::{
-        DatFile, DatFileParserError, DatFileParserOps, DatHeader, MockDatParser,
+        DatFile, DatFileParserError, DatFileParserOps, DatGame, DatHeader, DatRom, MockDatParser,
     };
     use database::{repository_manager::RepositoryManager, setup_test_db};
     use file_metadata::{
@@ -259,7 +259,9 @@ mod tests {
     };
 
     use crate::{
-        file_import::file_import_service_ops::MockFileImportServiceOps,
+        file_import::file_import_service_ops::{
+            CreateMockState, FileImportServiceOps, MockFileImportServiceOps,
+        },
         file_system_ops::{FileSystemOps, SimpleDirEntry, mock::MockFileSystemOps},
         mass_import::{
             context::{MassImportDependencies, MassImportOps, SendReaderFactoryFn},
@@ -295,23 +297,14 @@ mod tests {
         }
     }
 
-    async fn get_deps() -> MassImportDependencies {
-        let pool = Arc::new(setup_test_db().await);
-        let repository_manager = Arc::new(RepositoryManager::new(pool));
-        let settings = Arc::new(crate::view_models::Settings::default());
-
-        MassImportDependencies {
-            repository_manager,
-            settings,
-        }
-    }
-
     fn get_ops(
         dat_file_parser_ops: Option<Box<dyn DatFileParserOps>>,
         fs_ops: Option<Box<dyn FileSystemOps>>,
         reader_factory_fn: Option<Box<SendReaderFactoryFn>>,
+        file_import_ops: Option<Box<dyn FileImportServiceOps>>,
     ) -> MassImportOps {
-        let file_import_service_ops = Box::new(MockFileImportServiceOps::new());
+        let file_import_service_ops =
+            file_import_ops.unwrap_or_else(|| Box::new(MockFileImportServiceOps::new()));
         let parse_result: Result<DatFile, DatFileParserError> = Ok(DatFile {
             header: DatHeader::default(),
             games: vec![],
@@ -345,7 +338,7 @@ mod tests {
                 item_type: None,
                 system_id: 1,
             },
-            get_ops(Some(dat_file_parser_ops), None, None),
+            get_ops(Some(dat_file_parser_ops), None, None, None),
         );
 
         let step = ImportDatFileStep;
@@ -374,7 +367,7 @@ mod tests {
         mock_fs_ops.add_entry(entry2);
         mock_fs_ops.add_entry(entry3);
 
-        let ops = get_ops(None, Some(Box::new(mock_fs_ops)), None);
+        let ops = get_ops(None, Some(Box::new(mock_fs_ops)), None, None);
 
         let mut context = MassImportContext::with_ops(
             MassImportInput {
@@ -399,20 +392,6 @@ mod tests {
 
     #[async_std::test]
     async fn test_read_file_metadata_step() {
-        let mock_metadata = vec![
-            ReadFile {
-                file_name: "file1.bin".to_string(),
-                sha1_checksum: [1u8; 20],
-                file_size: 123,
-            },
-            ReadFile {
-                file_name: "file2.bin".to_string(),
-                sha1_checksum: [2u8; 20],
-                file_size: 456,
-            },
-        ];
-        // TODO: mock metadata should be provided for each file separately
-        // factory returns reader for each file, and each reader should return different metadata
         let mut metadata_by_path = HashMap::new();
         metadata_by_path.insert(
             PathBuf::from("/mock/file1.zip"),
@@ -443,7 +422,7 @@ mod tests {
         );
         let reader_factory =
             create_mock_reader_factory(metadata_by_path, vec![PathBuf::from("/mock/file3.zip")]);
-        let ops = get_ops(None, None, Some(Box::new(reader_factory)));
+        let ops = get_ops(None, None, Some(Box::new(reader_factory)), None);
         let mut context = MassImportContext::with_ops(
             MassImportInput {
                 source_path: PathBuf::from("/mock"),
@@ -508,5 +487,75 @@ mod tests {
                 .read_failed_files
                 .contains(&PathBuf::from("/mock/file1.zip"))
         );
+    }
+    #[async_std::test]
+    async fn test_import_file_sets_step_success() {
+        // Arrange
+        // Minimal DAT with one game and one ROM
+        let dat_game = DatGame {
+            name: "Test Game".to_string(),
+            description: "Test Game".to_string(),
+            roms: vec![DatRom {
+                name: "rom1.bin".to_string(),
+                sha1: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+                size: 123,
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let dat_file = DatFile {
+            header: DatHeader {
+                name: "Test DAT".to_string(),
+                version: "1.0".to_string(),
+                ..Default::default()
+            },
+            games: vec![dat_game],
+        };
+        // File metadata matching the ROM SHA1
+        let mut file_metadata = HashMap::new();
+        file_metadata.insert(
+            PathBuf::from("/mock/rom1.zip"),
+            vec![ReadFile {
+                file_name: "rom1.bin".to_string(),
+                sha1_checksum: sha1_from_hex_string("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+                    .unwrap(),
+                file_size: 123,
+            }],
+        );
+        // Mock FileImportServiceOps with deterministic output
+        let mock_file_import_ops = MockFileImportServiceOps::with_create_mock(CreateMockState {
+            file_set_id: 42,
+            release_id: Some(7),
+        });
+        let ops = get_ops(None, None, None, Some(Box::new(mock_file_import_ops)));
+        let mut context = MassImportContext::with_ops(
+            MassImportInput {
+                source_path: PathBuf::from("/mock"),
+                dat_file_path: None,
+                file_type: core_types::FileType::Rom,
+                item_type: None,
+                system_id: 1,
+            },
+            ops,
+        );
+        // Pre-populate state as if previous steps succeeded
+        context.state.dat_file = Some(dat_file);
+        context.state.file_metadata = file_metadata;
+        context
+            .state
+            .read_ok_files
+            .push(PathBuf::from("/mock/rom1.zip"));
+        // Act
+        let step = ImportFileSetsStep;
+        let result = step.execute(&mut context).await;
+        // Assert
+        assert!(matches!(result, StepAction::Continue));
+        assert_eq!(context.state.import_results.len(), 1);
+        let import_result = &context.state.import_results[0];
+        assert_eq!(import_result.file_set_id, Some(42));
+        match &import_result.status {
+            FileSetImportStatus::Success => {}
+            other => panic!("Unexpected import status: {:?}", other),
+        }
     }
 }

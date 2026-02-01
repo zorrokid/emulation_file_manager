@@ -80,7 +80,7 @@ pub struct DatHeader {
     pub subset: Option<String>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Deserialize, PartialEq, Clone, Default)]
 pub struct DatGame {
     #[serde(rename = "@name")]
     pub name: String,
@@ -99,7 +99,7 @@ pub struct DatGame {
     pub releases: Vec<DatRelease>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Deserialize, PartialEq, Clone, Default)]
 pub struct DatRom {
     #[serde(rename = "@name")]
     pub name: String,
@@ -121,7 +121,7 @@ pub struct DatRom {
     pub header: Option<String>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Deserialize, PartialEq, Clone, Default)]
 pub struct DatRelease {
     #[serde(rename = "@name")]
     pub name: String,
