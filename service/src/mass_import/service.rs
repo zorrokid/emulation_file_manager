@@ -6,7 +6,7 @@ use database::repository_manager::RepositoryManager;
 use crate::{
     error::Error,
     mass_import::{
-        context::{MassImportContext, MassImportDependencies, MassImportState},
+        context::{MassImportContext, MassImportDependencies},
         models::{MassImportInput, MassImportResult, MassImportSyncEvent},
     },
     pipeline::generic_pipeline::Pipeline,
@@ -46,7 +46,7 @@ impl MassImportService {
     pub async fn import(
         &self,
         input: MassImportInput,
-        progress_tx: Sender<MassImportSyncEvent>,
+        progress_tx: Option<Sender<MassImportSyncEvent>>,
     ) -> Result<MassImportResult, Error> {
         tracing::info!(
             input = ?input,
@@ -63,4 +63,12 @@ impl MassImportService {
         tracing::info!("Mass import process completed.");
         Ok(MassImportResult::from(context.state))
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[async_std::test]
+    async fn test_mass_import_service() {}
 }

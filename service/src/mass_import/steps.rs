@@ -188,21 +188,22 @@ impl PipelineStep<MassImportContext> for ImportFileSetsStep {
         let import_items = context.get_import_items();
         for item in import_items {
             if let Some(file_set) = item.file_set {
+                let file_set_name = file_set.file_set_name.clone();
                 let import_res = context
                     .ops
                     .file_import_service_ops
                     .create_file_set(file_set);
-                match import_res.await {
+                let (id, status) = match import_res.await {
                     Ok(import_result) => {
                         if import_result.failed_steps.is_empty() {
                             tracing::info!(
                                 file_set_id = %import_result.file_set_id,
                                 "Successfully imported file set",
                             );
-                            context.state.import_results.push(FileSetImportResult {
-                                file_set_id: Some(import_result.file_set_id),
-                                status: FileSetImportStatus::Success,
-                            });
+                            (
+                                Some(import_result.file_set_id),
+                                FileSetImportStatus::Success,
+                            )
                         } else {
                             tracing::warn!(
                                 file_set_id = %import_result.file_set_id,
@@ -220,10 +221,10 @@ impl PipelineStep<MassImportContext> for ImportFileSetsStep {
                                     "Failed step in file set import",
                                 );
                             }
-                            context.state.import_results.push(FileSetImportResult {
-                                file_set_id: Some(import_result.file_set_id),
-                                status: FileSetImportStatus::SucessWithWarnings(errors),
-                            });
+                            (
+                                Some(import_result.file_set_id),
+                                FileSetImportStatus::SucessWithWarnings(errors),
+                            )
                         }
                     }
                     Err(e) => {
@@ -231,10 +232,25 @@ impl PipelineStep<MassImportContext> for ImportFileSetsStep {
                             error = ?e,
                             "Failed to import file set",
                         );
-                        context.state.import_results.push(FileSetImportResult {
-                            file_set_id: None,
-                            status: FileSetImportStatus::Failed(format!("{}", e)),
-                        });
+                        (None, FileSetImportStatus::Failed(format!("{}", e)))
+                    }
+                };
+
+                context.state.import_results.push(FileSetImportResult {
+                    file_set_id: id,
+                    status: status.clone(),
+                });
+
+                if let Some(sender_tx) = &context.progress_tx {
+                    let event = crate::mass_import::models::MassImportSyncEvent {
+                        file_set_name,
+                        status,
+                    };
+                    if let Err(e) = sender_tx.send(event).await {
+                        tracing::error!(
+                            error = ?e,
+                            "Failed to send progress event",
+                        );
                     }
                 }
             }

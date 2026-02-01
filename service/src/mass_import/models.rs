@@ -20,6 +20,7 @@ pub struct MassImportInput {
 #[derive(Debug, Clone)]
 pub struct MassImportSyncEvent {
     pub file_set_name: String,
+    pub status: FileSetImportStatus,
 }
 
 #[derive(Debug, Clone)]

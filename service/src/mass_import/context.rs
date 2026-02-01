@@ -101,7 +101,7 @@ impl MassImportContext {
     pub fn new(
         input: MassImportInput,
         deps: MassImportDependencies,
-        progress_tx: Sender<MassImportSyncEvent>,
+        progress_tx: Option<Sender<MassImportSyncEvent>>,
     ) -> Self {
         let fs_ops: Box<dyn FileSystemOps> = Box::new(StdFileSystemOps);
         let dat_file_parser_ops: Box<dyn DatFileParserOps> =
@@ -119,7 +119,7 @@ impl MassImportContext {
                 file_import_service_ops,
                 reader_factory_fn,
             },
-            progress_tx: Some(progress_tx),
+            progress_tx,
         }
     }
 
