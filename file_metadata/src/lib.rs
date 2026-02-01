@@ -200,6 +200,12 @@ pub struct MockFileMetadataReader {
     pub metadata: Vec<ReadFile>,
 }
 
+pub fn create_mock_factory(
+    reader: MockFileMetadataReader,
+) -> impl Fn(&Path) -> Result<Box<dyn FileMetadataReader>, FileMetadataError> {
+    move |_path: &Path| Ok(Box::new(reader.clone()))
+}
+
 impl FileMetadataReader for MockFileMetadataReader {
     fn read_metadata(&self) -> Result<Vec<ReadFile>, FileMetadataError> {
         Ok(self.metadata.clone())
@@ -216,12 +222,6 @@ mod tests {
 
     use super::*;
     use std::{io::Write, path::Path};
-
-    pub fn create_mock_factory(
-        reader: MockFileMetadataReader,
-    ) -> impl Fn(&Path) -> Result<Box<dyn FileMetadataReader>, FileMetadataError> {
-        move |_path: &Path| Ok(Box::new(reader.clone()))
-    }
 
     #[test]
     fn test_single_file_metadata_reader() {

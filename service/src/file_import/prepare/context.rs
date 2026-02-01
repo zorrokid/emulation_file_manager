@@ -6,7 +6,6 @@ use std::{
 
 use core_types::{FileType, ReadFile, Sha1Checksum};
 use database::{models::FileInfo, repository_manager::RepositoryManager};
-use file_import::FileImportOps;
 use file_metadata::file_metadata_ops::FileMetadataOps;
 
 use crate::{

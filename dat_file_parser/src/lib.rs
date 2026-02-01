@@ -63,7 +63,7 @@ pub struct DatFile {
     pub games: Vec<DatGame>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Deserialize, PartialEq, Clone, Default)]
 pub struct DatHeader {
     pub id: i32,
     pub name: String,

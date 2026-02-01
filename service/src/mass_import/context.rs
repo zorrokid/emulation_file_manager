@@ -1,6 +1,6 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
-use crate::mass_import::models::MassImportInput;
+use crate::{error::Error, mass_import::models::MassImportInput};
 use core_types::{ReadFile, Sha1Checksum, sha1_from_hex_string};
 use dat_file_parser::{DatFile, DatFileParserOps, DatGame, DatHeader, DatRom};
 use database::repository_manager::RepositoryManager;
@@ -73,13 +73,26 @@ pub struct MassImportOps {
     pub reader_factory_fn: Box<SendReaderFactoryFn>,
 }
 
+pub enum FileSetImportStatus {
+    Success,
+    SucessWithWarnings(Vec<String>), // Warning message
+    Failed(String),                  // Error message
+}
+
+pub struct FileSetImportResult {
+    pub status: FileSetImportStatus,
+    pub file_set_id: Option<i64>,
+}
+
 #[derive(Default)]
 pub struct MassImporState {
     pub import_items: Vec<ImportItem>,
-    pub files: Vec<PathBuf>,
-    pub failed_files: Vec<PathBuf>,
+    pub read_ok_files: Vec<PathBuf>,
+    pub read_failed_files: Vec<PathBuf>,
+    pub dir_scan_errors: Vec<Error>,
     pub file_metadata: HashMap<PathBuf, Vec<ReadFile>>,
     pub dat_file: Option<DatFile>,
+    pub import_results: Vec<FileSetImportResult>,
 }
 
 pub struct MassImportDependencies {
@@ -138,9 +151,9 @@ impl MassImportContext {
 
     pub fn get_non_failed_files(&self) -> Vec<PathBuf> {
         self.state
-            .files
+            .read_ok_files
             .iter()
-            .filter(|file| !self.state.failed_files.contains(file))
+            .filter(|file| !self.state.read_failed_files.contains(file))
             .cloned()
             .collect()
     }
