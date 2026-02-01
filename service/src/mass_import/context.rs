@@ -8,15 +8,13 @@ use async_std::channel::Sender;
 use core_types::{ReadFile, Sha1Checksum, sha1_from_hex_string};
 use dat_file_parser::{DatFile, DatFileParserOps, DatGame, DatHeader, DatRom};
 use database::repository_manager::RepositoryManager;
-use file_metadata::reader_factory::create_metadata_reader;
 
 use crate::{
     file_import::{
         file_import_service_ops::FileImportServiceOps,
         model::{FileImportSource, FileSetImportModel, ImportFileContent},
-        service::FileImportService,
     },
-    file_system_ops::{FileSystemOps, StdFileSystemOps},
+    file_system_ops::FileSystemOps,
     view_models::Settings,
 };
 
@@ -24,7 +22,8 @@ use crate::{
 pub type SendReaderFactoryFn = dyn Fn(
         &std::path::Path,
     ) -> Result<Box<dyn file_metadata::FileMetadataReader>, file_metadata::FileMetadataError>
-    + Send;
+    + Send
+    + Sync;
 
 #[derive(Debug, Clone)]
 pub enum ImportItemStatus {
@@ -75,10 +74,10 @@ pub struct MassImportContext {
 }
 
 pub struct MassImportOps {
-    pub fs_ops: Box<dyn FileSystemOps>,
-    pub dat_file_parser_ops: Box<dyn DatFileParserOps>,
-    pub file_import_service_ops: Box<dyn FileImportServiceOps>,
-    pub reader_factory_fn: Box<SendReaderFactoryFn>,
+    pub fs_ops: Arc<dyn FileSystemOps>,
+    pub dat_file_parser_ops: Arc<dyn DatFileParserOps>,
+    pub file_import_service_ops: Arc<dyn FileImportServiceOps>,
+    pub reader_factory_fn: Arc<SendReaderFactoryFn>,
 }
 
 #[derive(Default)]
@@ -100,35 +99,14 @@ pub struct MassImportDependencies {
 impl MassImportContext {
     pub fn new(
         input: MassImportInput,
-        deps: MassImportDependencies,
+        ops: MassImportOps,
         progress_tx: Option<Sender<MassImportSyncEvent>>,
     ) -> Self {
-        let fs_ops: Box<dyn FileSystemOps> = Box::new(StdFileSystemOps);
-        let dat_file_parser_ops: Box<dyn DatFileParserOps> =
-            Box::new(dat_file_parser::DefaultDatParser);
-        let reader_factory_fn: Box<SendReaderFactoryFn> = Box::new(create_metadata_reader);
-        let file_import_service_ops: Box<dyn FileImportServiceOps> = Box::new(
-            FileImportService::new(deps.repository_manager.clone(), deps.settings.clone()),
-        );
-        MassImportContext {
+        Self {
             input,
             state: MassImportState::default(),
-            ops: MassImportOps {
-                fs_ops,
-                dat_file_parser_ops,
-                file_import_service_ops,
-                reader_factory_fn,
-            },
-            progress_tx,
-        }
-    }
-
-    pub fn with_ops(input: MassImportInput, ops: MassImportOps) -> Self {
-        MassImportContext {
-            input,
             ops,
-            state: MassImportState::default(),
-            progress_tx: None,
+            progress_tx,
         }
     }
 
@@ -369,7 +347,7 @@ mod tests {
         );
 
         // Mock factory always returns the same mock reader
-        let mock_factory: Box<SendReaderFactoryFn> = Box::new(
+        let mock_factory: Arc<SendReaderFactoryFn> = Arc::new(
             |_path: &Path| -> Result<Box<dyn FileMetadataReader>, FileMetadataError> {
                 Ok(Box::new(MockFileMetadataReader {
                     metadata: vec![/* test data */],
@@ -386,12 +364,12 @@ mod tests {
             system_id: 42,
         };
         let ops = MassImportOps {
-            fs_ops: Box::new(MockFileSystemOps::new()),
-            dat_file_parser_ops: Box::new(MockDatParser::new(Ok(dat_file.clone()))),
-            file_import_service_ops: Box::new(MockFileImportServiceOps::new()),
+            fs_ops: Arc::new(MockFileSystemOps::new()),
+            dat_file_parser_ops: Arc::new(MockDatParser::new(Ok(dat_file.clone()))),
+            file_import_service_ops: Arc::new(MockFileImportServiceOps::new()),
             reader_factory_fn: mock_factory,
         };
-        let mut context = MassImportContext::with_ops(input, ops);
+        let mut context = MassImportContext::new(input, ops, None);
         context.state.dat_file = Some(dat_file);
         context.state.file_metadata = file_metadata;
 

@@ -1,11 +1,13 @@
 use std::{collections::HashMap, path::PathBuf};
 
 use core_types::{FileType, ReadFile, item_type::ItemType};
-use dat_file_parser::DatFile;
+use dat_file_parser::{DatFile, DatFileParserOps};
 
 use crate::{
     error::Error,
-    mass_import::context::{ImportItem, MassImportState},
+    file_import::file_import_service_ops::FileImportServiceOps,
+    file_system_ops::FileSystemOps,
+    mass_import::context::{ImportItem, MassImportState, SendReaderFactoryFn},
 };
 
 #[derive(Debug, Clone)]

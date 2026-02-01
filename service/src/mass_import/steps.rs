@@ -272,10 +272,7 @@ mod tests {
     use dat_file_parser::{
         DatFile, DatFileParserError, DatFileParserOps, DatGame, DatHeader, DatRom, MockDatParser,
     };
-    use database::{repository_manager::RepositoryManager, setup_test_db};
-    use file_metadata::{
-        FileMetadataError, FileMetadataReader, MockFileMetadataReader, create_mock_factory,
-    };
+    use file_metadata::{FileMetadataError, FileMetadataReader, MockFileMetadataReader};
 
     use crate::{
         file_import::file_import_service_ops::{
@@ -283,56 +280,31 @@ mod tests {
         },
         file_system_ops::{FileSystemOps, SimpleDirEntry, mock::MockFileSystemOps},
         mass_import::{
-            context::{MassImportDependencies, MassImportOps, SendReaderFactoryFn},
+            context::{MassImportOps, SendReaderFactoryFn},
             models::MassImportInput,
+            test_utils::create_mock_reader_factory,
         },
     };
 
     use super::*;
 
-    pub fn create_mock_reader_factory(
-        per_path: HashMap<PathBuf, Vec<ReadFile>>,
-        failing_paths: Vec<PathBuf>,
-    ) -> impl Fn(&Path) -> Result<Box<dyn FileMetadataReader>, FileMetadataError> + Send {
-        move |path: &Path| {
-            if failing_paths.contains(&path.to_path_buf()) {
-                return Err(FileMetadataError::GeneralError {
-                    path: path.to_path_buf(),
-                    message: "Simulated failure for this path".to_string(),
-                });
-            }
-
-            let metadata =
-                per_path
-                    .get(path)
-                    .cloned()
-                    .ok_or_else(|| FileMetadataError::GeneralError {
-                        path: path.to_path_buf(),
-                        message: "No mock metadata for this path".to_string(),
-                    })?;
-
-            let mock_reader = MockFileMetadataReader { metadata };
-            Ok(Box::new(mock_reader))
-        }
-    }
-
     fn get_ops(
-        dat_file_parser_ops: Option<Box<dyn DatFileParserOps>>,
-        fs_ops: Option<Box<dyn FileSystemOps>>,
-        reader_factory_fn: Option<Box<SendReaderFactoryFn>>,
-        file_import_ops: Option<Box<dyn FileImportServiceOps>>,
+        dat_file_parser_ops: Option<Arc<dyn DatFileParserOps>>,
+        fs_ops: Option<Arc<dyn FileSystemOps>>,
+        reader_factory_fn: Option<Arc<SendReaderFactoryFn>>,
+        file_import_ops: Option<Arc<dyn FileImportServiceOps>>,
     ) -> MassImportOps {
         let file_import_service_ops =
-            file_import_ops.unwrap_or_else(|| Box::new(MockFileImportServiceOps::new()));
+            file_import_ops.unwrap_or_else(|| Arc::new(MockFileImportServiceOps::new()));
         let parse_result: Result<DatFile, DatFileParserError> = Ok(DatFile {
             header: DatHeader::default(),
             games: vec![],
         });
         let dat_file_parser_ops =
-            dat_file_parser_ops.unwrap_or(Box::new(MockDatParser::new(parse_result)));
-        let fs_ops = fs_ops.unwrap_or(Box::new(MockFileSystemOps::new()));
+            dat_file_parser_ops.unwrap_or(Arc::new(MockDatParser::new(parse_result)));
+        let fs_ops = fs_ops.unwrap_or(Arc::new(MockFileSystemOps::new()));
         let reader_factory_fn = reader_factory_fn
-            .unwrap_or(Box::new(create_mock_reader_factory(HashMap::new(), vec![])));
+            .unwrap_or(Arc::new(create_mock_reader_factory(HashMap::new(), vec![])));
         MassImportOps {
             fs_ops,
             file_import_service_ops,
@@ -347,9 +319,9 @@ mod tests {
             header: DatHeader::default(),
             games: vec![],
         });
-        let dat_file_parser_ops = Box::new(MockDatParser::new(parse_result));
+        let dat_file_parser_ops = Arc::new(MockDatParser::new(parse_result));
 
-        let mut context = MassImportContext::with_ops(
+        let mut context = MassImportContext::new(
             MassImportInput {
                 source_path: PathBuf::from("/path/to/source"),
                 dat_file_path: Some(PathBuf::from("/path/to/datfile.dat")),
@@ -358,6 +330,7 @@ mod tests {
                 system_id: 1,
             },
             get_ops(Some(dat_file_parser_ops), None, None, None),
+            None,
         );
 
         let step = ImportDatFileStep;
@@ -386,9 +359,9 @@ mod tests {
         mock_fs_ops.add_entry(entry2);
         mock_fs_ops.add_entry(entry3);
 
-        let ops = get_ops(None, Some(Box::new(mock_fs_ops)), None, None);
+        let ops = get_ops(None, Some(Arc::new(mock_fs_ops)), None, None);
 
-        let mut context = MassImportContext::with_ops(
+        let mut context = MassImportContext::new(
             MassImportInput {
                 source_path: PathBuf::from("/mock"),
                 dat_file_path: None,
@@ -397,6 +370,7 @@ mod tests {
                 system_id: 1,
             },
             ops,
+            None,
         );
 
         let step = ReadFilesStep;
@@ -441,8 +415,8 @@ mod tests {
         );
         let reader_factory =
             create_mock_reader_factory(metadata_by_path, vec![PathBuf::from("/mock/file3.zip")]);
-        let ops = get_ops(None, None, Some(Box::new(reader_factory)), None);
-        let mut context = MassImportContext::with_ops(
+        let ops = get_ops(None, None, Some(Arc::new(reader_factory)), None);
+        let mut context = MassImportContext::new(
             MassImportInput {
                 source_path: PathBuf::from("/mock"),
                 dat_file_path: None,
@@ -451,6 +425,7 @@ mod tests {
                 system_id: 1,
             },
             ops,
+            None,
         );
 
         context
@@ -546,8 +521,8 @@ mod tests {
             file_set_id: 42,
             release_id: Some(7),
         });
-        let ops = get_ops(None, None, None, Some(Box::new(mock_file_import_ops)));
-        let mut context = MassImportContext::with_ops(
+        let ops = get_ops(None, None, None, Some(Arc::new(mock_file_import_ops)));
+        let mut context = MassImportContext::new(
             MassImportInput {
                 source_path: PathBuf::from("/mock"),
                 dat_file_path: None,
@@ -556,6 +531,7 @@ mod tests {
                 system_id: 1,
             },
             ops,
+            None,
         );
         // Pre-populate state as if previous steps succeeded
         context.state.dat_file = Some(dat_file);
