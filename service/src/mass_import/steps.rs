@@ -271,8 +271,16 @@ mod tests {
 
     pub fn create_mock_reader_factory(
         per_path: HashMap<PathBuf, Vec<ReadFile>>,
+        failing_paths: Vec<PathBuf>,
     ) -> impl Fn(&Path) -> Result<Box<dyn FileMetadataReader>, FileMetadataError> + Send {
         move |path: &Path| {
+            if failing_paths.contains(&path.to_path_buf()) {
+                return Err(FileMetadataError::GeneralError {
+                    path: path.to_path_buf(),
+                    message: "Simulated failure for this path".to_string(),
+                });
+            }
+
             let metadata =
                 per_path
                     .get(path)
@@ -285,11 +293,6 @@ mod tests {
             let mock_reader = MockFileMetadataReader { metadata };
             Ok(Box::new(mock_reader))
         }
-        /*let mock_metadata = meta_data.unwrap_or_default();
-        let mock_reader = MockFileMetadataReader {
-            metadata: mock_metadata.clone(),
-        };
-        create_mock_factory(mock_reader)*/
     }
 
     async fn get_deps() -> MassImportDependencies {
@@ -316,8 +319,8 @@ mod tests {
         let dat_file_parser_ops =
             dat_file_parser_ops.unwrap_or(Box::new(MockDatParser::new(parse_result)));
         let fs_ops = fs_ops.unwrap_or(Box::new(MockFileSystemOps::new()));
-        let reader_factory_fn =
-            reader_factory_fn.unwrap_or(Box::new(create_mock_reader_factory(HashMap::new())));
+        let reader_factory_fn = reader_factory_fn
+            .unwrap_or(Box::new(create_mock_reader_factory(HashMap::new(), vec![])));
         MassImportOps {
             fs_ops,
             file_import_service_ops,
@@ -434,7 +437,12 @@ mod tests {
                 file_size: 456,
             }],
         );
-        let reader_factory = create_mock_reader_factory(metadata_by_path);
+        metadata_by_path.insert(
+            PathBuf::from("/mock/file3.zip"),
+            vec![], // This file will simulate failure
+        );
+        let reader_factory =
+            create_mock_reader_factory(metadata_by_path, vec![PathBuf::from("/mock/file3.zip")]);
         let ops = get_ops(None, None, Some(Box::new(reader_factory)));
         let mut context = MassImportContext::with_ops(
             MassImportInput {
@@ -494,5 +502,11 @@ mod tests {
         assert_eq!(file_2_metadata[0].file_name, "file2.bin");
         assert_eq!(file_2_metadata[0].file_size, 456);
         assert_eq!(file_2_metadata[0].sha1_checksum, [2u8; 20]);
+        assert!(
+            !context
+                .state
+                .read_failed_files
+                .contains(&PathBuf::from("/mock/file1.zip"))
+        );
     }
 }
