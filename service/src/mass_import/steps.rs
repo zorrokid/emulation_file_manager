@@ -274,17 +274,12 @@ impl PipelineStep<MassImportContext> for ImportFileSetsStep {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        collections::HashMap,
-        path::{Path, PathBuf},
-        sync::Arc,
-    };
+    use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
     use core_types::{ReadFile, sha1_from_hex_string};
     use dat_file_parser::{
         DatFile, DatFileParserError, DatFileParserOps, DatGame, DatHeader, DatRom, MockDatParser,
     };
-    use file_metadata::{FileMetadataError, FileMetadataReader, MockFileMetadataReader};
 
     use crate::{
         file_import::file_import_service_ops::{

@@ -198,6 +198,11 @@ impl MassImportContext {
             }
         }
 
+        let selected_files: Vec<Sha1Checksum> = available_roms
+            .iter()
+            .filter_map(|rom| sha1_from_hex_string(&rom.sha1).ok())
+            .collect();
+
         let file_set = Some(FileSetImportModel {
             import_files: import_files
                 .into_iter()
@@ -209,12 +214,14 @@ impl MassImportContext {
                         .collect(),
                 })
                 .collect(),
-            selected_files: vec![],
+            selected_files,
 
             system_ids: vec![self.input.system_id],
             file_type: self.input.file_type,
 
             source: format!("{} {}", header.name, header.version),
+            // TODO: Normalize the name, for example No-Intro uses (...) - release name on the
+            // other hand could have the whole name
             file_set_name: game.name.clone(),
             file_set_file_name: game.name.clone(),
 
@@ -400,6 +407,15 @@ mod tests {
         assert_eq!(file_set_1.system_ids, vec![42]);
         assert_eq!(file_set_1.import_files.len(), 1);
         assert_eq!(file_set_1.import_files[0].path, file1_path);
+        assert_eq!(
+            file_set_1.selected_files.len(),
+            1,
+            "selected_files should contain SHA1 of available ROM"
+        );
+        assert_eq!(
+            file_set_1.selected_files[0],
+            sha1_from_hex_string("da39a3ee5e6b4b0d3255bfef95601890afd80709").unwrap()
+        );
 
         // Verify: Second game should have 1 ROM available and 1 missing
         assert_eq!(import_items[1].dat_game.name, "Game2");
@@ -413,6 +429,15 @@ mod tests {
         assert_eq!(file_set_2.file_set_name, "Game2");
         assert_eq!(file_set_2.import_files.len(), 1);
         assert_eq!(file_set_2.import_files[0].path, file2_path);
+        assert_eq!(
+            file_set_2.selected_files.len(),
+            1,
+            "selected_files should contain SHA1 of available ROM, not missing ones"
+        );
+        assert_eq!(
+            file_set_2.selected_files[0],
+            sha1_from_hex_string("2fd4e1c67a2d28fced849ee1bb76e7391b93eb12").unwrap()
+        );
 
         // Verify: Missing ROM
         assert_eq!(import_items[1].dat_roms_missing[0].name, "game2b.rom");

@@ -96,7 +96,7 @@ impl MassImportService {
         let mut context = MassImportContext::new(input, ops, progress_tx);
         let pipeline = Pipeline::<MassImportContext>::new();
         pipeline.execute(&mut context).await?;
-        dbg!(&context.state);
+        //dbg!(&context.state);
         tracing::info!("Mass import process completed.");
         Ok(MassImportResult::from(context.state))
     }

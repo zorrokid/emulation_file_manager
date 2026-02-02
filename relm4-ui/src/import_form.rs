@@ -98,6 +98,7 @@ pub enum ImportFormMsg {
     StartImport,
     ItemTypeChanged(Option<ItemType>),
     ProcessSyncEvent(MassImportSyncEvent),
+    ImportSummaryDialogClosed,
 }
 
 #[derive(Debug)]
@@ -446,20 +447,24 @@ impl Component for ImportForm {
                     name: event.file_set_name,
                 });
             }
+            ImportFormMsg::ImportSummaryDialogClosed => {
+                tracing::info!("Import summary dialog closed, hiding form");
+                self.imported_sets_list_view_wrapper.clear();
+                root.hide();
+            }
         }
     }
 
     fn update_cmd(
         &mut self,
         message: Self::CommandOutput,
-        _sender: ComponentSender<Self>,
+        sender: ComponentSender<Self>,
         root: &Self::Root,
     ) {
         match message {
             CommandMsg::ProcessImportResult(result) => match result {
                 Ok(mass_import_result) => {
-                    self.show_import_summary_dialog(&mass_import_result, root);
-                    root.hide();
+                    self.show_import_summary_dialog(&mass_import_result, root, &sender);
                 }
                 Err(e) => {
                     tracing::error!("Import failed: {:?}", e);
@@ -471,7 +476,12 @@ impl Component for ImportForm {
 }
 
 impl ImportForm {
-    fn show_import_summary_dialog(&self, result: &MassImportResult, root: &gtk::Window) {
+    fn show_import_summary_dialog(
+        &self,
+        result: &MassImportResult,
+        root: &gtk::Window,
+        sender: &ComponentSender<Self>,
+    ) {
         // TODO: improve the summary details
         let successful_imports = result
             .import_results
@@ -532,6 +542,21 @@ impl ImportForm {
             },
         );
 
-        show_info_dialog(message, root);
+        let dialog = gtk::MessageDialog::new(
+            Some(root),
+            gtk::DialogFlags::MODAL,
+            gtk::MessageType::Info,
+            gtk::ButtonsType::Ok,
+            &message,
+        );
+        dialog.connect_response(clone!(
+            #[strong]
+            sender,
+            move |dialog, _| {
+                dialog.close();
+                sender.input(ImportFormMsg::ImportSummaryDialogClosed);
+            }
+        ));
+        dialog.show();
     }
 }
