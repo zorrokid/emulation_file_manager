@@ -186,6 +186,7 @@ mod tests {
         // Act
         let result = service.import(input, Some(tx)).await;
 
+        // Assert
         // There should be one progress event for the one file set imported
         let event = rx.recv().await;
 
@@ -199,7 +200,6 @@ mod tests {
             "Progress event should have correct file set name"
         );
 
-        // Assert
         assert!(
             result.is_ok(),
             "Mass import service should complete without error"
