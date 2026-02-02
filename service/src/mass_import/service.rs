@@ -115,14 +115,9 @@ mod tests {
     use async_std::channel;
     use core_types::{FileType, ReadFile, Sha1Checksum, sha1_bytes_to_hex_string};
     use dat_file_parser::{DatFile, DatGame, DatHeader, DatRom, MockDatParser};
-    use database::setup_test_db;
 
     #[async_std::test]
     async fn test_mass_import_service_runs_pipeline_and_returns_result() {
-        // Arrange: real test database and default settings
-        let pool = Arc::new(setup_test_db().await);
-        let repository_manager = Arc::new(RepositoryManager::new(pool));
-
         let mut fs_ops = MockFileSystemOps::new();
         fs_ops.add_entry(Ok(SimpleDirEntry {
             path: PathBuf::from("/mock/Test Game.zip"),
@@ -186,10 +181,23 @@ mod tests {
         };
 
         // Optional progress channel (not asserted here, just exercised)
-        let (tx, _rx) = channel::unbounded();
+        let (tx, rx) = channel::unbounded();
 
         // Act
         let result = service.import(input, Some(tx)).await;
+
+        // There should be one progress event for the one file set imported
+        let event = rx.recv().await;
+
+        assert!(
+            event.is_ok(),
+            "Should receive a progress event during import"
+        );
+        let event = event.unwrap();
+        assert_eq!(
+            event.file_set_name, "Test Game",
+            "Progress event should have correct file set name"
+        );
 
         // Assert
         assert!(
