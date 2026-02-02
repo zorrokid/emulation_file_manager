@@ -185,9 +185,16 @@ impl PipelineStep<MassImportContext> for ImportFileSetsStep {
     }
 
     async fn execute(&self, context: &mut MassImportContext) -> StepAction {
+        println!("Importing file sets...");
         let import_items = context.get_import_items();
+        println!("Number of import items: {}", import_items.len());
         for item in import_items {
+            println!(
+                "Importing file set: {:?}",
+                item.file_set.as_ref().map(|fs| &fs.file_set_name)
+            );
             if let Some(file_set) = item.file_set {
+                println!("Creating file set: {}", file_set.file_set_name);
                 let file_set_name = file_set.file_set_name.clone();
                 let import_res = context
                     .ops
@@ -195,6 +202,10 @@ impl PipelineStep<MassImportContext> for ImportFileSetsStep {
                     .create_file_set(file_set);
                 let (id, status) = match import_res.await {
                     Ok(import_result) => {
+                        println!(
+                            "Successfully imported file set: {}",
+                            import_result.file_set_id
+                        );
                         if import_result.failed_steps.is_empty() {
                             tracing::info!(
                                 file_set_id = %import_result.file_set_id,
@@ -235,6 +246,7 @@ impl PipelineStep<MassImportContext> for ImportFileSetsStep {
                         (None, FileSetImportStatus::Failed(format!("{}", e)))
                     }
                 };
+                println!("Import result for file set {}: {:?}", file_set_name, status);
 
                 context.state.import_results.push(FileSetImportResult {
                     file_set_id: id,

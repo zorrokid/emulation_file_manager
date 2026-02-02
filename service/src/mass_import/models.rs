@@ -36,7 +36,7 @@ pub struct MassImportResult {
     pub import_results: Vec<FileSetImportResult>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FileSetImportStatus {
     Success,
     SucessWithWarnings(Vec<String>), // Warning message

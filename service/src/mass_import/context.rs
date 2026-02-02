@@ -66,6 +66,7 @@ impl ImportItem {
     }
 }
 
+#[derive(Debug)]
 pub struct MassImportContext {
     pub input: MassImportInput,
     pub state: MassImportState,
@@ -80,7 +81,13 @@ pub struct MassImportOps {
     pub reader_factory_fn: Arc<SendReaderFactoryFn>,
 }
 
-#[derive(Default)]
+impl std::fmt::Debug for MassImportOps {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MassImportOps").finish()
+    }
+}
+
+#[derive(Default, Debug)]
 pub struct MassImportState {
     pub import_items: Vec<ImportItem>,
     pub read_ok_files: Vec<PathBuf>,

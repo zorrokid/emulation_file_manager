@@ -96,6 +96,7 @@ impl MassImportService {
         let mut context = MassImportContext::new(input, ops, progress_tx);
         let pipeline = Pipeline::<MassImportContext>::new();
         pipeline.execute(&mut context).await?;
+        dbg!(&context.state);
         tracing::info!("Mass import process completed.");
         Ok(MassImportResult::from(context.state))
     }
@@ -107,13 +108,13 @@ mod tests {
 
     use super::*;
     use crate::{
-        file_import::file_import_service_ops::MockFileImportServiceOps,
+        file_import::file_import_service_ops::{CreateMockState, MockFileImportServiceOps},
         file_system_ops::{SimpleDirEntry, mock::MockFileSystemOps},
         mass_import::{models::MassImportInput, test_utils::create_mock_reader_factory},
     };
     use async_std::channel;
     use core_types::{FileType, ReadFile, Sha1Checksum, sha1_bytes_to_hex_string};
-    use dat_file_parser::{DatFile, DatGame, DatHeader, DatRom};
+    use dat_file_parser::{DatFile, DatGame, DatHeader, DatRom, MockDatParser};
     use database::setup_test_db;
 
     #[async_std::test]
@@ -149,9 +150,13 @@ mod tests {
         };
 
         let dat_file_parser_ops: Arc<dyn DatFileParserOps> =
-            Arc::new(dat_file_parser::MockDatParser::new(Ok(dat_file)));
-        let file_import_service_ops: Arc<dyn FileImportServiceOps> =
-            Arc::new(MockFileImportServiceOps::new());
+            Arc::new(MockDatParser::new(Ok(dat_file)));
+        let file_import_service_ops: Arc<dyn FileImportServiceOps> = Arc::new(
+            MockFileImportServiceOps::with_create_mock(CreateMockState {
+                file_set_id: 1,
+                release_id: Some(1),
+            }),
+        );
 
         let mut metadata_by_path = HashMap::new();
         metadata_by_path.insert(
@@ -173,8 +178,8 @@ mod tests {
         );
 
         let input = MassImportInput {
-            source_path: std::path::PathBuf::from("/mock"),
-            dat_file_path: None,
+            source_path: PathBuf::from("/mock"),
+            dat_file_path: Some(PathBuf::from("/mock/datfile.dat")),
             file_type: FileType::Rom,
             item_type: None,
             system_id: 1,
@@ -193,10 +198,15 @@ mod tests {
         );
 
         let import_result = result.unwrap();
+        assert!(
+            !import_result.import_results.is_empty(),
+            "Import items should not be empty",
+        );
 
-        // We don't assert specific contents here because the pipeline uses
-        // real steps and empty inputs; this test verifies orchestration only.
-        // If the pipeline wiring breaks, this test will fail.
-        assert!(import_result.import_results.is_empty());
+        assert_eq!(
+            import_result.import_results[0].status,
+            crate::mass_import::models::FileSetImportStatus::Success,
+            "First import result should be successful",
+        );
     }
 }
