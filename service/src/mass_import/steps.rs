@@ -46,6 +46,22 @@ impl PipelineStep<MassImportContext> for ImportDatFileStep {
     }
 }
 
+pub struct StoreDatFileStep;
+#[async_trait::async_trait]
+impl PipelineStep<MassImportContext> for StoreDatFileStep {
+    fn name(&self) -> &'static str {
+        "store_dat_file_step"
+    }
+    fn should_execute(&self, context: &MassImportContext) -> bool {
+        context.state.dat_file.is_some()
+    }
+
+    async fn execute(&self, context: &mut MassImportContext) -> StepAction {
+        // TODO
+        StepAction::Continue
+    }
+}
+
 pub struct ReadFilesStep;
 #[async_trait::async_trait]
 impl PipelineStep<MassImportContext> for ReadFilesStep {
@@ -185,16 +201,17 @@ impl PipelineStep<MassImportContext> for ImportFileSetsStep {
     }
 
     async fn execute(&self, context: &mut MassImportContext) -> StepAction {
-        println!("Importing file sets...");
         let import_items = context.get_import_items();
-        println!("Number of import items: {}", import_items.len());
         for item in import_items {
-            println!(
-                "Importing file set: {:?}",
-                item.file_set.as_ref().map(|fs| &fs.file_set_name)
+            tracing::info!(
+                file_set_name = item.file_set.as_ref().map(|fs| &fs.file_set_name),
+                "Importing file set",
             );
             if let Some(file_set) = item.file_set {
-                println!("Creating file set: {}", file_set.file_set_name);
+                tracing::info!(
+                     file_set_name = %file_set.file_set_name,
+                    "Creating file set for import",
+                );
                 let file_set_name = file_set.file_set_name.clone();
                 let import_res = context
                     .ops
@@ -287,7 +304,7 @@ mod tests {
         },
         file_system_ops::{FileSystemOps, SimpleDirEntry, mock::MockFileSystemOps},
         mass_import::{
-            context::{MassImportOps, SendReaderFactoryFn},
+            context::{MassImportDeps, MassImportOps, SendReaderFactoryFn},
             models::MassImportInput,
             test_utils::create_mock_reader_factory,
         },
@@ -320,6 +337,13 @@ mod tests {
         }
     }
 
+    async fn get_deps() -> MassImportDeps {
+        let pool = Arc::new(database::setup_test_db().await);
+        let repository_manager =
+            Arc::new(database::repository_manager::RepositoryManager::new(pool));
+        MassImportDeps { repository_manager }
+    }
+
     #[async_std::test]
     async fn test_import_dat_file_step() {
         let parse_result: Result<DatFile, DatFileParserError> = Ok(DatFile {
@@ -329,6 +353,7 @@ mod tests {
         let dat_file_parser_ops = Arc::new(MockDatParser::new(parse_result));
 
         let mut context = MassImportContext::new(
+            get_deps().await,
             MassImportInput {
                 source_path: PathBuf::from("/path/to/source"),
                 dat_file_path: Some(PathBuf::from("/path/to/datfile.dat")),
@@ -369,6 +394,7 @@ mod tests {
         let ops = get_ops(None, Some(Arc::new(mock_fs_ops)), None, None);
 
         let mut context = MassImportContext::new(
+            get_deps().await,
             MassImportInput {
                 source_path: PathBuf::from("/mock"),
                 dat_file_path: None,
@@ -424,6 +450,7 @@ mod tests {
             create_mock_reader_factory(metadata_by_path, vec![PathBuf::from("/mock/file3.zip")]);
         let ops = get_ops(None, None, Some(Arc::new(reader_factory)), None);
         let mut context = MassImportContext::new(
+            get_deps().await,
             MassImportInput {
                 source_path: PathBuf::from("/mock"),
                 dat_file_path: None,
@@ -530,6 +557,7 @@ mod tests {
         });
         let ops = get_ops(None, None, None, Some(Arc::new(mock_file_import_ops)));
         let mut context = MassImportContext::new(
+            get_deps().await,
             MassImportInput {
                 source_path: PathBuf::from("/mock"),
                 dat_file_path: None,

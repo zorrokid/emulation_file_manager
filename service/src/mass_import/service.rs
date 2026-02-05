@@ -10,7 +10,7 @@ use crate::{
     file_import::{file_import_service_ops::FileImportServiceOps, service::FileImportService},
     file_system_ops::{FileSystemOps, StdFileSystemOps},
     mass_import::{
-        context::{MassImportContext, MassImportOps, SendReaderFactoryFn},
+        context::{MassImportContext, MassImportDeps, MassImportOps, SendReaderFactoryFn},
         models::{MassImportInput, MassImportResult, MassImportSyncEvent},
     },
     pipeline::generic_pipeline::Pipeline,
@@ -22,6 +22,7 @@ pub struct MassImportService {
     dat_file_parser_ops: Arc<dyn DatFileParserOps>,
     file_import_service_ops: Arc<dyn FileImportServiceOps>,
     reader_factory_fn: Arc<SendReaderFactoryFn>,
+    repository_manager: Arc<RepositoryManager>,
 }
 
 impl std::fmt::Debug for MassImportService {
@@ -45,6 +46,7 @@ impl MassImportService {
             dat_file_parser_ops,
             file_import_service_ops,
             reader_factory_fn,
+            repository_manager,
         )
     }
 
@@ -53,12 +55,14 @@ impl MassImportService {
         dat_file_parser_ops: Arc<dyn DatFileParserOps>,
         file_import_service_ops: Arc<dyn FileImportServiceOps>,
         reader_factory_fn: Arc<SendReaderFactoryFn>,
+        repository_manager: Arc<RepositoryManager>,
     ) -> Self {
         MassImportService {
             fs_ops,
             dat_file_parser_ops,
             file_import_service_ops,
             reader_factory_fn,
+            repository_manager,
         }
     }
 
@@ -93,7 +97,10 @@ impl MassImportService {
             reader_factory_fn: self.reader_factory_fn.clone(),
         };
 
-        let mut context = MassImportContext::new(input, ops, progress_tx);
+        let deps = MassImportDeps {
+            repository_manager: self.repository_manager.clone(),
+        };
+        let mut context = MassImportContext::new(deps, input, ops, progress_tx);
         let pipeline = Pipeline::<MassImportContext>::new();
         pipeline.execute(&mut context).await?;
         //dbg!(&context.state);
@@ -115,6 +122,7 @@ mod tests {
     use async_std::channel;
     use core_types::{FileType, ReadFile, Sha1Checksum, sha1_bytes_to_hex_string};
     use dat_file_parser::{DatFile, DatGame, DatHeader, DatRom, MockDatParser};
+    use database::setup_test_db;
 
     #[async_std::test]
     async fn test_mass_import_service_runs_pipeline_and_returns_result() {
@@ -165,11 +173,14 @@ mod tests {
         let reader_factory_fn = Arc::new(create_mock_reader_factory(metadata_by_path, vec![]));
 
         let fs_ops = Arc::new(fs_ops);
+        let pool = Arc::new(setup_test_db().await);
+        let repository_manager = Arc::new(RepositoryManager::new(pool));
         let service = MassImportService::new_with_ops(
             fs_ops,
             dat_file_parser_ops,
             file_import_service_ops,
             reader_factory_fn,
+            repository_manager,
         );
 
         let input = MassImportInput {

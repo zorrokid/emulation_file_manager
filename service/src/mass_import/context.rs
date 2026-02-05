@@ -7,7 +7,7 @@ use crate::{
 };
 use async_std::channel::Sender;
 use core_types::{ReadFile, Sha1Checksum, sha1_from_hex_string};
-use dat_file_parser::{DatFile, DatFileParserOps, DatGame, DatHeader, DatRom};
+use dat_file_parser::{DatFile, DatFileParserOps, DatGame, DatHeader};
 use database::repository_manager::RepositoryManager;
 
 use crate::{
@@ -69,10 +69,16 @@ impl ImportItem {
 
 #[derive(Debug)]
 pub struct MassImportContext {
+    pub deps: MassImportDeps,
     pub input: MassImportInput,
     pub state: MassImportState,
     pub ops: MassImportOps,
     pub progress_tx: Option<Sender<MassImportSyncEvent>>,
+}
+
+#[derive(Debug)]
+pub struct MassImportDeps {
+    pub repository_manager: Arc<RepositoryManager>,
 }
 
 pub struct MassImportOps {
@@ -106,11 +112,13 @@ pub struct MassImportDependencies {
 
 impl MassImportContext {
     pub fn new(
+        deps: MassImportDeps,
         input: MassImportInput,
         ops: MassImportOps,
         progress_tx: Option<Sender<MassImportSyncEvent>>,
     ) -> Self {
         Self {
+            deps,
             input,
             state: MassImportState::default(),
             ops,
@@ -259,7 +267,7 @@ mod tests {
     use std::path::Path;
 
     use core_types::{FileType, item_type::ItemType};
-    use dat_file_parser::MockDatParser;
+    use dat_file_parser::{DatRom, MockDatParser};
     use file_metadata::{FileMetadataError, FileMetadataReader, MockFileMetadataReader};
 
     use crate::{
@@ -269,8 +277,8 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    fn test_get_import_items() {
+    #[async_std::test]
+    async fn test_get_import_items() {
         // Setup: Create a DAT file with two games
         let dat_file = DatFile {
             header: dat_file_parser::DatHeader {
@@ -389,7 +397,10 @@ mod tests {
             file_import_service_ops: Arc::new(MockFileImportServiceOps::new()),
             reader_factory_fn: mock_factory,
         };
-        let mut context = MassImportContext::new(input, ops, None);
+        let pool = Arc::new(database::setup_test_db().await);
+        let repository_manager = Arc::new(RepositoryManager::new(pool));
+        let deps = MassImportDeps { repository_manager };
+        let mut context = MassImportContext::new(deps, input, ops, None);
         context.state.dat_file = Some(dat_file);
         context.state.file_metadata = file_metadata;
 

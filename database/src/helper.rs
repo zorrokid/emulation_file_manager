@@ -8,3 +8,38 @@ pub struct AddFileSetParams<'a> {
     pub files_in_fileset: &'a [ImportedFile],
     pub system_ids: &'a [i64],
 }
+
+pub struct AddDatFileParams<'a> {
+    pub dat_id: i32,
+    pub name: &'a str,
+    pub description: &'a str,
+    pub version: &'a str,
+    pub date: Option<&'a str>,
+    pub author: &'a str,
+    pub homepage: Option<&'a str>,
+    pub url: Option<&'a str>,
+    pub subset: Option<&'a str>,
+    pub system_id: i64,
+}
+
+pub struct AddDatGameParams<'a> {
+    pub dat_file_id: i64,
+    pub name: &'a str,
+    pub game_id: Option<&'a str>,
+    pub description: &'a str,
+    pub cloneof: Option<&'a str>,
+    pub cloneofid: Option<&'a str>,
+}
+
+pub struct AddDatRomParams<'a> {
+    pub dat_game_id: i64,
+    pub name: &'a str,
+    pub size: i64,
+    pub crc: &'a str,
+    pub md5: &'a str,
+    pub sha1: &'a str,
+    pub sha256: Option<&'a str>,
+    pub status: Option<&'a str>,
+    pub serial: Option<&'a str>,
+    pub header: Option<&'a str>,
+}
