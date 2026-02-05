@@ -293,7 +293,7 @@ mod tests {
             file_set_file_name: "test_game.zip".to_string(),
             item_ids: vec![],
             item_types: vec![],
-            create_release: false,
+            create_release: None,
         };
 
         let result = service.create_file_set(file_set_import_model).await;

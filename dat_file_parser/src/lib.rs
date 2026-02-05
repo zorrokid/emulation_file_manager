@@ -140,6 +140,49 @@ pub fn parse_dat_file(path: &Path) -> Result<DatFile, DatFileParserError> {
     Ok(dat_file)
 }
 
+impl From<DatGame> for domain::naming_conventions::no_intro::DatGame {
+    fn from(dat_game: DatGame) -> Self {
+        domain::naming_conventions::no_intro::DatGame {
+            name: dat_game.name,
+            id: dat_game.id,
+            cloneof: dat_game.cloneof,
+            cloneofid: dat_game.cloneofid,
+            categories: dat_game.categories,
+            description: dat_game.description,
+            roms: dat_game.roms.into_iter().map(|rom| rom.into()).collect(),
+            releases: dat_game
+                .releases
+                .into_iter()
+                .map(|release| release.into())
+                .collect(),
+        }
+    }
+}
+
+impl From<DatRom> for domain::naming_conventions::no_intro::DatRom {
+    fn from(dat_rom: DatRom) -> Self {
+        domain::naming_conventions::no_intro::DatRom {
+            name: dat_rom.name,
+            size: dat_rom.size,
+            crc: dat_rom.crc,
+            md5: dat_rom.md5,
+            sha1: dat_rom.sha1,
+            sha256: dat_rom.sha256,
+            status: dat_rom.status,
+            serial: dat_rom.serial,
+            header: dat_rom.header,
+        }
+    }
+}
+
+impl From<DatRelease> for domain::naming_conventions::no_intro::DatRelease {
+    fn from(dat_release: DatRelease) -> Self {
+        domain::naming_conventions::no_intro::DatRelease {
+            name: dat_release.name,
+            region: dat_release.region,
+        }
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;

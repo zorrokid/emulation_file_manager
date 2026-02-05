@@ -2,6 +2,7 @@ use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use crate::{
     error::Error,
+    file_import::model::CreateReleaseParams,
     mass_import::models::{FileSetImportResult, MassImportInput, MassImportSyncEvent},
 };
 use async_std::channel::Sender;
@@ -34,9 +35,9 @@ pub enum ImportItemStatus {
 
 #[derive(Debug, Clone)]
 pub struct ImportItem {
-    pub dat_game: DatGame,
-    pub dat_roms_available: Vec<DatRom>,
-    pub dat_roms_missing: Vec<DatRom>,
+    pub dat_game: domain::naming_conventions::no_intro::DatGame,
+    pub dat_roms_available: Vec<domain::naming_conventions::no_intro::DatRom>,
+    pub dat_roms_missing: Vec<domain::naming_conventions::no_intro::DatRom>,
     pub release_name: String,
     pub software_title_name: String,
     // This can be passed directly to create_file_set in file_import service to proceed with
@@ -47,10 +48,10 @@ pub struct ImportItem {
 
 impl ImportItem {
     pub fn new(
-        dat_game: DatGame,
+        dat_game: domain::naming_conventions::no_intro::DatGame,
         file_set: Option<FileSetImportModel>,
-        dat_roms_available: Vec<DatRom>,
-        dat_roms_missing: Vec<DatRom>,
+        dat_roms_available: Vec<domain::naming_conventions::no_intro::DatRom>,
+        dat_roms_missing: Vec<domain::naming_conventions::no_intro::DatRom>,
     ) -> Self {
         let software_title_name = dat_game.name.clone();
         let release_name = dat_game.description.clone();
@@ -168,8 +169,8 @@ impl MassImportContext {
 
         let mut import_files: HashMap<PathBuf, Vec<ImportFileContent>> = HashMap::new();
 
-        let mut available_roms = vec![];
-        let mut missing_roms = vec![];
+        let mut available_roms: Vec<domain::naming_conventions::no_intro::DatRom> = vec![];
+        let mut missing_roms: Vec<domain::naming_conventions::no_intro::DatRom> = vec![];
         for rom in &game.roms {
             let sha1_bytes_res: Sha1Checksum =
                 sha1_from_hex_string(&rom.sha1).expect("Invalid SHA1 in DAT");
@@ -180,7 +181,7 @@ impl MassImportContext {
                     source_file = source_file.display().to_string().as_str(),
                     "Matched ROM to source file"
                 );
-                available_roms.push(rom.clone());
+                available_roms.push(rom.clone().into());
                 import_files
                     .entry(source_file.clone())
                     .or_default()
@@ -194,7 +195,7 @@ impl MassImportContext {
                     rom_sha1 = rom.sha1.as_str(),
                     "No matching source file found for ROM"
                 );
-                missing_roms.push(rom.clone());
+                missing_roms.push(rom.clone().into());
             }
         }
 
@@ -202,6 +203,13 @@ impl MassImportContext {
             .iter()
             .filter_map(|rom| sha1_from_hex_string(&rom.sha1).ok())
             .collect();
+
+        let game: domain::naming_conventions::no_intro::DatGame = game.clone().into();
+
+        let create_release_params = CreateReleaseParams {
+            release_name: game.get_release_name(),
+            software_title_name: game.get_software_title_name(),
+        };
 
         let file_set = Some(FileSetImportModel {
             import_files: import_files
@@ -220,8 +228,6 @@ impl MassImportContext {
             file_type: self.input.file_type,
 
             source: format!("{} {}", header.name, header.version),
-            // TODO: Normalize the name, for example No-Intro uses (...) - release name on the
-            // other hand could have the whole name
             file_set_name: game.name.clone(),
             file_set_file_name: game.name.clone(),
 
@@ -230,7 +236,7 @@ impl MassImportContext {
                 .input
                 .item_type
                 .map_or_else(Vec::new, |item_type| vec![item_type]),
-            create_release: true,
+            create_release: Some(create_release_params),
         });
         ImportItem::new(game.clone(), file_set, available_roms, missing_roms)
     }

@@ -40,6 +40,14 @@ impl ReleaseRepository {
         Ok(release)
     }
 
+    pub async fn get_all_releases(&self) -> Result<Vec<Release>, DatabaseError> {
+        let releases = sqlx::query_as!(Release, "SELECT id, name FROM release")
+            .fetch_all(&*self.pool)
+            .await?;
+
+        Ok(releases)
+    }
+
     pub async fn get_releases(
         &self,
         system_id: Option<i64>,

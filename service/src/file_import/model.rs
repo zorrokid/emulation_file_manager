@@ -150,6 +150,12 @@ pub struct FileImportResult {
 }
 
 #[derive(Debug, Clone)]
+pub struct CreateReleaseParams {
+    pub release_name: String,
+    pub software_title_name: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct FileSetImportModel {
     pub import_files: Vec<FileImportSource>,
     pub selected_files: Vec<Sha1Checksum>,
@@ -161,8 +167,8 @@ pub struct FileSetImportModel {
     pub file_type: FileType,
     pub item_ids: Vec<i64>,
     pub item_types: Vec<ItemType>,
-    /// Creates a release and links file set to it, creates also a new software title and links the release to it.
-    pub create_release: bool,
+    /// If this is set, creates a release, links file set to it and creates a new software title and links the release to it.
+    pub create_release: Option<CreateReleaseParams>,
 }
 
 #[derive(Debug)]

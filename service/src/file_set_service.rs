@@ -4,6 +4,8 @@ use async_trait::async_trait;
 use core_types::{FileType, ImportedFile};
 use database::{helper::AddFileSetParams, repository_manager::RepositoryManager};
 
+use crate::file_import::model::CreateReleaseParams;
+
 pub struct CreateFileSetParams {
     pub file_set_name: String,
     pub file_set_file_name: String,
@@ -11,7 +13,7 @@ pub struct CreateFileSetParams {
     pub file_type: FileType,
     pub system_ids: Vec<i64>,
     pub files_in_file_set: Vec<ImportedFile>,
-    pub create_release: bool,
+    pub create_release: Option<CreateReleaseParams>,
 }
 
 #[derive(Debug)]
@@ -80,11 +82,15 @@ impl FileSetServiceOps for FileSetService {
             .await
             .map_err(|e| FileSetServiceError::DatabaseError(format!("{:?}", e)))?;
 
-        let release_id = if file_set_params.create_release {
+        let release_id = if let Some(create_release_params) = file_set_params.create_release {
             let software_title_id = self
                 .repository_manager
                 .get_software_title_repository()
-                .add_software_title_with_tx(&mut transaction, &file_set_params.file_set_name, None)
+                .add_software_title_with_tx(
+                    &mut transaction,
+                    &create_release_params.software_title_name,
+                    None,
+                )
                 .await
                 .map_err(|e| FileSetServiceError::DatabaseError(format!("{:?}", e)))?;
 
@@ -93,7 +99,7 @@ impl FileSetServiceOps for FileSetService {
                     .get_release_repository()
                     .add_release_full_with_tx(
                         &mut transaction,
-                        &file_set_params.file_set_name,
+                        &create_release_params.release_name,
                         &[software_title_id],
                         &[file_set_id],
                         &file_set_params.system_ids,
@@ -124,7 +130,7 @@ mod tests {
     use core_types::{ImportedFile, Sha1Checksum};
     use database::{repository_manager::RepositoryManager, setup_test_db};
 
-    use crate::file_set_service::FileSetServiceOps;
+    use crate::{file_import::model::CreateReleaseParams, file_set_service::FileSetServiceOps};
 
     #[async_std::test]
     async fn test_create_file_set() {
@@ -161,7 +167,10 @@ mod tests {
             file_type: core_types::FileType::Rom,
             system_ids: vec![system_id],
             files_in_file_set: files_in_fileset,
-            create_release: true,
+            create_release: Some(CreateReleaseParams {
+                release_name: "Test File Set".to_string(),
+                software_title_name: "Test File Set".to_string(),
+            }),
         };
         let result = file_set_service
             .create_file_set(create_params)
@@ -170,6 +179,7 @@ mod tests {
         assert!(result.file_set_id > 0);
         assert!(result.release_id.is_some());
 
+        // assert release
         let release = repository_manager
             .get_release_repository()
             .get_release(result.release_id.unwrap())
@@ -179,6 +189,7 @@ mod tests {
         assert_eq!(release.id, result.release_id.unwrap());
         assert_eq!(release.name, "Test File Set");
 
+        // assert software title
         let software_titles = repository_manager
             .get_software_title_repository()
             .get_software_titles_by_release(release.id)
@@ -209,7 +220,10 @@ mod tests {
             file_type: core_types::FileType::Rom,
             system_ids: vec![123],
             files_in_file_set: files_in_fileset,
-            create_release: true,
+            create_release: Some(CreateReleaseParams {
+                release_name: "Test File Set".to_string(),
+                software_title_name: "Test File Set".to_string(),
+            }),
         };
         let result = file_set_service.create_file_set(create_params).await;
 
@@ -222,5 +236,21 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(file_sets.len(), 0);
+
+        // release shouldn't exist
+        let releases = repository_manager
+            .get_release_repository()
+            .get_all_releases()
+            .await
+            .unwrap();
+        assert_eq!(releases.len(), 0);
+
+        // software title shouldn't exist
+        let software_titles = repository_manager
+            .get_software_title_repository()
+            .get_all_software_titles()
+            .await
+            .unwrap();
+        assert_eq!(software_titles.len(), 0);
     }
 }

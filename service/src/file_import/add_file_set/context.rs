@@ -10,7 +10,7 @@ use crate::{
         common_steps::{
             check_existing_files::CheckExistingFilesContext, import::AddFileSetContextOps,
         },
-        model::{FileImportData, ImportFileContent},
+        model::{CreateReleaseParams, FileImportData, ImportFileContent},
     },
     file_set_service::{CreateFileSetParams, FileSetService},
     file_system_ops::FileSystemOps,
@@ -30,7 +30,7 @@ pub struct AddFileSetOps {
 pub struct AddFileSetInput {
     pub system_ids: Vec<i64>,
     pub file_import_data: FileImportData,
-    pub create_release: bool,
+    pub create_release: Option<CreateReleaseParams>,
 
     // File set name and file name for file set that will be created from the set of import files.
     pub file_set_name: String,
@@ -171,7 +171,7 @@ impl AddFileSetContext {
             file_type: self.input.file_import_data.file_type,
             system_ids: self.input.system_ids.clone(),
             files_in_file_set: self.get_files_in_file_set(),
-            create_release: self.input.create_release,
+            create_release: self.input.create_release.clone(),
         }
     }
 }
@@ -256,7 +256,7 @@ mod tests {
         let input = AddFileSetInput {
             system_ids: vec![],
             file_import_data,
-            create_release: false,
+            create_release: None,
             file_set_name: "Test Game".to_string(),
             file_set_file_name: "test_game.zip".to_string(),
             source: "test_source".to_string(),

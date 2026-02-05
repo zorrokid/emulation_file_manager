@@ -1,4 +1,4 @@
 [workspace]
-members = ["file_import", "file_export", "database", "executable_runner", "service", "file_system", "core_types", "utils", "relm4-ui", "thumbnails", "ui-components", "cloud_storage", "credentials_storage", "internet_archive", "http_downloader", "dat_file_parser", "file_metadata"]
+members = ["file_import", "file_export", "database", "executable_runner", "service", "file_system", "core_types", "utils", "relm4-ui", "thumbnails", "ui-components", "cloud_storage", "credentials_storage", "internet_archive", "http_downloader", "dat_file_parser", "file_metadata", "domain"]
 
 resolver = "2"

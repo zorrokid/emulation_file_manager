@@ -843,7 +843,7 @@ impl FileSetFormModel {
             import_files: self.picked_files.clone(),
             item_ids: vec![],
             item_types,
-            create_release: false,
+            create_release: None,
         };
 
         let file_import_service = Arc::clone(&self.file_import_service);

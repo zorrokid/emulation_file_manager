@@ -147,7 +147,7 @@ mod tests {
             source: "test_source".to_string(),
             file_set_name: "Test Game".to_string(),
             file_set_file_name: "test_game.zip".to_string(),
-            create_release: false,
+            create_release: None,
         };
 
         let deps = AddFileSetDeps {

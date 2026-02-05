@@ -1056,6 +1056,7 @@ version = "0.1.0"
 dependencies = [
  "async-std",
  "async-trait",
+ "domain",
  "quick-xml 0.36.2",
  "serde",
 ]
@@ -1068,6 +1069,7 @@ dependencies = [
  "chrono",
  "core_types",
  "directories-next",
+ "domain",
  "dotenvy",
  "file_system",
  "serde_json",
@@ -1214,6 +1216,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "442039f5147480ba31067cb00ada1adae6892028e40e45fc5de7b7df6dcc1b5f"
 dependencies = [
  "const-random",
+]
+
+[[package]]
+name = "domain"
+version = "0.1.0"
+dependencies = [
+ "regex",
 ]
 
 [[package]]
@@ -3523,10 +3532,22 @@ dependencies = [
 ]
 
 [[package]]
-name = "regex-automata"
-version = "0.4.11"
+name = "regex"
+version = "1.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "833eb9ce86d40ef33cb1306d8accf7bc8ec2bfea4355cbdebb3df68b40925cad"
+checksum = "e10754a14b9137dd7b1e3e5b0493cc9171fdd105e0ab477f51b72e7f3ac0e276"
+dependencies = [
+ "aho-corasick",
+ "memchr",
+ "regex-automata",
+ "regex-syntax",
+]
+
+[[package]]
+name = "regex-automata"
+version = "0.4.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e1dd4122fc1595e8162618945476892eefca7b88c52820e74af6262213cae8f"
 dependencies = [
  "aho-corasick",
  "memchr",
@@ -3968,6 +3989,7 @@ dependencies = [
  "credentials_storage",
  "dat_file_parser",
  "database",
+ "domain",
  "executable_runner",
  "file_export",
  "file_import",
