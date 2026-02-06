@@ -131,6 +131,7 @@ impl FileImportService {
             source: import_model.source,
             system_ids: import_model.system_ids,
             create_release: import_model.create_release,
+            dat_file_id: import_model.dat_file_id,
         };
 
         let mut context = AddFileSetContext::new(ops, deps, input);
@@ -294,6 +295,7 @@ mod tests {
             item_ids: vec![],
             item_types: vec![],
             create_release: None,
+            dat_file_id: None,
         };
 
         let result = service.create_file_set(file_set_import_model).await;

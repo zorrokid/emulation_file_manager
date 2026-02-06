@@ -14,6 +14,7 @@ pub struct CreateFileSetParams {
     pub system_ids: Vec<i64>,
     pub files_in_file_set: Vec<ImportedFile>,
     pub create_release: Option<CreateReleaseParams>,
+    pub dat_file_id: Option<i64>,
 }
 
 #[derive(Debug)]
@@ -111,6 +112,8 @@ impl FileSetServiceOps for FileSetService {
             None
         };
 
+        // TODO: link file set to dat file if dat_file_id is provided
+
         transaction
             .commit()
             .await
@@ -171,6 +174,7 @@ mod tests {
                 release_name: "Test File Set".to_string(),
                 software_title_name: "Test File Set".to_string(),
             }),
+            dat_file_id: None,
         };
         let result = file_set_service
             .create_file_set(create_params)
@@ -224,6 +228,7 @@ mod tests {
                 release_name: "Test File Set".to_string(),
                 software_title_name: "Test File Set".to_string(),
             }),
+            dat_file_id: None,
         };
         let result = file_set_service.create_file_set(create_params).await;
 

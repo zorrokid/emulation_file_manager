@@ -246,6 +246,7 @@ impl MassImportContext {
                 .item_type
                 .map_or_else(Vec::new, |item_type| vec![item_type]),
             create_release: Some(create_release_params),
+            dat_file_id: self.state.dat_file_id,
         });
         ImportItem::new(game.clone(), file_set, available_roms, missing_roms)
     }

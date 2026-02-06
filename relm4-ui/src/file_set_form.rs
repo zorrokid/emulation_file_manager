@@ -844,6 +844,7 @@ impl FileSetFormModel {
             item_ids: vec![],
             item_types,
             create_release: None,
+            dat_file_id: None,
         };
 
         let file_import_service = Arc::clone(&self.file_import_service);

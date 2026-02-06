@@ -31,6 +31,7 @@ pub struct AddFileSetInput {
     pub system_ids: Vec<i64>,
     pub file_import_data: FileImportData,
     pub create_release: Option<CreateReleaseParams>,
+    pub dat_file_id: Option<i64>,
 
     // File set name and file name for file set that will be created from the set of import files.
     pub file_set_name: String,
@@ -172,6 +173,7 @@ impl AddFileSetContext {
             system_ids: self.input.system_ids.clone(),
             files_in_file_set: self.get_files_in_file_set(),
             create_release: self.input.create_release.clone(),
+            dat_file_id: self.input.dat_file_id,
         }
     }
 }
@@ -257,6 +259,7 @@ mod tests {
             system_ids: vec![],
             file_import_data,
             create_release: None,
+            dat_file_id: None,
             file_set_name: "Test Game".to_string(),
             file_set_file_name: "test_game.zip".to_string(),
             source: "test_source".to_string(),

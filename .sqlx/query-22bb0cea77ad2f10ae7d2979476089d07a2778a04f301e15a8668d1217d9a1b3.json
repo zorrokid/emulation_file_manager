@@ -1,0 +1,56 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT g.id, g.dat_file_id, g.name, g.game_id, g.description, g.cloneof, g.cloneofid\n             FROM dat_game g\n             INNER JOIN dat_rom r ON g.id = r.dat_game_id\n             WHERE r.sha1 = ?\n             LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "dat_file_id",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "name",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "game_id",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "description",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "cloneof",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "cloneofid",
+        "ordinal": 6,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "22bb0cea77ad2f10ae7d2979476089d07a2778a04f301e15a8668d1217d9a1b3"
+}
