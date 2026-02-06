@@ -112,7 +112,13 @@ impl FileSetServiceOps for FileSetService {
             None
         };
 
-        // TODO: link file set to dat file if dat_file_id is provided
+        if let Some(dat_file_id) = file_set_params.dat_file_id {
+            self.repository_manager
+                .get_file_set_repository()
+                .link_file_set_to_dat_file_with_tx(file_set_id, dat_file_id, &mut transaction)
+                .await
+                .map_err(|e| FileSetServiceError::DatabaseError(format!("{:?}", e)))?;
+        }
 
         transaction
             .commit()

@@ -762,13 +762,26 @@ impl FileSetRepository {
         file_set_id: i64,
         dat_file_id: i64,
     ) -> Result<(), DatabaseError> {
+        let mut transaction = self.pool.begin().await?;
+        self.link_file_set_to_dat_file_with_tx(file_set_id, dat_file_id, &mut transaction)
+            .await?;
+        transaction.commit().await?;
+        Ok(())
+    }
+
+    pub async fn link_file_set_to_dat_file_with_tx(
+        &self,
+        file_set_id: i64,
+        dat_file_id: i64,
+        transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    ) -> Result<(), DatabaseError> {
         sqlx::query!(
             "INSERT INTO file_set_dat_file_link (file_set_id, dat_file_id)
              VALUES (?, ?)",
             file_set_id,
             dat_file_id
         )
-        .execute(&*self.pool)
+        .execute(&mut **transaction)
         .await?;
         Ok(())
     }
