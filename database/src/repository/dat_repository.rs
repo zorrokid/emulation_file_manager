@@ -29,6 +29,7 @@ impl DatRepository {
         params: AddDatFileParams<'_>,
         tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     ) -> Result<i64, Error> {
+        println!("Inserting DAT file with system: {}", params.system_id);
         let result = sqlx::query!(
             "INSERT INTO dat_file (
                 dat_id, 
@@ -186,6 +187,23 @@ impl DatRepository {
         .fetch_optional(&*self.pool)
         .await?;
         Ok(game)
+    }
+
+    pub async fn check_dat_file_exists(
+        &self,
+        version: &str,
+        name: &str,
+        system_id: i64,
+    ) -> Result<Option<i64>, Error> {
+        let id = sqlx::query_scalar!(
+            "SELECT id FROM dat_file WHERE version = ? AND name = ? AND system_id = ?",
+            version,
+            name,
+            system_id
+        )
+        .fetch_optional(&*self.pool)
+        .await?;
+        Ok(id)
     }
 }
 
@@ -609,5 +627,35 @@ mod tests {
             .unwrap();
 
         assert!(not_found.is_none());
+    }
+
+    #[async_std::test]
+    async fn test_check_dat_file_exists() {
+        let pool = Arc::new(setup_test_db().await);
+        let system_repo = SystemRepository::new(pool.clone());
+        let system_id = system_repo.add_system("Commodore 64").await.unwrap();
+        let dat_repo = DatRepository::new(pool.clone());
+        let id = dat_repo
+            .add_dat_file(AddDatFileParams {
+                dat_id: 10,
+                name: "Test DAT",
+                description: "A test DAT file",
+                version: "1.0",
+                date: None,
+                author: "Test Author",
+                homepage: None,
+                url: None,
+                subset: None,
+                system_id,
+            })
+            .await
+            .unwrap();
+        let exists = dat_repo
+            .check_dat_file_exists("1.0", "Test DAT", system_id)
+            .await
+            .expect("Failed to check if DAT file exists");
+        assert!(exists.is_some());
+        let exists_id = exists.expect("Expected DAT file to exist but it does not");
+        assert_eq!(exists_id, id);
     }
 }

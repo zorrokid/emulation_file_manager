@@ -159,9 +159,44 @@ impl From<DatGame> for domain::naming_conventions::no_intro::DatGame {
     }
 }
 
+impl From<domain::naming_conventions::no_intro::DatGame> for DatGame {
+    fn from(dat_game: domain::naming_conventions::no_intro::DatGame) -> Self {
+        DatGame {
+            name: dat_game.name,
+            id: dat_game.id,
+            cloneof: dat_game.cloneof,
+            cloneofid: dat_game.cloneofid,
+            categories: dat_game.categories,
+            description: dat_game.description,
+            roms: dat_game.roms.into_iter().map(|rom| rom.into()).collect(),
+            releases: dat_game
+                .releases
+                .into_iter()
+                .map(|release| release.into())
+                .collect(),
+        }
+    }
+}
+
 impl From<DatRom> for domain::naming_conventions::no_intro::DatRom {
     fn from(dat_rom: DatRom) -> Self {
         domain::naming_conventions::no_intro::DatRom {
+            name: dat_rom.name,
+            size: dat_rom.size,
+            crc: dat_rom.crc,
+            md5: dat_rom.md5,
+            sha1: dat_rom.sha1,
+            sha256: dat_rom.sha256,
+            status: dat_rom.status,
+            serial: dat_rom.serial,
+            header: dat_rom.header,
+        }
+    }
+}
+
+impl From<domain::naming_conventions::no_intro::DatRom> for DatRom {
+    fn from(dat_rom: domain::naming_conventions::no_intro::DatRom) -> Self {
+        DatRom {
             name: dat_rom.name,
             size: dat_rom.size,
             crc: dat_rom.crc,
@@ -183,6 +218,66 @@ impl From<DatRelease> for domain::naming_conventions::no_intro::DatRelease {
         }
     }
 }
+
+impl From<domain::naming_conventions::no_intro::DatRelease> for DatRelease {
+    fn from(dat_release: domain::naming_conventions::no_intro::DatRelease) -> Self {
+        DatRelease {
+            name: dat_release.name,
+            region: dat_release.region,
+        }
+    }
+}
+
+impl From<DatHeader> for domain::naming_conventions::no_intro::DatHeader {
+    fn from(dat_header: DatHeader) -> Self {
+        domain::naming_conventions::no_intro::DatHeader {
+            id: dat_header.id,
+            name: dat_header.name,
+            description: dat_header.description,
+            version: dat_header.version,
+            date: dat_header.date,
+            author: dat_header.author,
+            homepage: dat_header.homepage,
+            url: dat_header.url,
+            subset: dat_header.subset,
+        }
+    }
+}
+
+impl From<domain::naming_conventions::no_intro::DatHeader> for DatHeader {
+    fn from(dat_header: domain::naming_conventions::no_intro::DatHeader) -> Self {
+        DatHeader {
+            id: dat_header.id,
+            name: dat_header.name,
+            description: dat_header.description,
+            version: dat_header.version,
+            date: dat_header.date,
+            author: dat_header.author,
+            homepage: dat_header.homepage,
+            url: dat_header.url,
+            subset: dat_header.subset,
+        }
+    }
+}
+
+impl From<DatFile> for domain::naming_conventions::no_intro::DatFile {
+    fn from(dat_file: DatFile) -> Self {
+        domain::naming_conventions::no_intro::DatFile {
+            header: dat_file.header.into(),
+            games: dat_file.games.into_iter().map(|game| game.into()).collect(),
+        }
+    }
+}
+
+impl From<domain::naming_conventions::no_intro::DatFile> for DatFile {
+    fn from(dat_file: domain::naming_conventions::no_intro::DatFile) -> Self {
+        DatFile {
+            header: dat_file.header.into(),
+            games: dat_file.games.into_iter().map(|game| game.into()).collect(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -207,5 +302,10 @@ mod tests {
         let rom = &first_game.roms[0];
         assert_eq!(rom.size, 8192);
         assert_eq!(rom.crc, "3aa93ef3");
+
+        // assert conversions between domain and dat file models work correctly
+        let domain_dat: domain::naming_conventions::no_intro::DatFile = dat.clone().into();
+        let dat_converted_back: DatFile = domain_dat.into();
+        assert_eq!(dat, dat_converted_back);
     }
 }

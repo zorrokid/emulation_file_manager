@@ -175,6 +175,11 @@ mod tests {
         let fs_ops = Arc::new(fs_ops);
         let pool = Arc::new(setup_test_db().await);
         let repository_manager = Arc::new(RepositoryManager::new(pool));
+        let system_id = repository_manager
+            .get_system_repository()
+            .add_system("Test System")
+            .await
+            .unwrap();
         let service = MassImportService::new_with_ops(
             fs_ops,
             dat_file_parser_ops,
@@ -188,7 +193,7 @@ mod tests {
             dat_file_path: Some(PathBuf::from("/mock/datfile.dat")),
             file_type: FileType::Rom,
             item_type: None,
-            system_id: 1,
+            system_id,
         };
 
         // Optional progress channel (not asserted here, just exercised)

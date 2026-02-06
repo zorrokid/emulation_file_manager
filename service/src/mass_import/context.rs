@@ -102,6 +102,7 @@ pub struct MassImportState {
     pub dir_scan_errors: Vec<Error>,
     pub file_metadata: HashMap<PathBuf, Vec<ReadFile>>,
     pub dat_file: Option<DatFile>,
+    pub dat_file_id: Option<i64>,
     pub import_results: Vec<FileSetImportResult>,
 }
 

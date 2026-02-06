@@ -23,6 +23,10 @@ impl DatFileService {
         dat_file: &ParserDatFile,
         system_id: i64,
     ) -> Result<i64, Error> {
+        println!(
+            "Storing DAT file with system id: {} - {}",
+            dat_file.header.name, system_id
+        );
         let mut transaction = self
             .repository_manager
             .begin_transaction()
@@ -44,6 +48,7 @@ impl DatFileService {
             system_id,
         };
 
+        println!("Adding DAT file to database: {}", dat_file.header.name);
         let dat_file_id = repo
             .add_dat_file_with_tx(add_dat_file_params, &mut transaction)
             .await
@@ -58,6 +63,7 @@ impl DatFileService {
                 cloneof: game.cloneof.as_deref(),
                 cloneofid: game.cloneofid.as_deref(),
             };
+            println!("Adding game to database: {}", game.name);
             let game_id = repo
                 .add_dat_game_with_tx(game_params, &mut transaction)
                 .await
@@ -75,21 +81,27 @@ impl DatFileService {
                     serial: rom.serial.as_deref(),
                     header: rom.header.as_deref(),
                 };
+                println!("Adding ROM to database: {} (Game: {})", rom.name, game.name);
                 repo.add_dat_rom_with_tx(rom_params, &mut transaction)
                     .await
                     .map_err(|e| Error::DbError(format!("{:?}", e)))?;
             }
         }
 
+        println!(
+            "Committing transaction for DAT file: {}",
+            dat_file.header.name
+        );
         transaction
             .commit()
             .await
             .map_err(|e| Error::DbError(format!("{:?}", e)))?;
 
+        println!("DAT file stored successfully: {}", dat_file.header.name);
         Ok(dat_file_id)
     }
 
-    pub async fn fetch_dat_file(&self, dat_file_id: i64) -> Result<DatFile, Error> {
+    pub async fn fetch_dat_file(&self, dat_file_id: i64) -> Result<(i64, DatFile), Error> {
         let dat_file = self
             .repository_manager
             .get_dat_repository()
@@ -149,10 +161,13 @@ impl DatFileService {
             };
             games_out.push(game);
         }
-        Ok(DatFile {
-            header: dat_header,
-            games: games_out,
-        })
+        Ok((
+            dat_file.id,
+            DatFile {
+                header: dat_header,
+                games: games_out,
+            },
+        ))
     }
 }
 
@@ -213,6 +228,7 @@ mod tests {
         };
 
         let service = DatFileService::new(repository_manager.clone());
+        println!("System ID: {}", system_id);
         let dat_file_id = service.store_dat_file(&dat_file, system_id).await.unwrap();
 
         assert!(dat_file_id > 0);
@@ -233,7 +249,7 @@ mod tests {
         assert_eq!(games.len(), 1);
         assert_eq!(games[0].name, "Test Game");
 
-        let dat_file = service.fetch_dat_file(dat_file_id).await.unwrap();
+        let (_, dat_file) = service.fetch_dat_file(dat_file_id).await.unwrap();
         assert_eq!(dat_file.header.name, "Test DAT");
         assert_eq!(dat_file.header.version, "1.0");
         assert_eq!(dat_file.header.author, "Test Author");

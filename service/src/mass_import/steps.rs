@@ -1,4 +1,5 @@
 use crate::{
+    dat_file_service::DatFileService,
     error::Error,
     mass_import::{
         context::MassImportContext,
@@ -46,6 +47,70 @@ impl PipelineStep<MassImportContext> for ImportDatFileStep {
     }
 }
 
+pub struct CheckExistingDatFileStep;
+#[async_trait::async_trait]
+impl PipelineStep<MassImportContext> for CheckExistingDatFileStep {
+    fn name(&self) -> &'static str {
+        "check_existing_dat_file_step"
+    }
+    fn should_execute(&self, context: &MassImportContext) -> bool {
+        context.state.dat_file.is_some()
+    }
+
+    async fn execute(&self, context: &mut MassImportContext) -> StepAction {
+        let dat_file = context
+            .state
+            .dat_file
+            .as_ref()
+            .expect("DAT file should be present in state");
+        let is_existing_dat_res = context
+            .deps
+            .repository_manager
+            .get_dat_repository()
+            .check_dat_file_exists(
+                dat_file.header.version.as_str(),
+                dat_file.header.name.as_str(), // TODO: use dat file type instead?
+                context.input.system_id,
+            )
+            .await;
+
+        match is_existing_dat_res {
+            Ok(id_res) => {
+                if let Some(id) = id_res {
+                    tracing::info!(
+                        system_id = context.input.system_id,
+                        dat_name = %dat_file.header.name,
+                        dat_version = %dat_file.header.version,
+                        "DAT file already exists in the database",
+                    );
+                    context.state.dat_file_id = Some(id);
+                } else {
+                    tracing::info!(
+                        system_id = context.input.system_id,
+                        dat_name = %dat_file.header.name,
+                        dat_version = %dat_file.header.version,
+                        "DAT file does not exist in the database, proceeding to store it",
+                    );
+                }
+                StepAction::Continue
+            }
+            Err(err) => {
+                tracing::error!(
+                    system_id = context.input.system_id,
+                    dat_name = %dat_file.header.name,
+                    dat_version = %dat_file.header.version,
+                    error = ?err,
+                    "Error while checking if DAT file exists in the database",
+                );
+                StepAction::Abort(Error::DbError(format!(
+                    "Error while checking if DAT file exists in the database: {}",
+                    err
+                )))
+            }
+        }
+    }
+}
+
 pub struct StoreDatFileStep;
 #[async_trait::async_trait]
 impl PipelineStep<MassImportContext> for StoreDatFileStep {
@@ -53,11 +118,34 @@ impl PipelineStep<MassImportContext> for StoreDatFileStep {
         "store_dat_file_step"
     }
     fn should_execute(&self, context: &MassImportContext) -> bool {
-        context.state.dat_file.is_some()
+        context.state.dat_file.is_some() && context.state.dat_file_id.is_none()
     }
 
     async fn execute(&self, context: &mut MassImportContext) -> StepAction {
-        // TODO
+        let dat_file = context
+            .state
+            .dat_file
+            .as_ref()
+            .expect("DAT file should be present in state");
+
+        let dat_service = DatFileService::new(context.deps.repository_manager.clone());
+        match dat_service
+            .store_dat_file(dat_file, context.input.system_id)
+            .await
+        {
+            Ok(dat_file_id) => {
+                println!("Successfully stored DAT file with ID: {}", dat_file_id);
+                context.state.dat_file_id = Some(dat_file_id);
+            }
+            Err(e) => {
+                println!("Failed to store DAT file: {}", e);
+                return StepAction::Abort(Error::DbError(format!(
+                    "Failed to store DAT file: {}",
+                    e
+                )));
+            }
+        }
+
         StepAction::Continue
     }
 }
@@ -297,6 +385,7 @@ mod tests {
     use dat_file_parser::{
         DatFile, DatFileParserError, DatFileParserOps, DatGame, DatHeader, DatRom, MockDatParser,
     };
+    use database::helper::AddDatFileParams;
 
     use crate::{
         file_import::file_import_service_ops::{
@@ -369,6 +458,66 @@ mod tests {
         let result = step.execute(&mut context).await;
         assert!(matches!(result, StepAction::Continue));
         assert!(context.state.dat_file.is_some());
+    }
+
+    #[async_std::test]
+    async fn test_check_existing_dat_file_step_with_existing_dat_file() {
+        // Arrange
+
+        // Prepare a dat file and add it to the repository to simulate existing dat fil
+        let deps = get_deps().await;
+        let system_repo = deps.repository_manager.get_system_repository();
+        let system_id = system_repo
+            .add_system("Test System")
+            .await
+            .expect("Failed to add test system");
+        let dat_repo = deps.repository_manager.get_dat_repository();
+
+        let dat_file = DatFile {
+            header: DatHeader {
+                name: "Test DAT".to_string(),
+                version: "1.0".to_string(),
+                ..Default::default()
+            },
+            games: vec![],
+        };
+
+        let add_dat_file_params = AddDatFileParams {
+            dat_id: dat_file.header.id,
+            name: dat_file.header.name.as_str(),
+            description: dat_file.header.description.as_str(),
+            version: dat_file.header.version.as_str(),
+            date: dat_file.header.date.as_deref(),
+            author: dat_file.header.author.as_str(),
+            homepage: dat_file.header.homepage.as_deref(),
+            url: dat_file.header.url.as_deref(),
+            subset: dat_file.header.subset.as_deref(),
+            system_id,
+        };
+        dat_repo.add_dat_file(add_dat_file_params).await.unwrap();
+
+        let dat_file_parser_ops = Arc::new(MockDatParser::new(Ok(dat_file.clone())));
+        let mut context = MassImportContext::new(
+            get_deps().await,
+            MassImportInput {
+                source_path: PathBuf::from("/path/to/source"),
+                dat_file_path: Some(PathBuf::from("/path/to/datfile.dat")),
+                file_type: core_types::FileType::Rom,
+                item_type: None,
+                system_id: 1,
+            },
+            get_ops(Some(dat_file_parser_ops), None, None, None),
+            None,
+        );
+
+        // Pre-populate state with a dat file to trigger the step
+        context.state.dat_file = Some(dat_file);
+
+        // Act
+        let result = CheckExistingDatFileStep.execute(&mut context).await;
+
+        // Assert
+        assert!(matches!(result, StepAction::Continue));
     }
 
     #[async_std::test]
