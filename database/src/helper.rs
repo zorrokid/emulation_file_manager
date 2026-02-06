@@ -9,6 +9,7 @@ pub struct AddFileSetParams<'a> {
     pub system_ids: &'a [i64],
 }
 
+#[derive(Default)]
 pub struct AddDatFileParams<'a> {
     pub dat_id: i32,
     pub name: &'a str,

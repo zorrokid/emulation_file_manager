@@ -756,11 +756,28 @@ impl FileSetRepository {
 
         Ok(item_types)
     }
+
+    pub async fn link_file_set_to_dat_file(
+        &self,
+        file_set_id: i64,
+        dat_file_id: i64,
+    ) -> Result<(), DatabaseError> {
+        sqlx::query!(
+            "INSERT INTO file_set_dat_file_link (file_set_id, dat_file_id)
+             VALUES (?, ?)",
+            file_set_id,
+            dat_file_id
+        )
+        .execute(&*self.pool)
+        .await?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{
+        helper::AddDatFileParams,
         repository::{
             file_info_repository::FileInfoRepository, system_repository::SystemRepository,
         },
@@ -1749,5 +1766,53 @@ mod tests {
         assert_eq!(item_types.len(), 2);
         assert!(item_types.contains(&ItemType::Manual));
         assert!(item_types.contains(&ItemType::InlayCard));
+    }
+
+    #[async_std::test]
+    async fn test_link_file_set_to_dat_file() {
+        let pool = setup_test_db().await;
+        let pool = Arc::new(pool);
+        let file_set_repository = FileSetRepository { pool: pool.clone() };
+
+        let file_set_id = file_set_repository
+            .add_file_set("Test File Set", "test.zip", &FileType::Rom, "", &[], &[])
+            .await
+            .unwrap();
+
+        let system_id = SystemRepository::new(pool.clone())
+            .add_system("Test System")
+            .await
+            .unwrap();
+
+        let dat_repository = crate::repository::dat_repository::DatRepository::new(pool.clone());
+
+        let dat_file_params = AddDatFileParams {
+            dat_id: 1,
+            name: "Test DAT",
+            system_id,
+            ..AddDatFileParams::default()
+        };
+
+        let dat_file_id = dat_repository.add_dat_file(dat_file_params).await.unwrap();
+
+        // Link the file set to the dat file
+        file_set_repository
+            .link_file_set_to_dat_file(file_set_id, dat_file_id)
+            .await
+            .unwrap();
+
+        // Verify the link exists
+        let count = query_scalar!(
+            "SELECT COUNT(*) 
+                 FROM file_set_dat_file_link 
+                 WHERE file_set_id = ? AND dat_file_id = ?",
+            file_set_id,
+            dat_file_id
+        )
+        .fetch_one(&*pool)
+        .await
+        .unwrap();
+
+        assert_eq!(count, 1);
     }
 }
