@@ -63,6 +63,10 @@ impl PipelineStep<MassImportContext> for CheckExistingDatFileStep {
             .dat_file
             .as_ref()
             .expect("DAT file should be present in state");
+        println!(
+            "Checking if DAT file already exists in the database: name='{}', version='{}, system_id={}'",
+            dat_file.header.name, dat_file.header.version, context.input.system_id
+        );
         let is_existing_dat_res = context
             .deps
             .repository_manager
@@ -76,6 +80,10 @@ impl PipelineStep<MassImportContext> for CheckExistingDatFileStep {
 
         match is_existing_dat_res {
             Ok(id_res) => {
+                println!(
+                    "Check existing DAT file result for '{}': {:?}",
+                    dat_file.header.name, id_res
+                );
                 if let Some(id) = id_res {
                     tracing::info!(
                         system_id = context.input.system_id,
@@ -494,17 +502,17 @@ mod tests {
             subset: dat_file.header.subset.as_deref(),
             system_id,
         };
-        dat_repo.add_dat_file(add_dat_file_params).await.unwrap();
+        let dat_id = dat_repo.add_dat_file(add_dat_file_params).await.unwrap();
 
         let dat_file_parser_ops = Arc::new(MockDatParser::new(Ok(dat_file.clone())));
         let mut context = MassImportContext::new(
-            get_deps().await,
+            deps,
             MassImportInput {
                 source_path: PathBuf::from("/path/to/source"),
                 dat_file_path: Some(PathBuf::from("/path/to/datfile.dat")),
                 file_type: core_types::FileType::Rom,
                 item_type: None,
-                system_id: 1,
+                system_id,
             },
             get_ops(Some(dat_file_parser_ops), None, None, None),
             None,
@@ -518,6 +526,7 @@ mod tests {
 
         // Assert
         assert!(matches!(result, StepAction::Continue));
+        assert_eq!(context.state.dat_file_id, Some(dat_id));
     }
 
     #[async_std::test]
