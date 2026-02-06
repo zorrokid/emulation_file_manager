@@ -3,6 +3,25 @@ use std::sync::OnceLock;
 use regex::Regex;
 
 #[derive(Debug, Clone)]
+pub struct DatFile {
+    pub header: DatHeader,
+    pub games: Vec<DatGame>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DatHeader {
+    pub id: i32,
+    pub name: String,
+    pub description: String,
+    pub version: String,
+    pub date: Option<String>,
+    pub author: String,
+    pub homepage: Option<String>,
+    pub url: Option<String>,
+    pub subset: Option<String>,
+}
+
+#[derive(Debug, Clone)]
 pub struct DatGame {
     pub name: String,
     pub id: Option<String>,
