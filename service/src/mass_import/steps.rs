@@ -530,6 +530,122 @@ mod tests {
     }
 
     #[async_std::test]
+    async fn test_check_existing_dat_file_step_with_non_existing_dat_file() {
+        // Arrange
+        let dat_file = DatFile {
+            header: DatHeader {
+                name: "Non-Existing DAT".to_string(),
+                version: "1.0".to_string(),
+                ..Default::default()
+            },
+            games: vec![],
+        };
+        let dat_file_parser_ops = Arc::new(MockDatParser::new(Ok(dat_file.clone())));
+        let mut context = MassImportContext::new(
+            get_deps().await,
+            MassImportInput {
+                source_path: PathBuf::from("/path/to/source"),
+                dat_file_path: Some(PathBuf::from("/path/to/datfile.dat")),
+                file_type: core_types::FileType::Rom,
+                item_type: None,
+                system_id: 1,
+            },
+            get_ops(Some(dat_file_parser_ops), None, None, None),
+            None,
+        );
+
+        // Pre-populate state with a dat file to trigger the step
+        context.state.dat_file = Some(dat_file);
+
+        // Act
+        let result = CheckExistingDatFileStep.execute(&mut context).await;
+
+        // Assert
+        assert!(matches!(result, StepAction::Continue));
+        assert_eq!(context.state.dat_file_id, None);
+    }
+
+    #[async_std::test]
+    async fn test_store_dat_file_step() {
+        // Arrange
+        let dat_file = DatFile {
+            header: DatHeader {
+                name: "Test DAT".to_string(),
+                version: "1.0".to_string(),
+                ..Default::default()
+            },
+            games: vec![],
+        };
+        let deps = get_deps().await;
+        let system_repo = deps.repository_manager.get_system_repository();
+        let system_id = system_repo
+            .add_system("Test System")
+            .await
+            .expect("Failed to add test system");
+        let dat_file_parser_ops = Arc::new(MockDatParser::new(Ok(dat_file.clone())));
+        let mut context = MassImportContext::new(
+            deps,
+            MassImportInput {
+                source_path: PathBuf::from("/path/to/source"),
+                dat_file_path: Some(PathBuf::from("/path/to/datfile.dat")),
+                file_type: core_types::FileType::Rom,
+                item_type: None,
+                system_id,
+            },
+            get_ops(Some(dat_file_parser_ops), None, None, None),
+            None,
+        );
+
+        // Pre-populate state with a dat file to trigger the step
+        context.state.dat_file = Some(dat_file);
+        context.state.dat_file_id = None; // Ensure dat file ID is None to trigger storage
+
+        // Act
+        let step = StoreDatFileStep;
+
+        assert!(step.should_execute(&context));
+        let result = step.execute(&mut context).await;
+
+        // Assert
+        assert!(matches!(result, StepAction::Continue));
+        assert!(context.state.dat_file_id.is_some());
+    }
+
+    #[async_std::test]
+    async fn test_store_dat_file_step_dat_id_set() {
+        // Arrange
+        let dat_file = DatFile {
+            header: DatHeader {
+                name: "Test DAT".to_string(),
+                version: "1.0".to_string(),
+                ..Default::default()
+            },
+            games: vec![],
+        };
+        let dat_file_parser_ops = Arc::new(MockDatParser::new(Ok(dat_file.clone())));
+        let mut context = MassImportContext::new(
+            get_deps().await,
+            MassImportInput {
+                source_path: PathBuf::from("/path/to/source"),
+                dat_file_path: Some(PathBuf::from("/path/to/datfile.dat")),
+                file_type: core_types::FileType::Rom,
+                item_type: None,
+                system_id: 1,
+            },
+            get_ops(Some(dat_file_parser_ops), None, None, None),
+            None,
+        );
+
+        // Pre-populate state with a dat file and a dat file ID to ensure step should not execute
+        context.state.dat_file = Some(dat_file);
+        context.state.dat_file_id = Some(1); // Simulate existing dat file ID
+
+        // Act
+        let step = StoreDatFileStep;
+        assert!(!step.should_execute(&context));
+    }
+
+    #[async_std::test]
     async fn test_read_files_step() {
         // Prepare mock file system ops to return two files
         let mut mock_fs_ops = MockFileSystemOps::new();
