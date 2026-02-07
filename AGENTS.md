@@ -59,6 +59,45 @@ CI will fail without up-to-date `.sqlx/` metadata.
 - Propagate errors, don't panic in production
 - `unwrap()` only acceptable in tests
 
+### Mock Implementation Pattern
+When creating mocks for traits (for testing):
+
+**Structure:**
+```rust
+#[derive(Clone, Default)]
+pub struct MockSomethingService {
+    // Counters for auto-incrementing IDs
+    next_id: Arc<Mutex<i64>>,
+    
+    // State tracking (what operations were performed)
+    performed_operations: Arc<Mutex<HashMap<K, V>>>,
+    
+    // Pre-configured results (for lookups)
+    // Use BTreeSet for order-independent sets
+    configured_results: Arc<Mutex<HashMap<BTreeSet<Key>, Value>>>,
+    
+    // Failure simulation
+    fail_for: Arc<Mutex<Vec<Condition>>>,
+}
+```
+
+**Required Methods:**
+- `new()` - Create with sensible defaults
+- `add_*()` / `set_*()` - Configure behavior
+- `fail_*_for()` - Simulate failures
+- `was_*()` / `get_*()` / `*_count()` - Verify operations
+- `clear()` - Reset state between tests
+
+**Best Practices:**
+- Use `BTreeSet` for unordered collections (not `Vec`)
+- Use `Arc<Mutex<>>` for shared mutable state
+- Implement `Clone` and `Default`
+- Include comprehensive tests (9+ test cases)
+- Document capabilities in doc comments
+- Check failure conditions first in methods
+
+**Examples:** `MockCloudStorage`, `MockFileSetService`
+
 ## When to Use Which Agent
 
 | Need | Agent | Why |
