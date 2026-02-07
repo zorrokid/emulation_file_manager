@@ -32,11 +32,31 @@ You help create comprehensive, maintainable tests following the project's testin
 
 When creating mocks for traits:
 
-### Structure
+### Structure (Simplified Pattern)
+
+**Bundle all state into a single struct** - This reduces boilerplate by 90%:
+
 ```rust
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
+
+/// Internal mutable state
+#[derive(Default)]
+struct MockState {
+    // 1. ID Generation: Auto-increment counters
+    next_id: i64,
+    
+    // 2. State Tracking: Record what was called/created
+    operations: HashMap<Id, Data>,
+    
+    // 3. Pre-configured Results: Return specific values for inputs
+    // Use BTreeSet as HashMap keys for order-independent collections
+    configured_results: HashMap<Key, Value>,
+    
+    // 4. Failure Simulation: Trigger errors for specific inputs
+    fail_for: HashSet<Key>,
+}
 
 /// Mock implementation of SomethingOps for testing
 ///
@@ -44,22 +64,25 @@ use async_trait::async_trait;
 /// - List key capabilities
 /// - Explain what can be configured
 /// - Describe verification methods
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct MockSomething {
-    // 1. ID Generation: Auto-increment counters
-    next_id: Arc<Mutex<i64>>,
-    
-    // 2. State Tracking: Record what was called/created
-    operations: Arc<Mutex<HashMap<Id, Data>>>,
-    
-    // 3. Pre-configured Results: Return specific values for inputs
-    // Use BTreeSet as HashMap keys for order-independent collections
-    configured_results: Arc<Mutex<HashMap<Key, Value>>>,
-    
-    // 4. Failure Simulation: Trigger errors for specific inputs
-    fail_for: Arc<Mutex<HashSet<Key>>>,
+    // Single Arc<Mutex<>> instead of one per field!
+    state: Arc<Mutex<MockState>>,
+}
+
+impl Default for MockSomething {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 ```
+
+**Why this is better:**
+- ✅ **90% less boilerplate** - One `Arc<Mutex<>>` instead of N
+- ✅ **Single lock acquisition** - More efficient, less contention
+- ✅ **Easier to extend** - Just add field to `MockState`
+- ✅ **Clearer structure** - Separates state from interface
+- ✅ **Simpler `clear()`** - Just replace the whole state
 
 ### Required Methods
 
@@ -67,10 +90,10 @@ pub struct MockSomething {
 ```rust
 pub fn new() -> Self {
     Self {
-        next_id: Arc::new(Mutex::new(1)),
-        operations: Arc::new(Mutex::new(HashMap::new())),
-        configured_results: Arc::new(Mutex::new(HashMap::new())),
-        fail_for: Arc::new(Mutex::new(HashSet::new())),
+        state: Arc::new(Mutex::new(MockState {
+            next_id: 1,
+            ..Default::default()
+        })),
     }
 }
 ```
@@ -78,8 +101,13 @@ pub fn new() -> Self {
 **Configuration:**
 ```rust
 // Pre-configure return values
-pub fn add_result(&self, key: Key, value: Value) { ... }
-pub fn set_next_id(&self, id: i64) { ... }
+pub fn add_result(&self, key: Key, value: Value) {
+    self.state.lock().unwrap().configured_results.insert(key, value);
+}
+
+pub fn set_next_id(&self, id: i64) {
+    self.state.lock().unwrap().next_id = id;
+}
 
 // Configure failures
 pub fn fail_for(&self, key: Key) { ... }
@@ -95,12 +123,13 @@ pub fn call_count(&self) -> usize { ... }
 
 **Reset:**
 ```rust
-// Clean state between tests
+// Clean state between tests - super simple now!
 pub fn clear(&self) {
-    *self.next_id.lock().unwrap() = 1;
-    self.operations.lock().unwrap().clear();
-    self.configured_results.lock().unwrap().clear();
-    self.fail_for.lock().unwrap().clear();
+    let mut state = self.state.lock().unwrap();
+    *state = MockState {
+        next_id: 1,
+        ..Default::default()
+    };
 }
 ```
 
@@ -110,36 +139,35 @@ pub fn clear(&self) {
 #[async_trait]
 impl SomethingOps for MockSomething {
     async fn do_something(&self, input: Input) -> Result<Output, Error> {
+        // Acquire lock once for entire operation
+        let mut state = self.state.lock().unwrap();
+        
         // 1. Check failure conditions FIRST
-        if self.fail_for.lock().unwrap().contains(&input.key) {
+        if state.fail_for.contains(&input.key) {
             return Err(Error::MockFailure("...".to_string()));
         }
         
         // 2. Generate or retrieve result
-        let result = self.configured_results
-            .lock()
-            .unwrap()
+        let result = state.configured_results
             .get(&input.key)
             .cloned()
             .unwrap_or_else(|| {
                 // Generate default if not configured
-                let id = {
-                    let mut next = self.next_id.lock().unwrap();
-                    let id = *next;
-                    *next += 1;
-                    id
-                };
+                let id = state.next_id;
+                state.next_id += 1;
                 Output { id }
             });
         
         // 3. Track the operation
-        self.operations.lock().unwrap().insert(input.key, input.data);
+        state.operations.insert(input.key, input.data);
         
         // 4. Return result
         Ok(result)
     }
 }
 ```
+
+**Note:** Single lock acquisition is more efficient than multiple locks!
 
 ### Test Coverage
 
@@ -189,6 +217,27 @@ state: HashMap<K, V>
 ```
 
 **Rationale:**
+### Arc<Mutex<>> Pattern
+
+**Use single `Arc<Mutex<State>>` instead of multiple per-field:**
+```rust
+// Good: Single lock point
+pub struct MockSomething {
+    state: Arc<Mutex<MockState>>,
+}
+
+// Bad: Multiple lock points (90% more boilerplate)
+pub struct MockSomething {
+    field1: Arc<Mutex<Type1>>,
+    field2: Arc<Mutex<Type2>>,
+    field3: Arc<Mutex<Type3>>,
+}
+```
+
+**Rationale:**
+- Single lock acquisition per operation (more efficient)
+- Less contention between operations
+- Much less boilerplate (one Arc instead of N)
 - `Arc` allows `Clone` trait (mock can be cloned)
 - `Mutex` allows interior mutability
 - Enables `Send + Sync` (required for async traits)
@@ -196,12 +245,24 @@ state: HashMap<K, V>
 ### Derive Traits
 
 ```rust
-#[derive(Clone, Default)]
-pub struct MockSomething { ... }
+#[derive(Clone)]  // MockSomething can derive Clone
+pub struct MockSomething { 
+    state: Arc<Mutex<MockState>>,
+}
+
+impl Default for MockSomething {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Default)]  // MockState uses Default
+struct MockState { ... }
 ```
 
-- `Clone`: Easy to pass around in tests
-- `Default`: Can use `MockSomething::default()` or `..Default::default()`
+**Why separate Default implementations:**
+- `MockSomething::new()` sets custom initial values (e.g., `next_id: 1`)
+- `MockState::default()` can be used with struct update syntax: `..Default::default()`
 
 ### Documentation
 

@@ -8,6 +8,17 @@ use crate::file_set::{
     CreateFileSetParams, CreateFileSetResult, FileSetServiceError, FileSetServiceOps,
 };
 
+/// Internal state for MockFileSetService
+#[derive(Default)]
+struct MockState {
+    next_file_set_id: i64,
+    next_release_id: i64,
+    created_file_sets: HashMap<i64, CreateFileSetParams>,
+    checksum_to_file_set: HashMap<BTreeSet<Sha1Checksum>, i64>,
+    fail_create_for: Vec<String>,
+    fail_find_for: Vec<BTreeSet<Sha1Checksum>>,
+}
+
 /// Mock implementation of FileSetServiceOps for testing
 ///
 /// This mock allows you to:
@@ -15,69 +26,59 @@ use crate::file_set::{
 /// - Test failure scenarios
 /// - Pre-configure file set lookups by checksums
 /// - Verify what operations were performed
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct MockFileSetService {
-    /// Counter for generating file set IDs
-    next_file_set_id: Arc<Mutex<i64>>,
+    state: Arc<Mutex<MockState>>,
+}
 
-    /// Counter for generating release IDs
-    next_release_id: Arc<Mutex<i64>>,
-
-    /// Track created file sets (file_set_id -> params used)
-    created_file_sets: Arc<Mutex<HashMap<i64, CreateFileSetParams>>>,
-
-    /// Pre-configured lookups: checksums -> file_set_id
-    /// BTreeSet ensures order independence and prevents duplicates
-    checksum_to_file_set: Arc<Mutex<HashMap<BTreeSet<Sha1Checksum>, i64>>>,
-
-    /// Keys that should fail on create_file_set
-    fail_create_for: Arc<Mutex<Vec<String>>>,
-
-    /// Keys that should fail on find_file_set_by_files
-    fail_find_for: Arc<Mutex<Vec<BTreeSet<Sha1Checksum>>>>,
+impl Default for MockFileSetService {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MockFileSetService {
     /// Create a new mock file set service
     pub fn new() -> Self {
         Self {
-            next_file_set_id: Arc::new(Mutex::new(1)),
-            next_release_id: Arc::new(Mutex::new(1)),
-            created_file_sets: Arc::new(Mutex::new(HashMap::new())),
-            checksum_to_file_set: Arc::new(Mutex::new(HashMap::new())),
-            fail_create_for: Arc::new(Mutex::new(Vec::new())),
-            fail_find_for: Arc::new(Mutex::new(Vec::new())),
+            state: Arc::new(Mutex::new(MockState {
+                next_file_set_id: 1,
+                next_release_id: 1,
+                ..Default::default()
+            })),
         }
     }
 
     /// Add a pre-configured file set lookup result
     pub fn add_file_set_lookup(&self, checksums: Vec<Sha1Checksum>, file_set_id: i64) {
         let checksum_set: BTreeSet<Sha1Checksum> = checksums.into_iter().collect();
-        self.checksum_to_file_set
+        self.state
             .lock()
             .unwrap()
+            .checksum_to_file_set
             .insert(checksum_set, file_set_id);
     }
 
     /// Make create_file_set fail for a specific file set name
     pub fn fail_create_for(&self, file_set_name: impl Into<String>) {
-        self.fail_create_for
+        self.state
             .lock()
             .unwrap()
+            .fail_create_for
             .push(file_set_name.into());
     }
 
     /// Make find_file_set_by_files fail for specific checksums
     pub fn fail_find_for(&self, checksums: Vec<Sha1Checksum>) {
         let checksum_set: BTreeSet<Sha1Checksum> = checksums.into_iter().collect();
-        self.fail_find_for.lock().unwrap().push(checksum_set);
+        self.state.lock().unwrap().fail_find_for.push(checksum_set);
     }
 
     /// Get all created file sets
     pub fn get_created_file_sets(&self) -> Vec<(i64, CreateFileSetParams)> {
-        self.created_file_sets
-            .lock()
-            .unwrap()
+        let state = self.state.lock().unwrap();
+        state
+            .created_file_sets
             .iter()
             .map(|(id, params)| {
                 (
@@ -99,36 +100,37 @@ impl MockFileSetService {
 
     /// Get the number of created file sets
     pub fn created_count(&self) -> usize {
-        self.created_file_sets.lock().unwrap().len()
+        self.state.lock().unwrap().created_file_sets.len()
     }
 
     /// Check if a file set was created with a specific name
     pub fn was_created(&self, file_set_name: &str) -> bool {
-        self.created_file_sets
+        self.state
             .lock()
             .unwrap()
+            .created_file_sets
             .values()
             .any(|params| params.file_set_name == file_set_name)
     }
 
     /// Set the next file set ID to be returned
     pub fn set_next_file_set_id(&self, id: i64) {
-        *self.next_file_set_id.lock().unwrap() = id;
+        self.state.lock().unwrap().next_file_set_id = id;
     }
 
     /// Set the next release ID to be returned
     pub fn set_next_release_id(&self, id: i64) {
-        *self.next_release_id.lock().unwrap() = id;
+        self.state.lock().unwrap().next_release_id = id;
     }
 
     /// Clear all state (useful between tests)
     pub fn clear(&self) {
-        *self.next_file_set_id.lock().unwrap() = 1;
-        *self.next_release_id.lock().unwrap() = 1;
-        self.created_file_sets.lock().unwrap().clear();
-        self.checksum_to_file_set.lock().unwrap().clear();
-        self.fail_create_for.lock().unwrap().clear();
-        self.fail_find_for.lock().unwrap().clear();
+        let mut state = self.state.lock().unwrap();
+        *state = MockState {
+            next_file_set_id: 1,
+            next_release_id: 1,
+            ..Default::default()
+        };
     }
 }
 
@@ -138,13 +140,10 @@ impl FileSetServiceOps for MockFileSetService {
         &self,
         file_set_params: CreateFileSetParams,
     ) -> Result<CreateFileSetResult, FileSetServiceError> {
+        let mut state = self.state.lock().unwrap();
+
         // Check if we should fail this operation
-        if self
-            .fail_create_for
-            .lock()
-            .unwrap()
-            .contains(&file_set_params.file_set_name)
-        {
+        if state.fail_create_for.contains(&file_set_params.file_set_name) {
             return Err(FileSetServiceError::DatabaseError(format!(
                 "Mock create failure for file set: {}",
                 file_set_params.file_set_name
@@ -152,27 +151,19 @@ impl FileSetServiceOps for MockFileSetService {
         }
 
         // Generate IDs
-        let file_set_id = {
-            let mut next_id = self.next_file_set_id.lock().unwrap();
-            let id = *next_id;
-            *next_id += 1;
-            id
-        };
+        let file_set_id = state.next_file_set_id;
+        state.next_file_set_id += 1;
 
         let release_id = if file_set_params.create_release.is_some() {
-            let mut next_id = self.next_release_id.lock().unwrap();
-            let id = *next_id;
-            *next_id += 1;
+            let id = state.next_release_id;
+            state.next_release_id += 1;
             Some(id)
         } else {
             None
         };
 
         // Store the created file set
-        self.created_file_sets
-            .lock()
-            .unwrap()
-            .insert(file_set_id, file_set_params);
+        state.created_file_sets.insert(file_set_id, file_set_params);
 
         Ok(CreateFileSetResult {
             file_set_id,
@@ -187,20 +178,17 @@ impl FileSetServiceOps for MockFileSetService {
         // Convert to BTreeSet for order-independent comparison
         let file_set: BTreeSet<Sha1Checksum> = files.into_iter().collect();
 
+        let state = self.state.lock().unwrap();
+
         // Check if we should fail this operation
-        if self.fail_find_for.lock().unwrap().contains(&file_set) {
+        if state.fail_find_for.contains(&file_set) {
             return Err(FileSetServiceError::DatabaseError(
                 "Mock find failure".to_string(),
             ));
         }
 
         // Look up in pre-configured results
-        let result = self
-            .checksum_to_file_set
-            .lock()
-            .unwrap()
-            .get(&file_set)
-            .copied();
+        let result = state.checksum_to_file_set.get(&file_set).copied();
 
         Ok(result)
     }
