@@ -111,15 +111,30 @@ pub mod mock {
     use std::collections::HashSet;
     use std::sync::{Arc, Mutex};
 
-    /// Mock implementation for testing
-    #[derive(Clone, Default)]
-    pub struct MockFileSystemOps {
-        existing_files: Arc<Mutex<HashSet<String>>>,
-        deleted_files: Arc<Mutex<Vec<String>>>,
-        fail_on_delete: Arc<Mutex<Option<String>>>,
-
+    /// Internal state for MockFileSystemOps.
+    ///
+    /// Groups all mutable state into a single struct for simplified locking.
+    #[derive(Default)]
+    struct MockState {
+        existing_files: HashSet<String>,
+        deleted_files: Vec<String>,
+        fail_on_delete: Option<String>,
         // TODO: unify, maybe existing files could be in entries?
         entries: Vec<Result<SimpleDirEntry, Error>>,
+    }
+
+    /// Mock implementation for testing
+    #[derive(Clone)]
+    pub struct MockFileSystemOps {
+        state: Arc<Mutex<MockState>>,
+    }
+
+    impl Default for MockFileSystemOps {
+        fn default() -> Self {
+            Self {
+                state: Arc::new(Mutex::new(MockState::default())),
+            }
+        }
     }
 
     impl MockFileSystemOps {
@@ -129,78 +144,70 @@ pub mod mock {
 
         /// Add a file to the mock file system
         pub fn add_file(&self, path: impl Into<String>) {
-            self.existing_files.lock().unwrap().insert(path.into());
-            println!(
-                "Current existing files: {:?}",
-                self.existing_files.lock().unwrap()
-            );
+            let mut state = self.state.lock().unwrap();
+            state.existing_files.insert(path.into());
+            println!("Current existing files: {:?}", state.existing_files);
         }
 
         /// Make deletion fail with a specific error message
         pub fn fail_delete_with(&self, error: impl Into<String>) {
-            *self.fail_on_delete.lock().unwrap() = Some(error.into());
+            let mut state = self.state.lock().unwrap();
+            state.fail_on_delete = Some(error.into());
         }
 
         /// Get list of deleted files
         pub fn get_deleted_files(&self) -> Vec<String> {
-            self.deleted_files.lock().unwrap().clone()
+            let state = self.state.lock().unwrap();
+            state.deleted_files.clone()
         }
 
         /// Check if a file was deleted
         pub fn was_deleted(&self, path: &str) -> bool {
-            self.deleted_files
-                .lock()
-                .unwrap()
-                .contains(&path.to_string())
+            let state = self.state.lock().unwrap();
+            state.deleted_files.contains(&path.to_string())
         }
 
         /// Clear all state (useful between tests)
         pub fn clear(&self) {
             println!("Clearing mock file system state");
-            self.existing_files.lock().unwrap().clear();
-            self.deleted_files.lock().unwrap().clear();
-            *self.fail_on_delete.lock().unwrap() = None;
+            let mut state = self.state.lock().unwrap();
+            *state = MockState::default();
         }
 
         pub fn add_entry(&mut self, entry: Result<SimpleDirEntry, Error>) {
-            self.entries.push(entry);
+            let mut state = self.state.lock().unwrap();
+            state.entries.push(entry);
         }
     }
 
     impl FileSystemOps for MockFileSystemOps {
         fn exists(&self, path: &Path) -> bool {
+            let state = self.state.lock().unwrap();
             println!("Checking existence of path: {}", path.display());
-            println!(
-                "Existing files in mock file system: {:?}",
-                self.existing_files.lock().unwrap()
-            );
-            self.existing_files
-                .lock()
-                .unwrap()
-                .contains(path.to_string_lossy().as_ref())
+            println!("Existing files in mock file system: {:?}", state.existing_files);
+            state.existing_files.contains(path.to_string_lossy().as_ref())
         }
 
         fn remove_file(&self, path: &Path) -> io::Result<()> {
-            if let Some(error) = self.fail_on_delete.lock().unwrap().as_ref() {
+            let mut state = self.state.lock().unwrap();
+
+            if let Some(error) = state.fail_on_delete.as_ref() {
                 return Err(io::Error::other(error.clone()));
             }
 
             let path_str = path.to_string_lossy().to_string();
-            self.deleted_files.lock().unwrap().push(path_str.clone());
-            self.existing_files.lock().unwrap().remove(&path_str);
+            state.deleted_files.push(path_str.clone());
+            state.existing_files.remove(&path_str);
             Ok(())
         }
 
         fn is_zip_archive(&self, path: &Path) -> Result<bool, Error> {
+            let state = self.state.lock().unwrap();
             println!("Checking if path is zip archive: {}", path.display());
             let path_str = path.to_string_lossy();
             println!("Path string: {}", path_str);
-            if !self
-                .existing_files
-                .lock()
-                .unwrap()
-                .contains(path_str.as_ref())
-            {
+
+            if !state.existing_files.contains(path_str.as_ref()) {
                 println!("File does not exist in mock file system: {}", path_str,);
                 Err(Error::IoError(format!("File does not exist: {}", path_str)))
             } else {
@@ -209,18 +216,19 @@ pub mod mock {
         }
 
         fn move_file(&self, from: &Path, to: &Path) -> io::Result<()> {
+            let mut state = self.state.lock().unwrap();
             let from_str = from.to_string_lossy().to_string();
             let to_str = to.to_string_lossy().to_string();
 
-            if !self.existing_files.lock().unwrap().contains(&from_str) {
+            if !state.existing_files.contains(&from_str) {
                 return Err(io::Error::other(format!(
                     "Source file does not exist: {}",
                     from_str
                 )));
             }
 
-            self.existing_files.lock().unwrap().remove(&from_str);
-            self.existing_files.lock().unwrap().insert(to_str);
+            state.existing_files.remove(&from_str);
+            state.existing_files.insert(to_str);
             Ok(())
         }
 
@@ -228,7 +236,8 @@ pub mod mock {
             &self,
             _path: &Path, // if needed could be mapped to entries
         ) -> io::Result<Box<dyn Iterator<Item = Result<SimpleDirEntry, Error>>>> {
-            Ok(Box::new(self.entries.clone().into_iter()))
+            let state = self.state.lock().unwrap();
+            Ok(Box::new(state.entries.clone().into_iter()))
         }
     }
 }
