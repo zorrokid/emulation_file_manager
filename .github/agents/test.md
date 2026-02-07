@@ -28,6 +28,57 @@ You help create comprehensive, maintainable tests following the project's testin
 - May use `setup_test_db()` for real database
 - Acceptable to be slower (10-100ms per test)
 
+## Real vs Mock Dependencies
+
+### Always Use Real (Never Mock)
+
+**RepositoryManager**: Always use real instance with test database
+```rust
+use database::setup_test_db;
+use std::sync::Arc;
+
+async fn create_test_repo_manager() -> Arc<RepositoryManager> {
+    let pool = Arc::new(setup_test_db().await);
+    Arc::new(RepositoryManager::new(pool))
+}
+```
+
+**Why?**
+- `setup_test_db()` creates fast in-memory SQLite database
+- Runs real migrations ensuring schema is correct
+- Tests actual SQL queries, not mock behavior
+- No need to maintain parallel mock implementations
+
+### Always Mock (Never Real)
+
+**Service Traits** (FileSetServiceOps, CloudStorageOps, FileSystemOps, etc.):
+- Mock using simplified state pattern
+- Allows controlled test scenarios
+- Fast and deterministic
+- No external dependencies
+
+**Example test context with real RepositoryManager:**
+```rust
+struct TestContext {
+    repository_manager: Arc<RepositoryManager>,
+    file_set_service: Arc<dyn FileSetServiceOps>,
+    // ... other fields
+}
+
+impl TestContext {
+    async fn new(file_set_service: Arc<dyn FileSetServiceOps>) -> Self {
+        // Real RepositoryManager with test DB
+        let pool = Arc::new(setup_test_db().await);
+        let repo_manager = Arc::new(RepositoryManager::new(pool));
+        
+        Self {
+            repository_manager: repo_manager,
+            file_set_service,
+        }
+    }
+}
+```
+
 ## Mock Implementation Pattern
 
 When creating mocks for traits:
