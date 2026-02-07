@@ -4,49 +4,10 @@ use async_trait::async_trait;
 use core_types::{FileType, ImportedFile, Sha1Checksum};
 use database::{helper::AddFileSetParams, repository_manager::RepositoryManager};
 
-use crate::file_import::model::CreateReleaseParams;
-
-pub struct CreateFileSetParams {
-    pub file_set_name: String,
-    pub file_set_file_name: String,
-    pub source: String,
-    pub file_type: FileType,
-    pub system_ids: Vec<i64>,
-    pub files_in_file_set: Vec<ImportedFile>,
-    pub create_release: Option<CreateReleaseParams>,
-    pub dat_file_id: Option<i64>,
-}
-
-#[derive(Debug)]
-pub struct CreateFileSetResult {
-    pub file_set_id: i64,
-    pub release_id: Option<i64>,
-}
-
-#[derive(Debug)]
-pub enum FileSetServiceError {
-    DatabaseError(String),
-}
-
-impl std::fmt::Display for FileSetServiceError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            FileSetServiceError::DatabaseError(msg) => write!(f, "Database error: {}", msg),
-        }
-    }
-}
-
-#[async_trait]
-pub trait FileSetServiceOps: Send + Sync {
-    async fn create_file_set(
-        &self,
-        file_set_params: CreateFileSetParams,
-    ) -> Result<CreateFileSetResult, FileSetServiceError>;
-    async fn find_file_set_by_files(
-        &self,
-        files: Vec<Sha1Checksum>,
-    ) -> Result<Option<i64>, FileSetServiceError>;
-}
+use crate::{
+    file_import::model::CreateReleaseParams,
+    file_set::{CreateFileSetParams, CreateFileSetResult, FileSetServiceError, FileSetServiceOps},
+};
 
 #[derive(Debug)]
 pub struct FileSetService {
@@ -183,12 +144,13 @@ impl FileSetServiceOps for FileSetService {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use std::sync::Arc;
 
     use core_types::{ImportedFile, Sha1Checksum};
     use database::{repository_manager::RepositoryManager, setup_test_db};
 
-    use crate::{file_import::model::CreateReleaseParams, file_set_service::FileSetServiceOps};
+    use crate::file_import::model::CreateReleaseParams;
 
     #[async_std::test]
     async fn test_create_file_set() {
@@ -201,7 +163,7 @@ mod tests {
             .await
             .unwrap();
 
-        let file_set_service = super::FileSetService::new(Arc::clone(&repository_manager));
+        let file_set_service = FileSetService::new(Arc::clone(&repository_manager));
         let file_1_sha1: Sha1Checksum = [0u8; 20];
         let file_2_sha1: Sha1Checksum = [1u8; 20];
         let files_in_fileset: Vec<ImportedFile> = vec![
@@ -218,7 +180,7 @@ mod tests {
                 file_size: 2048,
             },
         ];
-        let create_params = super::CreateFileSetParams {
+        let create_params = CreateFileSetParams {
             file_set_name: "Test File Set".to_string(),
             file_set_file_name: "test_file_set.zip".to_string(),
             source: "Unit Test".to_string(),
@@ -265,7 +227,7 @@ mod tests {
         let pool = Arc::new(setup_test_db().await);
         let repository_manager = Arc::new(RepositoryManager::new(pool));
 
-        let file_set_service = super::FileSetService::new(Arc::clone(&repository_manager));
+        let file_set_service = FileSetService::new(Arc::clone(&repository_manager));
         let file_1_sha1: Sha1Checksum = [0u8; 20];
         let files_in_fileset: Vec<ImportedFile> = vec![ImportedFile {
             original_file_name: "test_file_1.rom".to_string(),
@@ -273,7 +235,7 @@ mod tests {
             sha1_checksum: file_1_sha1,
             file_size: 1024,
         }];
-        let create_params = super::CreateFileSetParams {
+        let create_params = CreateFileSetParams {
             file_set_name: "Test File Set".to_string(),
             file_set_file_name: "test_file_set.zip".to_string(),
             source: "Unit Test".to_string(),
@@ -327,7 +289,7 @@ mod tests {
             .await
             .unwrap();
 
-        let file_set_service = super::FileSetService::new(Arc::clone(&repository_manager));
+        let file_set_service = FileSetService::new(Arc::clone(&repository_manager));
 
         // Create first file set
         let file_1_sha1: Sha1Checksum = [0u8; 20];
@@ -346,7 +308,7 @@ mod tests {
                 file_size: 2048,
             },
         ];
-        let create_params = super::CreateFileSetParams {
+        let create_params = CreateFileSetParams {
             file_set_name: "Test File Set".to_string(),
             file_set_file_name: "test_file_set.zip".to_string(),
             source: "Unit Test".to_string(),
@@ -380,7 +342,7 @@ mod tests {
                 file_size: 2048,
             },
         ];
-        let create_params_2 = super::CreateFileSetParams {
+        let create_params_2 = CreateFileSetParams {
             file_set_name: "Test File Set 2".to_string(),
             file_set_file_name: "test_file_set_2.zip".to_string(),
             source: "Unit Test".to_string(),

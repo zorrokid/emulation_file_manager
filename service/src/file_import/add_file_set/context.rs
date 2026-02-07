@@ -12,7 +12,7 @@ use crate::{
         },
         model::{CreateReleaseParams, FileImportData, ImportFileContent},
     },
-    file_set_service::{CreateFileSetParams, FileSetService},
+    file_set::{CreateFileSetParams, file_set_service::FileSetService},
     file_system_ops::FileSystemOps,
     view_models::Settings,
 };

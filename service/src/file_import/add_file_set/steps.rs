@@ -3,7 +3,7 @@ use crate::{
     file_import::{
         add_file_set::context::AddFileSetContext, common_steps::import::AddFileSetContextOps,
     },
-    file_set_service::FileSetServiceOps,
+    file_set::FileSetServiceOps,
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
 
