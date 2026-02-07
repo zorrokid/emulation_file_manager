@@ -59,44 +59,6 @@ CI will fail without up-to-date `.sqlx/` metadata.
 - Propagate errors, don't panic in production
 - `unwrap()` only acceptable in tests
 
-### Mock Implementation Pattern
-When creating mocks for traits (for testing):
-
-**Structure:**
-```rust
-#[derive(Clone, Default)]
-pub struct MockSomethingService {
-    // Counters for auto-incrementing IDs
-    next_id: Arc<Mutex<i64>>,
-    
-    // State tracking (what was called/created)
-    operations: Arc<Mutex<HashMap<Id, Data>>>,
-    
-    // Pre-configured return values
-    configured_results: Arc<Mutex<HashMap<Key, Value>>>,
-    
-    // Simulate failures for specific inputs
-    fail_for: Arc<Mutex<HashSet<Key>>>,
-}
-```
-
-**Required Methods:**
-- `new()` - Create with sensible defaults
-- `add_*()` / `set_*()` - Configure behavior and results
-- `fail_*_for()` - Simulate failures for specific inputs
-- `was_*()` / `get_*()` / `*_count()` - Verify operations
-- `clear()` - Reset state between tests
-
-**Best Practices:**
-- Use `BTreeSet` for collections as HashMap keys (sorted, implements Hash)
-- Use `Arc<Mutex<>>` for shared mutable state (Clone + Send + Sync)
-- Implement `Clone` and `Default` for easy test setup
-- Include comprehensive tests (9+ test cases)
-- Document capabilities in doc comments
-- Check failure conditions first in trait methods
-
-**Examples:** `MockCloudStorage`, `MockFileSetService`
-
 ## When to Use Which Agent
 
 | Need | Agent | Why |
@@ -104,6 +66,7 @@ pub struct MockSomethingService {
 | Where should X live? | architect | Understands layers & boundaries |
 | Add table or query | database | Knows SQLx patterns & migrations |
 | Create UI component | gui | Knows relm4 patterns & gotchas |
+| Write tests or mocks | test | Knows testing patterns & mocks |
 | Review design | architect | Evaluates trade-offs |
 
 **Detailed implementation patterns are in the specialized agent profiles—not here.**
