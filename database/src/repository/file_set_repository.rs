@@ -235,6 +235,80 @@ impl FileSetRepository {
         let file_sets = query_builder.fetch_all(&*self.pool).await?;
         Ok(file_sets)
     }
+
+    /// Finds a file set that contains exactly the given checksums (no more, no less).
+    /// Returns the file set ID if found, None otherwise.
+    ///
+    /// The query ensures exact match by:
+    /// 1. Finding file sets that contain the given checksums (candidate_matches)
+    /// 2. For those candidates, counting total files in the file set
+    /// 3. Verifying matched count equals input count AND total count equals input count
+    pub async fn find_file_set_by_checksums(
+        &self,
+        checksums: &[Sha1Checksum],
+        file_type: FileType,
+    ) -> Result<Option<i64>, DatabaseError> {
+        if checksums.is_empty() {
+            return Ok(None);
+        }
+
+        let placeholders = checksums
+            .iter()
+            .map(|_| "?")
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        let query = format!(
+            "-- Find file sets that contain exactly the given checksums
+             WITH candidate_matches AS (
+                 -- Step 1: Find file sets that contain at least one of the input checksums
+                 SELECT DISTINCT fsfi.file_set_id
+                 FROM file_set_file_info fsfi
+                 INNER JOIN file_info fi ON fsfi.file_info_id = fi.id
+                 WHERE fi.sha1_checksum IN ({})  -- Input checksums
+                   AND fi.file_type = ?          -- Must match file type
+             )
+             SELECT cm.file_set_id
+             FROM candidate_matches cm
+             WHERE (
+                 -- Step 2: Count total files in the candidate file set
+                 -- This must equal the input count (no extra files)
+                 SELECT COUNT(*)
+                 FROM file_set_file_info fsfi2
+                 WHERE fsfi2.file_set_id = cm.file_set_id
+             ) = ?
+             AND (
+                 -- Step 3: Count how many of the input checksums are in this file set
+                 -- This must equal the input count (all checksums present)
+                 SELECT COUNT(DISTINCT fi2.id)
+                 FROM file_set_file_info fsfi3
+                 INNER JOIN file_info fi2 ON fsfi3.file_info_id = fi2.id
+                 WHERE fsfi3.file_set_id = cm.file_set_id
+                   AND fi2.sha1_checksum IN ({})  -- Input checksums (repeated)
+                   AND fi2.file_type = ?          -- Must match file type (repeated)
+             ) = ?
+             -- Result: file set has exactly N files, all matching input checksums",
+            placeholders, placeholders
+        );
+
+        let mut query_builder = sqlx::query_scalar::<_, i64>(&query);
+        // First set of placeholders for checksums in candidate_matches CTE
+        for checksum in checksums {
+            query_builder = query_builder.bind(checksum.as_slice());
+        }
+        query_builder = query_builder.bind(file_type as i64);
+        query_builder = query_builder.bind(checksums.len() as i64);
+        // Second set of placeholders for checksums in the subquery
+        for checksum in checksums {
+            query_builder = query_builder.bind(checksum.as_slice());
+        }
+        query_builder = query_builder.bind(file_type as i64);
+        query_builder = query_builder.bind(checksums.len() as i64);
+
+        let file_set_id = query_builder.fetch_optional(&*self.pool).await?;
+        Ok(file_set_id)
+    }
+
     pub async fn add_file_set(
         &self,
         file_set_name: &str,
@@ -1827,5 +1901,119 @@ mod tests {
         .unwrap();
 
         assert_eq!(count, 1);
+    }
+
+    #[async_std::test]
+    async fn test_find_file_set_by_checksums() {
+        let pool = Arc::new(setup_test_db().await);
+        let file_set_repository = FileSetRepository { pool: pool.clone() };
+
+        let system_id = SystemRepository::new(pool.clone())
+            .add_system("Test System")
+            .await
+            .unwrap();
+
+        // Create first file set with 2 files
+        let file_1_sha1: Sha1Checksum = [0u8; 20];
+        let file_2_sha1: Sha1Checksum = [1u8; 20];
+        let files_in_fileset_1 = vec![
+            ImportedFile {
+                original_file_name: "test_file_1.rom".to_string(),
+                archive_file_name: "archive_file_name".to_string(),
+                sha1_checksum: file_1_sha1,
+                file_size: 1024,
+            },
+            ImportedFile {
+                original_file_name: "test_file_2.rom".to_string(),
+                archive_file_name: "archive_file_name_2".to_string(),
+                sha1_checksum: file_2_sha1,
+                file_size: 2048,
+            },
+        ];
+
+        let file_set_id_1 = file_set_repository
+            .add_file_set(
+                "Test File Set 1",
+                "test_file_set_1.zip",
+                &FileType::Rom,
+                "Unit Test",
+                &files_in_fileset_1,
+                &[system_id],
+            )
+            .await
+            .unwrap();
+
+        // Create second file set with 2 different files
+        let file_3_sha1: Sha1Checksum = [2u8; 20];
+        let file_4_sha1: Sha1Checksum = [3u8; 20];
+        let files_in_fileset_2 = vec![
+            ImportedFile {
+                original_file_name: "test_file_3.rom".to_string(),
+                archive_file_name: "archive_file_name_3".to_string(),
+                sha1_checksum: file_3_sha1,
+                file_size: 1024,
+            },
+            ImportedFile {
+                original_file_name: "test_file_4.rom".to_string(),
+                archive_file_name: "archive_file_name_4".to_string(),
+                sha1_checksum: file_4_sha1,
+                file_size: 2048,
+            },
+        ];
+
+        let file_set_id_2 = file_set_repository
+            .add_file_set(
+                "Test File Set 2",
+                "test_file_set_2.zip",
+                &FileType::Rom,
+                "Unit Test",
+                &files_in_fileset_2,
+                &[system_id],
+            )
+            .await
+            .unwrap();
+
+        // Test 1: Find file set by exact match of checksums
+        let found_id = file_set_repository
+            .find_file_set_by_checksums(&[file_1_sha1, file_2_sha1], FileType::Rom)
+            .await
+            .unwrap();
+        assert_eq!(found_id, Some(file_set_id_1));
+
+        // Test 2: Find second file set by exact match
+        let found_id = file_set_repository
+            .find_file_set_by_checksums(&[file_3_sha1, file_4_sha1], FileType::Rom)
+            .await
+            .unwrap();
+        assert_eq!(found_id, Some(file_set_id_2));
+
+        // Test 3: Mixed checksums from different file sets should return None
+        let found_id = file_set_repository
+            .find_file_set_by_checksums(&[file_1_sha1, file_4_sha1], FileType::Rom)
+            .await
+            .unwrap();
+        assert_eq!(found_id, None);
+
+        // Test 4: Subset of checksums should return None (count mismatch)
+        let found_id = file_set_repository
+            .find_file_set_by_checksums(&[file_1_sha1], FileType::Rom)
+            .await
+            .unwrap();
+        assert_eq!(found_id, None);
+
+        // Test 5: Non-existing checksums should return None
+        let non_existing_sha1: Sha1Checksum = [99u8; 20];
+        let found_id = file_set_repository
+            .find_file_set_by_checksums(&[non_existing_sha1], FileType::Rom)
+            .await
+            .unwrap();
+        assert_eq!(found_id, None);
+
+        // Test 6: Empty checksums should return None
+        let found_id = file_set_repository
+            .find_file_set_by_checksums(&[], FileType::Rom)
+            .await
+            .unwrap();
+        assert_eq!(found_id, None);
     }
 }

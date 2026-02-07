@@ -139,37 +139,45 @@ impl FileSetServiceOps for FileSetService {
         &self,
         sha1_checksums: Vec<Sha1Checksum>,
     ) -> Result<Option<i64>, FileSetServiceError> {
-        let file_infos = self
-            .repository_manager
-            .get_file_info_repository()
-            .get_file_infos_by_sha1_checksums(&sha1_checksums, FileType::Rom)
+        // New optimized implementation: single database query
+        self.repository_manager
+            .get_file_set_repository()
+            .find_file_set_by_checksums(&sha1_checksums, FileType::Rom)
             .await
-            .map_err(|e| FileSetServiceError::DatabaseError(format!("{:?}", e)))?;
-        for file_info in file_infos {
-            let file_sets = self
-                .repository_manager
-                .get_file_set_repository()
-                .get_file_sets_by_file_info(file_info.id)
-                .await
-                .map_err(|e| FileSetServiceError::DatabaseError(format!("{:?}", e)))?;
+            .map_err(|e| FileSetServiceError::DatabaseError(format!("{:?}", e)))
 
-            for file_set in file_sets {
-                let files_in_file_set = self
-                    .repository_manager
-                    .get_file_info_repository()
-                    .get_file_infos_by_file_set(file_set.id)
-                    .await
-                    .map_err(|e| FileSetServiceError::DatabaseError(format!("{:?}", e)))?;
-                if files_in_file_set.len() == sha1_checksums.len()
-                    && files_in_file_set
-                        .iter()
-                        .all(|fi| sha1_checksums.contains(&fi.sha1_checksum))
-                {
-                    return Ok(Some(file_set.id));
-                }
-            }
-        }
-        Ok(None)
+        // Old implementation (O(n*m*k) queries) - kept for reference:
+        // let file_infos = self
+        //     .repository_manager
+        //     .get_file_info_repository()
+        //     .get_file_infos_by_sha1_checksums(&sha1_checksums, FileType::Rom)
+        //     .await
+        //     .map_err(|e| FileSetServiceError::DatabaseError(format!("{:?}", e)))?;
+        // for file_info in file_infos {
+        //     let file_sets = self
+        //         .repository_manager
+        //         .get_file_set_repository()
+        //         .get_file_sets_by_file_info(file_info.id)
+        //         .await
+        //         .map_err(|e| FileSetServiceError::DatabaseError(format!("{:?}", e)))?;
+        //
+        //     for file_set in file_sets {
+        //         let files_in_file_set = self
+        //             .repository_manager
+        //             .get_file_info_repository()
+        //             .get_file_infos_by_file_set(file_set.id)
+        //             .await
+        //             .map_err(|e| FileSetServiceError::DatabaseError(format!("{:?}", e)))?;
+        //         if files_in_file_set.len() == sha1_checksums.len()
+        //             && files_in_file_set
+        //                 .iter()
+        //                 .all(|fi| sha1_checksums.contains(&fi.sha1_checksum))
+        //         {
+        //             return Ok(Some(file_set.id));
+        //         }
+        //     }
+        // }
+        // Ok(None)
     }
 }
 
