@@ -4,7 +4,8 @@ use core_types::Sha1Checksum;
 use database::repository_manager::RepositoryManager;
 
 use crate::{
-    file_set_service::{FileSetService, FileSetServiceOps},
+    error::Error,
+    file_set_service::FileSetServiceOps,
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
 
@@ -15,6 +16,8 @@ pub trait CheckExistingFileSetContext {
     fn all_files_in_file_set_exist(&self) -> bool;
     fn get_existing_file_sha1_checksums(&self) -> Vec<Sha1Checksum>;
     fn repository_manager(&self) -> Arc<RepositoryManager>;
+    fn set_file_set_id(&mut self, file_set_id: Option<i64>);
+    fn get_file_set_service(&self) -> Arc<dyn FileSetServiceOps>;
 }
 
 pub struct CheckExistingFileSetStep<T: CheckExistingFileSetContext> {
@@ -48,14 +51,28 @@ impl<T: CheckExistingFileSetContext + Send + Sync> PipelineStep<T> for CheckExis
 
     async fn execute(&self, context: &mut T) -> StepAction {
         println!("Checking for existing file set in the database...");
-        let repository_manager = context.repository_manager();
 
-        let file_set_service = FileSetService::new(repository_manager.clone());
-
-        let existing_file_set = file_set_service
+        let existing_file_set = context
+            .get_file_set_service()
             .find_file_set_by_files(context.get_existing_file_sha1_checksums())
             .await;
 
-        StepAction::Continue
+        match existing_file_set {
+            Ok(file_set_id) => {
+                tracing::info!(
+                    file_set_id = file_set_id,
+                    "Got result for existing file set in repository"
+                );
+                context.set_file_set_id(file_set_id);
+                StepAction::Continue
+            }
+            Err(e) => {
+                tracing::error!("Error checking for existing file set: {e}");
+                StepAction::Abort(Error::DbError(format!(
+                    "Error checking for existing file set: {}",
+                    e
+                )))
+            }
+        }
     }
 }
