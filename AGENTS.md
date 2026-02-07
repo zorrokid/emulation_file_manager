@@ -69,32 +69,31 @@ pub struct MockSomethingService {
     // Counters for auto-incrementing IDs
     next_id: Arc<Mutex<i64>>,
     
-    // State tracking (what operations were performed)
-    performed_operations: Arc<Mutex<HashMap<K, V>>>,
+    // State tracking (what was called/created)
+    operations: Arc<Mutex<HashMap<Id, Data>>>,
     
-    // Pre-configured results (for lookups)
-    // Use BTreeSet for order-independent sets
-    configured_results: Arc<Mutex<HashMap<BTreeSet<Key>, Value>>>,
+    // Pre-configured return values
+    configured_results: Arc<Mutex<HashMap<Key, Value>>>,
     
-    // Failure simulation
-    fail_for: Arc<Mutex<Vec<Condition>>>,
+    // Simulate failures for specific inputs
+    fail_for: Arc<Mutex<HashSet<Key>>>,
 }
 ```
 
 **Required Methods:**
 - `new()` - Create with sensible defaults
-- `add_*()` / `set_*()` - Configure behavior
-- `fail_*_for()` - Simulate failures
+- `add_*()` / `set_*()` - Configure behavior and results
+- `fail_*_for()` - Simulate failures for specific inputs
 - `was_*()` / `get_*()` / `*_count()` - Verify operations
 - `clear()` - Reset state between tests
 
 **Best Practices:**
-- Use `BTreeSet` for unordered collections (not `Vec`)
-- Use `Arc<Mutex<>>` for shared mutable state
-- Implement `Clone` and `Default`
+- Use `BTreeSet` for collections as HashMap keys (sorted, implements Hash)
+- Use `Arc<Mutex<>>` for shared mutable state (Clone + Send + Sync)
+- Implement `Clone` and `Default` for easy test setup
 - Include comprehensive tests (9+ test cases)
 - Document capabilities in doc comments
-- Check failure conditions first in methods
+- Check failure conditions first in trait methods
 
 **Examples:** `MockCloudStorage`, `MockFileSetService`
 
