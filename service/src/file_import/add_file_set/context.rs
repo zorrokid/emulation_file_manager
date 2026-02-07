@@ -8,11 +8,12 @@ use crate::{
     error::Error,
     file_import::{
         common_steps::{
+            check_existing_file_set::CheckExistingFileSetContext,
             check_existing_files::CheckExistingFilesContext, import::AddFileSetContextOps,
         },
         model::{CreateReleaseParams, FileImportData, ImportFileContent},
     },
-    file_set::{CreateFileSetParams, file_set_service::FileSetService},
+    file_set::{CreateFileSetParams, FileSetServiceOps, file_set_service::FileSetService},
     file_system_ops::FileSystemOps,
     view_models::Settings,
 };
@@ -25,6 +26,7 @@ pub struct AddFileSetDeps {
 pub struct AddFileSetOps {
     pub file_import_ops: Arc<dyn FileImportOps>,
     pub fs_ops: Arc<dyn FileSystemOps>,
+    pub file_set_service_ops: Arc<dyn FileSetServiceOps>,
 }
 
 pub struct AddFileSetInput {
@@ -213,6 +215,37 @@ impl CheckExistingFilesContext for AddFileSetContext {
     }
 }
 
+impl CheckExistingFileSetContext for AddFileSetContext {
+    fn all_files_in_file_set_exist(&self) -> bool {
+        let existing_checksums = self.get_existing_file_sha1_checksums();
+        self.input
+            .file_import_data
+            .selected_files
+            .iter()
+            .all(|checksum| existing_checksums.contains(checksum))
+    }
+
+    fn get_existing_file_sha1_checksums(&self) -> Vec<Sha1Checksum> {
+        self.state
+            .existing_files
+            .iter()
+            .map(|file_info| file_info.sha1_checksum)
+            .collect()
+    }
+
+    fn repository_manager(&self) -> Arc<RepositoryManager> {
+        self.deps.repository_manager.clone()
+    }
+
+    fn set_file_set_id(&mut self, file_set_id: Option<i64>) {
+        self.state.file_set_id = file_set_id;
+    }
+
+    fn get_file_set_service(&self) -> Arc<dyn FileSetServiceOps> {
+        self.ops.file_set_service_ops.clone()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
@@ -244,6 +277,7 @@ mod tests {
         let settings = Arc::new(Settings::default());
         let file_import_ops = Arc::new(MockFileImportOps::new());
         let file_system_ops = Arc::new(MockFileSystemOps::new());
+        let file_set_service_ops = Arc::new(FileSetService::new(repository_manager.clone()));
 
         let deps = AddFileSetDeps {
             repository_manager: repository_manager.clone(),
@@ -253,6 +287,7 @@ mod tests {
         let ops = AddFileSetOps {
             file_import_ops,
             fs_ops: file_system_ops,
+            file_set_service_ops,
         };
 
         let input = AddFileSetInput {

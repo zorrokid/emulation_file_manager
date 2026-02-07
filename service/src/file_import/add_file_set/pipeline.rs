@@ -4,7 +4,10 @@ use crate::{
             context::AddFileSetContext,
             steps::{AddFileSetItemTypesStep, UpdateDatabaseStep},
         },
-        common_steps::{check_existing_files::CheckExistingFilesStep, import::ImportFilesStep},
+        common_steps::{
+            check_existing_file_set::CheckExistingFileSetStep,
+            check_existing_files::CheckExistingFilesStep, import::ImportFilesStep,
+        },
     },
     pipeline::generic_pipeline::Pipeline,
 };
@@ -13,12 +16,11 @@ impl Pipeline<AddFileSetContext> {
     pub fn new() -> Self {
         Self::with_steps(vec![
             Box::new(CheckExistingFilesStep::<AddFileSetContext>::new()),
-            // TODO: check if identical file set already exists and skip import if so and just
-            // return the existing file set id
-            // probably FileSetItemTypes should be checked as well
-            //Box::new(CheckExistingFileSetStep),
+            Box::new(CheckExistingFileSetStep::<AddFileSetContext>::new()),
             Box::new(ImportFilesStep::<AddFileSetContext>::new()),
             Box::new(UpdateDatabaseStep),
+            // TODO: since we check existing file set, we should probably skip this step if the
+            // file set already exists (or check if item types are already set)
             Box::new(AddFileSetItemTypesStep),
         ])
     }

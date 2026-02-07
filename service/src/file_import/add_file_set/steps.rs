@@ -121,6 +121,7 @@ mod tests {
         AddFileSetDeps, AddFileSetInput, AddFileSetOps,
     };
     use crate::file_import::model::{FileImportData, FileImportSource, ImportFileContent};
+    use crate::file_set::mock_file_set_service::MockFileSetService;
     use crate::file_system_ops::mock::MockFileSystemOps;
     use core_types::item_type::ItemType;
     use core_types::{FileType, ImportedFile, Sha1Checksum};
@@ -136,9 +137,12 @@ mod tests {
         let settings = Arc::new(crate::view_models::Settings::default());
         let file_system_ops = Arc::new(MockFileSystemOps::new());
 
+        let file_set_service_ops = Arc::new(MockFileSetService::new());
+
         let ops = AddFileSetOps {
             file_import_ops: Arc::new(MockFileImportOps::new()),
             fs_ops: file_system_ops.clone(),
+            file_set_service_ops,
         };
 
         let input = AddFileSetInput {
