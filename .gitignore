@@ -3,4 +3,3 @@ target
 # Application logs
 logs/
 *.deb
-.github
