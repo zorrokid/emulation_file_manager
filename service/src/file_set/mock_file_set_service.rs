@@ -173,14 +173,6 @@ impl FileSetServiceOps for MockFileSetService {
             release_id,
         })
     }
-
-    async fn find_equal_file_set(
-        &self,
-        equality_specs: FileSetEqualitySpecs,
-    ) -> Result<Option<i64>, FileSetServiceError> {
-        // TODO
-        Ok(None)
-    }
 }
 
 #[cfg(test)]
@@ -259,55 +251,6 @@ mod tests {
         assert_eq!(mock.created_count(), 0);
     }
 
-    /*#[async_std::test]
-    async fn test_mock_find_file_set_by_files() {
-        let mock = MockFileSetService::new();
-
-        let checksums = vec![[1u8; 20], [2u8; 20]];
-        mock.add_file_set_lookup(checksums.clone(), 42);
-
-        let result = mock.find_equal_file_set(checksums).await.unwrap();
-
-        assert_eq!(result, Some(42));
-    }
-
-    #[async_std::test]
-    async fn test_mock_find_file_set_by_files_not_found() {
-        let mock = MockFileSetService::new();
-
-        let checksums = vec![[1u8; 20], [2u8; 20]];
-
-        let result = mock.find_equal_file_set(checksums).await.unwrap();
-
-        assert_eq!(result, None);
-    }
-
-    #[async_std::test]
-    async fn test_mock_find_file_set_by_files_order_independent() {
-        let mock = MockFileSetService::new();
-
-        let checksums1 = vec![[1u8; 20], [2u8; 20]];
-        let checksums2 = vec![[2u8; 20], [1u8; 20]]; // Different order
-
-        mock.add_file_set_lookup(checksums1.clone(), 42);
-
-        let result = mock.find_equal_file_set(checksums2).await.unwrap();
-
-        assert_eq!(result, Some(42));
-    }
-
-    #[async_std::test]
-    async fn test_mock_find_file_set_by_files_failure() {
-        let mock = MockFileSetService::new();
-
-        let checksums = vec![[1u8; 20], [2u8; 20]];
-        mock.fail_find_for(checksums.clone());
-
-        let result = mock.find_equal_file_set(checksums).await;
-
-        assert!(result.is_err());
-    }*/
-
     #[async_std::test]
     async fn test_custom_ids() {
         let mock = MockFileSetService::new();
@@ -334,7 +277,7 @@ mod tests {
         assert_eq!(result.release_id, Some(200));
     }
 
-    /*#[async_std::test]
+    #[async_std::test]
     async fn test_clear() {
         let mock = MockFileSetService::new();
 
@@ -357,7 +300,5 @@ mod tests {
         mock.clear();
 
         assert_eq!(mock.created_count(), 0);
-        let result = mock.find_equal_file_set(vec![[1u8; 20]]).await.unwrap();
-        assert_eq!(result, None);
-    }*/
+    }
 }

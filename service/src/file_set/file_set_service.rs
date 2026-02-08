@@ -94,17 +94,6 @@ impl FileSetServiceOps for FileSetService {
             release_id,
         })
     }
-
-    async fn find_equal_file_set(
-        &self,
-        equality_specs: FileSetEqualitySpecs,
-    ) -> Result<Option<i64>, FileSetServiceError> {
-        self.repository_manager
-            .get_file_set_repository()
-            .find_file_set(&equality_specs)
-            .await
-            .map_err(|e| FileSetServiceError::DatabaseError(format!("{:?}", e)))
-    }
 }
 
 #[cfg(test)]

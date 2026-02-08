@@ -53,8 +53,9 @@ impl<T: CheckExistingFileSetContext + Send + Sync> PipelineStep<T> for CheckExis
         println!("Checking for existing file set in the database...");
 
         let existing_file_set = context
-            .get_file_set_service()
-            .find_equal_file_set(context.file_set_equality_specs())
+            .repository_manager()
+            .get_file_set_repository()
+            .find_file_set(&context.file_set_equality_specs())
             .await;
 
         match existing_file_set {

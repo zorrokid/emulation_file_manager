@@ -2,7 +2,7 @@ pub mod file_set_service;
 pub mod mock_file_set_service;
 
 use async_trait::async_trait;
-use core_types::{FileSetEqualitySpecs, FileType, ImportedFile};
+use core_types::{FileType, ImportedFile};
 
 use crate::file_import::model::CreateReleaseParams;
 
@@ -42,9 +42,4 @@ pub trait FileSetServiceOps: Send + Sync {
         &self,
         file_set_params: CreateFileSetParams,
     ) -> Result<CreateFileSetResult, FileSetServiceError>;
-
-    async fn find_equal_file_set(
-        &self,
-        equality_specs: FileSetEqualitySpecs,
-    ) -> Result<Option<i64>, FileSetServiceError>;
 }
