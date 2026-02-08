@@ -178,23 +178,6 @@ impl FileSetServiceOps for MockFileSetService {
         &self,
         equality_specs: FileSetEqualitySpecs,
     ) -> Result<Option<i64>, FileSetServiceError> {
-        /*
-        // Convert to BTreeSet for order-independent comparison
-        let file_set: BTreeSet<Sha1Checksum> = files.into_iter().collect();
-
-        let state = self.state.lock().unwrap();
-
-        // Check if we should fail this operation
-        if state.fail_find_for.contains(&file_set) {
-            return Err(FileSetServiceError::DatabaseError(
-                "Mock find failure".to_string(),
-            ));
-        }
-
-        // Look up in pre-configured results
-        let result = state.checksum_to_file_set.get(&file_set).copied();
-
-        Ok(result)*/
         // TODO
         Ok(None)
     }

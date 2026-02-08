@@ -842,6 +842,7 @@ mod tests {
     };
 
     use super::*;
+    use core_types::FileSetFileEqualitySpecs;
     use sqlx::{query, query_scalar};
 
     #[async_std::test]
@@ -1873,8 +1874,9 @@ mod tests {
         assert_eq!(count, 1);
     }
 
-    /*#[async_std::test]
-    async fn test_find_file_set_by_checksums() {
+    #[async_std::test]
+    async fn test_find_file_set() {
+        // Arrange
         let pool = Arc::new(setup_test_db().await);
         let file_set_repository = FileSetRepository { pool: pool.clone() };
 
@@ -1883,107 +1885,118 @@ mod tests {
             .await
             .unwrap();
 
-        // Create first file set with 2 files
-        let file_1_sha1: Sha1Checksum = [0u8; 20];
-        let file_2_sha1: Sha1Checksum = [1u8; 20];
-        let files_in_fileset_1 = vec![
+        let files = vec![
             ImportedFile {
-                original_file_name: "test_file_1.rom".to_string(),
-                archive_file_name: "archive_file_name".to_string(),
-                sha1_checksum: file_1_sha1,
-                file_size: 1024,
+                sha1_checksum: [0; 20],
+                file_size: 123,
+                original_file_name: "test1.rom".to_string(),
+                archive_file_name: "archive_file_name_1".to_string(),
             },
             ImportedFile {
-                original_file_name: "test_file_2.rom".to_string(),
+                sha1_checksum: [1; 20],
+                file_size: 456,
+                original_file_name: "test2.rom".to_string(),
                 archive_file_name: "archive_file_name_2".to_string(),
-                sha1_checksum: file_2_sha1,
-                file_size: 2048,
             },
         ];
 
-        let file_set_id_1 = file_set_repository
+        let file_set_id = file_set_repository
             .add_file_set(
-                "Test File Set 1",
-                "test_file_set_1.zip",
+                "Test File Set",
+                "test_file_set",
                 &FileType::Rom,
                 "Unit Test",
-                &files_in_fileset_1,
+                &files,
                 &[system_id],
             )
             .await
             .unwrap();
 
-        // Create second file set with 2 different files
-        let file_3_sha1: Sha1Checksum = [2u8; 20];
-        let file_4_sha1: Sha1Checksum = [3u8; 20];
-        let files_in_fileset_2 = vec![
+        let file_set_equality_specs = FileSetEqualitySpecs {
+            file_set_name: "Test File Set".to_string(),
+            file_set_file_name: "test_file_set".to_string(),
+            file_type: FileType::Rom,
+            source: "Unit Test".to_string(),
+            file_set_file_info: files
+                .iter()
+                .map(|f| FileSetFileEqualitySpecs {
+                    file_name: f.original_file_name.clone(),
+                    file_type: FileType::Rom,
+                    sha1_checksum: f.sha1_checksum,
+                })
+                .collect(),
+        };
+
+        // Act
+        let found_id = file_set_repository
+            .find_file_set(&file_set_equality_specs)
+            .await
+            .unwrap();
+
+        // Assert
+        assert_eq!(found_id, Some(file_set_id));
+    }
+
+    #[async_std::test]
+    async fn test_find_file_set_with_matching_file_set_but_non_matching_files_in_file_set() {
+        // Arrange
+        let pool = Arc::new(setup_test_db().await);
+        let file_set_repository = FileSetRepository { pool: pool.clone() };
+
+        let system_id = SystemRepository::new(pool.clone())
+            .add_system("Test System")
+            .await
+            .unwrap();
+
+        let files = vec![
             ImportedFile {
-                original_file_name: "test_file_3.rom".to_string(),
-                archive_file_name: "archive_file_name_3".to_string(),
-                sha1_checksum: file_3_sha1,
-                file_size: 1024,
+                sha1_checksum: [0; 20],
+                file_size: 123,
+                original_file_name: "test1.rom".to_string(),
+                archive_file_name: "archive_file_name_1".to_string(),
             },
             ImportedFile {
-                original_file_name: "test_file_4.rom".to_string(),
-                archive_file_name: "archive_file_name_4".to_string(),
-                sha1_checksum: file_4_sha1,
-                file_size: 2048,
+                sha1_checksum: [1; 20],
+                file_size: 456,
+                original_file_name: "test2.rom".to_string(),
+                archive_file_name: "archive_file_name_2".to_string(),
             },
         ];
 
-        let file_set_id_2 = file_set_repository
+        let _ = file_set_repository
             .add_file_set(
-                "Test File Set 2",
-                "test_file_set_2.zip",
+                "Test File Set",
+                "test_file_set",
                 &FileType::Rom,
                 "Unit Test",
-                &files_in_fileset_2,
+                &files,
                 &[system_id],
             )
             .await
             .unwrap();
 
-        // Test 1: Find file set by exact match of checksums
-        let found_id = file_set_repository
-            .find_file_set_by_checksums(&[file_1_sha1, file_2_sha1], FileType::Rom)
-            .await
-            .unwrap();
-        assert_eq!(found_id, Some(file_set_id_1));
+        let file_set_equality_specs = FileSetEqualitySpecs {
+            file_set_name: "Test File Set".to_string(),
+            file_set_file_name: "test_file_set".to_string(),
+            file_type: FileType::Rom,
+            source: "Unit Test".to_string(),
+            file_set_file_info: files
+                .iter()
+                .map(|f| FileSetFileEqualitySpecs {
+                    file_name: "something_else.rom".to_string(),
+                    file_type: FileType::Rom,
+                    sha1_checksum: f.sha1_checksum,
+                })
+                .collect(),
+        };
 
-        // Test 2: Find second file set by exact match
+        // Act
         let found_id = file_set_repository
-            .find_file_set_by_checksums(&[file_3_sha1, file_4_sha1], FileType::Rom)
+            .find_file_set(&file_set_equality_specs)
             .await
             .unwrap();
-        assert_eq!(found_id, Some(file_set_id_2));
 
-        // Test 3: Mixed checksums from different file sets should return None
-        let found_id = file_set_repository
-            .find_file_set_by_checksums(&[file_1_sha1, file_4_sha1], FileType::Rom)
-            .await
-            .unwrap();
-        assert_eq!(found_id, None);
-
-        // Test 4: Subset of checksums should return None (count mismatch)
-        let found_id = file_set_repository
-            .find_file_set_by_checksums(&[file_1_sha1], FileType::Rom)
-            .await
-            .unwrap();
-        assert_eq!(found_id, None);
-
-        // Test 5: Non-existing checksums should return None
-        let non_existing_sha1: Sha1Checksum = [99u8; 20];
-        let found_id = file_set_repository
-            .find_file_set_by_checksums(&[non_existing_sha1], FileType::Rom)
-            .await
-            .unwrap();
-        assert_eq!(found_id, None);
-
-        // Test 6: Empty checksums should return None
-        let found_id = file_set_repository
-            .find_file_set_by_checksums(&[], FileType::Rom)
-            .await
-            .unwrap();
-        assert_eq!(found_id, None);
-    }*/
+        // Assert
+        assert!(found_id.is_none());
+    }
 }
