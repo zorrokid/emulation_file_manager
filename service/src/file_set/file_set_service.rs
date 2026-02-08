@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use core_types::FileSetEqualitySpecs;
 use database::{helper::AddFileSetParams, repository_manager::RepositoryManager};
 
 use crate::file_set::{

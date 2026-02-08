@@ -21,6 +21,15 @@ impl PipelineStep<AddFileSetContext> for UpdateDatabaseStep {
             return StepAction::Abort(Error::FileImportError("No files in file set.".to_string()));
         }
 
+        // TODO: check if we already have file set id set from previous step check
+        // maybe add file set id to CreateFileSetParams
+        // - check if release and software title creation is needed
+        // - check if dat file linking is needed
+        // The point of those all being in the same service is that we want to do all that in a
+        // single transaction and roll back if any of it fails, otherwise we might end up with a
+        // release without a file set or a file set without files, etc.
+        // TODO: if file set exists, we should still check that it's linked to dat file if dat file
+        // id is provided.
         let file_type = context.get_file_import_model().file_type;
         let file_set_service = context.get_file_set_service();
         let file_set_service_result = file_set_service
