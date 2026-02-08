@@ -328,6 +328,7 @@ impl FileSyncStatus {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct FileSetEqualitySpecs {
     pub file_set_name: String,
     pub file_set_file_name: String,
@@ -336,6 +337,7 @@ pub struct FileSetEqualitySpecs {
     pub file_set_file_info: Vec<FileSetFileEqualitySpecs>,
 }
 
+#[derive(Debug, Clone)]
 pub struct FileSetFileEqualitySpecs {
     pub file_name: String,
     pub file_type: FileType,
