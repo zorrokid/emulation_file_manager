@@ -1,6 +1,8 @@
 use std::{collections::HashMap, sync::Arc};
 
-use core_types::{ImportedFile, Sha1Checksum, item_type::ItemType};
+use core_types::{
+    FileSetEqualitySpecs, FileSetFileEqualitySpecs, ImportedFile, Sha1Checksum, item_type::ItemType,
+};
 use database::{models::FileInfo, repository_manager::RepositoryManager};
 use file_import::FileImportOps;
 
@@ -216,21 +218,19 @@ impl CheckExistingFilesContext for AddFileSetContext {
 }
 
 impl CheckExistingFileSetContext for AddFileSetContext {
-    fn all_files_in_file_set_exist(&self) -> bool {
-        let existing_checksums = self.get_existing_file_sha1_checksums();
+    fn files_in_file_set_already_exist(&self) -> bool {
+        let existing_checksums: Vec<Sha1Checksum> = self
+            .state
+            .existing_files
+            .iter()
+            .map(|file_info| file_info.sha1_checksum)
+            .collect();
+
         self.input
             .file_import_data
             .selected_files
             .iter()
             .all(|checksum| existing_checksums.contains(checksum))
-    }
-
-    fn get_existing_file_sha1_checksums(&self) -> Vec<Sha1Checksum> {
-        self.state
-            .existing_files
-            .iter()
-            .map(|file_info| file_info.sha1_checksum)
-            .collect()
     }
 
     fn repository_manager(&self) -> Arc<RepositoryManager> {
@@ -243,6 +243,31 @@ impl CheckExistingFileSetContext for AddFileSetContext {
 
     fn get_file_set_service(&self) -> Arc<dyn FileSetServiceOps> {
         self.ops.file_set_service_ops.clone()
+    }
+
+    fn file_set_equality_specs(&self) -> FileSetEqualitySpecs {
+        let selected_files = &self.input.file_import_data.selected_files;
+        let file_set_file_info: Vec<FileSetFileEqualitySpecs> = self
+            .input
+            .file_import_data
+            .import_files
+            .iter()
+            .flat_map(|import_file| import_file.content.clone())
+            .filter(|(checksum, _)| selected_files.contains(checksum))
+            .map(|(_, content)| FileSetFileEqualitySpecs {
+                file_name: content.file_name.clone(),
+                sha1_checksum: content.sha1_checksum,
+                file_type: self.input.file_import_data.file_type,
+            })
+            .collect();
+
+        FileSetEqualitySpecs {
+            file_set_name: self.input.file_set_name.clone(),
+            file_set_file_name: self.input.file_set_file_name.clone(),
+            file_type: self.input.file_import_data.file_type,
+            source: self.input.source.clone(),
+            file_set_file_info,
+        }
     }
 }
 
@@ -271,7 +296,19 @@ mod tests {
         }
     }
 
-    fn create_test_context(file_import_data: FileImportData) -> AddFileSetContext {
+    fn create_file_set_input(file_import_data: FileImportData) -> AddFileSetInput {
+        AddFileSetInput {
+            system_ids: vec![],
+            file_import_data,
+            create_release: None,
+            dat_file_id: None,
+            file_set_name: "Test Game".to_string(),
+            file_set_file_name: "test_game.zip".to_string(),
+            source: "test_source".to_string(),
+        }
+    }
+
+    fn create_test_context(input: AddFileSetInput) -> AddFileSetContext {
         let pool = async_std::task::block_on(setup_test_db());
         let repository_manager = Arc::new(RepositoryManager::new(Arc::new(pool)));
         let settings = Arc::new(Settings::default());
@@ -290,16 +327,6 @@ mod tests {
             file_set_service_ops,
         };
 
-        let input = AddFileSetInput {
-            system_ids: vec![],
-            file_import_data,
-            create_release: None,
-            dat_file_id: None,
-            file_set_name: "Test Game".to_string(),
-            file_set_file_name: "test_game.zip".to_string(),
-            source: "test_source".to_string(),
-        };
-
         let state = AddFileSetState::default();
 
         AddFileSetContext {
@@ -313,7 +340,7 @@ mod tests {
     #[test]
     fn test_get_files_in_file_set_empty() {
         let file_import_data = create_file_import_data(vec![], vec![]);
-        let context = create_test_context(file_import_data);
+        let context = create_test_context(create_file_set_input(file_import_data));
         let result = context.get_files_in_file_set();
         assert!(result.is_empty());
     }
@@ -322,7 +349,7 @@ mod tests {
     fn test_get_files_in_file_set_includes_imported_files() {
         let checksum: Sha1Checksum = [1u8; 20];
         let file_import_data = create_file_import_data(vec![checksum], vec![]);
-        let mut context = create_test_context(file_import_data);
+        let mut context = create_test_context(create_file_set_input(file_import_data));
         context.state.imported_files.insert(
             checksum,
             ImportedFile {
@@ -369,7 +396,7 @@ mod tests {
                 content,
             }],
         );
-        let mut context = create_test_context(file_import_data);
+        let mut context = create_test_context(create_file_set_input(file_import_data));
         context.state.existing_files.push(FileInfo {
             id: 1,
             sha1_checksum: checksum1,
@@ -417,7 +444,7 @@ mod tests {
                 content,
             }],
         );
-        let mut context = create_test_context(file_import_data);
+        let mut context = create_test_context(create_file_set_input(file_import_data));
         context.state.existing_files.push(FileInfo {
             id: 1,
             sha1_checksum: checksum2,
@@ -453,5 +480,83 @@ mod tests {
             existing_file.archive_file_name,
             "existing_archive_file_name"
         );
+    }
+
+    #[test]
+    fn test_file_set_equality_specs() {
+        let checksum1: Sha1Checksum = [1u8; 20];
+        let checksum2: Sha1Checksum = [2u8; 20];
+        let checksum3: Sha1Checksum = [3u8; 20];
+
+        let file_import_data = create_file_import_data(
+            vec![checksum1, checksum3],
+            vec![
+                FileImportSource {
+                    path: PathBuf::from("/test/source1.zip"),
+                    content: [
+                        (
+                            checksum1,
+                            ImportFileContent {
+                                file_name: "game1.rom".to_string(),
+                                sha1_checksum: checksum1,
+                                file_size: 1024,
+                            },
+                        ),
+                        (
+                            checksum2,
+                            ImportFileContent {
+                                file_name: "game2.rom".to_string(),
+                                sha1_checksum: checksum2,
+                                file_size: 2048,
+                            },
+                        ),
+                    ]
+                    .into_iter()
+                    .collect::<HashMap<_, _>>(),
+                },
+                FileImportSource {
+                    path: PathBuf::from("/test/source2.zip"),
+                    content: [(
+                        checksum3,
+                        ImportFileContent {
+                            file_name: "game3.rom".to_string(),
+                            sha1_checksum: checksum3,
+                            file_size: 4096,
+                        },
+                    )]
+                    .into_iter()
+                    .collect::<HashMap<_, _>>(),
+                },
+            ],
+        );
+
+        let input = AddFileSetInput {
+            system_ids: vec![],
+            file_import_data,
+            create_release: None,
+            dat_file_id: None,
+            file_set_name: "Test Game Set".to_string(),
+            file_set_file_name: "test_game_set.zip".to_string(),
+            source: "test_source".to_string(),
+        };
+
+        let context = create_test_context(input);
+        let equality_specs = context.file_set_equality_specs();
+
+        assert_eq!(equality_specs.file_set_name, "Test Game Set");
+        assert_eq!(equality_specs.file_set_file_name, "test_game_set.zip");
+        assert_eq!(equality_specs.file_type, FileType::Rom);
+        assert_eq!(equality_specs.source, "test_source");
+        assert_eq!(equality_specs.file_set_file_info.len(), 2);
+        assert!(equality_specs.file_set_file_info.iter().any(|info| {
+            info.file_name == "game1.rom"
+                && info.sha1_checksum == checksum1
+                && info.file_type == FileType::Rom
+        }));
+        assert!(equality_specs.file_set_file_info.iter().any(|info| {
+            info.file_name == "game3.rom"
+                && info.sha1_checksum == checksum3
+                && info.file_type == FileType::Rom
+        }));
     }
 }

@@ -2,7 +2,7 @@ pub mod file_set_service;
 pub mod mock_file_set_service;
 
 use async_trait::async_trait;
-use core_types::{FileType, ImportedFile, Sha1Checksum};
+use core_types::{FileSetEqualitySpecs, FileType, ImportedFile};
 
 use crate::file_import::model::CreateReleaseParams;
 
@@ -43,8 +43,8 @@ pub trait FileSetServiceOps: Send + Sync {
         file_set_params: CreateFileSetParams,
     ) -> Result<CreateFileSetResult, FileSetServiceError>;
 
-    async fn find_file_set_by_files(
+    async fn find_equal_file_set(
         &self,
-        files: Vec<Sha1Checksum>,
+        equality_specs: FileSetEqualitySpecs,
     ) -> Result<Option<i64>, FileSetServiceError>;
 }

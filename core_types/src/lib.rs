@@ -328,6 +328,20 @@ impl FileSyncStatus {
     }
 }
 
+pub struct FileSetEqualitySpecs {
+    pub file_set_name: String,
+    pub file_set_file_name: String,
+    pub file_type: FileType,
+    pub source: String,
+    pub file_set_file_info: Vec<FileSetFileEqualitySpecs>,
+}
+
+pub struct FileSetFileEqualitySpecs {
+    pub file_name: String,
+    pub file_type: FileType,
+    pub sha1_checksum: Sha1Checksum,
+}
+
 // TODO add test for From<&str> for ArgumentType
 #[cfg(test)]
 mod tests {
