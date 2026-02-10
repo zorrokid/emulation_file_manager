@@ -59,17 +59,16 @@ CI will fail without up-to-date `.sqlx/` metadata.
 - Propagate errors, don't panic in production
 - `unwrap()` only acceptable in tests
 
-## When to Use Which Agent
+## Task-Specific Guidelines
 
-| Need | Agent | Why |
-|------|-------|-----|
-| Where should X live? | architect | Understands layers & boundaries |
-| Add table or query | database | Knows SQLx patterns & migrations |
-| Create UI component | gui | Knows relm4 patterns & gotchas |
-| Write tests or mocks | test | Knows testing patterns & mocks |
-| Review design | architect | Evaluates trade-offs |
+**IMPORTANT:** Before working on these tasks, read the corresponding instruction file:
 
-**Detailed implementation patterns are in the specialized agent profiles—not here.**
+- **Architecture & Design**: Read `.github/copilot-instructions-architect.md`
+- **Database Work** (schemas, queries, migrations): Read `.github/copilot-instructions-database.md`
+- **GUI Development** (relm4 components): Read `.github/copilot-instructions-gui.md`
+- **Testing** (writing tests, mocks): Read `.github/copilot-instructions-test.md`
+
+These files contain essential patterns and requirements for each domain.
 
 ## Technical Requirements
 
