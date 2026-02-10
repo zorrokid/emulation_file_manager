@@ -2,7 +2,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use core_types::{FileSetEqualitySpecs, Sha1Checksum};
+use core_types::Sha1Checksum;
 
 use crate::file_set::{
     CreateFileSetParams, CreateFileSetResult, FileSetServiceError, FileSetServiceOps,

@@ -1,3 +1,6 @@
+use core_types::{FileSetEqualitySpecs, FileSetFileEqualitySpecs, sha1_from_hex_string};
+use database::models::FileSet;
+
 use crate::{
     dat_file_service::DatFileService,
     error::Error,
@@ -31,7 +34,7 @@ impl PipelineStep<MassImportContext> for ImportDatFileStep {
         match parse_res {
             Ok(dat_file) => {
                 println!("Successfully parsed DAT file: {:?}", dat_file);
-                context.state.dat_file = Some(dat_file);
+                context.state.dat_file = Some(dat_file.into());
             }
             Err(e) => {
                 // Abort since dat file was explicitly provided
@@ -285,6 +288,135 @@ impl PipelineStep<MassImportContext> for ReadFileMetadataStep {
     }
 }
 
+/// This step will filter out file sets that already exist in the database based on their metadata.
+///
+/// There can be following cases:
+///
+/// 1. New file set, new software title, new release, not linked to dat file:
+///
+/// This is the basic case when importing dat file.
+///
+/// There is no existing file set with the same signature. We can proceed with importing it as a
+/// new file set and link it to dat file. We will also create a new software title and release for
+/// it. We don't currenctly check duplicates for software titles and releases in this case. The
+/// possible duplicates should be merged manually by the user after the import. We will provide a
+/// functionality to merge software titles and releases in the future.
+///
+/// 2. Existing file set, existing software title, existing release, linked to dat file:
+///
+/// This is basic case when user tries to import the same dat file twice. We could just check if
+/// dat file already exists and abort the import but we will have a separate functionality for
+/// adding dat files without import. So dat file may exists because of that.
+///
+/// There is an existing file set that is already linked to current dat file. We can consider it
+/// as a duplicate and skip it.
+///
+/// 3. Existing file set, existing software title, existing release, not linked to dat file:
+///
+/// There is an existing file set with exactly the same signature but it's not linked to this
+/// file set (e.g. because it was imported with a different DAT file or without a DAT file). In
+/// this case we can link the existing file set to dat file.
+///
+/// 4. Existing file set, existing or non existing software title, existing or non existing release, not linked to dat file:
+///
+/// This case could happen when the same file set was imported with a different DAT file or by
+/// adding as single file set software title and release may differ because of that.
+///
+/// Currently we treat this case as an existing file set and create a releaes and software title
+/// for it and link it to dat file. Possible duplicates should be merged manually by the user after
+/// the import. We will provide a functionality to merge software titles and releases in the
+/// future.
+///
+pub struct FilterExistingFileSetsStep;
+
+#[async_trait::async_trait]
+impl PipelineStep<MassImportContext> for FilterExistingFileSetsStep {
+    fn name(&self) -> &'static str {
+        "filter_existing_file_sets_step"
+    }
+    fn should_execute(&self, context: &MassImportContext) -> bool {
+        !context.state.file_metadata.is_empty() && context.state.dat_file.is_some()
+    }
+
+    async fn execute(&self, context: &mut MassImportContext) -> StepAction {
+        let dat_file = context
+            .state
+            .dat_file
+            .as_ref()
+            .expect("DAT file should be present in state");
+        let existing_file_sets: Vec<FileSet> = vec![];
+        for game in &dat_file.games {
+            let mut file_set_file_info: Vec<FileSetFileEqualitySpecs> = Vec::new();
+            for rom in &game.roms {
+                let sha1_checksum = match sha1_from_hex_string(&rom.sha1) {
+                    Ok(checksum) => checksum,
+                    Err(e) => {
+                        tracing::error!(
+                            error = ?e,
+                            rom_sha1 = %rom.sha1,
+                            rom_name = %rom.name,
+                            "Failed to parse SHA1 checksum from hex string",
+                        );
+                        return StepAction::Abort(Error::ParseError(format!(
+                            "Failed to parse SHA1 checksum from hex string for ROM '{}': {}",
+                            rom.name, e
+                        )));
+                    }
+                };
+
+                file_set_file_info.push(FileSetFileEqualitySpecs {
+                    file_name: rom.name.clone(),
+                    file_type: context.input.file_type,
+                    sha1_checksum,
+                });
+            }
+
+            let file_set_equality_specs = FileSetEqualitySpecs {
+                file_set_name: game.name.clone(),
+                file_set_file_name: game.name.clone(),
+                file_type: context.input.file_type,
+                source: "".to_string(), // TODO
+                file_set_file_info,
+            };
+
+            let existing_file_set_res = context
+                .deps
+                .repository_manager
+                .get_file_set_repository()
+                .find_file_set(&file_set_equality_specs)
+                .await;
+
+            match existing_file_set_res {
+                Ok(Some(existing_file_set_id)) => {
+                    tracing::info!(
+                        file_set_name = %game.name,
+                        file_set_id = existing_file_set_id,
+                        "Found existing file set matching the game in DAT file",
+                    );
+                }
+                Ok(None) => {
+                    tracing::info!(
+                        file_set_name = %game.name,
+                        "No existing file set found matching the game in DAT file, it will be imported as new",
+                    );
+                }
+                Err(e) => {
+                    tracing::error!(
+                        error = ?e,
+                        file_set_name = %game.name,
+                        "Failed to check for existing file set matching the game in DAT file",
+                    );
+                    return StepAction::Abort(Error::DbError(format!(
+                        "Failed to check for existing file set matching the game '{}': {}",
+                        game.name, e
+                    )));
+                }
+            }
+        }
+        StepAction::Continue
+    }
+}
+
 pub struct ImportFileSetsStep;
 
 #[async_trait::async_trait]
@@ -390,10 +522,9 @@ mod tests {
     use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
     use core_types::{ReadFile, sha1_from_hex_string};
-    use dat_file_parser::{
-        DatFile, DatFileParserError, DatFileParserOps, DatGame, DatHeader, DatRom, MockDatParser,
-    };
+    use dat_file_parser::{DatFileParserError, DatFileParserOps, MockDatParser};
     use database::helper::AddDatFileParams;
+    use domain::naming_conventions::no_intro::{DatFile, DatGame, DatHeader, DatRom};
 
     use crate::{
         file_import::file_import_service_ops::{
@@ -417,10 +548,11 @@ mod tests {
     ) -> MassImportOps {
         let file_import_service_ops =
             file_import_ops.unwrap_or_else(|| Arc::new(MockFileImportServiceOps::new()));
-        let parse_result: Result<DatFile, DatFileParserError> = Ok(DatFile {
-            header: DatHeader::default(),
-            games: vec![],
-        });
+        let parse_result: Result<dat_file_parser::DatFile, DatFileParserError> =
+            Ok(dat_file_parser::DatFile {
+                header: dat_file_parser::DatHeader::default(),
+                games: vec![],
+            });
         let dat_file_parser_ops =
             dat_file_parser_ops.unwrap_or(Arc::new(MockDatParser::new(parse_result)));
         let fs_ops = fs_ops.unwrap_or(Arc::new(MockFileSystemOps::new()));
@@ -443,10 +575,11 @@ mod tests {
 
     #[async_std::test]
     async fn test_import_dat_file_step() {
-        let parse_result: Result<DatFile, DatFileParserError> = Ok(DatFile {
-            header: DatHeader::default(),
-            games: vec![],
-        });
+        let parse_result: Result<dat_file_parser::DatFile, DatFileParserError> =
+            Ok(dat_file_parser::DatFile {
+                header: dat_file_parser::DatHeader::default(),
+                games: vec![],
+            });
         let dat_file_parser_ops = Arc::new(MockDatParser::new(parse_result));
 
         let mut context = MassImportContext::new(
@@ -504,7 +637,7 @@ mod tests {
         };
         let dat_id = dat_repo.add_dat_file(add_dat_file_params).await.unwrap();
 
-        let dat_file_parser_ops = Arc::new(MockDatParser::new(Ok(dat_file.clone())));
+        let dat_file_parser_ops = Arc::new(MockDatParser::new(Ok(dat_file.clone().into())));
         let mut context = MassImportContext::new(
             deps,
             MassImportInput {
@@ -540,7 +673,7 @@ mod tests {
             },
             games: vec![],
         };
-        let dat_file_parser_ops = Arc::new(MockDatParser::new(Ok(dat_file.clone())));
+        let dat_file_parser_ops = Arc::new(MockDatParser::new(Ok(dat_file.clone().into())));
         let mut context = MassImportContext::new(
             get_deps().await,
             MassImportInput {
@@ -582,7 +715,7 @@ mod tests {
             .add_system("Test System")
             .await
             .expect("Failed to add test system");
-        let dat_file_parser_ops = Arc::new(MockDatParser::new(Ok(dat_file.clone())));
+        let dat_file_parser_ops = Arc::new(MockDatParser::new(Ok(dat_file.clone().into())));
         let mut context = MassImportContext::new(
             deps,
             MassImportInput {
@@ -622,7 +755,7 @@ mod tests {
             },
             games: vec![],
         };
-        let dat_file_parser_ops = Arc::new(MockDatParser::new(Ok(dat_file.clone())));
+        let dat_file_parser_ops = Arc::new(MockDatParser::new(Ok(dat_file.clone().into())));
         let mut context = MassImportContext::new(
             get_deps().await,
             MassImportInput {
@@ -862,4 +995,11 @@ mod tests {
             other => panic!("Unexpected import status: {:?}", other),
         }
     }
+
+    // TODO: create a test case where re-importing the same dat file
+    // - shouldn't create a new dat file in the database
+    // - shouldn't create duplicate file sets
+    // - should create file sets with they do not exist
+    // - shouldn't create duplicate releases if file set and release already exist for the same dat
+    // file and game combination
 }

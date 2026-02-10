@@ -829,6 +829,21 @@ impl FileSetRepository {
         .await?;
         Ok(())
     }
+
+    pub async fn get_dat_files_for_file_set(
+        &self,
+        file_set_id: i64,
+    ) -> Result<Vec<i64>, DatabaseError> {
+        let dat_file_ids = sqlx::query_scalar!(
+            "SELECT dat_file_id 
+             FROM file_set_dat_file_link 
+             WHERE file_set_id = ?",
+            file_set_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+        Ok(dat_file_ids)
+    }
 }
 
 #[cfg(test)]

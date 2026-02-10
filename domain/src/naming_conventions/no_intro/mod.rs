@@ -8,7 +8,7 @@ pub struct DatFile {
     pub games: Vec<DatGame>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct DatHeader {
     pub id: i32,
     pub name: String,
@@ -21,7 +21,14 @@ pub struct DatHeader {
     pub subset: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+impl DatHeader {
+    /// Source is a string that identifies the origin of the dat file.
+    pub fn get_source(&self) -> String {
+        format!("{} - {}", self.name, self.version)
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DatGame {
     pub name: String,
     pub id: Option<String>,
@@ -33,7 +40,7 @@ pub struct DatGame {
     pub releases: Vec<DatRelease>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DatRom {
     pub name: String,
     pub size: u64,
@@ -46,7 +53,7 @@ pub struct DatRom {
     pub header: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DatRelease {
     pub name: String,
     pub region: String,
@@ -176,5 +183,21 @@ mod tests {
             let game = create_dat_game_with_name(input);
             assert_eq!(game.get_release_name(), *expected);
         }
+    }
+
+    #[test]
+    fn dat_header_get_source() {
+        let header = DatHeader {
+            id: 1,
+            name: "Test Dat".to_string(),
+            description: "A test dat file".to_string(),
+            version: "1.0".to_string(),
+            date: None,
+            author: "Test Author".to_string(),
+            homepage: None,
+            url: None,
+            subset: None,
+        };
+        assert_eq!(header.get_source(), "Test Dat - 1.0");
     }
 }

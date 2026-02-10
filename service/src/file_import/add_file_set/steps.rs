@@ -7,13 +7,18 @@ use crate::{
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
 
-pub struct UpdateDatabaseStep;
+pub struct CreateFileSetToDatabaseStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<AddFileSetContext> for UpdateDatabaseStep {
+impl PipelineStep<AddFileSetContext> for CreateFileSetToDatabaseStep {
     fn name(&self) -> &'static str {
         "update_database"
     }
+
+    fn should_execute(&self, context: &AddFileSetContext) -> bool {
+        context.state.file_set_id.is_none()
+    }
+
     async fn execute(&self, context: &mut AddFileSetContext) -> StepAction {
         let files_in_file_set = context.get_files_in_file_set();
         if files_in_file_set.is_empty() {
@@ -99,18 +104,52 @@ impl PipelineStep<AddFileSetContext> for AddFileSetItemTypesStep {
 
     async fn execute(&self, context: &mut AddFileSetContext) -> StepAction {
         let file_set_id = context.state.file_set_id.unwrap();
-        let res = context
+        // check existing linking
+        let existing_item_types = context
             .deps
             .repository_manager
             .get_file_set_repository()
-            .add_item_types_to_file_set(&file_set_id, &context.state.item_types)
+            .get_item_types_for_file_set(file_set_id)
             .await;
 
-        match res {
-            Ok(_) => tracing::info!("Item types added to file set"),
+        match existing_item_types {
+            Ok(existing) => {
+                let new_item_types: Vec<_> = context
+                    .state
+                    .item_types
+                    .iter()
+                    .filter(|it| !existing.contains(it))
+                    .cloned()
+                    .collect();
+
+                if new_item_types.is_empty() {
+                    tracing::info!("No new item types to add to file set");
+                    return StepAction::Continue;
+                }
+
+                let res = context
+                    .deps
+                    .repository_manager
+                    .get_file_set_repository()
+                    .add_item_types_to_file_set(&file_set_id, &new_item_types)
+                    .await;
+
+                match res {
+                    Ok(_) => tracing::info!("Item types added to file set"),
+                    Err(err) => {
+                        tracing::error!(error = %err,
+                    "Add item types to file set operation failed.");
+                        // No point to abort here, add to failed steps and continue
+                        context.state.failed_steps.insert(
+                            self.name().to_string(),
+                            Error::DbError(format!("Error adding item types to file set: {}", err)),
+                        );
+                    }
+                }
+            }
             Err(err) => {
                 tracing::error!(error = %err,
-                    "Add item types to file set operation failed.");
+                    "Error checking existing item types for file set, aborting add item types step.");
                 // No point to abort here, add to failed steps and continue
                 context.state.failed_steps.insert(
                     self.name().to_string(),
@@ -211,7 +250,7 @@ mod tests {
             },
         );
 
-        let step = UpdateDatabaseStep;
+        let step = CreateFileSetToDatabaseStep;
         let result = step.execute(&mut context).await;
 
         if !matches!(result, StepAction::Continue) {
@@ -268,7 +307,7 @@ mod tests {
             },
         );
 
-        let step = UpdateDatabaseStep;
+        let step = CreateFileSetToDatabaseStep;
         let result = step.execute(&mut context).await;
 
         if !matches!(result, StepAction::Continue) {

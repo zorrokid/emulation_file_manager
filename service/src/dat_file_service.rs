@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use dat_file_parser::DatFile as ParserDatFile;
 use database::{
     helper::{AddDatFileParams, AddDatGameParams, AddDatRomParams},
     repository_manager::RepositoryManager,
@@ -18,11 +17,7 @@ impl DatFileService {
         DatFileService { repository_manager }
     }
 
-    pub async fn store_dat_file(
-        &self,
-        dat_file: &ParserDatFile,
-        system_id: i64,
-    ) -> Result<i64, Error> {
+    pub async fn store_dat_file(&self, dat_file: &DatFile, system_id: i64) -> Result<i64, Error> {
         println!(
             "Storing DAT file with system id: {} - {}",
             dat_file.header.name, system_id
@@ -174,11 +169,8 @@ impl DatFileService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dat_file_parser::{
-        DatFile as ParserDatFile, DatGame as ParserDatGame, DatHeader as ParserDatHeader,
-        DatRom as ParserDatRom,
-    };
     use database::setup_test_db;
+    use domain::naming_conventions::no_intro::{DatFile, DatHeader};
 
     #[async_std::test]
     async fn test_store_dat_file() {
@@ -190,8 +182,8 @@ mod tests {
             .await
             .unwrap();
 
-        let dat_file = ParserDatFile {
-            header: ParserDatHeader {
+        let dat_file = DatFile {
+            header: DatHeader {
                 id: 1,
                 name: "Test DAT".to_string(),
                 description: "Test DAT file".to_string(),
@@ -202,14 +194,14 @@ mod tests {
                 url: Some("https://test.com/dat".to_string()),
                 subset: None,
             },
-            games: vec![ParserDatGame {
+            games: vec![DatGame {
                 name: "Test Game".to_string(),
                 id: Some("game1".to_string()),
                 description: "Test game description".to_string(),
                 cloneof: None,
                 cloneofid: None,
                 categories: vec![],
-                roms: vec![ParserDatRom {
+                roms: vec![DatRom {
                     name: "test.rom".to_string(),
                     size: 1024,
                     crc: "ABCD1234".to_string(),

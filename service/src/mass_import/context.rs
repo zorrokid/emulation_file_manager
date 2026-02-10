@@ -1,14 +1,16 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use crate::{
+    dat_game_status_service::DatGameFileSetStatus,
     error::Error,
     file_import::model::CreateReleaseParams,
     mass_import::models::{FileSetImportResult, MassImportInput, MassImportSyncEvent},
 };
 use async_std::channel::Sender;
 use core_types::{ReadFile, Sha1Checksum, sha1_from_hex_string};
-use dat_file_parser::{DatFile, DatFileParserOps, DatGame, DatHeader};
+use dat_file_parser::DatFileParserOps;
 use database::repository_manager::RepositoryManager;
+use domain::naming_conventions::no_intro::{DatFile, DatGame, DatHeader, DatRom};
 
 use crate::{
     file_import::{
@@ -35,9 +37,9 @@ pub enum ImportItemStatus {
 
 #[derive(Debug, Clone)]
 pub struct ImportItem {
-    pub dat_game: domain::naming_conventions::no_intro::DatGame,
-    pub dat_roms_available: Vec<domain::naming_conventions::no_intro::DatRom>,
-    pub dat_roms_missing: Vec<domain::naming_conventions::no_intro::DatRom>,
+    pub dat_game: DatGame,
+    pub dat_roms_available: Vec<DatRom>,
+    pub dat_roms_missing: Vec<DatRom>,
     pub release_name: String,
     pub software_title_name: String,
     // This can be passed directly to create_file_set in file_import service to proceed with
@@ -48,10 +50,10 @@ pub struct ImportItem {
 
 impl ImportItem {
     pub fn new(
-        dat_game: domain::naming_conventions::no_intro::DatGame,
+        dat_game: DatGame,
         file_set: Option<FileSetImportModel>,
-        dat_roms_available: Vec<domain::naming_conventions::no_intro::DatRom>,
-        dat_roms_missing: Vec<domain::naming_conventions::no_intro::DatRom>,
+        dat_roms_available: Vec<DatRom>,
+        dat_roms_missing: Vec<DatRom>,
     ) -> Self {
         let software_title_name = dat_game.name.clone();
         let release_name = dat_game.description.clone();
@@ -104,6 +106,7 @@ pub struct MassImportState {
     pub dat_file: Option<DatFile>,
     pub dat_file_id: Option<i64>,
     pub import_results: Vec<FileSetImportResult>,
+    pub game_file_set_statuses: Vec<DatGameFileSetStatus>,
 }
 
 pub struct MassImportDependencies {
@@ -236,7 +239,7 @@ impl MassImportContext {
             system_ids: vec![self.input.system_id],
             file_type: self.input.file_type,
 
-            source: format!("{} {}", header.name, header.version),
+            source: header.get_source(),
             file_set_name: game.name.clone(),
             file_set_file_name: game.name.clone(),
 
@@ -269,7 +272,7 @@ mod tests {
     use std::path::Path;
 
     use core_types::{FileType, item_type::ItemType};
-    use dat_file_parser::{DatRom, MockDatParser};
+    use dat_file_parser::MockDatParser;
     use file_metadata::{FileMetadataError, FileMetadataReader, MockFileMetadataReader};
 
     use crate::{
@@ -283,7 +286,7 @@ mod tests {
     async fn test_get_import_items() {
         // Setup: Create a DAT file with two games
         let dat_file = DatFile {
-            header: dat_file_parser::DatHeader {
+            header: DatHeader {
                 id: 1,
                 name: "Test DAT".to_string(),
                 description: "Test Description".to_string(),
@@ -395,7 +398,7 @@ mod tests {
         };
         let ops = MassImportOps {
             fs_ops: Arc::new(MockFileSystemOps::new()),
-            dat_file_parser_ops: Arc::new(MockDatParser::new(Ok(dat_file.clone()))),
+            dat_file_parser_ops: Arc::new(MockDatParser::new(Ok(dat_file.clone().into()))),
             file_import_service_ops: Arc::new(MockFileImportServiceOps::new()),
             reader_factory_fn: mock_factory,
         };

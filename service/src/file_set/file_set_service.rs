@@ -30,19 +30,20 @@ impl FileSetServiceOps for FileSetService {
             .await
             .map_err(|e| FileSetServiceError::DatabaseError(format!("{:?}", e)))?;
 
-        let add_file_set_params = AddFileSetParams {
-            file_set_name: &file_set_params.file_set_name,
-            file_set_file_name: &file_set_params.file_set_file_name,
-            source: &file_set_params.source,
-            file_type: &file_set_params.file_type,
-            system_ids: &file_set_params.system_ids,
-            files_in_fileset: &file_set_params.files_in_file_set,
-        };
-
         let file_set_id = self
             .repository_manager
             .get_file_set_repository()
-            .add_file_set_with_tx(&mut transaction, add_file_set_params)
+            .add_file_set_with_tx(
+                &mut transaction,
+                AddFileSetParams {
+                    file_set_name: &file_set_params.file_set_name,
+                    file_set_file_name: &file_set_params.file_set_file_name,
+                    source: &file_set_params.source,
+                    file_type: &file_set_params.file_type,
+                    system_ids: &file_set_params.system_ids,
+                    files_in_fileset: &file_set_params.files_in_file_set,
+                },
+            )
             .await
             .map_err(|e| FileSetServiceError::DatabaseError(format!("{:?}", e)))?;
 
@@ -103,7 +104,7 @@ mod tests {
     use core_types::{ImportedFile, Sha1Checksum};
     use database::{repository_manager::RepositoryManager, setup_test_db};
 
-    use crate::file_import::model::CreateReleaseParams;
+    use crate::{file_import::model::CreateReleaseParams, file_set::CreateFileSetParams};
 
     #[async_std::test]
     async fn test_create_file_set() {
@@ -134,6 +135,8 @@ mod tests {
             },
         ];
         let create_params = CreateFileSetParams {
+            // TODO: mabe file set fields should be options, if file set already exists, we don't
+            // need these fields.
             file_set_name: "Test File Set".to_string(),
             file_set_file_name: "test_file_set.zip".to_string(),
             source: "Unit Test".to_string(),
@@ -229,113 +232,4 @@ mod tests {
             .unwrap();
         assert_eq!(software_titles.len(), 0);
     }
-
-    /*
-    #[async_std::test]
-    async fn test_find_file_set_by_files_has_matching_file_set() {
-        // Arrange
-        let pool = Arc::new(setup_test_db().await);
-        let repository_manager = Arc::new(RepositoryManager::new(pool));
-
-        let system_id = repository_manager
-            .get_system_repository()
-            .add_system("Test System")
-            .await
-            .unwrap();
-
-        let file_set_service = FileSetService::new(Arc::clone(&repository_manager));
-
-        // Create first file set
-        let file_1_sha1: Sha1Checksum = [0u8; 20];
-        let file_2_sha1: Sha1Checksum = [1u8; 20];
-        let files_in_fileset: Vec<ImportedFile> = vec![
-            ImportedFile {
-                original_file_name: "test_file_1.rom".to_string(),
-                archive_file_name: "archive_file_name".to_string(),
-                sha1_checksum: file_1_sha1,
-                file_size: 1024,
-            },
-            ImportedFile {
-                original_file_name: "test_file_2.rom".to_string(),
-                archive_file_name: "archive_file_name_2".to_string(),
-                sha1_checksum: file_2_sha1,
-                file_size: 2048,
-            },
-        ];
-        let create_params = CreateFileSetParams {
-            file_set_name: "Test File Set".to_string(),
-            file_set_file_name: "test_file_set.zip".to_string(),
-            source: "Unit Test".to_string(),
-            file_type: core_types::FileType::Rom,
-            system_ids: vec![system_id],
-            files_in_file_set: files_in_fileset,
-            create_release: None,
-            dat_file_id: None,
-        };
-        let result = file_set_service
-            .create_file_set(create_params)
-            .await
-            .unwrap();
-
-        let file_set_id = result.file_set_id;
-
-        // Create second file set with different files
-        let file_3_sha1: Sha1Checksum = [2u8; 20];
-        let file_4_sha1: Sha1Checksum = [3u8; 20];
-        let files_in_fileset_2: Vec<ImportedFile> = vec![
-            ImportedFile {
-                original_file_name: "test_file_3.rom".to_string(),
-                archive_file_name: "archive_file_name_3".to_string(),
-                sha1_checksum: file_3_sha1,
-                file_size: 1024,
-            },
-            ImportedFile {
-                original_file_name: "test_file_4.rom".to_string(),
-                archive_file_name: "archive_file_name_4".to_string(),
-                sha1_checksum: file_4_sha1,
-                file_size: 2048,
-            },
-        ];
-        let create_params_2 = CreateFileSetParams {
-            file_set_name: "Test File Set 2".to_string(),
-            file_set_file_name: "test_file_set_2.zip".to_string(),
-            source: "Unit Test".to_string(),
-            file_type: core_types::FileType::Rom,
-            system_ids: vec![system_id],
-            files_in_file_set: files_in_fileset_2,
-            create_release: None,
-            dat_file_id: None,
-        };
-        let result_2 = file_set_service
-            .create_file_set(create_params_2)
-            .await
-            .unwrap();
-        let file_set_id_2 = result_2.file_set_id;
-
-        // Act
-        let found_file_set_id = file_set_service
-            .find_equal_file_set(vec![file_1_sha1, file_2_sha1])
-            .await
-            .expect("Failed to find file set by files")
-            .expect("File set should be found");
-        let found_file_set_id_2 = file_set_service
-            .find_equal_file_set(vec![file_3_sha1, file_4_sha1])
-            .await
-            .expect("Failed to find file set by files")
-            .expect("File set should be found");
-        let not_found_file_set_id = file_set_service
-            .find_equal_file_set(vec![file_1_sha1, file_4_sha1])
-            .await
-            .expect("Failed to find file set by files");
-        let not_found_file_set_id_2 = file_set_service
-            .find_equal_file_set(vec![file_1_sha1])
-            .await
-            .expect("Failed to find file set by files");
-
-        // Assert
-        assert_eq!(found_file_set_id, file_set_id);
-        assert_eq!(found_file_set_id_2, file_set_id_2);
-        assert_eq!(not_found_file_set_id, None);
-        assert_eq!(not_found_file_set_id_2, None);
-    }*/
 }

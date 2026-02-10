@@ -7,6 +7,9 @@ use core_types::{FileType, ImportedFile};
 use crate::file_import::model::CreateReleaseParams;
 
 pub struct CreateFileSetParams {
+    /// If file set already exists, this will be set to the existing file set id and new file set
+    /// will not be created. We still want to create possible release with software title and link
+    /// to dat file, if that is requested.
     pub file_set_name: String,
     pub file_set_file_name: String,
     pub source: String,

@@ -20,6 +20,7 @@ pub trait CheckExistingFileSetContext {
     fn set_file_set_id(&mut self, file_set_id: Option<i64>);
 }
 
+// This is generic so that can be used in both add file set and update file set pipelines.
 pub struct CheckExistingFileSetStep<T: CheckExistingFileSetContext> {
     // `PhantomData<T>` is required to satisfy Rust's type system for generic structs that don't store their generic type directly.
     _phantom: std::marker::PhantomData<T>,
