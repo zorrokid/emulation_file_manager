@@ -3,6 +3,7 @@ use database::models::FileSet;
 
 use crate::{
     dat_file_service::DatFileService,
+    dat_game_status_service::{DatGameFileSetStatus, DatGameStatusService},
     error::Error,
     mass_import::{
         context::MassImportContext,
@@ -335,79 +336,51 @@ impl PipelineStep<MassImportContext> for FilterExistingFileSetsStep {
         "filter_existing_file_sets_step"
     }
     fn should_execute(&self, context: &MassImportContext) -> bool {
-        !context.state.file_metadata.is_empty() && context.state.dat_file.is_some()
+        // we need file metadata to check for existing file sets
+        !context.state.file_metadata.is_empty()
+            // dat file has to be parsed for this step
+            && context.state.dat_file.is_some()
+            // dat file has to be inserted for this step
+            && context.state.dat_file_id.is_some()
     }
 
     async fn execute(&self, context: &mut MassImportContext) -> StepAction {
+        // TODO: add to context if needs injection for mocking in tests
+        // now it's fine since we use in mem test db anyway in tests
+        let date_game_status_service =
+            DatGameStatusService::new(context.deps.repository_manager.clone());
         let dat_file = context
             .state
             .dat_file
             .as_ref()
             .expect("DAT file should be present in state");
-        let existing_file_sets: Vec<FileSet> = vec![];
+        let dat_file_id = context
+            .state
+            .dat_file_id
+            .expect("DAT file ID should be present in state");
         for game in &dat_file.games {
-            let mut file_set_file_info: Vec<FileSetFileEqualitySpecs> = Vec::new();
-            for rom in &game.roms {
-                let sha1_checksum = match sha1_from_hex_string(&rom.sha1) {
-                    Ok(checksum) => checksum,
-                    Err(e) => {
-                        tracing::error!(
-                            error = ?e,
-                            rom_sha1 = %rom.sha1,
-                            rom_name = %rom.name,
-                            "Failed to parse SHA1 checksum from hex string",
-                        );
-                        return StepAction::Abort(Error::ParseError(format!(
-                            "Failed to parse SHA1 checksum from hex string for ROM '{}': {}",
-                            rom.name, e
-                        )));
-                    }
-                };
-
-                file_set_file_info.push(FileSetFileEqualitySpecs {
-                    file_name: rom.name.clone(),
-                    file_type: context.input.file_type,
-                    sha1_checksum,
-                });
-            }
-
-            let file_set_equality_specs = FileSetEqualitySpecs {
-                file_set_name: game.name.clone(),
-                file_set_file_name: game.name.clone(),
-                file_type: context.input.file_type,
-                source: "".to_string(), // TODO
-                file_set_file_info,
-            };
-
-            let existing_file_set_res = context
-                .deps
-                .repository_manager
-                .get_file_set_repository()
-                .find_file_set(&file_set_equality_specs)
+            let status = date_game_status_service
+                .get_status(game, context.input.file_type, &dat_file.header, dat_file_id)
                 .await;
-
-            match existing_file_set_res {
-                Ok(Some(existing_file_set_id)) => {
+            match status {
+                Ok(status) => {
                     tracing::info!(
-                        file_set_name = %game.name,
-                        file_set_id = existing_file_set_id,
-                        "Found existing file set matching the game in DAT file",
+                        game = %game.name,
+                        dat_file_id = dat_file_id,
+                        "Got existing file set status for game",
                     );
-                }
-                Ok(None) => {
-                    tracing::info!(
-                        file_set_name = %game.name,
-                        "No existing file set found matching the game in DAT file, it will be imported as new",
-                    );
+                    context.state.statuses.push(status);
                 }
                 Err(e) => {
                     tracing::error!(
                         error = ?e,
-                        file_set_name = %game.name,
-                        "Failed to check for existing file set matching the game in DAT file",
+                        game = %game.name,
+                        dat_file_id = dat_file_id,
+                        "Failed to get existing file set status for game",
                     );
+                    // Let's still abort at this phase
                     return StepAction::Abort(Error::DbError(format!(
-                        "Failed to check for existing file set matching the game '{}': {}",
+                        "Failed to get existing file set status for game '{}': {}",
                         game.name, e
                     )));
                 }
@@ -424,8 +397,14 @@ impl PipelineStep<MassImportContext> for ImportFileSetsStep {
     fn name(&self) -> &'static str {
         "import_file_sets_step"
     }
+
     fn should_execute(&self, context: &MassImportContext) -> bool {
-        !context.get_non_failed_files().is_empty()
+        context
+            .state
+            .statuses
+            .iter()
+            .find(|status| matches!(status, DatGameFileSetStatus::NonExisting(_)))
+            .is_some()
     }
 
     async fn execute(&self, context: &mut MassImportContext) -> StepAction {
@@ -923,6 +902,7 @@ mod tests {
                 .contains(&PathBuf::from("/mock/file1.zip"))
         );
     }
+
     #[async_std::test]
     async fn test_import_file_sets_step_success() {
         // Arrange
@@ -944,7 +924,7 @@ mod tests {
                 version: "1.0".to_string(),
                 ..Default::default()
             },
-            games: vec![dat_game],
+            games: vec![dat_game.clone()],
         };
         // File metadata matching the ROM SHA1
         let mut file_metadata = HashMap::new();
@@ -957,6 +937,9 @@ mod tests {
                 file_size: 123,
             }],
         );
+        // Status with existing entry for game
+        let statuses = vec![DatGameFileSetStatus::NonExisting(dat_game)];
+
         // Mock FileImportServiceOps with deterministic output
         let mock_file_import_ops = MockFileImportServiceOps::with_create_mock(CreateMockState {
             file_set_id: 42,
@@ -978,6 +961,7 @@ mod tests {
         // Pre-populate state as if previous steps succeeded
         context.state.dat_file = Some(dat_file);
         context.state.file_metadata = file_metadata;
+        context.state.statuses = statuses;
         context
             .state
             .read_ok_files

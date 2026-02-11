@@ -107,6 +107,7 @@ pub struct MassImportState {
     pub dat_file_id: Option<i64>,
     pub import_results: Vec<FileSetImportResult>,
     pub game_file_set_statuses: Vec<DatGameFileSetStatus>,
+    pub statuses: Vec<DatGameFileSetStatus>,
 }
 
 pub struct MassImportDependencies {
@@ -255,12 +256,22 @@ impl MassImportContext {
     }
 
     pub fn get_import_items(&self) -> Vec<ImportItem> {
+        let non_existing_games = self
+            .state
+            .statuses
+            .iter()
+            .filter(|status| matches!(status, DatGameFileSetStatus::NonExisting(_)))
+            .map(|status| match status {
+                DatGameFileSetStatus::NonExisting(dat_game) => dat_game.clone(),
+                _ => unreachable!(),
+            });
+
         self.state.dat_file.as_ref().map_or(Vec::new(), |dat_file| {
             let mut import_items: Vec<ImportItem> = Vec::new();
             tracing::info!("Mapping DAT entries to import items...");
             let sha1_to_file_map = self.build_sha1_to_file_map();
-            dat_file.games.iter().for_each(|game| {
-                import_items.push(self.get_import_item(game, &dat_file.header, &sha1_to_file_map));
+            non_existing_games.for_each(|game| {
+                import_items.push(self.get_import_item(&game, &dat_file.header, &sha1_to_file_map));
             });
             import_items
         })
@@ -285,74 +296,66 @@ mod tests {
     #[async_std::test]
     async fn test_get_import_items() {
         // Setup: Create a DAT file with two games
-        let dat_file = DatFile {
-            header: DatHeader {
-                id: 1,
-                name: "Test DAT".to_string(),
-                description: "Test Description".to_string(),
-                version: "1.0".to_string(),
-                date: Some("2024-01-01".to_string()),
-                author: "Test Author".to_string(),
-                homepage: None,
-                url: None,
-                subset: None,
-            },
-            games: vec![
-                DatGame {
-                    name: "Game1".to_string(),
-                    id: Some("1".to_string()),
-                    cloneof: None,
-                    cloneofid: None,
-                    categories: vec![],
-                    description: "First Game".to_string(),
-                    roms: vec![DatRom {
-                        name: "game1.rom".to_string(),
-                        size: 1024,
-                        crc: "12345678".to_string(),
-                        md5: "d41d8cd98f00b204e9800998ecf8427e".to_string(),
-                        sha1: "da39a3ee5e6b4b0d3255bfef95601890afd80709".to_string(),
-                        sha256: None,
-                        status: None,
-                        serial: None,
-                        header: None,
-                    }],
-                    releases: vec![],
+        let dat_game_1 = DatGame {
+            name: "Game1".to_string(),
+            id: Some("1".to_string()),
+            description: "First Game".to_string(),
+            roms: vec![DatRom {
+                name: "game1.rom".to_string(),
+                size: 1024,
+                sha1: "da39a3ee5e6b4b0d3255bfef95601890afd80709".to_string(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let dat_game_2 = DatGame {
+            name: "Game2".to_string(),
+            id: Some("2".to_string()),
+            description: "Second Game".to_string(),
+            roms: vec![
+                DatRom {
+                    name: "game2a.rom".to_string(),
+                    size: 2048,
+                    sha1: "2fd4e1c67a2d28fced849ee1bb76e7391b93eb12".to_string(),
+                    ..Default::default()
                 },
-                DatGame {
-                    name: "Game2".to_string(),
-                    id: Some("2".to_string()),
-                    cloneof: None,
-                    cloneofid: None,
-                    categories: vec![],
-                    description: "Second Game".to_string(),
-                    roms: vec![
-                        DatRom {
-                            name: "game2a.rom".to_string(),
-                            size: 2048,
-                            crc: "87654321".to_string(),
-                            md5: "098f6bcd4621d373cade4e832627b4f6".to_string(),
-                            sha1: "2fd4e1c67a2d28fced849ee1bb76e7391b93eb12".to_string(),
-                            sha256: None,
-                            status: None,
-                            serial: None,
-                            header: None,
-                        },
-                        DatRom {
-                            name: "game2b.rom".to_string(),
-                            size: 512,
-                            crc: "abcdef00".to_string(),
-                            md5: "5d41402abc4b2a76b9719d911017c592".to_string(),
-                            sha1: "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d".to_string(),
-                            sha256: None,
-                            status: None,
-                            serial: None,
-                            header: None,
-                        },
-                    ],
-                    releases: vec![],
+                DatRom {
+                    name: "game2b.rom".to_string(),
+                    size: 512,
+                    sha1: "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d".to_string(),
+                    ..Default::default()
                 },
             ],
+            ..Default::default()
         };
+        let dat_game_3 = DatGame {
+            name: "Game3".to_string(),
+            id: Some("3".to_string()),
+            roms: vec![DatRom {
+                name: "game3.rom".to_string(),
+                size: 4096,
+                sha1: "e5e9fa1ba31ecd1ae84f75caaa474f3a663f05f4".to_string(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let dat_file = DatFile {
+            header: DatHeader {
+                name: "Test DAT".to_string(),
+                version: "1.0".to_string(),
+                ..Default::default()
+            },
+            games: vec![dat_game_1.clone(), dat_game_2.clone(), dat_game_3.clone()],
+        };
+
+        let statuses = vec![
+            DatGameFileSetStatus::NonExisting(dat_game_1.clone()),
+            DatGameFileSetStatus::NonExisting(dat_game_2.clone()),
+            DatGameFileSetStatus::ExistingWithReleaseAndLinkedToDat {
+                file_set_id: 1,
+                game: dat_game_3.clone(),
+            },
+        ];
 
         // Setup: Create file metadata matching the first game and one ROM from the second
         let mut file_metadata = HashMap::new();
@@ -408,11 +411,12 @@ mod tests {
         let mut context = MassImportContext::new(deps, input, ops, None);
         context.state.dat_file = Some(dat_file);
         context.state.file_metadata = file_metadata;
+        context.state.statuses = statuses;
 
         // Execute: Get import items
         let import_items = context.get_import_items();
 
-        // Verify: Should have 2 import items
+        // Verify: Should have 2 import items, 3rd game is existing and should be filtered out
         assert_eq!(import_items.len(), 2);
 
         // Verify: First game should have all ROMs available

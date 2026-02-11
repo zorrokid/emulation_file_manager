@@ -377,9 +377,4 @@ mod tests {
             status
         );
     }
-
-    #[async_std::test]
-    async fn test_get_status_existing_db_error() {
-        // TODO
-    }
 }
