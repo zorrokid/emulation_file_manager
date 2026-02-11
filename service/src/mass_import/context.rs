@@ -4,6 +4,7 @@ use crate::{
     dat_game_status_service::DatGameFileSetStatus,
     error::Error,
     file_import::model::CreateReleaseParams,
+    file_set::FileSetServiceOps,
     mass_import::models::{FileSetImportResult, MassImportInput, MassImportSyncEvent},
 };
 use async_std::channel::Sender;
@@ -88,6 +89,7 @@ pub struct MassImportOps {
     pub dat_file_parser_ops: Arc<dyn DatFileParserOps>,
     pub file_import_service_ops: Arc<dyn FileImportServiceOps>,
     pub reader_factory_fn: Arc<SendReaderFactoryFn>,
+    pub file_set_service_ops: Arc<dyn FileSetServiceOps>,
 }
 
 impl std::fmt::Debug for MassImportOps {
@@ -288,6 +290,7 @@ mod tests {
 
     use crate::{
         file_import::file_import_service_ops::MockFileImportServiceOps,
+        file_set::mock_file_set_service::MockFileSetService,
         file_system_ops::mock::MockFileSystemOps,
     };
 
@@ -399,11 +402,13 @@ mod tests {
             item_type: Some(ItemType::Cartridge),
             system_id: 42,
         };
+        let file_set_service_ops = Arc::new(MockFileSetService::new());
         let ops = MassImportOps {
             fs_ops: Arc::new(MockFileSystemOps::new()),
             dat_file_parser_ops: Arc::new(MockDatParser::new(Ok(dat_file.clone().into()))),
             file_import_service_ops: Arc::new(MockFileImportServiceOps::new()),
             reader_factory_fn: mock_factory,
+            file_set_service_ops,
         };
         let pool = Arc::new(database::setup_test_db().await);
         let repository_manager = Arc::new(RepositoryManager::new(pool));

@@ -3,8 +3,9 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use database::{helper::AddFileSetParams, repository_manager::RepositoryManager};
 
-use crate::file_set::{
-    CreateFileSetParams, CreateFileSetResult, FileSetServiceError, FileSetServiceOps,
+use crate::{
+    file_import::model::CreateReleaseParams,
+    file_set::{CreateFileSetParams, CreateFileSetResult, FileSetServiceError, FileSetServiceOps},
 };
 
 #[derive(Debug)]
@@ -93,6 +94,59 @@ impl FileSetServiceOps for FileSetService {
             file_set_id,
             release_id,
         })
+    }
+
+    async fn create_release_for_file_set(
+        &self,
+        file_set_ids: &[i64],
+        create_release_params: CreateReleaseParams,
+        system_ids: &[i64],
+        dat_file_id: Option<i64>,
+    ) -> Result<i64, FileSetServiceError> {
+        let mut transaction = self
+            .repository_manager
+            .begin_transaction()
+            .await
+            .map_err(|e| FileSetServiceError::DatabaseError(format!("{:?}", e)))?;
+
+        let software_title_id = self
+            .repository_manager
+            .get_software_title_repository()
+            .add_software_title_with_tx(
+                &mut transaction,
+                &create_release_params.software_title_name,
+                None,
+            )
+            .await
+            .map_err(|e| FileSetServiceError::DatabaseError(format!("{:?}", e)))?;
+
+        let release_id = self
+            .repository_manager
+            .get_release_repository()
+            .add_release_full_with_tx(
+                &mut transaction,
+                &create_release_params.release_name,
+                &[software_title_id],
+                file_set_ids,
+                system_ids,
+            )
+            .await
+            .map_err(|e| FileSetServiceError::DatabaseError(format!("{:?}", e)))?;
+
+        if let Some(dat_file_id) = dat_file_id {
+            self.repository_manager
+                .get_file_set_repository()
+                .link_file_set_to_dat_file_with_tx(file_set_ids[0], dat_file_id, &mut transaction)
+                .await
+                .map_err(|e| FileSetServiceError::DatabaseError(format!("{:?}", e)))?;
+        }
+
+        transaction
+            .commit()
+            .await
+            .map_err(|e| FileSetServiceError::DatabaseError(format!("{:?}", e)))?;
+
+        Ok(release_id)
     }
 }
 

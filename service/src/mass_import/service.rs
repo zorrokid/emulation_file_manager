@@ -8,6 +8,7 @@ use file_metadata::reader_factory::create_metadata_reader;
 use crate::{
     error::Error,
     file_import::{file_import_service_ops::FileImportServiceOps, service::FileImportService},
+    file_set::{FileSetServiceOps, file_set_service::FileSetService},
     file_system_ops::{FileSystemOps, StdFileSystemOps},
     mass_import::{
         context::{MassImportContext, MassImportDeps, MassImportOps, SendReaderFactoryFn},
@@ -23,6 +24,7 @@ pub struct MassImportService {
     file_import_service_ops: Arc<dyn FileImportServiceOps>,
     reader_factory_fn: Arc<SendReaderFactoryFn>,
     repository_manager: Arc<RepositoryManager>,
+    file_set_service_ops: Arc<dyn FileSetServiceOps>,
 }
 
 impl std::fmt::Debug for MassImportService {
@@ -40,12 +42,15 @@ impl MassImportService {
         let file_import_service_ops: Arc<dyn FileImportServiceOps> = Arc::new(
             FileImportService::new(repository_manager.clone(), settings.clone()),
         );
+        let file_set_service_ops: Arc<dyn FileSetServiceOps> =
+            Arc::new(FileSetService::new(repository_manager.clone()));
 
         MassImportService::new_with_ops(
             fs_ops,
             dat_file_parser_ops,
             file_import_service_ops,
             reader_factory_fn,
+            file_set_service_ops,
             repository_manager,
         )
     }
@@ -55,6 +60,7 @@ impl MassImportService {
         dat_file_parser_ops: Arc<dyn DatFileParserOps>,
         file_import_service_ops: Arc<dyn FileImportServiceOps>,
         reader_factory_fn: Arc<SendReaderFactoryFn>,
+        file_set_service_ops: Arc<dyn FileSetServiceOps>,
         repository_manager: Arc<RepositoryManager>,
     ) -> Self {
         MassImportService {
@@ -62,6 +68,7 @@ impl MassImportService {
             dat_file_parser_ops,
             file_import_service_ops,
             reader_factory_fn,
+            file_set_service_ops,
             repository_manager,
         }
     }
@@ -95,6 +102,7 @@ impl MassImportService {
             dat_file_parser_ops: self.dat_file_parser_ops.clone(),
             file_import_service_ops: self.file_import_service_ops.clone(),
             reader_factory_fn: self.reader_factory_fn.clone(),
+            file_set_service_ops: self.file_set_service_ops.clone(),
         };
 
         let deps = MassImportDeps {
@@ -116,6 +124,7 @@ mod tests {
     use super::*;
     use crate::{
         file_import::file_import_service_ops::{CreateMockState, MockFileImportServiceOps},
+        file_set::mock_file_set_service::MockFileSetService,
         file_system_ops::{SimpleDirEntry, mock::MockFileSystemOps},
         mass_import::{models::MassImportInput, test_utils::create_mock_reader_factory},
     };
@@ -180,11 +189,14 @@ mod tests {
             .add_system("Test System")
             .await
             .unwrap();
+
+        let file_set_service_ops = Arc::new(MockFileSetService::new());
         let service = MassImportService::new_with_ops(
             fs_ops,
             dat_file_parser_ops,
             file_import_service_ops,
             reader_factory_fn,
+            file_set_service_ops,
             repository_manager,
         );
 

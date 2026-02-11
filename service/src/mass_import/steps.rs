@@ -2,6 +2,7 @@ use crate::{
     dat_file_service::DatFileService,
     dat_game_status_service::{DatGameFileSetStatus, DatGameStatusService},
     error::Error,
+    file_import::model::CreateReleaseParams,
     mass_import::{
         context::MassImportContext,
         models::{FileSetImportResult, FileSetImportStatus},
@@ -492,6 +493,95 @@ impl PipelineStep<MassImportContext> for ImportFileSetsStep {
     }
 }
 
+pub struct LinkExistingFileSetsStep;
+
+#[async_trait::async_trait]
+impl PipelineStep<MassImportContext> for LinkExistingFileSetsStep {
+    fn name(&self) -> &'static str {
+        "link_existing_file_sets_step"
+    }
+
+    fn should_execute(&self, context: &MassImportContext) -> bool {
+        context.state.dat_file_id.is_some()
+            && context.state.statuses.iter().any(|status| {
+                matches!(
+                    status,
+                    DatGameFileSetStatus::ExistingWithoutReleaseAndWithoutLinkToDat { .. }
+                )
+            })
+    }
+
+    async fn execute(&self, context: &mut MassImportContext) -> StepAction {
+        let dat_file_id = context
+            .state
+            .dat_file_id
+            .expect("DAT file ID should be present in state");
+
+        let statuses = context
+            .state
+            .statuses
+            .iter()
+            .filter(|status| {
+                matches!(
+                    status,
+                    DatGameFileSetStatus::ExistingWithoutReleaseAndWithoutLinkToDat { .. }
+                )
+            })
+            .collect::<Vec<_>>();
+
+        for status in statuses {
+            if let DatGameFileSetStatus::ExistingWithoutReleaseAndWithoutLinkToDat {
+                game,
+                file_set_id,
+            } = status
+            {
+                tracing::info!(
+                    game = %game.name,
+                    file_set_id = file_set_id,
+                    "Linking existing file set to dat file",
+                );
+                let file_set_id = *file_set_id;
+                let res = context
+                    .ops
+                    .file_set_service_ops
+                    .create_release_for_file_set(
+                        &[file_set_id],
+                        CreateReleaseParams {
+                            release_name: game.get_release_name(),
+                            software_title_name: game.get_software_title_name(),
+                        },
+                        &[context.input.system_id],
+                        Some(dat_file_id),
+                    )
+                    .await;
+                match res {
+                    Ok(id) => {
+                        tracing::info!(
+                            game = %game.name,
+                            file_set_id = file_set_id,
+                            release_id = id,
+                            dat_file_id = dat_file_id,
+                            "Successfully linked existing file set to dat file and created a release",
+                        );
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            error = ?e,
+                            game = %game.name,
+                            file_set_id = file_set_id,
+                            dat_file_id = dat_file_id,
+                            "Failed to link existing file set to dat file and create a release",
+                        );
+                        // Not aborting any more
+                        // TODO: collect failed links and show them in the end of import process
+                    }
+                }
+            }
+        }
+        StepAction::Continue
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::{collections::HashMap, path::PathBuf, sync::Arc};
@@ -505,6 +595,7 @@ mod tests {
         file_import::file_import_service_ops::{
             CreateMockState, FileImportServiceOps, MockFileImportServiceOps,
         },
+        file_set::mock_file_set_service::MockFileSetService,
         file_system_ops::{FileSystemOps, SimpleDirEntry, mock::MockFileSystemOps},
         mass_import::{
             context::{MassImportDeps, MassImportOps, SendReaderFactoryFn},
@@ -533,11 +624,13 @@ mod tests {
         let fs_ops = fs_ops.unwrap_or(Arc::new(MockFileSystemOps::new()));
         let reader_factory_fn = reader_factory_fn
             .unwrap_or(Arc::new(create_mock_reader_factory(HashMap::new(), vec![])));
+        let file_set_service_ops = Arc::new(MockFileSetService::new());
         MassImportOps {
             fs_ops,
             file_import_service_ops,
             reader_factory_fn,
             dat_file_parser_ops,
+            file_set_service_ops,
         }
     }
 

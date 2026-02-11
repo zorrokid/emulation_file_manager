@@ -45,4 +45,13 @@ pub trait FileSetServiceOps: Send + Sync {
         &self,
         file_set_params: CreateFileSetParams,
     ) -> Result<CreateFileSetResult, FileSetServiceError>;
+
+    async fn create_release_for_file_set(
+        &self,
+        file_set_ids: &[i64],
+        create_release_params: CreateReleaseParams,
+        system_ids: &[i64],
+        // dat_file_id is optional, but if provided, it will link the release to the dat file.
+        dat_file_id: Option<i64>,
+    ) -> Result<i64, FileSetServiceError>;
 }

@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use core_types::Sha1Checksum;
 
+use crate::file_import::model::CreateReleaseParams;
 use crate::file_set::{
     CreateFileSetParams, CreateFileSetResult, FileSetServiceError, FileSetServiceOps,
 };
@@ -172,6 +173,20 @@ impl FileSetServiceOps for MockFileSetService {
             file_set_id,
             release_id,
         })
+    }
+
+    async fn create_release_for_file_set(
+        &self,
+        _file_set_ids: &[i64],
+        _create_release_params: CreateReleaseParams,
+        _system_ids: &[i64],
+        _dat_file_id: Option<i64>,
+    ) -> Result<i64, FileSetServiceError> {
+        // TODO: improve if needed
+        let mut state = self.state.lock().unwrap();
+        let release_id = state.next_release_id;
+        state.next_release_id += 1;
+        Ok(release_id)
     }
 }
 
