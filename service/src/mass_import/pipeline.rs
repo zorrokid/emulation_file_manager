@@ -19,6 +19,7 @@ impl Pipeline<MassImportContext> {
             Box::new(ReadFileMetadataStep),
             Box::new(FilterExistingFileSetsStep),
             Box::new(ImportFileSetsStep),
+            // TODO: handle existing / non linked file sets
         ])
     }
 }
