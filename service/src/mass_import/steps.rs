@@ -1,6 +1,3 @@
-use core_types::{FileSetEqualitySpecs, FileSetFileEqualitySpecs, sha1_from_hex_string};
-use database::models::FileSet;
-
 use crate::{
     dat_file_service::DatFileService,
     dat_game_status_service::{DatGameFileSetStatus, DatGameStatusService},
@@ -403,8 +400,7 @@ impl PipelineStep<MassImportContext> for ImportFileSetsStep {
             .state
             .statuses
             .iter()
-            .find(|status| matches!(status, DatGameFileSetStatus::NonExisting(_)))
-            .is_some()
+            .any(|status| matches!(status, DatGameFileSetStatus::NonExisting(_)))
     }
 
     async fn execute(&self, context: &mut MassImportContext) -> StepAction {
