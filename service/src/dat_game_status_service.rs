@@ -151,6 +151,7 @@ impl DatGameStatusService {
 
 #[cfg(test)]
 mod tests {
+    use core_types::ImportedFile;
     use database::setup_test_repository_manager;
     use domain::naming_conventions::no_intro::DatRom;
 
@@ -201,11 +202,88 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn test_get_status_existing_file_set_not_linked_to_dat() {}
+    async fn test_get_status_existing_file_set_not_linked_to_dat() {
+        // Arrange
+        let repository_manager = setup_test_repository_manager().await;
+
+        let service = DatGameStatusService::new(repository_manager);
+        let game = DatGame {
+            name: "Test Game".to_string(),
+            roms: vec![DatRom {
+                name: "test_rom.bin".to_string(),
+                size: 1024,
+                sha1: "1234567890abcdef1234567890abcdef12345678".to_string(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let header = DatHeader {
+            name: "Test Dat".to_string(),
+            version: "1.0".to_string(),
+            ..Default::default()
+        };
+
+        let source = header.get_source();
+
+        let file_type = FileType::Rom;
+        let dat_file_id = 1;
+
+        let system_id = service
+            .repository_manager
+            .get_system_repository()
+            .add_system("Test System")
+            .await
+            .expect("Failed to add system to repository");
+
+        let file_set_id = service
+            .repository_manager
+            .get_file_set_repository()
+            .add_file_set(
+                "Test Game",
+                "Test Game",
+                &file_type,
+                &source,
+                &[ImportedFile {
+                    original_file_name: "test_rom.bin".to_string(),
+                    archive_file_name: "test_rom.bin".to_string(),
+                    file_size: 1024,
+                    sha1_checksum: sha1_from_hex_string(&game.roms[0].sha1).unwrap(),
+                }],
+                &[system_id],
+            )
+            .await
+            .expect("Failed to add file set to repository");
+
+        // Act
+        let result = service
+            .get_status(&game, file_type, &header, dat_file_id)
+            .await;
+
+        // Assert
+        assert!(
+            result.is_ok(),
+            "Expected get_status to succeed, but got error: {:?}",
+            result.err()
+        );
+        let status = result.unwrap();
+        assert_eq!(
+            status,
+            DatGameFileSetStatus::ExistingWithoutReleaseAndWithoutLinkToDat {
+                file_set_id,
+                game: game.clone()
+            },
+            "Expected status to be NonExisting, but got: {:?}",
+            status
+        );
+    }
 
     #[async_std::test]
-    async fn test_get_status_existing_file_set_linked_to_dat() {}
+    async fn test_get_status_existing_file_set_linked_to_dat() {
+        // TODO
+    }
 
     #[async_std::test]
-    async fn test_get_status_existing_db_error() {}
+    async fn test_get_status_existing_db_error() {
+        // TODO
+    }
 }
