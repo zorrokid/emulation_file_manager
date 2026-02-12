@@ -1069,6 +1069,166 @@ mod tests {
         }
     }
 
+    #[async_std::test]
+    async fn test_link_existing_file_sets_step() {
+        // Arrange
+        let deps = get_deps().await;
+
+        // Create a system and dat file
+        let system_id = deps
+            .repository_manager
+            .get_system_repository()
+            .add_system("Test System")
+            .await
+            .expect("Failed to add test system");
+
+        let dat_file = DatFile {
+            header: DatHeader {
+                name: "Test DAT".to_string(),
+                version: "1.0".to_string(),
+                ..Default::default()
+            },
+            games: vec![DatGame {
+                name: "Test Game".to_string(),
+                description: "Test Description".to_string(),
+                roms: vec![DatRom {
+                    name: "test.bin".to_string(),
+                    size: 1024,
+                    sha1: "0000000000000000000000000000000000000001".to_string(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+        };
+
+        let dat_file_id = deps
+            .repository_manager
+            .get_dat_repository()
+            .add_dat_file(AddDatFileParams {
+                dat_id: dat_file.header.id,
+                name: dat_file.header.name.as_str(),
+                description: dat_file.header.description.as_str(),
+                version: dat_file.header.version.as_str(),
+                date: dat_file.header.date.as_deref(),
+                author: dat_file.header.author.as_str(),
+                homepage: dat_file.header.homepage.as_deref(),
+                url: dat_file.header.url.as_deref(),
+                subset: dat_file.header.subset.as_deref(),
+                system_id,
+            })
+            .await
+            .expect("Failed to add dat file");
+
+        // Create an existing file set without a release (simulating a file set that was imported before)
+        let existing_file_set_id = deps
+            .repository_manager
+            .get_file_set_repository()
+            .add_file_set(
+                &dat_file.games[0].name,
+                &dat_file.games[0].name,
+                &core_types::FileType::Rom,
+                &dat_file.header.get_source(),
+                &[],
+                &[system_id],
+            )
+            .await
+            .expect("Failed to create existing file set");
+
+        // Use real FileSetService
+        use crate::file_set::file_set_service::FileSetService;
+        let file_set_service = Arc::new(FileSetService::new(deps.repository_manager.clone()));
+
+        let ops = MassImportOps {
+            dat_file_parser_ops: Arc::new(MockDatParser::new(Ok(dat_file.clone().into()))),
+            fs_ops: Arc::new(MockFileSystemOps::new()),
+            reader_factory_fn: Arc::new(create_mock_reader_factory(HashMap::new(), vec![])),
+            file_set_service_ops: file_set_service,
+            file_import_service_ops: Arc::new(MockFileImportServiceOps::new()),
+        };
+
+        let mut context = MassImportContext::new(
+            MassImportDeps {
+                repository_manager: deps.repository_manager.clone(),
+            },
+            MassImportInput {
+                source_path: PathBuf::from("/path/to/source"),
+                dat_file_path: Some(PathBuf::from("/path/to/datfile.dat")),
+                file_type: core_types::FileType::Rom,
+                item_type: None,
+                system_id,
+            },
+            ops,
+            None,
+        );
+
+        // Pre-populate state as if previous steps found an existing file set without release
+        context.state.dat_file_id = Some(dat_file_id);
+        context.state.statuses = vec![
+            DatGameFileSetStatus::ExistingWithoutReleaseAndWithoutLinkToDat {
+                game: dat_file.games[0].clone(),
+                file_set_id: existing_file_set_id,
+            },
+        ];
+
+        // Act
+        let step = LinkExistingFileSetsStep;
+        let result = step.execute(&mut context).await;
+
+        // Assert
+        assert!(matches!(result, StepAction::Continue));
+
+        // Verify that the file set is now linked to a release
+        let is_in_release = deps
+            .repository_manager
+            .get_file_set_repository()
+            .is_file_set_in_release(existing_file_set_id)
+            .await
+            .expect("Failed to check if file set is in release");
+        assert!(is_in_release, "File set should now be linked to a release");
+
+        let release = deps
+            .repository_manager
+            .get_release_repository()
+            .get_releases(None, None, Some(existing_file_set_id))
+            .await
+            .expect("Failed to get release by file set ID");
+
+        assert_eq!(
+            release.len(),
+            1,
+            "There should be exactly one release linked to the file set"
+        );
+
+        let release = &release[0];
+
+        assert_eq!(
+            release.name,
+            dat_file.games[0].get_release_name(),
+            "Release name should match the expected format"
+        );
+
+        let software_title = deps
+            .repository_manager
+            .get_software_title_repository()
+            .get_software_titles_by_release(release.id)
+            .await
+            .expect("Failed to get software title by ID");
+
+        assert_eq!(
+            software_title.len(),
+            1,
+            "There should be exactly one software title linked to the release"
+        );
+
+        let software_title = &software_title[0];
+
+        assert_eq!(
+            software_title.name,
+            dat_file.games[0].get_software_title_name(),
+            "Software title name should match the expected format"
+        );
+    }
+
     // TODO: create a test case where re-importing the same dat file
     // - shouldn't create a new dat file in the database
     // - shouldn't create duplicate file sets

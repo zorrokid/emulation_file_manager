@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT dat_file_id \n             FROM file_set_dat_file_link \n             WHERE file_set_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "dat_file_id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "16d47668f2b11486fcc8047441a6a6473313809b67caab38c57c6a7862635559"
+}
