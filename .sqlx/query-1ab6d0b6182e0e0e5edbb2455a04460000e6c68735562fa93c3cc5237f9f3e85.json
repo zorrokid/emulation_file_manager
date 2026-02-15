@@ -1,0 +1,80 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT * FROM dat_rom WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "dat_game_id",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "name",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "size",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "crc",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "md5",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "sha1",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "sha256",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "status",
+        "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "serial",
+        "ordinal": 9,
+        "type_info": "Text"
+      },
+      {
+        "name": "header",
+        "ordinal": 10,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "1ab6d0b6182e0e0e5edbb2455a04460000e6c68735562fa93c3cc5237f9f3e85"
+}

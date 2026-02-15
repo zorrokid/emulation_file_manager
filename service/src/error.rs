@@ -14,6 +14,7 @@ pub enum Error {
     FileImportError(String),
     OperationCancelled,
     InvalidInput(String),
+    ParseError(String),
 }
 
 impl Display for Error {
@@ -29,6 +30,7 @@ impl Display for Error {
             Error::FileImportError(message) => write!(f, "File import error: {}", message),
             Error::OperationCancelled => write!(f, "Operation was cancelled"),
             Error::InvalidInput(message) => write!(f, "Invalid input: {}", message),
+            Error::ParseError(message) => write!(f, "Parse error: {}", message),
         }
     }
 }
@@ -48,5 +50,11 @@ impl From<cloud_storage::CloudStorageError> for Error {
 impl From<FileExportError> for Error {
     fn from(err: FileExportError) -> Self {
         Error::ExportError(err.to_string())
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Self {
+        Error::IoError(err.to_string())
     }
 }

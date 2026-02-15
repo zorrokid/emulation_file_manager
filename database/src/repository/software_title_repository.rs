@@ -56,8 +56,9 @@ impl SoftwareTitleRepository {
         Ok(software_titles)
     }
 
-    pub async fn add_software_title(
+    pub async fn add_software_title_with_tx(
         &self,
+        tx: &mut sqlx::Transaction<'_, Sqlite>,
         name: &str,
         franchise_id: Option<i64>,
     ) -> Result<i64, Error> {
@@ -66,9 +67,22 @@ impl SoftwareTitleRepository {
             name,
             franchise_id
         )
-        .execute(&*self.pool)
+        .execute(&mut **tx)
         .await?;
         Ok(result.last_insert_rowid())
+    }
+
+    pub async fn add_software_title(
+        &self,
+        name: &str,
+        franchise_id: Option<i64>,
+    ) -> Result<i64, Error> {
+        let mut transaction = self.pool.begin().await?;
+        let software_title_id = self
+            .add_software_title_with_tx(&mut transaction, name, franchise_id)
+            .await?;
+        transaction.commit().await?;
+        Ok(software_title_id)
     }
 
     pub async fn update_software_title(
@@ -121,7 +135,7 @@ mod tests {
 
         // Add a new software title
         let software_title_id = software_title_repository
-            .add_software_title(&"Test Software Title".to_string(), None)
+            .add_software_title("Test Software Title", None)
             .await
             .unwrap();
 

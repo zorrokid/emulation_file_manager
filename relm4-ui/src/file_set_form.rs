@@ -1,7 +1,9 @@
 use std::{path::PathBuf, sync::Arc};
 
 use async_std::{channel::unbounded, task};
-use core_types::{FileType, ReadFile, Sha1Checksum, events::HttpDownloadEvent};
+use core_types::{
+    FileType, ReadFile, Sha1Checksum, events::HttpDownloadEvent, item_type::ItemType,
+};
 use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, FactorySender,
@@ -32,7 +34,12 @@ use service::{
 };
 use ui_components::{DropDownMsg, DropDownOutputMsg, FileTypeDropDown, FileTypeSelectedMsg};
 
-use crate::utils::{dialog_utils::show_error_dialog, string_utils::format_bytes};
+use crate::{
+    components::item_type_dropdown::{
+        ItemTypeDropDownMsg, ItemTypeDropDownOutputMsg, ItemTypeDropdown,
+    },
+    utils::{dialog_utils::show_error_dialog, string_utils::format_bytes},
+};
 
 #[derive(Debug, Clone)]
 struct File {
@@ -138,6 +145,7 @@ pub enum FileSetFormMsg {
     Hide,
     ProcessDownloadEvent(HttpDownloadEvent),
     CancelDownload,
+    ItemTypeChanged(Option<ItemType>),
 }
 
 #[derive(Debug)]
@@ -183,6 +191,8 @@ pub struct FileSetFormModel {
     download_total_size: Option<u64>,
     download_bytes: u64,
     download_cancel_tx: Option<async_std::channel::Sender<()>>,
+    item_type_dropdown: Controller<ItemTypeDropdown>,
+    selected_item_type: Option<ItemType>,
 }
 
 impl FileSetFormModel {
@@ -242,6 +252,12 @@ impl Component for FileSetFormModel {
                     #[local_ref]
                     file_types_dropdown -> gtk::Box,
                 },
+
+                #[local_ref]
+                item_type_dropdown -> gtk::Box,
+
+                // TODO: add item type selection
+                // and ensure that item type is selected for certain file types
 
                 gtk::Button {
                     set_label: "Open File Picker",
@@ -420,6 +436,15 @@ impl Component for FileSetFormModel {
             Arc::clone(&init_model.settings),
         ));
 
+        let item_type_dropdown = ItemTypeDropdown::builder().launch(()).forward(
+            sender.input_sender(),
+            |msg| match msg {
+                ItemTypeDropDownOutputMsg::ItemTypeChanged(opt_item_type) => {
+                    FileSetFormMsg::ItemTypeChanged(opt_item_type)
+                }
+            },
+        );
+
         let model = FileSetFormModel {
             files,
             selected_system_ids: Vec::new(),
@@ -440,11 +465,14 @@ impl Component for FileSetFormModel {
             download_bytes: 0,
             download_cancel_tx: None,
             file_set_id: None,
+            item_type_dropdown,
+            selected_item_type: None,
         };
 
         let file_types_dropdown = model.dropdown.widget();
 
         let files_list_box = model.files.widget();
+        let item_type_dropdown = model.item_type_dropdown.widget();
 
         let widgets = view_output!();
         ComponentParts { model, widgets }
@@ -678,6 +706,10 @@ impl Component for FileSetFormModel {
                     tracing::error!(error = ?error, "Download failed");
                 }
             },
+            FileSetFormMsg::ItemTypeChanged(opt_item_type) => {
+                tracing::info!("Item type changed (new component): {:?}", opt_item_type);
+                self.selected_item_type = opt_item_type;
+            }
         }
     }
 
@@ -761,6 +793,16 @@ impl Component for FileSetFormModel {
                 self.file_set_name = file_set_view_model.file_set_name.clone();
                 self.file_set_file_name = file_set_view_model.file_name.clone();
                 self.source = file_set_view_model.source.clone();
+                // TODO: support multiple item types
+                self.selected_item_type = file_set_view_model.item_types.first().cloned();
+                tracing::info!(
+                    "Setting selected item type in item type dropdown: {:?}",
+                    self.selected_item_type
+                );
+                self.item_type_dropdown
+                    .emit(ItemTypeDropDownMsg::SetSelectedItemType(
+                        self.selected_item_type,
+                    ));
                 self.files.guard().clear();
                 for file in file_set_view_model.files.iter() {
                     self.files.guard().push_back(ReadFile {
@@ -786,6 +828,11 @@ impl Component for FileSetFormModel {
 impl FileSetFormModel {
     fn create_file_set(&self, sender: ComponentSender<Self>, file_type: FileType) {
         tracing::info!("Creating new file set");
+        let item_types = if let Some(item_type) = self.selected_item_type {
+            vec![item_type]
+        } else {
+            vec![]
+        };
         let file_import_model = FileSetImportModel {
             file_set_name: self.file_set_name.clone(),
             file_set_file_name: self.file_set_file_name.clone(),
@@ -795,6 +842,9 @@ impl FileSetFormModel {
             selected_files: self.selected_files_in_picked_files.clone(),
             import_files: self.picked_files.clone(),
             item_ids: vec![],
+            item_types,
+            create_release: None,
+            dat_file_id: None,
         };
 
         let file_import_service = Arc::clone(&self.file_import_service);
@@ -812,6 +862,11 @@ impl FileSetFormModel {
         file_set_id: i64,
     ) {
         tracing::info!(file_set_id = file_set_id, "Updating file set");
+        let item_types = if let Some(item_type) = self.selected_item_type {
+            vec![item_type]
+        } else {
+            vec![]
+        };
         let update_model = UpdateFileSetModel {
             file_set_name: self.file_set_name.clone(),
             file_set_file_name: self.file_set_file_name.clone(),
@@ -821,6 +876,7 @@ impl FileSetFormModel {
             import_files: self.picked_files.clone(),
             file_set_id,
             item_ids: vec![],
+            item_types,
         };
 
         let file_import_service = Arc::clone(&self.file_import_service);

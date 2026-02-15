@@ -1,0 +1,86 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id, dat_id, name, description, version, date, author, homepage, url, subset, system_id, imported_at\n             FROM dat_file\n             WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "dat_id",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "name",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "description",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "version",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "date",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "author",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "homepage",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "url",
+        "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "subset",
+        "ordinal": 9,
+        "type_info": "Text"
+      },
+      {
+        "name": "system_id",
+        "ordinal": 10,
+        "type_info": "Integer"
+      },
+      {
+        "name": "imported_at",
+        "ordinal": 11,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "63d366182a8d8490ed45b0997f032fd9338e11b36769eb881e3740a04d1704f2"
+}

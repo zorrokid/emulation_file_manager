@@ -1,13 +1,17 @@
 pub mod cloud_sync;
+pub mod dat_file_service;
+pub mod dat_game_status_service;
 pub mod download_service;
 pub mod error;
 pub mod export_service;
 pub mod external_executable_runner;
 pub mod file_import;
+pub mod file_set;
 pub mod file_set_deletion;
 pub mod file_set_download;
 pub mod file_system_ops;
 pub mod file_type_migration;
+pub mod mass_import;
 pub mod pipeline;
 pub mod settings_service;
 pub mod view_model_service;

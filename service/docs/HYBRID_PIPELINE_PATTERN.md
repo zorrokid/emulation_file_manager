@@ -1,13 +1,34 @@
 # Hybrid Pipeline Pattern Implementation
 
+## Pattern Description
+
+The **Hybrid Pipeline Pattern** is a design pattern that combines sequential data processing with intelligent flow control. It addresses the common challenge of orchestrating complex, multi-step business processes where:
+
+- **Operations must happen in a specific order** - Each step builds on the results of previous steps
+- **Steps may be conditional** - Some operations only execute based on accumulated state
+- **Early exit is necessary** - The process can stop successfully or abort on errors without completing all steps
+- **Context accumulates over time** - Data and state flow through the pipeline, with each step potentially enriching it
+- **Reusability is important** - Common steps should be sharable across different pipelines
+
+**Key characteristics:**
+- A **Context object** carries all dependencies, configuration, and accumulated state
+- **Steps** are independent, testable units that mutate the context
+- **Flow control** is explicit through return values (Continue, Skip, Abort)
+- **Generic implementation** eliminates boilerplate while allowing type-safe specialization
+- **Steps can be generic** and reused across multiple pipeline types
+
+This pattern excels at modeling complex domain workflows where traditional sequential code becomes hard to test, maintain, and reason about.
+
 ## Overview
 
-The service layer uses a **Hybrid Pipeline Pattern** that combines the best of both Pipeline and Chain of Responsibility patterns. This pattern is implemented generically in `service/src/pipeline.rs` and used across multiple services like `FileSetDeletionService`, `CloudStorageSyncService`, and `FileSetDownloadService`.
+The service layer implements this pattern generically in `service/src/pipeline/` and uses it across **9 different service pipelines** in the application.
 
 The generic `Pipeline<T>` struct provides:
 - A shared `execute()` implementation that eliminates code duplication
 - Flexible step ordering via configuration
 - Consistent error handling and flow control across all pipelines
+- Support for conditional execution and early exit
+- Reusable generic steps like `ConnectToCloudStep<T>`
 
 ## Module Structure
 
@@ -308,11 +329,28 @@ The Hybrid Pipeline Pattern provides:
 
 It's particularly well-suited for complex business processes with multiple sequential steps that need to be testable, observable, and maintainable.
 
-## Other Pipelines Using This Pattern
+## All Pipelines Using This Pattern
 
-The same pattern is used for:
+The application has **9 pipeline implementations** following this pattern:
 
-### CloudStorageSyncService
+### 1. FileSetDeletionService
+```rust
+// service/src/file_set_deletion/pipeline.rs
+impl Pipeline<DeletionContext> {
+    pub fn new() -> Self {
+        Self::with_steps(vec![
+            Box::new(ValidateNotInUseStep),
+            Box::new(FetchFileInfosStep),
+            Box::new(DeleteFileSetStep),
+            Box::new(FilterDeletableFilesStep),
+            Box::new(MarkForCloudDeletionStep),
+            Box::new(DeleteLocalFilesStep),
+        ])
+    }
+}
+```
+
+### 2. CloudStorageSyncService
 ```rust
 // service/src/cloud_sync/pipeline.rs
 impl Pipeline<SyncContext> {
@@ -328,7 +366,7 @@ impl Pipeline<SyncContext> {
 }
 ```
 
-### FileSetDownloadService
+### 3. FileSetDownloadService
 ```rust
 // service/src/file_set_download/pipeline.rs
 impl Pipeline<DownloadContext> {
@@ -345,9 +383,99 @@ impl Pipeline<DownloadContext> {
 }
 ```
 
+### 4. ExternalExecutableRunnerService
+```rust
+// service/src/external_executable_runner/pipeline.rs
+impl Pipeline<ExternalExecutableRunnerContext> {
+    pub fn new() -> Self {
+        Self::with_steps(vec![
+            Box::new(PrepareFilesStep),
+            Box::new(StartExecutableStep),
+            Box::new(CleanupFilesStep),
+        ])
+    }
+}
+```
+
+### 5. FileTypeMigrationService
+```rust
+// service/src/file_type_migration/pipeline.rs
+impl Pipeline<FileTypeMigrationContext> {
+    pub fn new() -> Self {
+        Self::with_steps(vec![
+            Box::new(CollectFileSetsStep),
+            Box::new(CollectCloudFileSetsStep),
+            Box::new(MoveLocalFilesStep),
+            Box::new(ConnectToCloudStep::<FileTypeMigrationContext>::new()),
+            Box::new(MoveCloudFilesStep),
+            Box::new(UpdateFileInfosStep),
+            Box::new(UpdateFileSetsStep),
+            Box::new(AddItemsToFileSetsStep),
+        ])
+    }
+}
+```
+
+### 6. PrepareFileImportService
+```rust
+// service/src/file_import/prepare/pipeline.rs
+impl Pipeline<PrepareFileImportContext> {
+    pub fn new() -> Self {
+        Self::with_steps(vec![
+            Box::new(CollectFileMetadataStep),
+            Box::new(CollectFileInfoStep::<PrepareFileImportContext>::new()),
+        ])
+    }
+}
+```
+
+### 7. UpdateFileSetService
+```rust
+// service/src/file_import/update_file_set/pipeline.rs
+impl Pipeline<UpdateFileSetContext> {
+    pub fn new() -> Self {
+        Self::with_steps(vec![
+            // Preparation steps
+            Box::new(FetchFileSetStep),
+            Box::new(FetchFilesInFileSetStep),
+            // File deletion steps
+            Box::new(CollectDeletionCandidatesStep),
+            Box::new(FilterDeletableFilesStep::<UpdateFileSetContext>::new()),
+            Box::new(DeleteLocalFilesStep::<UpdateFileSetContext>::new()),
+            Box::new(MarkForCloudDeletionStep::<UpdateFileSetContext>::new()),
+            Box::new(UnlinkFilesFromFileSetStep),
+            Box::new(DeleteFileInfosStep::<UpdateFileSetContext>::new()),
+            // Import new files
+            Box::new(CheckExistingFilesStep::<UpdateFileSetContext>::new()),
+            Box::new(ImportFilesStep::<UpdateFileSetContext>::new()),
+            Box::new(UpdateFileInfoToDatabaseStep),
+            Box::new(UpdateFileSetFilesStep),
+            Box::new(UpdateFileSetStep),
+            Box::new(MarkNewFilesForCloudSyncStep),
+        ])
+    }
+}
+```
+
+### 8. AddFileSetService
+```rust
+// service/src/file_import/add_file_set/pipeline.rs
+impl Pipeline<AddFileSetContext> {
+    pub fn new() -> Self {
+        Self::with_steps(vec![
+            Box::new(CheckExistingFilesStep::<AddFileSetContext>::new()),
+            Box::new(ImportFilesStep::<AddFileSetContext>::new()),
+            Box::new(UpdateDatabaseStep),
+        ])
+    }
+}
+```
+
+## Generic and Reusable Steps
+
 ### Generic Cloud Connection Step
 
-A special note about `ConnectToCloudStep<T>`: This is a generic step defined in `service/src/pipeline/cloud_connection.rs` that can be used by any pipeline needing cloud connectivity. It works with any context that implements the `CloudConnectionContext` trait:
+`ConnectToCloudStep<T>` is a **generic step** defined in `service/src/pipeline/cloud_connection.rs` that can be used by any pipeline needing cloud connectivity. It works with any context that implements the `CloudConnectionContext` trait:
 
 ```rust
 pub trait CloudConnectionContext {
@@ -358,14 +486,62 @@ pub trait CloudConnectionContext {
 }
 ```
 
-Both `SyncContext` and `DownloadContext` implement this trait, allowing them to share the same cloud connection logic without code duplication.
+**Pipelines using this step:**
+- `CloudStorageSyncService` - `ConnectToCloudStep::<SyncContext>`
+- `FileSetDownloadService` - `ConnectToCloudStep::<DownloadContext>`
+- `FileTypeMigrationService` - `ConnectToCloudStep::<FileTypeMigrationContext>`
 
-Each pipeline:
-1. Defines its own context type (e.g., `SyncContext`, `DownloadContext`, `DeletionContext`)
-2. Implements steps via `PipelineStep<ContextType>` trait
-3. Configures step sequence in `Pipeline<ContextType>::new()`
-4. Uses the shared `Pipeline<T>::execute()` for execution logic
-5. Can optionally implement `CloudConnectionContext` to use the generic `ConnectToCloudStep<T>`
+### Generic File Import Steps
+
+Several steps in the `file_import/common_steps/` directory are generic and reused across multiple import pipelines:
+
+- **`CollectFileInfoStep<T>`** - Used by `PrepareFileImportContext`
+- **`CheckExistingFilesStep<T>`** - Used by `AddFileSetContext` and `UpdateFileSetContext`
+- **`ImportFilesStep<T>`** - Used by `AddFileSetContext` and `UpdateFileSetContext`
+
+### Generic File Deletion Steps
+
+File deletion logic is extracted into generic steps in `file_import/common_steps/file_deletion_steps/`:
+
+- **`FilterDeletableFilesStep<T>`** - Identifies files safe to delete
+- **`DeleteLocalFilesStep<T>`** - Deletes files from local storage
+- **`MarkForCloudDeletionStep<T>`** - Marks synced files for cloud deletion
+- **`DeleteFileInfosStep<T>`** - Removes file_info records from database
+
+These are reused by both `FileSetDeletionService` and `UpdateFileSetService`.
+
+## Pipeline Pattern Principles
+
+Each pipeline follows these principles:
+
+1. **Defines its own context type** (e.g., `SyncContext`, `DownloadContext`, `DeletionContext`)
+   - Context holds all dependencies (repository, settings, ops traits)
+   - Context accumulates state as pipeline executes
+   - Context is passed mutably through each step
+
+2. **Implements steps via `PipelineStep<ContextType>` trait**
+   - Each step is a separate struct implementing the trait
+   - Steps are stateless - all state lives in the context
+   - Steps can be tested in isolation
+
+3. **Configures step sequence in `Pipeline<ContextType>::new()`**
+   - Step order is explicitly defined
+   - Easy to reorder, add, or remove steps
+   - Clear documentation of the process flow
+
+4. **Uses the shared `Pipeline<T>::execute()` for execution logic**
+   - No duplication of pipeline execution code
+   - Consistent error handling across all pipelines
+   - Built-in support for conditional execution via `should_execute()`
+
+5. **Can optionally implement `CloudConnectionContext`**
+   - To use the generic `ConnectToCloudStep<T>`
+   - Or implement other shared traits for reusable generic steps
+
+6. **Uses trait objects for dependency injection**
+   - All external dependencies injected as `Arc<dyn Trait>`
+   - Enables easy testing with mocks
+   - Runtime flexibility without generic complexity
 
 ### Dependency Injection with Trait Objects
 
@@ -388,3 +564,16 @@ While generics offer zero-cost abstraction, trait objects are preferred here bec
 - The virtual dispatch overhead is negligible compared to I/O operations
 - The code is significantly more maintainable and readable
 - Testing is straightforward with mock implementations
+
+# Mapping to Agent concepts to Pipeline:
+
+
+Agent Concept	Your Pipeline Concept
+Agent state / memory	Context
+Tools	Context-held services (DB repos, LLM client)
+Reasoning	Steps that call the LLM
+Planning	Pipeline configuration (step order)
+Observation	Context mutations
+Action	DB writes / file writes
+Reflection	Optional post-step validation
+Stop condition	Skip / Abort

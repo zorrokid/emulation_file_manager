@@ -1,10 +1,11 @@
 use std::{collections::HashSet, sync::Arc};
 
-use core_types::{FileType, ImportedFile, Sha1Checksum, item_type::ItemType};
+use core_types::{FileSetEqualitySpecs, FileType, ImportedFile, Sha1Checksum, item_type::ItemType};
 use sqlx::{FromRow, Pool, Row, Sqlite, sqlite::SqliteRow};
 
 use crate::{
     database_error::{DatabaseError, Error},
+    helper::AddFileSetParams,
     models::{FileSet, FileSetFileInfo},
 };
 
@@ -20,12 +21,18 @@ impl FileSetRepository {
 
     /// Validates that file_type of FileInfo matches FileSet.
     /// This ensures consistency between the file_type stored in both tables.
-    async fn validate_file_type_consistency(
+    ///
+    /// Can we called with Exectutor e.g. pool (&self.pool) or executor from transaction (&mut *transaction),
+    /// anything that implements Executor (avoids overlapping mutable borrows).
+    async fn validate_file_type_consistency<'e, E>(
         &self,
-        transaction: &mut sqlx::Transaction<'_, Sqlite>,
+        executor: E,
         file_set_id: i64,
         file_info_id: i64,
-    ) -> Result<(), DatabaseError> {
+    ) -> Result<(), DatabaseError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+    {
         let result = sqlx::query!(
             "SELECT 
                 fs.file_type as file_set_type,
@@ -35,7 +42,7 @@ impl FileSetRepository {
             file_set_id,
             file_info_id
         )
-        .fetch_optional(&mut **transaction)
+        .fetch_optional(executor)
         .await?;
 
         if let Some(row) = result {
@@ -229,9 +236,49 @@ impl FileSetRepository {
         Ok(file_sets)
     }
 
-    /// Adds a new file set along with its associated files and system links.
-    /// Checks for existing file info entries to avoid duplicates.
-    /// Returns the ID of the newly created file set.
+    pub async fn find_file_set(
+        &self,
+        equality_specs: &FileSetEqualitySpecs,
+    ) -> Result<Option<i64>, DatabaseError> {
+        // Does file set(s) with same signature exist:
+        let file_type = equality_specs.file_type.to_db_int();
+        // NOTE: there shouldn't be multiple candidates usually so no point to optimize this query
+        // now.
+        let matching_file_sets = sqlx::query_scalar!(
+            "SELECT id 
+                 FROM file_set 
+                 WHERE name = ? AND file_name = ? AND file_type = ?",
+            equality_specs.file_set_name,
+            equality_specs.file_set_file_name,
+            file_type
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        // If exists, check that files in file set have a matching signature (same checksums and
+        // file names)
+        for file_set_id in matching_file_sets {
+            let file_set_file_infos = self.get_file_set_file_info(file_set_id).await?;
+
+            let file_name_to_checksum_map = file_set_file_infos
+                .iter()
+                .map(|file_info| (file_info.file_name.clone(), file_info.sha1_checksum))
+                .collect::<HashSet<_>>();
+
+            let file_name_to_checksum_map_from_input = equality_specs
+                .file_set_file_info
+                .iter()
+                .map(|file| (file.file_name.clone(), file.sha1_checksum))
+                .collect::<HashSet<_>>();
+
+            if file_name_to_checksum_map == file_name_to_checksum_map_from_input {
+                return Ok(Some(file_set_id));
+            }
+        }
+
+        Ok(None)
+    }
+
     pub async fn add_file_set(
         &self,
         file_set_name: &str,
@@ -241,13 +288,41 @@ impl FileSetRepository {
         files_in_fileset: &[ImportedFile],
         system_ids: &[i64],
     ) -> Result<i64, Error> {
-        println!(
-            "Adding file set: {}, {} file type: {:?}, files: {:?}, systems: {:?}",
-            file_set_name, file_set_file_name, file_type, files_in_fileset, system_ids
-        );
+        let mut transaction = self.pool.begin().await?;
+        let params = AddFileSetParams {
+            file_set_name,
+            file_set_file_name,
+            file_type,
+            source,
+            files_in_fileset,
+            system_ids,
+        };
+        let file_set_id = self.add_file_set_with_tx(&mut transaction, params).await?;
+        transaction.commit().await?;
+        Ok(file_set_id)
+    }
+
+    /// Adds a new file set along with its associated files and system links.
+    /// Checks for existing file info entries to avoid duplicates.
+    /// Returns the ID of the newly created file set.
+    pub async fn add_file_set_with_tx(
+        &self,
+        transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        params: AddFileSetParams<'_>,
+    ) -> Result<i64, Error> {
+        let AddFileSetParams {
+            file_set_name,
+            file_set_file_name,
+            file_type,
+            source,
+            files_in_fileset,
+            system_ids,
+        } = params;
+
         let file_type = file_type.to_db_int();
 
-        let mut transaction = self.pool.begin().await?;
+        // bind trasaction connection (tx is &mut SqliteConnection)
+        let tx = &mut **transaction;
 
         // First create the file set
 
@@ -263,7 +338,7 @@ impl FileSetRepository {
             file_set_name,
             source,
         )
-        .execute(&mut *transaction)
+        .execute(&mut *tx)
         .await?;
         let file_set_id = result.last_insert_rowid();
         println!("File set created with ID: {}", file_set_id);
@@ -278,7 +353,7 @@ impl FileSetRepository {
                 checksum,
                 file_type
             )
-            .fetch_optional(&mut *transaction)
+            .fetch_optional(&mut *tx)
             .await?;
 
             println!(
@@ -304,7 +379,7 @@ impl FileSetRepository {
                         archive_file_name,
                         file_type
                     )
-                    .execute(&mut *transaction)
+                    .execute(&mut *tx)
                     .await?;
 
                     file_info_result.last_insert_rowid()
@@ -326,7 +401,7 @@ impl FileSetRepository {
                  WHERE file_info_id = ?",
                 file_info_id
             )
-            .fetch_all(&mut *transaction)
+            .fetch_all(&mut *tx)
             .await?
             .into_iter()
             .map(|row| row.system_id)
@@ -353,14 +428,14 @@ impl FileSetRepository {
                     file_info_id,
                     system_id
                 )
-                .execute(&mut *transaction)
+                .execute(&mut *tx)
                 .await?;
             }
 
             // insert file_set_file_info
 
             // Validate that file_type matches between FileSet and FileInfo
-            self.validate_file_type_consistency(&mut transaction, file_set_id, file_info_id)
+            self.validate_file_type_consistency(&mut *tx, file_set_id, file_info_id)
                 .await
                 .map_err(|e| Error::DbError(e.to_string()))?;
 
@@ -376,11 +451,9 @@ impl FileSetRepository {
                 file.original_file_name,
                 0 // TODO: get sort order from UI
             )
-            .execute(&mut *transaction)
+            .execute(&mut *tx)
             .await?;
         }
-
-        transaction.commit().await?;
 
         println!("File set with ID {} added successfully", file_set_id);
 
@@ -407,7 +480,7 @@ impl FileSetRepository {
 
         for (file_info_id, file_name) in file_info_ids_and_names {
             // Validate that file_type matches between FileSet and FileInfo
-            self.validate_file_type_consistency(&mut transaction, file_set_id, *file_info_id)
+            self.validate_file_type_consistency(&mut *transaction, file_set_id, *file_info_id)
                 .await
                 .map_err(|e| Error::DbError(e.to_string()))?;
 
@@ -635,6 +708,78 @@ impl FileSetRepository {
         Ok(())
     }
 
+    pub async fn add_item_types_to_file_set(
+        &self,
+        file_set_id: &i64,
+        item_types: &[ItemType],
+    ) -> Result<(), DatabaseError> {
+        let mut transaction = self.pool.begin().await?;
+
+        for item_type in item_types {
+            let item_type_db_int = item_type.to_db_int();
+            sqlx::query!(
+                "INSERT INTO file_set_item_type (file_set_id, item_type) 
+                 VALUES (?, ?)",
+                file_set_id,
+                item_type_db_int
+            )
+            .execute(&mut *transaction)
+            .await?;
+        }
+
+        transaction.commit().await?;
+        Ok(())
+    }
+
+    pub async fn update_item_types_to_file_set(
+        &self,
+        file_set_id: &i64,
+        item_types: &[ItemType],
+    ) -> Result<(), DatabaseError> {
+        let mut transaction = self.pool.begin().await?;
+
+        let existing_item_types = self.get_item_types_for_file_set(*file_set_id).await?;
+
+        let new_item_types: Vec<_> = item_types
+            .iter()
+            .filter(|it| !existing_item_types.contains(it))
+            .cloned()
+            .collect();
+
+        let removed_item_types: Vec<_> = existing_item_types
+            .iter()
+            .filter(|it| !item_types.contains(it))
+            .cloned()
+            .collect();
+
+        for item_type in removed_item_types {
+            let item_type_db_int = item_type.to_db_int();
+            sqlx::query!(
+                "DELETE FROM file_set_item_type 
+                 WHERE file_set_id = ? AND item_type = ?",
+                file_set_id,
+                item_type_db_int
+            )
+            .execute(&mut *transaction)
+            .await?;
+        }
+
+        for item_type in new_item_types {
+            let item_type_db_int = item_type.to_db_int();
+            sqlx::query!(
+                "INSERT INTO file_set_item_type (file_set_id, item_type) 
+                 VALUES (?, ?)",
+                file_set_id,
+                item_type_db_int
+            )
+            .execute(&mut *transaction)
+            .await?;
+        }
+
+        transaction.commit().await?;
+        Ok(())
+    }
+
     pub async fn get_item_types_for_file_set(
         &self,
         file_set_id: i64,
@@ -655,11 +800,56 @@ impl FileSetRepository {
 
         Ok(item_types)
     }
+
+    pub async fn link_file_set_to_dat_file(
+        &self,
+        file_set_id: i64,
+        dat_file_id: i64,
+    ) -> Result<(), DatabaseError> {
+        let mut transaction = self.pool.begin().await?;
+        self.link_file_set_to_dat_file_with_tx(file_set_id, dat_file_id, &mut transaction)
+            .await?;
+        transaction.commit().await?;
+        Ok(())
+    }
+
+    pub async fn link_file_set_to_dat_file_with_tx(
+        &self,
+        file_set_id: i64,
+        dat_file_id: i64,
+        transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    ) -> Result<(), DatabaseError> {
+        sqlx::query!(
+            "INSERT INTO file_set_dat_file_link (file_set_id, dat_file_id)
+             VALUES (?, ?)",
+            file_set_id,
+            dat_file_id
+        )
+        .execute(&mut **transaction)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn get_dat_files_for_file_set(
+        &self,
+        file_set_id: i64,
+    ) -> Result<Vec<i64>, DatabaseError> {
+        let dat_file_ids = sqlx::query_scalar!(
+            "SELECT dat_file_id 
+             FROM file_set_dat_file_link 
+             WHERE file_set_id = ?",
+            file_set_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+        Ok(dat_file_ids)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{
+        helper::AddDatFileParams,
         repository::{
             file_info_repository::FileInfoRepository, system_repository::SystemRepository,
         },
@@ -667,6 +857,7 @@ mod tests {
     };
 
     use super::*;
+    use core_types::FileSetFileEqualitySpecs;
     use sqlx::{query, query_scalar};
 
     #[async_std::test]
@@ -1615,5 +1806,212 @@ mod tests {
         assert_eq!(item_types.len(), 2);
         assert!(item_types.contains(&ItemType::Box));
         assert!(item_types.contains(&ItemType::Manual));
+    }
+
+    #[async_std::test]
+    async fn test_update_item_types_to_file_set() {
+        let pool = setup_test_db().await;
+        let pool = Arc::new(pool);
+        let file_set_repository = FileSetRepository { pool: pool.clone() };
+
+        let file_set_id = file_set_repository
+            .add_file_set("Test File Set", "test.zip", &FileType::Rom, "", &[], &[])
+            .await
+            .unwrap();
+
+        file_set_repository
+            .add_item_type_to_file_set(&file_set_id, &ItemType::Box)
+            .await
+            .unwrap();
+        file_set_repository
+            .add_item_type_to_file_set(&file_set_id, &ItemType::Manual)
+            .await
+            .unwrap();
+
+        file_set_repository
+            .update_item_types_to_file_set(&file_set_id, &[ItemType::Manual, ItemType::InlayCard])
+            .await
+            .unwrap();
+        let item_types = file_set_repository
+            .get_item_types_for_file_set(file_set_id)
+            .await
+            .unwrap();
+        assert_eq!(item_types.len(), 2);
+        assert!(item_types.contains(&ItemType::Manual));
+        assert!(item_types.contains(&ItemType::InlayCard));
+    }
+
+    #[async_std::test]
+    async fn test_link_file_set_to_dat_file() {
+        let pool = setup_test_db().await;
+        let pool = Arc::new(pool);
+        let file_set_repository = FileSetRepository { pool: pool.clone() };
+
+        let file_set_id = file_set_repository
+            .add_file_set("Test File Set", "test.zip", &FileType::Rom, "", &[], &[])
+            .await
+            .unwrap();
+
+        let system_id = SystemRepository::new(pool.clone())
+            .add_system("Test System")
+            .await
+            .unwrap();
+
+        let dat_repository = crate::repository::dat_repository::DatRepository::new(pool.clone());
+
+        let dat_file_params = AddDatFileParams {
+            dat_id: 1,
+            name: "Test DAT",
+            system_id,
+            ..AddDatFileParams::default()
+        };
+
+        let dat_file_id = dat_repository.add_dat_file(dat_file_params).await.unwrap();
+
+        // Link the file set to the dat file
+        file_set_repository
+            .link_file_set_to_dat_file(file_set_id, dat_file_id)
+            .await
+            .unwrap();
+
+        // Verify the link exists
+        let count = query_scalar!(
+            "SELECT COUNT(*) 
+                 FROM file_set_dat_file_link 
+                 WHERE file_set_id = ? AND dat_file_id = ?",
+            file_set_id,
+            dat_file_id
+        )
+        .fetch_one(&*pool)
+        .await
+        .unwrap();
+
+        assert_eq!(count, 1);
+    }
+
+    #[async_std::test]
+    async fn test_find_file_set() {
+        // Arrange
+        let pool = Arc::new(setup_test_db().await);
+        let file_set_repository = FileSetRepository { pool: pool.clone() };
+
+        let system_id = SystemRepository::new(pool.clone())
+            .add_system("Test System")
+            .await
+            .unwrap();
+
+        let files = vec![
+            ImportedFile {
+                sha1_checksum: [0; 20],
+                file_size: 123,
+                original_file_name: "test1.rom".to_string(),
+                archive_file_name: "archive_file_name_1".to_string(),
+            },
+            ImportedFile {
+                sha1_checksum: [1; 20],
+                file_size: 456,
+                original_file_name: "test2.rom".to_string(),
+                archive_file_name: "archive_file_name_2".to_string(),
+            },
+        ];
+
+        let file_set_id = file_set_repository
+            .add_file_set(
+                "Test File Set",
+                "test_file_set",
+                &FileType::Rom,
+                "Unit Test",
+                &files,
+                &[system_id],
+            )
+            .await
+            .unwrap();
+
+        let file_set_equality_specs = FileSetEqualitySpecs {
+            file_set_name: "Test File Set".to_string(),
+            file_set_file_name: "test_file_set".to_string(),
+            file_type: FileType::Rom,
+            source: "Unit Test".to_string(),
+            file_set_file_info: files
+                .iter()
+                .map(|f| FileSetFileEqualitySpecs {
+                    file_name: f.original_file_name.clone(),
+                    file_type: FileType::Rom,
+                    sha1_checksum: f.sha1_checksum,
+                })
+                .collect(),
+        };
+
+        // Act
+        let found_id = file_set_repository
+            .find_file_set(&file_set_equality_specs)
+            .await
+            .unwrap();
+
+        // Assert
+        assert_eq!(found_id, Some(file_set_id));
+    }
+
+    #[async_std::test]
+    async fn test_find_file_set_with_matching_file_set_but_non_matching_files_in_file_set() {
+        // Arrange
+        let pool = Arc::new(setup_test_db().await);
+        let file_set_repository = FileSetRepository { pool: pool.clone() };
+
+        let system_id = SystemRepository::new(pool.clone())
+            .add_system("Test System")
+            .await
+            .unwrap();
+
+        let files = vec![
+            ImportedFile {
+                sha1_checksum: [0; 20],
+                file_size: 123,
+                original_file_name: "test1.rom".to_string(),
+                archive_file_name: "archive_file_name_1".to_string(),
+            },
+            ImportedFile {
+                sha1_checksum: [1; 20],
+                file_size: 456,
+                original_file_name: "test2.rom".to_string(),
+                archive_file_name: "archive_file_name_2".to_string(),
+            },
+        ];
+
+        let _ = file_set_repository
+            .add_file_set(
+                "Test File Set",
+                "test_file_set",
+                &FileType::Rom,
+                "Unit Test",
+                &files,
+                &[system_id],
+            )
+            .await
+            .unwrap();
+
+        let file_set_equality_specs = FileSetEqualitySpecs {
+            file_set_name: "Test File Set".to_string(),
+            file_set_file_name: "test_file_set".to_string(),
+            file_type: FileType::Rom,
+            source: "Unit Test".to_string(),
+            file_set_file_info: files
+                .iter()
+                .map(|f| FileSetFileEqualitySpecs {
+                    file_name: "something_else.rom".to_string(),
+                    file_type: FileType::Rom,
+                    sha1_checksum: f.sha1_checksum,
+                })
+                .collect(),
+        };
+
+        // Act
+        let found_id = file_set_repository
+            .find_file_set(&file_set_equality_specs)
+            .await
+            .unwrap();
+
+        // Assert
+        assert!(found_id.is_none());
     }
 }

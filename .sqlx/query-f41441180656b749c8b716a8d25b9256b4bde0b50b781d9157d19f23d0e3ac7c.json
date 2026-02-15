@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO dat_game (\n                dat_file_id, \n                name, \n                game_id, \n                description, \n                cloneof, \n                cloneofid\n            ) VALUES (?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "f41441180656b749c8b716a8d25b9256b4bde0b50b781d9157d19f23d0e3ac7c"
+}

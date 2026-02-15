@@ -359,6 +359,13 @@ impl ViewModelService {
                 .await
                 .map_err(|err| Error::DbError(err.to_string()))?;
 
+            let file_set_item_types = self
+                .repository_manager
+                .get_file_set_repository()
+                .get_item_types_for_file_set(file_set.id)
+                .await
+                .map_err(|err| Error::DbError(err.to_string()))?;
+
             file_set_view_models.push(FileSetViewModel {
                 id: file_set.id,
                 file_set_name: file_set.name.clone(),
@@ -367,6 +374,7 @@ impl ViewModelService {
                 file_name: file_set.file_name.clone(),
                 source: file_set.source.clone(),
                 can_delete,
+                item_types: file_set_item_types,
             });
         }
 
@@ -419,6 +427,13 @@ impl ViewModelService {
             .await
             .map_err(|err| Error::DbError(err.to_string()))?;
 
+        let item_types = self
+            .repository_manager
+            .get_file_set_repository()
+            .get_item_types_for_file_set(file_set.id)
+            .await
+            .map_err(|err| Error::DbError(err.to_string()))?;
+
         Ok(FileSetViewModel {
             id: file_set.id,
             file_set_name: file_set.name.clone(),
@@ -427,6 +442,7 @@ impl ViewModelService {
             file_name: file_set.file_name.clone(),
             source: file_set.source.clone(),
             can_delete,
+            item_types,
         })
     }
 

@@ -1,0 +1,14 @@
+[package]
+name = "file_metadata"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+core_types = { path = "../core_types" }
+thiserror = "2.0.18"
+utils = { path = "../utils" }
+zip = "2.6.0"
+sha1 = "0.10.6"
+tempfile = "3.19.1"
+
+
