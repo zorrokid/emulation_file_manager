@@ -4,8 +4,9 @@ use relm4::{
     Component, ComponentParts, ComponentSender, RelmWidgetExt,
     gtk::{
         self,
-        glib::clone,
-        prelude::{BoxExt, OrientableExt, WidgetExt},
+        gio::prelude::ListModelExt,
+        glib::{clone, object::ObjectExt},
+        prelude::{BoxExt, OrientableExt, SelectionModelExt, WidgetExt},
     },
     typed_view::list::TypedListView,
 };
@@ -18,7 +19,8 @@ use crate::list_item::ListItem;
 #[derive(Debug)]
 pub struct SoftwareTitlesList {
     view_model_service: Arc<ViewModelService>,
-    list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
+    list_view_wrapper: TypedListView<ListItem, gtk::MultiSelection>,
+    selected_items: Vec<ListItem>,
 }
 
 #[derive(Debug)]
@@ -26,6 +28,7 @@ pub enum SoftwareTitleListMsg {
     Selected { index: u32 },
     FetchSoftwareTitles,
     AddSoftwareTitle(SoftwareTitleListModel),
+    SelectionChanged { position: u32, n_items: u32 },
 }
 
 #[derive(Debug)]
@@ -71,22 +74,25 @@ impl Component for SoftwareTitlesList {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection> =
+        let list_view_wrapper: TypedListView<ListItem, gtk::MultiSelection> =
             TypedListView::with_sorting();
 
         let model = SoftwareTitlesList {
             view_model_service: init_model.view_model_service,
             list_view_wrapper,
+            selected_items: Vec::new(),
         };
         let list_view = &model.list_view_wrapper.view;
         let selection_model = &model.list_view_wrapper.selection_model;
-        selection_model.connect_selected_notify(clone!(
+        for prop in selection_model.list_properties() {
+            println!("property: {}", prop.name());
+        }
+
+        selection_model.connect_selection_changed(clone!(
             #[strong]
             sender,
-            move |selection| {
-                sender.input(SoftwareTitleListMsg::Selected {
-                    index: selection.selected(),
-                });
+            move |_, position, n_items| {
+                sender.input(SoftwareTitleListMsg::SelectionChanged { position, n_items });
             }
         ));
 
@@ -121,6 +127,25 @@ impl Component for SoftwareTitlesList {
                     name: software_title.name,
                 };
                 self.list_view_wrapper.append(item);
+            }
+            SoftwareTitleListMsg::SelectionChanged { position, n_items } => {
+                println!("Selection changed");
+                let selection = &self.list_view_wrapper.selection_model;
+                for i in position..position + n_items {
+                    if selection.is_selected(i) {
+                        let software_title = self.list_view_wrapper.get_visible(i);
+                        if let Some(software_title) = software_title {
+                            let software_title = software_title.borrow().clone();
+                            println!("Selected: {:?}", software_title);
+                            self.selected_items.push(software_title);
+                        }
+                    } else if let Some(software_title) = self.list_view_wrapper.get_visible(i) {
+                        let software_title = software_title.borrow().clone();
+                        println!("Deselected: {:?}", software_title);
+                        self.selected_items
+                            .retain(|item| item.id != software_title.id);
+                    }
+                }
             }
         }
     }
