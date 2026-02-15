@@ -16,6 +16,7 @@ pub trait CheckExistingFilesContext {
 }
 
 pub struct CheckExistingFilesStep<T: CheckExistingFilesContext> {
+    // `PhantomData<T>` is required to satisfy Rust's type system for generic structs that don't store their generic type directly.
     _phantom: std::marker::PhantomData<T>,
 }
 

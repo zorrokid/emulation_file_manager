@@ -3,18 +3,24 @@ use std::{path::Path, sync::Arc};
 use core_types::{FileType, ImportedFile};
 use database::repository_manager::RepositoryManager;
 use file_import::FileImportOps;
+use file_metadata::file_metadata_ops::{FileMetadataOps, StdFileMetadataOps};
 
 use crate::{
     error::Error,
     file_import::{
-        add_file_set::context::{AddFileSetContext, FileSetParams as AddFileSetParams},
+        add_file_set::context::{
+            AddFileSetContext, AddFileSetDeps, AddFileSetInput, AddFileSetOps,
+        },
         model::{
             FileImportData, FileImportPrepareResult, FileImportResult, FileSetImportModel,
-            FileSetOperationDeps, UpdateFileSetModel,
+            UpdateFileSetModel,
         },
         prepare::context::PrepareFileImportContext,
-        update_file_set::context::{FileSetParams as UpdateFileSetParams, UpdateFileSetContext},
+        update_file_set::context::{
+            UpdateFileSetContext, UpdateFileSetDeps, UpdateFileSetInput, UpdateFileSetOps,
+        },
     },
+    file_set::{FileSetServiceOps, file_set_service::FileSetService},
     file_system_ops::{FileSystemOps, StdFileSystemOps},
     pipeline::generic_pipeline::Pipeline,
     view_models::Settings,
@@ -24,6 +30,8 @@ pub struct FileImportService {
     repository_manager: Arc<RepositoryManager>,
     fs_ops: Arc<dyn FileSystemOps>,
     file_import_ops: Arc<dyn FileImportOps>,
+    file_metadata_ops: Arc<dyn FileMetadataOps>,
+    file_set_service_ops: Arc<dyn FileSetServiceOps>,
     settings: Arc<Settings>,
 }
 
@@ -35,10 +43,13 @@ impl std::fmt::Debug for FileImportService {
 
 impl FileImportService {
     pub fn new(repository_manager: Arc<RepositoryManager>, settings: Arc<Settings>) -> Self {
+        let file_set_service = FileSetService::new(repository_manager.clone());
         Self::new_with_ops(
             repository_manager,
             Arc::new(StdFileSystemOps),
             Arc::new(file_import::StdFileImportOps),
+            Arc::new(StdFileMetadataOps),
+            Arc::new(file_set_service),
             settings,
         )
     }
@@ -47,13 +58,17 @@ impl FileImportService {
         repository_manager: Arc<RepositoryManager>,
         fs_ops: Arc<dyn FileSystemOps>,
         file_import_ops: Arc<dyn FileImportOps>,
+        file_metadata_ops: Arc<dyn FileMetadataOps>,
+        file_set_service_ops: Arc<dyn FileSetServiceOps>,
         settings: Arc<Settings>,
     ) -> Self {
         Self {
             repository_manager,
             fs_ops,
             file_import_ops,
+            file_metadata_ops,
             settings,
+            file_set_service_ops,
         }
     }
 
@@ -67,7 +82,7 @@ impl FileImportService {
             file_path,
             file_type,
             self.fs_ops.clone(),
-            self.file_import_ops.clone(),
+            self.file_metadata_ops.clone(),
         );
         let pipeline = Pipeline::<PrepareFileImportContext>::new();
         match pipeline.execute(&mut context).await {
@@ -105,34 +120,42 @@ impl FileImportService {
             import_files: import_model.import_files,
         };
 
-        let mut context = AddFileSetContext::new(
-            FileSetOperationDeps {
-                repository_manager: self.repository_manager.clone(),
-                settings: self.settings.clone(),
-                file_import_ops: self.file_import_ops.clone(),
-                fs_ops: self.fs_ops.clone(),
-            },
-            AddFileSetParams {
-                file_import_data,
-                file_set_name: import_model.file_set_name,
-                file_set_file_name: import_model.file_set_file_name,
-                source: import_model.source,
-                item_ids: import_model.item_ids,
-                system_ids: import_model.system_ids,
-            },
-        );
+        let ops = AddFileSetOps {
+            file_import_ops: self.file_import_ops.clone(),
+            fs_ops: self.fs_ops.clone(),
+            file_set_service_ops: self.file_set_service_ops.clone(),
+        };
+
+        let deps = AddFileSetDeps {
+            repository_manager: self.repository_manager.clone(),
+            settings: self.settings.clone(),
+        };
+
+        let input = AddFileSetInput {
+            file_import_data,
+            file_set_name: import_model.file_set_name,
+            file_set_file_name: import_model.file_set_file_name,
+            source: import_model.source,
+            system_ids: import_model.system_ids,
+            create_release: import_model.create_release,
+            dat_file_id: import_model.dat_file_id,
+        };
+
+        let mut context = AddFileSetContext::new(ops, deps, input);
 
         let pipeline = Pipeline::<AddFileSetContext>::new();
         let result = pipeline.execute(&mut context).await;
-        match (result, context.file_set_id) {
+        match (result, context.state.file_set_id) {
             (Ok(_), Some(id)) => Ok(FileImportResult {
                 file_set_id: id,
+                release_id: context.state.release_id,
                 imported_new_files: context
+                    .state
                     .imported_files
                     .values()
                     .cloned()
                     .collect::<Vec<ImportedFile>>(),
-                failed_steps: context.failed_steps,
+                failed_steps: context.state.failed_steps,
             }),
             (Err(err), _) => Err(err),
             (_, None) => Err(Error::FileImportError(
@@ -151,33 +174,37 @@ impl FileImportService {
             selected_files: import_model.selected_files,
             import_files: import_model.import_files,
         };
-        let mut context = UpdateFileSetContext::new(
-            FileSetOperationDeps {
-                repository_manager: self.repository_manager.clone(),
-                settings: self.settings.clone(),
-                file_import_ops: self.file_import_ops.clone(),
-                fs_ops: self.fs_ops.clone(),
-            },
-            UpdateFileSetParams {
-                file_set_id: import_model.file_set_id,
-                file_set_name: import_model.file_set_name,
-                file_set_file_name: import_model.file_set_file_name,
-                source: import_model.source,
-                item_ids: import_model.item_ids,
-                file_import_data,
-            },
-        );
+        let deps = UpdateFileSetDeps {
+            repository_manager: self.repository_manager.clone(),
+            settings: self.settings.clone(),
+        };
+        let ops = UpdateFileSetOps {
+            file_import_ops: self.file_import_ops.clone(),
+            fs_ops: self.fs_ops.clone(),
+        };
+        let input = UpdateFileSetInput {
+            file_set_id: import_model.file_set_id,
+            file_set_name: import_model.file_set_name,
+            file_set_file_name: import_model.file_set_file_name,
+            source: import_model.source,
+            item_ids: import_model.item_ids,
+            file_import_data,
+            item_types: import_model.item_types,
+        };
+        let mut context = UpdateFileSetContext::new(deps, ops, input);
         let pipeline = Pipeline::<UpdateFileSetContext>::new();
         let res = pipeline.execute(&mut context).await;
         match res {
             Ok(_) => Ok(FileImportResult {
                 file_set_id: import_model.file_set_id,
+                release_id: None,
                 imported_new_files: context
+                    .state
                     .imported_files
                     .values()
                     .cloned()
                     .collect::<Vec<ImportedFile>>(),
-                failed_steps: context.failed_steps,
+                failed_steps: context.state.failed_steps,
             }),
             Err(err) => Err(err),
         }
@@ -191,9 +218,11 @@ mod tests {
     use core_types::{FileSyncStatus, ImportedFile, ReadFile};
     use database::setup_test_db;
     use file_import::mock::MockFileImportOps;
+    use file_metadata::file_metadata_ops::mock::MockFileMetadataOps;
 
     use crate::{
         file_import::model::{FileImportSource, ImportFileContent},
+        file_set::mock_file_set_service::MockFileSetService,
         file_system_ops::mock::MockFileSystemOps,
     };
 
@@ -243,13 +272,19 @@ mod tests {
             },
         );
 
+        let file_metadata_ops = Arc::new(MockFileMetadataOps::new());
+
         let fs_ops = Arc::new(MockFileSystemOps::new());
         fs_ops.add_file(path_str);
+
+        let file_set_service_ops = Arc::new(MockFileSetService::new());
 
         let service = FileImportService {
             repository_manager: repository_manager.clone(),
             fs_ops,
             file_import_ops,
+            file_metadata_ops,
+            file_set_service_ops,
             settings,
         };
 
@@ -269,6 +304,9 @@ mod tests {
             file_set_name: file_set_name.clone(),
             file_set_file_name: "test_game.zip".to_string(),
             item_ids: vec![],
+            item_types: vec![],
+            create_release: None,
+            dat_file_id: None,
         };
 
         let result = service.create_file_set(file_set_import_model).await;
@@ -343,13 +381,19 @@ mod tests {
             },
         );
 
+        let file_metadata_ops = Arc::new(MockFileMetadataOps::new());
+
         let fs_ops = Arc::new(MockFileSystemOps::new());
         fs_ops.add_file(new_file_path_str);
+
+        let file_set_service_ops = Arc::new(MockFileSetService::new());
 
         let service = FileImportService {
             repository_manager: repository_manager.clone(),
             fs_ops,
             file_import_ops,
+            file_metadata_ops,
+            file_set_service_ops,
             settings,
         };
 
@@ -372,6 +416,7 @@ mod tests {
             file_set_name: "".to_string(),
             file_set_file_name: "".to_string(),
             item_ids: vec![],
+            item_types: vec![],
         };
 
         // Perform the addition
@@ -460,13 +505,18 @@ mod tests {
             .unwrap();
 
         let file_import_ops = Arc::new(MockFileImportOps::new());
+        let file_metadata_ops = Arc::new(MockFileMetadataOps::new());
 
         let fs_ops = Arc::new(MockFileSystemOps::new());
+
+        let file_set_service_ops = Arc::new(MockFileSetService::new());
 
         let service = FileImportService {
             repository_manager: repository_manager.clone(),
             fs_ops,
             file_import_ops,
+            file_metadata_ops,
+            file_set_service_ops,
             settings,
         };
 
@@ -481,6 +531,7 @@ mod tests {
             file_set_name: "".to_string(),
             file_set_file_name: "".to_string(),
             item_ids: vec![],
+            item_types: vec![],
         };
 
         // Perform the addition
@@ -583,13 +634,18 @@ mod tests {
             .unwrap();
 
         let file_import_ops = Arc::new(MockFileImportOps::new());
+        let file_metadata_ops = Arc::new(MockFileMetadataOps::new());
 
         let fs_ops = Arc::new(MockFileSystemOps::new());
+
+        let file_set_service_ops = Arc::new(MockFileSetService::new());
 
         let service = FileImportService {
             repository_manager: repository_manager.clone(),
             fs_ops,
             file_import_ops,
+            file_metadata_ops,
+            file_set_service_ops,
             settings,
         };
 
@@ -604,6 +660,7 @@ mod tests {
             file_set_name: "".to_string(),
             file_set_file_name: "".to_string(),
             item_ids: vec![],
+            item_types: vec![],
         };
 
         // Perform the addition
@@ -660,12 +717,17 @@ mod tests {
         let fs_ops = Arc::new(MockFileSystemOps::new());
         fs_ops.add_file(file_path_str);
         let file_import_ops = Arc::new(MockFileImportOps::new());
-        file_import_ops.add_zip_file(file_in_zip_archive.sha1_checksum, file_in_zip_archive);
+        let file_metadata_ops = Arc::new(MockFileMetadataOps::new());
+        file_metadata_ops.add_zip_file(file_in_zip_archive.sha1_checksum, file_in_zip_archive);
+
+        let file_set_service_ops = Arc::new(MockFileSetService::new());
 
         let service = FileImportService {
             repository_manager,
             fs_ops,
             file_import_ops,
+            file_metadata_ops,
+            file_set_service_ops,
             settings,
         };
         let result = service

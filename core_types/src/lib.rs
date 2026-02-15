@@ -1,11 +1,24 @@
 pub mod events;
 pub mod item_type;
 
+use hex::FromHex;
 use serde::{Deserialize, Serialize};
 use std::string::ToString;
 use strum_macros::{Display, EnumIter};
 
 pub type Sha1Checksum = [u8; 20];
+
+pub fn sha1_bytes_to_hex_string(checksum: &Sha1Checksum) -> String {
+    checksum.iter().map(|b| format!("{:02x}", b)).collect()
+}
+
+pub fn sha1_from_hex_string(hex_str: &str) -> Result<Sha1Checksum, CoreTypeError> {
+    let bytes = <[u8; 20]>::from_hex(hex_str).map_err(|_| {
+        CoreTypeError::ConversionError("Failed to convert hex string to Sha1Checksum".to_string())
+    })?;
+    Ok(bytes)
+}
+
 pub type FileSize = u64;
 
 #[derive(Debug, Clone)]
@@ -197,6 +210,16 @@ pub const IMAGE_FILE_TYPES: &[FileType] = &[
     FileType::Scan,
 ];
 
+pub const ACTIVE_FILE_TYPES: &[FileType] = &[
+    FileType::DiskImage,
+    FileType::TapeImage,
+    FileType::Rom,
+    FileType::MemorySnapshot,
+    FileType::Screenshot,
+    FileType::Document,
+    FileType::Scan,
+];
+
 pub const DOCUMENT_FILE_TYPES: &[FileType] = &[FileType::Manual, FileType::Box, FileType::Document];
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Display, Serialize, Deserialize)]
@@ -303,6 +326,22 @@ impl FileSyncStatus {
             )),
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct FileSetEqualitySpecs {
+    pub file_set_name: String,
+    pub file_set_file_name: String,
+    pub file_type: FileType,
+    pub source: String,
+    pub file_set_file_info: Vec<FileSetFileEqualitySpecs>,
+}
+
+#[derive(Debug, Clone)]
+pub struct FileSetFileEqualitySpecs {
+    pub file_name: String,
+    pub file_type: FileType,
+    pub sha1_checksum: Sha1Checksum,
 }
 
 // TODO add test for From<&str> for ArgumentType

@@ -23,6 +23,7 @@ use std::{
 };
 
 use crate::{
+    import_form::{ImportForm, ImportFormInit, ImportFormMsg},
     release::{ReleaseInitModel, ReleaseModel, ReleaseMsg, ReleaseOutputMsg},
     releases::{ReleasesInit, ReleasesModel, ReleasesMsg, ReleasesOutputMsg},
     settings_form::{SettingsForm, SettingsFormInit, SettingsFormMsg, SettingsFormOutputMsg},
@@ -57,6 +58,7 @@ pub enum AppMsg {
     UpdateSettings,
     CloseRequested,
     ShowError(String),
+    OpenImportDialog,
 }
 
 #[derive(Debug)]
@@ -85,6 +87,7 @@ pub struct AppModel {
     release_view: gtk::Box,
     release: OnceCell<Controller<ReleaseModel>>,
     settings_form: OnceCell<Controller<SettingsForm>>,
+    import_form: OnceCell<Controller<ImportForm>>,
     status_bar: Controller<StatusBarModel>,
     // Wrapping the flags in a single Mutex to prevent possible race conditions.
     flags: Arc<Mutex<Flags>>,
@@ -197,6 +200,7 @@ impl Component for AppModel {
             sync_service: OnceCell::new(),
             file_type_migration_service: OnceCell::new(),
             settings_form: OnceCell::new(),
+            import_form: OnceCell::new(),
             status_bar,
             flags,
             cloud_sync_cancel_tx: None,
@@ -249,6 +253,7 @@ impl Component for AppModel {
             }
             AppMsg::CloseRequested => self.process_close_requested(root),
             AppMsg::ShowError(error_msg) => show_error_dialog(error_msg, root),
+            AppMsg::OpenImportDialog => self.open_import_dialog(root),
         }
     }
 
@@ -342,6 +347,7 @@ impl AppModel {
 
         let menu = gio::Menu::new();
         menu.append(Some("Settings"), Some("app.settings"));
+        menu.append(Some("Import"), Some("app.import"));
         let popover = gtk::PopoverMenu::from_model(Some(&menu));
 
         menu_button.set_popover(Some(&popover));
@@ -357,8 +363,18 @@ impl AppModel {
                 println!("Settings action activated");
             }
         ));
+        let import_action = gio::SimpleAction::new("import", None);
+        import_action.connect_activate(clone!(
+            #[strong]
+            sender,
+            move |_, _| {
+                sender.input(AppMsg::OpenImportDialog);
+            }
+        ));
+
         let app = relm4::main_application();
         app.add_action(&settings_action);
+        app.add_action(&import_action);
 
         root.set_titlebar(Some(&header_bar));
         sync_button
@@ -794,5 +810,34 @@ impl AppModel {
             let res = migration_service.migrate_file_types(false).await;
             CommandMsg::MigrationDone(res)
         });
+    }
+
+    fn open_import_dialog(&self, root: &gtk::Window) {
+        if self.import_form.get().is_none() {
+            let import_form_init = ImportFormInit {
+                repository_manager: Arc::clone(
+                    self.repository_manager
+                        .get()
+                        .expect("Repository manager not initialized"),
+                ),
+                view_model_service: Arc::clone(
+                    self.view_model_service
+                        .get()
+                        .expect("View model service not initialized"),
+                ),
+                settings: Arc::clone(self.settings.get().expect("Settings not initialized")),
+            };
+            let import_form = ImportForm::builder()
+                .transient_for(root)
+                .launch(import_form_init)
+                .detach();
+            self.import_form
+                .set(import_form)
+                .expect("ImportForm already initialized");
+        }
+        self.import_form
+            .get()
+            .expect("ImportForm not initialized")
+            .emit(ImportFormMsg::Show);
     }
 }

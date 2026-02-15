@@ -163,3 +163,45 @@ pub struct ReleaseItem {
     pub item_type: ItemType,
     pub notes: String,
 }
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct DatFile {
+    pub id: i64,
+    pub dat_id: i64,
+    pub name: String,
+    pub description: String,
+    pub version: String,
+    pub date: Option<String>,
+    pub author: String,
+    pub homepage: Option<String>,
+    pub url: Option<String>,
+    pub subset: Option<String>,
+    pub system_id: i64,
+    pub imported_at: String,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct DatGame {
+    pub id: i64,
+    pub dat_file_id: i64,
+    pub name: String,
+    pub game_id: Option<String>,
+    pub description: String,
+    pub cloneof: Option<String>,
+    pub cloneofid: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct DatRom {
+    pub id: i64,
+    pub dat_game_id: i64,
+    pub name: String,
+    pub size: i64,
+    pub crc: String,
+    pub md5: String,
+    pub sha1: String,
+    pub sha256: Option<String>,
+    pub status: Option<String>,
+    pub serial: Option<String>,
+    pub header: Option<String>,
+}

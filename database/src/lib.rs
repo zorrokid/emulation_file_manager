@@ -1,5 +1,6 @@
 pub mod database_error;
 mod database_path;
+pub mod helper;
 pub mod models;
 mod repository;
 pub mod repository_manager;
@@ -7,7 +8,9 @@ pub mod repository_manager;
 use std::sync::Arc;
 
 use database_path::get_database_file_path;
-use sqlx::{migrate, sqlite::SqliteConnectOptions, Pool, Sqlite, SqlitePool};
+use sqlx::{Pool, Sqlite, SqlitePool, migrate, sqlite::SqliteConnectOptions};
+
+use crate::repository_manager::RepositoryManager;
 
 pub async fn get_db_pool() -> Result<Arc<Pool<Sqlite>>, sqlx::Error> {
     let db_file_path = get_database_file_path();
@@ -49,4 +52,9 @@ pub async fn setup_test_db() -> SqlitePool {
         .expect("Failed to enable foreign keys");
 
     pool
+}
+
+pub async fn setup_test_repository_manager() -> Arc<RepositoryManager> {
+    let pool = setup_test_db().await;
+    Arc::new(repository_manager::RepositoryManager::new(Arc::new(pool)))
 }

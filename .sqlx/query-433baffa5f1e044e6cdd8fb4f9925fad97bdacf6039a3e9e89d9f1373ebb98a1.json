@@ -1,0 +1,80 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id, dat_game_id, name, size, crc, md5, sha1, sha256, status, serial, header\n             FROM dat_rom\n             WHERE dat_game_id = ?\n             ORDER BY name",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "dat_game_id",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "name",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "size",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "crc",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "md5",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "sha1",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "sha256",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "status",
+        "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "serial",
+        "ordinal": 9,
+        "type_info": "Text"
+      },
+      {
+        "name": "header",
+        "ordinal": 10,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "433baffa5f1e044e6cdd8fb4f9925fad97bdacf6039a3e9e89d9f1373ebb98a1"
+}

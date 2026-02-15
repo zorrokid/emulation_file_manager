@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO dat_file (\n                dat_id, \n                name, \n                description, \n                version, \n                date, \n                author, \n                homepage, \n                url, \n                subset, \n                system_id\n            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 10
+    },
+    "nullable": []
+  },
+  "hash": "c2a423946fcd9f591df739dbca4a2406df1ac04334dfc2cac60f163ad6c7c38f"
+}

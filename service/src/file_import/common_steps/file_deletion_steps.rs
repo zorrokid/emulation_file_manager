@@ -931,7 +931,7 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn test_delete_file_infos_step_file_is_linked_to_file_set() {
+    async fn test_delete_file_infos_step_file_is_linked_to_another_file_set() {
         let TestSetup {
             settings,
             repo_manager,
@@ -940,7 +940,12 @@ mod tests {
             file1,
         } = prepare_test().await;
 
-        let file_set_id = prepare_file_set_with_files(&repo_manager, system_id, &[file1]).await;
+        let file1_clone = file1.clone();
+        let file_set_id =
+            prepare_file_set_with_files(&repo_manager, system_id, &[file1_clone]).await;
+        // second file set referencing the file, for this test we wouldn't need to insert this,
+        // settings is_deletable to false and file_deletion_success to None should be enough.
+        let _ = prepare_file_set_with_files(&repo_manager, system_id, &[file1]).await;
 
         let file_infos = repo_manager
             .get_file_info_repository()
@@ -951,17 +956,14 @@ mod tests {
         let file_info = file_infos.first().unwrap();
 
         let mut file_deletion_result = FileDeletionResult::new(file_info.clone());
-        file_deletion_result.is_deletable = true;
-        file_deletion_result.file_deletion_success = Some(true);
+        file_deletion_result.is_deletable = false;
+        file_deletion_result.file_deletion_success = None;
         let mut context = TestContext {
             file_set_id,
             repository_manager: repo_manager.clone(),
             settings: settings.clone(),
             fs_ops: fs_ops.clone(),
-            deletion_results: HashMap::from([(
-                file_info.sha1_checksum.clone(),
-                file_deletion_result,
-            )]),
+            deletion_results: HashMap::from([(file_info.sha1_checksum, file_deletion_result)]),
         };
 
         let step = DeleteFileInfosStep::<TestContext>::new();
@@ -973,7 +975,7 @@ mod tests {
             .get(&file_info.sha1_checksum)
             .unwrap();
 
-        assert!(!deletion_result.db_deletion_success.unwrap());
+        assert!(deletion_result.db_deletion_success.is_none());
 
         let res = repo_manager
             .get_file_info_repository()

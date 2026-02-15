@@ -1,3 +1,4 @@
+pub mod dat_repository;
 pub mod document_viewer_repository;
 pub mod emulator_repository;
 pub mod file_info_repository;

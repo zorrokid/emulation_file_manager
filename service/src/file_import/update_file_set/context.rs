@@ -7,11 +7,11 @@ use crate::{
             check_existing_files::CheckExistingFilesContext,
             file_deletion_steps::FileDeletionStepsContext,
         },
-        model::{FileImportData, FileSetOperationDeps},
+        model::FileImportData,
     },
     file_set_deletion::model::FileDeletionResult,
 };
-use core_types::{FileType, ImportedFile, Sha1Checksum};
+use core_types::{FileType, ImportedFile, Sha1Checksum, item_type::ItemType};
 use database::{
     models::{FileInfo, FileSet},
     repository_manager::RepositoryManager,
@@ -23,74 +23,65 @@ use crate::{
     view_models::Settings,
 };
 
-pub struct UpdateFileSetContext {
+pub struct UpdateFileSetDeps {
     pub repository_manager: Arc<RepositoryManager>,
     pub settings: Arc<Settings>,
+}
+
+pub struct UpdateFileSetOps {
     pub file_import_ops: Arc<dyn FileImportOps>,
     pub fs_ops: Arc<dyn FileSystemOps>,
+}
+
+pub struct UpdateFileSetInput {
     pub file_set_id: i64,
+    pub file_import_data: FileImportData,
     pub file_set_name: String,
     pub file_set_file_name: String,
     pub source: String,
+    // TODO: rmove?
     pub item_ids: Vec<i64>,
+    pub item_types: Vec<ItemType>,
+}
 
+#[derive(Default)]
+pub struct UpdateFileSetState {
     pub file_set: Option<FileSet>,
-    // files currently associated with the file set
+    /// files currently associated with the file set
     pub files_in_file_set: Vec<FileInfo>,
-
-    pub file_import_data: FileImportData,
-    // existing files found in the database, not yet associated with the file set
+    /// existing files found in the database, not yet associated with the file set
     pub existing_files: Vec<FileInfo>,
     pub new_files: Vec<FileInfo>,
     pub imported_files: HashMap<Sha1Checksum, ImportedFile>,
     /// To collect deletion results for files removed from the file set
     pub deletion_results: HashMap<Sha1Checksum, FileDeletionResult>,
-    // There can be steps where failure don't abort the pipeline. Collect those failed steps during deletion, with error message
+    /// There can be steps where failure don't abort the pipeline. Collect those failed steps during deletion, with error message
     pub failed_steps: HashMap<String, Error>,
 }
 
-pub struct FileSetParams {
-    pub file_set_id: i64,
-    pub file_import_data: FileImportData,
-    pub file_set_name: String,
-    pub file_set_file_name: String,
-    pub source: String,
-    pub item_ids: Vec<i64>,
+pub struct UpdateFileSetContext {
+    pub deps: UpdateFileSetDeps,
+    pub ops: UpdateFileSetOps,
+    pub input: UpdateFileSetInput,
+    pub state: UpdateFileSetState,
 }
 
 impl UpdateFileSetContext {
-    pub fn new(
-        file_set_operation_deps: FileSetOperationDeps,
-        file_set_params: FileSetParams,
-    ) -> Self {
+    pub fn new(deps: UpdateFileSetDeps, ops: UpdateFileSetOps, input: UpdateFileSetInput) -> Self {
         Self {
-            repository_manager: file_set_operation_deps.repository_manager,
-            settings: file_set_operation_deps.settings,
-            file_import_ops: file_set_operation_deps.file_import_ops,
-            fs_ops: file_set_operation_deps.fs_ops,
-
-            file_import_data: file_set_params.file_import_data,
-            file_set_id: file_set_params.file_set_id,
-            file_set_name: file_set_params.file_set_name,
-            file_set_file_name: file_set_params.file_set_file_name,
-            item_ids: file_set_params.item_ids,
-
-            file_set: None,
-            existing_files: vec![],
-            imported_files: HashMap::new(),
-            new_files: vec![],
-            files_in_file_set: vec![],
-            source: file_set_params.source,
-            deletion_results: HashMap::new(),
-            failed_steps: HashMap::new(),
+            deps,
+            ops,
+            input,
+            state: UpdateFileSetState::default(),
         }
     }
 
     pub fn has_removed_files(&self) -> bool {
         // Check if there are files that were in the file set but are not in the selected files
         // anymore
-        self.files_in_file_set.iter().any(|file| {
+        self.state.files_in_file_set.iter().any(|file| {
             !self
+                .input
                 .file_import_data
                 .selected_files
                 .contains(&file.sha1_checksum)
@@ -98,10 +89,12 @@ impl UpdateFileSetContext {
     }
 
     pub fn get_removed_files(&self) -> Vec<FileInfo> {
-        self.files_in_file_set
+        self.state
+            .files_in_file_set
             .iter()
             .filter(|file| {
                 !self
+                    .input
                     .file_import_data
                     .selected_files
                     .contains(&file.sha1_checksum)
@@ -114,6 +107,7 @@ impl UpdateFileSetContext {
         let mut file_info_ids_with_names = Vec::new();
 
         for file in self
+            .input
             .file_import_data
             .import_files
             .iter()
@@ -123,18 +117,21 @@ impl UpdateFileSetContext {
 
             // file has to be selected for import
             if self
+                .input
                 .file_import_data
                 .selected_files
                 .contains(&sha1_checksum)
             {
                 // file info for file is either in existing files or new files
                 let file_info_id = if let Some(existing_file) = self
+                    .state
                     .existing_files
                     .iter()
                     .find(|f| f.sha1_checksum == sha1_checksum)
                 {
                     existing_file.id
                 } else if let Some(new_file) = self
+                    .state
                     .new_files
                     .iter()
                     .find(|f| f.sha1_checksum == sha1_checksum)
@@ -158,37 +155,40 @@ impl UpdateFileSetContext {
 
 impl CheckExistingFilesContext for UpdateFileSetContext {
     fn get_sha1_checksums(&self) -> Vec<Sha1Checksum> {
-        self.file_import_data.selected_files.clone()
+        self.input.file_import_data.selected_files.clone()
     }
     fn file_type(&self) -> FileType {
-        self.file_import_data.file_type
+        self.input.file_import_data.file_type
     }
     fn repository_manager(&self) -> Arc<RepositoryManager> {
-        self.repository_manager.clone()
+        self.deps.repository_manager.clone()
     }
     fn set_existing_files(&mut self, existing_files: Vec<FileInfo>) {
-        self.existing_files = existing_files;
+        self.state.existing_files = existing_files;
     }
 }
 
 impl AddFileSetContextOps for UpdateFileSetContext {
     fn set_imported_files(&mut self, imported_files: HashMap<Sha1Checksum, ImportedFile>) {
-        self.imported_files = imported_files;
+        self.state.imported_files = imported_files;
     }
     fn file_import_ops(&self) -> &Arc<dyn FileImportOps> {
-        &self.file_import_ops
+        &self.ops.file_import_ops
     }
     fn get_file_import_model(&self) -> file_import::FileImportModel {
-        self.file_import_data
-            .get_file_import_model(&self.existing_files)
+        self.input
+            .file_import_data
+            .get_file_import_model(&self.state.existing_files)
     }
 
     fn is_new_files_to_be_imported(&self) -> bool {
-        self.file_import_data
+        self.input
+            .file_import_data
             .selected_files
             .iter()
             .any(|sha1_checksum| {
                 !self
+                    .state
                     .existing_files
                     .iter()
                     .any(|file_info| file_info.sha1_checksum == *sha1_checksum)
@@ -198,36 +198,37 @@ impl AddFileSetContextOps for UpdateFileSetContext {
 
 impl FileDeletionStepsContext for UpdateFileSetContext {
     fn repository_manager(&self) -> Arc<RepositoryManager> {
-        self.repository_manager.clone()
+        self.deps.repository_manager.clone()
     }
 
     fn file_set_id(&self) -> i64 {
-        self.file_set_id
+        self.input.file_set_id
     }
 
     fn has_deletion_candidates(&self) -> bool {
-        !self.deletion_results.is_empty()
+        !self.state.deletion_results.is_empty()
     }
 
     fn deletion_results_mut(&mut self) -> &mut HashMap<Sha1Checksum, FileDeletionResult> {
-        &mut self.deletion_results
+        &mut self.state.deletion_results
     }
 
     fn deletion_results(&self) -> &HashMap<Sha1Checksum, FileDeletionResult> {
-        &self.deletion_results
+        &self.state.deletion_results
     }
 
     fn fs_ops(&self) -> Arc<dyn FileSystemOps> {
-        self.fs_ops.clone()
+        self.ops.fs_ops.clone()
     }
 
     fn settings(&self) -> Arc<Settings> {
-        self.settings.clone()
+        self.deps.settings.clone()
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use std::{path::PathBuf, sync::Arc};
 
     use core_types::{FileType, Sha1Checksum};
@@ -236,8 +237,8 @@ mod tests {
 
     use crate::{
         file_import::{
-            model::{FileImportData, FileImportSource, FileSetOperationDeps, ImportFileContent},
-            update_file_set::context::{FileSetParams, UpdateFileSetContext},
+            model::{FileImportData, FileImportSource, ImportFileContent},
+            update_file_set::context::{UpdateFileSetContext, UpdateFileSetInput},
         },
         file_system_ops::mock::MockFileSystemOps,
     };
@@ -247,22 +248,27 @@ mod tests {
         let repository_manager = Arc::new(RepositoryManager::new(pool));
         let settings = Arc::new(crate::view_models::Settings::default());
 
-        UpdateFileSetContext::new(
-            FileSetOperationDeps {
-                repository_manager,
-                settings,
-                file_import_ops: Arc::new(MockFileImportOps::new()),
-                fs_ops: Arc::new(MockFileSystemOps::new()),
-            },
-            FileSetParams {
-                file_set_id: 0,
-                file_import_data,
-                file_set_name: "Test File Set".to_string(),
-                file_set_file_name: "test_file_set".to_string(),
-                source: "TMMP".to_string(),
-                item_ids: vec![],
-            },
-        )
+        let deps = UpdateFileSetDeps {
+            repository_manager: repository_manager.clone(),
+            settings: settings.clone(),
+        };
+
+        let ops = UpdateFileSetOps {
+            file_import_ops: Arc::new(MockFileImportOps::new()),
+            fs_ops: Arc::new(MockFileSystemOps::new()),
+        };
+
+        let input = UpdateFileSetInput {
+            file_set_id: 0,
+            file_import_data,
+            file_set_name: "Test File Set".to_string(),
+            file_set_file_name: "test_file_set".to_string(),
+            source: "TMMP".to_string(),
+            item_ids: vec![],
+            item_types: vec![],
+        };
+
+        UpdateFileSetContext::new(deps, ops, input)
     }
 
     #[async_std::test]
@@ -298,14 +304,14 @@ mod tests {
             }],
         };
         let mut context = create_test_context(file_import_data).await;
-        context.existing_files.push(FileInfo {
+        context.state.existing_files.push(FileInfo {
             id: 1,
             sha1_checksum: file_1_checksum,
             file_type: FileType::Rom,
             archive_file_name: "archive_file_name_1".to_string(),
             file_size: 1024,
         });
-        context.new_files.push(FileInfo {
+        context.state.new_files.push(FileInfo {
             id: 2,
             sha1_checksum: file_2_checksum,
             file_type: FileType::Rom,
@@ -341,7 +347,7 @@ mod tests {
             }],
         };
         let mut context = create_test_context(file_import_data).await;
-        context.existing_files.push(FileInfo {
+        context.state.existing_files.push(FileInfo {
             id: 1,
             sha1_checksum: file_1_checksum,
             file_type: FileType::Rom,

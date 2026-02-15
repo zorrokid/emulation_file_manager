@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO dat_rom (\n                dat_game_id, \n                name, \n                size, \n                crc, \n                md5, \n                sha1, \n                sha256, \n                status, \n                serial, \n                header\n            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 10
+    },
+    "nullable": []
+  },
+  "hash": "51d72e84de62a28902c3743eeeafb3020fa0910e6b94dadcc6770c637e432436"
+}

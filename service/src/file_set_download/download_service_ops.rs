@@ -54,6 +54,18 @@ pub struct DownloadCall {
     pub extract_files: bool,
 }
 
+/// Internal state for MockDownloadServiceOps.
+///
+/// Groups all mutable state into a single struct for simplified locking.
+#[derive(Default)]
+struct MockState {
+    should_fail: bool,
+    error_message: Option<String>,
+    download_calls: Vec<DownloadCall>,
+    failed_downloads_count: Option<usize>,
+    successful_downloads_count: Option<usize>,
+}
+
 /// Mock implementation for testing download service operations.
 ///
 /// This mock tracks all download calls and can simulate failures, allowing comprehensive
@@ -78,13 +90,17 @@ pub struct DownloadCall {
 ///     assert_eq!(calls[0].extract_files, true);
 /// }
 /// ```
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct MockDownloadServiceOps {
-    should_fail: bool,
-    error_message: Option<String>,
-    download_calls: Arc<Mutex<Vec<DownloadCall>>>,
-    failed_downloads_count: Option<usize>,
-    successful_downloads_count: Option<usize>,
+    state: Arc<Mutex<MockState>>,
+}
+
+impl Default for MockDownloadServiceOps {
+    fn default() -> Self {
+        Self {
+            state: Arc::new(Mutex::new(MockState::default())),
+        }
+    }
 }
 
 impl MockDownloadServiceOps {
@@ -112,28 +128,52 @@ impl MockDownloadServiceOps {
     /// ```
     pub fn with_failure(error_msg: impl Into<String>) -> Self {
         Self {
-            should_fail: true,
-            error_message: Some(error_msg.into()),
-            ..Default::default()
+            state: Arc::new(Mutex::new(MockState {
+                should_fail: true,
+                error_message: Some(error_msg.into()),
+                ..Default::default()
+            })),
         }
     }
 
     pub fn with_successful_and_failed_downloads(successful: usize, failed: usize) -> Self {
         Self {
-            successful_downloads_count: Some(successful),
-            failed_downloads_count: Some(failed),
-            ..Default::default()
+            state: Arc::new(Mutex::new(MockState {
+                successful_downloads_count: Some(successful),
+                failed_downloads_count: Some(failed),
+                ..Default::default()
+            })),
         }
+    }
+
+    /// Set whether downloads should fail (useful for reconfiguring mock in tests)
+    pub fn set_should_fail(&self, should_fail: bool) {
+        let mut state = self.state.lock().unwrap();
+        state.should_fail = should_fail;
+    }
+
+    /// Set the error message for failures
+    pub fn set_error_message(&self, error_msg: impl Into<String>) {
+        let mut state = self.state.lock().unwrap();
+        state.error_message = Some(error_msg.into());
     }
 
     /// Returns all calls made to the `download_file_set` method.
     pub fn download_calls(&self) -> Vec<DownloadCall> {
-        self.download_calls.lock().unwrap().clone()
+        let state = self.state.lock().unwrap();
+        state.download_calls.clone()
     }
 
     /// Returns the total number of download calls made.
     pub fn total_calls(&self) -> usize {
-        self.download_calls.lock().unwrap().len()
+        let state = self.state.lock().unwrap();
+        state.download_calls.len()
+    }
+
+    /// Clear all state (useful between tests)
+    pub fn clear(&self) {
+        let mut state = self.state.lock().unwrap();
+        *state = MockState::default();
     }
 }
 
@@ -149,20 +189,21 @@ impl DownloadServiceOps for MockDownloadServiceOps {
             "Mock download_file_set called with file_set_id: {}, extract_files: {}",
             file_set_id, extract_files
         );
+
+        let mut state = self.state.lock().unwrap();
+
         let call = DownloadCall {
             file_set_id,
             extract_files,
         };
-        self.download_calls.lock().unwrap().push(call);
-        println!(
-            "Total download calls so far: {}",
-            self.download_calls.lock().unwrap().len()
-        );
+        state.download_calls.push(call);
+        println!("Total download calls so far: {}", state.download_calls.len());
 
-        if self.should_fail {
+        if state.should_fail {
             println!("Mock download is set to fail");
             return Err(Error::DownloadError(
-                self.error_message
+                state
+                    .error_message
                     .clone()
                     .unwrap_or_else(|| "Mock download failed".to_string()),
             ));
@@ -171,8 +212,8 @@ impl DownloadServiceOps for MockDownloadServiceOps {
         println!("Mock download succeeded");
 
         Ok(DownloadResult {
-            successful_downloads: self.successful_downloads_count.unwrap_or(1),
-            failed_downloads: self.failed_downloads_count.unwrap_or(0),
+            successful_downloads: state.successful_downloads_count.unwrap_or(1),
+            failed_downloads: state.failed_downloads_count.unwrap_or(0),
             thumbnail_path_map: ThumbnailPathMap::new(),
             output_file_names: vec![],
             errors: vec![],
