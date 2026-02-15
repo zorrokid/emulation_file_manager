@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use core_types::SettingName;
 use credentials_storage::{CloudCredentials, CredentialsError};
@@ -13,6 +13,7 @@ pub struct SettingsSaveModel {
     pub sync_enabled: bool,
     pub access_key_id: String,
     pub secret_access_key: String,
+    pub collection_root_dir: Option<PathBuf>,
 }
 
 /// Service for managing application settings including settings stored to database and secure credentials stored in system keyring.
@@ -48,7 +49,7 @@ impl SettingsService {
     /// don't cause the overall operation to fail, as the database settings can still be used
     /// with environment variable fallback for credentials.
     pub async fn save_settings(&self, settings: SettingsSaveModel) -> Result<(), Error> {
-        let settings_map = HashMap::from([
+        let mut settings_map = HashMap::from([
             (SettingName::S3Bucket, settings.bucket),
             (SettingName::S3EndPoint, settings.endpoint),
             (SettingName::S3Region, settings.region),
@@ -61,6 +62,15 @@ impl SettingsService {
                 },
             ),
         ]);
+
+        if let Some(collection_root_dir) = settings.collection_root_dir {
+            settings_map.insert(
+                SettingName::CollectionRootDir,
+                // TODO: maybe consider some other option to store path instead of lossy string
+                // (e.g. base64 encoded bytes)
+                collection_root_dir.to_string_lossy().to_string(),
+            );
+        }
 
         // Save database settings first
         self.repository_manager
