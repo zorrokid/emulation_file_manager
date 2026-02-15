@@ -26,15 +26,31 @@ Emulators and document viewers can be configured for laumching files with. Bitma
 
 ## Document Viewer
 
+# Settings
 
-## Technologies
+## Collection Root directory
+
+This is automatically determined by `directories` crate with `ProjectDirs`. This is the root directory where all files are stored. This is also the directory that can be synced to cloud storage.
+
+User can change this directory in settings. Currently when changing the collection root directory, user should manually copy the files from old collection root directory to new collection root directory and before deleting them from original location, user should make sure that all files are moved and available in new collection root directory. 
+
+This can be done with rsync for example:
+
+```bash
+rsync -avz --checksum ~/.local/share/efm/files/ /path/to/new/collection/root/
+```
+
+
+In the future, I will add support for moving files to new collection root directory automatically when user changes the collection root directory in settings and / or support for multiple collection root directories. 
+
+# Technologies
 
 - [Rust](https://www.rust-lang.org/): The primary programming language used for development.
 - [relm4](https://relm4.org/): GTK4 UI 
 - [SQLx](https://github.com/launchbadge/sqlx): Used for SQLite database management, providing an asynchronous interface to SQLite database.
 - [rust-s3](https://github.com/durch/rust-s3): S3 compatible cloud storage
 
-## Architecture
+# Architecture
 
 The application is split in four main layers consisting of:
 - the core creates - these shouldn't have dependencies on other crates, they are used by the other layers
@@ -42,7 +58,7 @@ The application is split in four main layers consisting of:
 - the service crate - this may have dependencies on the core crates and the database crate, but not on the GUI crate
 - the GUI crate - this may have dependencies to the layers below, the core crates and the database crate (but not the cli crate which will be removed)
 
-## Emulation files
+# Emulation files
 
 Emulation files can be different kind of files (see `core_types::FileType` enum). Some of the files are used with emulators, some with external viewers, some internal viewers in this application.
 
@@ -97,7 +113,7 @@ The two-level linking approach (`release_file_set` + `file_set_item`) enables:
 - Assessing completeness: "This release should have a Manual (release_item), but we haven't linked any file sets to it yet"
 - Sharing file sets across releases while maintaining release-specific item categorization
 
-### File Type Design Rationale
+## File Type Design Rationale
 
 Both `file_info` and `file_set` contain a `file_type` field. While this appears redundant, both are necessary for different reasons:
 

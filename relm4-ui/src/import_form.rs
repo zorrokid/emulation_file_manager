@@ -32,7 +32,7 @@ use crate::{
     system_selector::{
         SystemSelectInit, SystemSelectModel, SystemSelectMsg, SystemSelectOutputMsg,
     },
-    utils::dialog_utils::{show_error_dialog, show_info_dialog},
+    utils::dialog_utils::show_error_dialog,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]

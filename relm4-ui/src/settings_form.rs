@@ -1,13 +1,15 @@
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentParts, ComponentSender, RelmWidgetExt,
     gtk::{
-        self, glib,
+        self, FileChooserDialog,
+        gio::prelude::FileExt,
+        glib::{self, clone},
         prelude::{
-            BoxExt, ButtonExt, CheckButtonExt, EditableExt, EntryBufferExtManual, EntryExt,
-            GtkWindowExt, OrientableExt, WidgetExt,
+            BoxExt, ButtonExt, CheckButtonExt, DialogExt, EditableExt, EntryBufferExtManual,
+            EntryExt, FileChooserExt as _, GtkWindowExt, OrientableExt, WidgetExt,
         },
     },
 };
@@ -24,6 +26,7 @@ pub struct SettingsForm {
     // settings fields (we are not modifying directly the settings object)
     // once changed settings have been saved, we emit a SettingsChanged message
     // so that the main application can reload settings and update components accordingly
+    pub collection_root_dir: Option<PathBuf>,
     pub s3_bucket_name: String,
     pub s3_endpoint: String,
     pub s3_region: String,
@@ -76,6 +79,8 @@ pub enum SettingsFormMsg {
     S3AccessKeyChanged(String),
     S3SecretKeyChanged(String),
     LoadCredentialStatus,
+    BrowseCollectionRootDir,
+    CollectionRootDirSelected(std::path::PathBuf),
 }
 
 #[derive(Debug)]
@@ -110,6 +115,31 @@ impl Component for SettingsForm {
                 set_orientation: gtk::Orientation::Vertical,
                 set_spacing: 10,
                 set_margin_all: 10,
+
+                gtk::Label {
+                    set_label: "Core settings",
+                    set_xalign: 0.0,
+                    set_margin_bottom: 10,
+                },
+
+                #[name = "collection_root_dir_entry"]
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    set_spacing: 5,
+                    set_margin_bottom: 10,
+                    gtk::Label {
+                        set_label: "Collection Root Directory",
+                    },
+                    gtk::Label {
+                        #[watch]
+                        set_label: &model.collection_root_dir.as_ref().map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|| "Not set".to_string()),
+                    },
+                    gtk::Button {
+                        set_label: "Browse",
+                        connect_clicked => SettingsFormMsg::BrowseCollectionRootDir,
+                    },
+                },
+
 
                 gtk::Label {
                     set_label: "Cloud Storage Settings",
@@ -291,6 +321,7 @@ impl Component for SettingsForm {
             credentials_stored: false,
             stored_access_key_preview: None,
             settings_service: settings_service.clone(),
+            collection_root_dir: Some(init.settings.collection_root_dir.clone()),
         };
         let widgets = view_output!();
 
@@ -308,6 +339,12 @@ impl Component for SettingsForm {
         root: &Self::Root,
     ) {
         match msg {
+            SettingsFormMsg::BrowseCollectionRootDir => {
+                self.select_collection_root_dir(root, &sender);
+            }
+            SettingsFormMsg::CollectionRootDirSelected(path) => {
+                self.collection_root_dir = Some(path);
+            }
             SettingsFormMsg::S3FileSyncToggled => {
                 self.s3_sync_enabled = !self.s3_sync_enabled;
             }
@@ -360,6 +397,7 @@ impl Component for SettingsForm {
                     sync_enabled: self.s3_sync_enabled,
                     access_key_id: self.s3_access_key_id.clone(),
                     secret_access_key: self.s3_secret_access_key.clone(),
+                    collection_root_dir: self.collection_root_dir.clone(),
                 };
 
                 sender.oneshot_command(async move {
@@ -454,5 +492,36 @@ impl Component for SettingsForm {
                 self.stored_access_key_preview = stored_key_preview;
             }
         }
+    }
+}
+
+impl SettingsForm {
+    fn select_collection_root_dir(&mut self, root: &gtk::Window, sender: &ComponentSender<Self>) {
+        let dialog = FileChooserDialog::builder()
+            .title("Select Collection Root Directory")
+            .action(gtk::FileChooserAction::SelectFolder)
+            .modal(true)
+            .transient_for(root)
+            .build();
+
+        dialog.add_button("Cancel", gtk::ResponseType::Cancel);
+        dialog.add_button("Select", gtk::ResponseType::Accept);
+
+        dialog.connect_response(clone!(
+            #[strong]
+            sender,
+            move |dialog, response| {
+                tracing::info!("Directory selection dialog response: {:?}", response);
+                if response == gtk::ResponseType::Accept
+                    && let Some(path) = dialog.file().and_then(|f| f.path())
+                {
+                    tracing::info!("Selected directory path: {:?}", path);
+                    sender.input(SettingsFormMsg::CollectionRootDirSelected(path));
+                }
+                dialog.close();
+            }
+        ));
+
+        dialog.present();
     }
 }
