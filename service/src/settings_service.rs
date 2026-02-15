@@ -201,6 +201,7 @@ mod tests {
             sync_enabled: true,
             access_key_id: "test-access-key".to_string(),
             secret_access_key: "test-secret-key".to_string(),
+            collection_root_dir: Some(PathBuf::from("/data/collections")),
         };
 
         // Save settings
@@ -217,6 +218,10 @@ mod tests {
         );
         assert_eq!(settings.s3_settings.as_ref().unwrap().region, "us-east-1");
         assert_eq!(settings.s3_settings.as_ref().unwrap().bucket, "my-bucket");
+        assert_eq!(
+            settings.collection_root_dir.to_string_lossy(),
+            "/data/collections"
+        );
 
         // Clean up test credentials after test
         credentials_storage::delete_credentials().ok();
