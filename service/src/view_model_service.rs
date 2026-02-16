@@ -16,7 +16,7 @@ use core_types::{ArgumentType, FileType};
 #[derive(Debug, Clone, Default)]
 pub struct ReleaseFilter {
     pub system_id: Option<i64>,
-    pub software_title_id: Option<i64>,
+    pub software_title_ids: Vec<i64>,
     pub file_set_id: Option<i64>,
 }
 
@@ -300,7 +300,7 @@ impl ViewModelService {
             .get_release_repository()
             .get_releases(
                 filters.system_id,
-                filters.software_title_id,
+                filters.software_title_ids,
                 filters.file_set_id,
             )
             .await
