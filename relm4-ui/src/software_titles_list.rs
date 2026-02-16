@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
 use relm4::{
-    Component, ComponentParts, ComponentSender, RelmWidgetExt,
+    Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
         self,
         glib::{clone, object::ObjectExt},
-        prelude::{BoxExt, OrientableExt, SelectionModelExt, WidgetExt},
+        prelude::{BoxExt, ButtonExt, OrientableExt, SelectionModelExt, WidgetExt},
     },
     typed_view::list::TypedListView,
 };
@@ -13,13 +13,19 @@ use service::{
     error::Error, view_model_service::ViewModelService, view_models::SoftwareTitleListModel,
 };
 
-use crate::list_item::ListItem;
+use crate::{
+    list_item::ListItem,
+    software_title_merge_dialog::{
+        SoftwareTitleMergeDialog, SoftwareTitleMergeDialogMsg, SoftwareTitleMergeDialogOutputMsg,
+    },
+};
 
 #[derive(Debug)]
 pub struct SoftwareTitlesList {
     view_model_service: Arc<ViewModelService>,
     list_view_wrapper: TypedListView<ListItem, gtk::MultiSelection>,
     selected_items: Vec<ListItem>,
+    merge_dialog_controller: Controller<SoftwareTitleMergeDialog>,
 }
 
 #[derive(Debug)]
@@ -28,6 +34,8 @@ pub enum SoftwareTitleListMsg {
     FetchSoftwareTitles,
     AddSoftwareTitle(SoftwareTitleListModel),
     SelectionChanged { position: u32, n_items: u32 },
+    StartMerge,
+    StartMergeWith(i64),
 }
 
 #[derive(Debug)]
@@ -66,6 +74,13 @@ impl Component for SoftwareTitlesList {
                 #[local_ref]
                 list_view -> gtk::ListView {}
             },
+
+            gtk::Button {
+                set_label: "Merge",
+                connect_clicked => SoftwareTitleListMsg::StartMerge,
+                #[watch]
+                set_sensitive: model.selected_items.len() > 1,
+            }
         }
     }
 
@@ -77,10 +92,20 @@ impl Component for SoftwareTitlesList {
         let list_view_wrapper: TypedListView<ListItem, gtk::MultiSelection> =
             TypedListView::with_sorting();
 
+        let merge_dialog_controller = SoftwareTitleMergeDialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                SoftwareTitleMergeDialogOutputMsg::Selected(item) => {
+                    SoftwareTitleListMsg::StartMergeWith(item.id)
+                }
+            });
+
         let model = SoftwareTitlesList {
             view_model_service: init_model.view_model_service,
             list_view_wrapper,
             selected_items: Vec::new(),
+            merge_dialog_controller,
         };
         let list_view = &model.list_view_wrapper.view;
         let selection_model = &model.list_view_wrapper.selection_model;
@@ -150,6 +175,18 @@ impl Component for SoftwareTitlesList {
                         sender.output(SoftwareTitleListOutMsg::SoftwareTitleDeselected { id });
                     }
                 }
+            }
+            SoftwareTitleListMsg::StartMerge => {
+                let items_to_merge: Vec<ListItem> = self.selected_items.clone();
+                self.merge_dialog_controller
+                    .emit(SoftwareTitleMergeDialogMsg::Show {
+                        software_titles_to_merge: items_to_merge,
+                    });
+                println!("Start merge");
+            }
+            SoftwareTitleListMsg::StartMergeWith(id) => {
+                // call service to merge selected software titles with the given id
+                println!("Start merge with id: {}", id);
             }
         }
     }

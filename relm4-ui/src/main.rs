@@ -20,6 +20,7 @@ mod release_form_components;
 mod releases;
 mod settings_form;
 mod software_title_form;
+mod software_title_merge_dialog;
 mod software_title_selector;
 mod software_titles_list;
 mod status_bar;
