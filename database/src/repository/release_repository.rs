@@ -71,9 +71,9 @@ impl ReleaseRepository {
                 release_system rs ON r.id = rs.release_id
              INNER JOIN
                 system s ON rs.system_id = s.id
-             INNER JOIN
+             LEFT JOIN
                 release_file_set rfs ON r.id = rfs.release_id
-             INNER JOIN
+             LEFT JOIN
                 file_set fs ON rfs.file_set_id = fs.id
             WHERE
                 (? IS NULL OR s.id = ?)
@@ -126,6 +126,7 @@ impl ReleaseRepository {
                 .file_types
                 .unwrap_or_default()
                 .split(',')
+                .filter(|s| !s.is_empty())
                 .map(|ft| {
                     let int_ft: u8 = ft.parse().expect("Failed to parse file type as u8");
                     FileType::from_db_int(int_ft).expect("Invalid file type")
@@ -939,6 +940,10 @@ mod tests {
             .add_software_title("Test Software Title 2", None)
             .await
             .unwrap();
+        let software_title_id_3 = software_title_repository
+            .add_software_title("Test Software Title 3", None)
+            .await
+            .unwrap();
         // Add two releases with different software titles and systems
         let file_set_repository = FileSetRepository::new(pool.clone());
         let file_set_id = file_set_repository
@@ -976,6 +981,16 @@ mod tests {
             .await
             .unwrap();
 
+        let release_without_file_set_id = release_repository
+            .add_release_full(
+                "Test Release 3",
+                &[software_title_id_3],
+                &[],
+                &[system_id_2],
+            )
+            .await
+            .unwrap();
+
         let releases = release_repository
             .get_releases(Some(system_id), vec![], None)
             .await
@@ -1000,6 +1015,21 @@ mod tests {
         assert_eq!(releases.len(), 2);
         assert!(releases.iter().any(|r| r.id == release_id));
         assert!(releases.iter().any(|r| r.id == release_id2));
+
+        let releases = release_repository
+            .get_releases(None, vec![], Some(file_set_id))
+            .await
+            .unwrap();
+        assert_eq!(releases.len(), 2);
+        assert!(releases.iter().any(|r| r.id == release_id));
+        assert!(releases.iter().any(|r| r.id == release_id2));
+
+        let releases = release_repository
+            .get_releases(None, vec![software_title_id_3], None)
+            .await
+            .unwrap();
+        assert_eq!(releases.len(), 1);
+        assert_eq!(releases[0].id, release_without_file_set_id);
     }
 
     async fn insert_test_release(pool: &Pool<Sqlite>) -> i64 {
