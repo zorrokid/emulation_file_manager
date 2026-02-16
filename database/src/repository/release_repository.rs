@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use core_types::FileType;
-use sqlx::{Pool, Sqlite, query_as};
+use sqlx::{Pool, Sqlite};
 
 use crate::{
     database_error::{DatabaseError, Error},
@@ -51,10 +51,10 @@ impl ReleaseRepository {
     pub async fn get_releases(
         &self,
         system_id: Option<i64>,
-        software_title_id: Option<i64>,
+        software_title_ids: Vec<i64>,
         file_set_id: Option<i64>,
     ) -> Result<Vec<ReleaseExtended>, Error> {
-        let query = r#"
+        let mut query = r#"
             SELECT
                 r.id as id,
                 r.name as name,
@@ -71,27 +71,40 @@ impl ReleaseRepository {
                 release_system rs ON r.id = rs.release_id
              INNER JOIN
                 system s ON rs.system_id = s.id
-             INNER JOIN
+             LEFT JOIN
                 release_file_set rfs ON r.id = rfs.release_id
-             INNER JOIN
+             LEFT JOIN
                 file_set fs ON rfs.file_set_id = fs.id
             WHERE
                 (? IS NULL OR s.id = ?)
-                AND (? IS NULL OR st.id = ?)
                 AND (? IS NULL OR fs.id = ?)
-             GROUP BY
-                r.id, r.name;
-        "#;
+        "#
+        .to_string();
 
-        let raw_releases: Vec<ReleaseExtendedRaw> = query_as(query)
+        if !software_title_ids.is_empty() {
+            let placeholders = software_title_ids
+                .iter()
+                .map(|_| "?".to_string())
+                .collect::<Vec<String>>()
+                .join(", ");
+            query.push_str(&format!(" AND st.id IN ({})", placeholders));
+        }
+
+        query.push_str(" GROUP BY r.id, r.name;");
+
+        let mut q = sqlx::query_as::<_, ReleaseExtendedRaw>(&query)
             .bind(system_id)
             .bind(system_id)
-            .bind(software_title_id)
-            .bind(software_title_id)
             .bind(file_set_id)
-            .bind(file_set_id)
-            .fetch_all(&*self.pool)
-            .await?;
+            .bind(file_set_id);
+
+        if !software_title_ids.is_empty() {
+            for software_title_id in &software_title_ids {
+                q = q.bind(*software_title_id);
+            }
+        }
+
+        let raw_releases = q.fetch_all(&*self.pool).await?;
 
         let mut releases: Vec<ReleaseExtended> = Vec::new();
 
@@ -113,6 +126,7 @@ impl ReleaseRepository {
                 .file_types
                 .unwrap_or_default()
                 .split(',')
+                .filter(|s| !s.is_empty())
                 .map(|ft| {
                     let int_ft: u8 = ft.parse().expect("Failed to parse file type as u8");
                     FileType::from_db_int(int_ft).expect("Invalid file type")
@@ -448,7 +462,7 @@ impl ReleaseRepository {
 
 #[cfg(test)]
 mod tests {
-    use core_types::ImportedFile;
+    use core_types::{ImportedFile, Sha1Checksum};
 
     use super::*;
     use crate::{
@@ -462,8 +476,7 @@ mod tests {
 
     #[async_std::test]
     async fn test_release_repository() {
-        let pool = setup_test_db().await;
-        let pool = Arc::new(pool);
+        let pool = Arc::new(setup_test_db().await);
         let release_repository = ReleaseRepository::new(pool.clone());
 
         let software_title_repository = SoftwareTitleRepository::new(pool.clone());
@@ -908,6 +921,115 @@ mod tests {
                 .await
                 .unwrap();
         assert_eq!(release_exists, 1);
+    }
+
+    #[async_std::test]
+    async fn test_get_releases() {
+        let file_1_sha: Sha1Checksum = [0; 20];
+        let pool = Arc::new(setup_test_db().await);
+        let release_repository = ReleaseRepository::new(pool.clone());
+        let software_title_repository = SoftwareTitleRepository::new(pool.clone());
+        let system_repository = SystemRepository::new(pool.clone());
+        let system_id = system_repository.add_system("Test System").await.unwrap();
+        let system_id_2 = system_repository.add_system("Test System 2").await.unwrap();
+        let software_title_id = software_title_repository
+            .add_software_title("Test Software Title", None)
+            .await
+            .unwrap();
+        let software_title_id_2 = software_title_repository
+            .add_software_title("Test Software Title 2", None)
+            .await
+            .unwrap();
+        let software_title_id_3 = software_title_repository
+            .add_software_title("Test Software Title 3", None)
+            .await
+            .unwrap();
+        // Add two releases with different software titles and systems
+        let file_set_repository = FileSetRepository::new(pool.clone());
+        let file_set_id = file_set_repository
+            .add_file_set(
+                "Test file set",
+                "File Set 1",
+                &FileType::Rom,
+                "",
+                &[ImportedFile {
+                    original_file_name: "File1.bin".to_string(),
+                    archive_file_name: "File1.zst".to_string(),
+                    file_size: 1024,
+                    sha1_checksum: file_1_sha,
+                }],
+                &[system_id],
+            )
+            .await
+            .unwrap();
+        let release_id = release_repository
+            .add_release_full(
+                "Test Release",
+                &[software_title_id],
+                &[file_set_id],
+                &[system_id],
+            )
+            .await
+            .unwrap();
+        let release_id2 = release_repository
+            .add_release_full(
+                "Test Release 2",
+                &[software_title_id_2],
+                &[file_set_id],
+                &[system_id_2],
+            )
+            .await
+            .unwrap();
+
+        let release_without_file_set_id = release_repository
+            .add_release_full(
+                "Test Release 3",
+                &[software_title_id_3],
+                &[],
+                &[system_id_2],
+            )
+            .await
+            .unwrap();
+
+        let releases = release_repository
+            .get_releases(Some(system_id), vec![], None)
+            .await
+            .unwrap();
+        assert_eq!(releases.len(), 1);
+        assert_eq!(releases[0].id, release_id);
+        let releases = release_repository
+            .get_releases(None, vec![software_title_id_2], None)
+            .await
+            .unwrap();
+        assert_eq!(releases.len(), 1);
+        assert_eq!(releases[0].id, release_id2);
+        let releases = release_repository
+            .get_releases(Some(system_id), vec![software_title_id_2], None)
+            .await
+            .unwrap();
+        assert_eq!(releases.len(), 0);
+        let releases = release_repository
+            .get_releases(None, vec![software_title_id, software_title_id_2], None)
+            .await
+            .unwrap();
+        assert_eq!(releases.len(), 2);
+        assert!(releases.iter().any(|r| r.id == release_id));
+        assert!(releases.iter().any(|r| r.id == release_id2));
+
+        let releases = release_repository
+            .get_releases(None, vec![], Some(file_set_id))
+            .await
+            .unwrap();
+        assert_eq!(releases.len(), 2);
+        assert!(releases.iter().any(|r| r.id == release_id));
+        assert!(releases.iter().any(|r| r.id == release_id2));
+
+        let releases = release_repository
+            .get_releases(None, vec![software_title_id_3], None)
+            .await
+            .unwrap();
+        assert_eq!(releases.len(), 1);
+        assert_eq!(releases[0].id, release_without_file_set_id);
     }
 
     async fn insert_test_release(pool: &Pool<Sqlite>) -> i64 {
