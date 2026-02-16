@@ -46,6 +46,7 @@ pub struct InitResult {
 pub enum AppMsg {
     Initialize,
     SoftwareTitleSelected { id: i64 },
+    SoftwareTitleDeselected { id: i64 },
     SoftwareTitleCreated(SoftwareTitleListModel),
     SoftwareTitleUpdated(SoftwareTitleListModel),
     ReleaseSelected { id: i64 },
@@ -219,6 +220,19 @@ impl Component for AppModel {
                     .get()
                     .expect("ReleasesModel not initialized")
                     .emit(ReleasesMsg::SoftwareTitleSelected { id });
+                // TODO: this might not be working correctly now after multiple releases can be
+                // selected, need to verify and fix if necessary
+                self.release
+                    .get()
+                    .expect("Release widget not initialized")
+                    .sender()
+                    .emit(ReleaseMsg::Clear);
+            }
+            AppMsg::SoftwareTitleDeselected { id } => {
+                self.releases
+                    .get()
+                    .expect("ReleasesModel not initialized")
+                    .emit(ReleasesMsg::SoftwareTitleDeselected { id });
                 self.release
                     .get()
                     .expect("Release widget not initialized")
@@ -655,6 +669,10 @@ impl AppModel {
                 SoftwareTitleListOutMsg::SoftwareTitleSelected { id } => {
                     AppMsg::SoftwareTitleSelected { id }
                 }
+                SoftwareTitleListOutMsg::SoftwareTitleDeselected { id } => {
+                    AppMsg::SoftwareTitleDeselected { id }
+                }
+
                 SoftwareTitleListOutMsg::ShowError(err_msg) => AppMsg::ShowError(err_msg),
             });
 

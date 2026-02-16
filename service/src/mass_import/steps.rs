@@ -1189,7 +1189,7 @@ mod tests {
         let release = deps
             .repository_manager
             .get_release_repository()
-            .get_releases(None, None, Some(existing_file_set_id))
+            .get_releases(None, vec![], Some(existing_file_set_id))
             .await
             .expect("Failed to get release by file set ID");
 

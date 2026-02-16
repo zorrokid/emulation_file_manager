@@ -4,7 +4,6 @@ use relm4::{
     Component, ComponentParts, ComponentSender, RelmWidgetExt,
     gtk::{
         self,
-        gio::prelude::ListModelExt,
         glib::{clone, object::ObjectExt},
         prelude::{BoxExt, OrientableExt, SelectionModelExt, WidgetExt},
     },
@@ -39,6 +38,7 @@ pub enum SoftwareTitleListCmdMsg {
 #[derive(Debug)]
 pub enum SoftwareTitleListOutMsg {
     SoftwareTitleSelected { id: i64 },
+    SoftwareTitleDeselected { id: i64 },
     ShowError(String),
 }
 
@@ -136,14 +136,18 @@ impl Component for SoftwareTitlesList {
                         let software_title = self.list_view_wrapper.get_visible(i);
                         if let Some(software_title) = software_title {
                             let software_title = software_title.borrow().clone();
+                            let id = software_title.id;
                             println!("Selected: {:?}", software_title);
                             self.selected_items.push(software_title);
+                            sender.output(SoftwareTitleListOutMsg::SoftwareTitleSelected { id });
                         }
                     } else if let Some(software_title) = self.list_view_wrapper.get_visible(i) {
                         let software_title = software_title.borrow().clone();
+                        let id = software_title.id;
                         println!("Deselected: {:?}", software_title);
                         self.selected_items
                             .retain(|item| item.id != software_title.id);
+                        sender.output(SoftwareTitleListOutMsg::SoftwareTitleDeselected { id });
                     }
                 }
             }

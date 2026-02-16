@@ -24,6 +24,7 @@ use crate::{
 #[derive(Debug)]
 pub enum ReleasesMsg {
     SoftwareTitleSelected { id: i64 },
+    SoftwareTitleDeselected { id: i64 },
     ReleaseSelected,
     StartAddRelease,
     AddRelease(ReleaseListModel),
@@ -47,7 +48,7 @@ pub struct ReleasesModel {
     repository_manager: Arc<RepositoryManager>,
     release_form: Controller<ReleaseFormModel>,
     releases_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
-    selected_software_title_id: Option<i64>,
+    selected_software_title_ids: Vec<i64>,
 }
 
 pub struct ReleasesInit {
@@ -146,7 +147,7 @@ impl Component for ReleasesModel {
             repository_manager: init_model.repository_manager,
             release_form,
             releases_list_view_wrapper: TypedListView::new(),
-            selected_software_title_id: None,
+            selected_software_title_ids: vec![],
         };
         let releases_list_view = &model.releases_list_view_wrapper.view;
         let selection_model = &model.releases_list_view_wrapper.selection_model;
@@ -166,28 +167,33 @@ impl Component for ReleasesModel {
         match msg {
             ReleasesMsg::SoftwareTitleSelected { id } => {
                 tracing::info!(id = id, "Software title selected");
-                self.selected_software_title_id = Some(id);
+                self.selected_software_title_ids.push(id);
                 sender.input(ReleasesMsg::FetchReleases);
             }
+            ReleasesMsg::SoftwareTitleDeselected { id } => {
+                tracing::info!(id = id, "Software title deselected");
+                // remove the id from selected_software_title_ids
+                self.selected_software_title_ids.retain(|&x| x != id);
+                self.releases_list_view_wrapper.clear();
+            }
             ReleasesMsg::FetchReleases => {
-                if let Some(software_title_id) = self.selected_software_title_id {
-                    tracing::info!(
-                        id = software_title_id,
-                        "Fetching releases for software title",
-                    );
+                tracing::info!(
+                    ids = ?self.selected_software_title_ids,
+                    "Fetching releases for software title",
+                );
 
-                    let view_model_service = Arc::clone(&self.view_model_service);
-                    sender.oneshot_command(async move {
-                        let releases_result = view_model_service
-                            .get_release_list_models(ReleaseFilter {
-                                software_title_id: Some(software_title_id),
-                                system_id: None,
-                                file_set_id: None,
-                            })
-                            .await;
-                        CommandMsg::FetchedReleases(releases_result)
-                    });
-                }
+                let view_model_service = Arc::clone(&self.view_model_service);
+                let software_title_ids = self.selected_software_title_ids.clone();
+                sender.oneshot_command(async move {
+                    let releases_result = view_model_service
+                        .get_release_list_models(ReleaseFilter {
+                            software_title_ids,
+                            system_id: None,
+                            file_set_id: None,
+                        })
+                        .await;
+                    CommandMsg::FetchedReleases(releases_result)
+                });
             }
             ReleasesMsg::ReleaseSelected => {
                 if let Some(selected_id) = self.get_selected_release_id() {
