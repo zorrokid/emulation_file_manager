@@ -172,9 +172,8 @@ impl Component for ReleasesModel {
             }
             ReleasesMsg::SoftwareTitleDeselected { id } => {
                 tracing::info!(id = id, "Software title deselected");
-                // remove the id from selected_software_title_ids
                 self.selected_software_title_ids.retain(|&x| x != id);
-                self.releases_list_view_wrapper.clear();
+                sender.input(ReleasesMsg::FetchReleases);
             }
             ReleasesMsg::FetchReleases => {
                 tracing::info!(
