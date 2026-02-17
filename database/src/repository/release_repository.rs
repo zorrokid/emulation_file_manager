@@ -144,9 +144,10 @@ impl ReleaseRepository {
         Ok(releases)
     }
 
-    pub async fn get_releases_with_software_title(
+    pub async fn get_releases_by_software_title_with_tx(
         &self,
         software_title_id: i64,
+        transaction: &mut sqlx::Transaction<'_, Sqlite>,
     ) -> Result<Vec<Release>, DatabaseError> {
         let releases = sqlx::query_as!(
             Release,
@@ -157,10 +158,21 @@ impl ReleaseRepository {
              WHERE rst.software_title_id = ?",
             software_title_id
         )
-        .fetch_all(&*self.pool)
+        .fetch_all(&mut **transaction)
         .await?;
-
         Ok(releases)
+    }
+
+    pub async fn get_releases_by_software_title(
+        &self,
+        software_title_id: i64,
+    ) -> Result<Vec<Release>, DatabaseError> {
+        let mut transaction = self.pool.begin().await?;
+        let result = self
+            .get_releases_by_software_title_with_tx(software_title_id, &mut transaction)
+            .await?;
+        transaction.commit().await?;
+        Ok(result)
     }
 
     pub async fn add_release(&self, release_name: &str) -> Result<i64, DatabaseError> {
@@ -419,17 +431,46 @@ impl ReleaseRepository {
         Ok(id)
     }
 
-    pub async fn add_software_title_to_release(
+    pub async fn add_software_title_to_release_with_tx(
         &self,
         release_id: i64,
         software_title_id: i64,
+        transaction: &mut sqlx::Transaction<'_, Sqlite>,
     ) -> Result<(), DatabaseError> {
         sqlx::query!(
             "INSERT INTO release_software_title (release_id, software_title_id) VALUES (?, ?)",
             release_id,
             software_title_id
         )
-        .execute(&*self.pool)
+        .execute(&mut **transaction)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn add_software_title_to_release(
+        &self,
+        release_id: i64,
+        software_title_id: i64,
+    ) -> Result<(), DatabaseError> {
+        let mut transaction = self.pool.begin().await?;
+        self.add_software_title_to_release_with_tx(release_id, software_title_id, &mut transaction)
+            .await?;
+        transaction.commit().await?;
+        Ok(())
+    }
+
+    pub async fn remove_software_title_from_release_with_tx(
+        &self,
+        release_id: i64,
+        software_title_id: i64,
+        transaction: &mut sqlx::Transaction<'_, Sqlite>,
+    ) -> Result<(), DatabaseError> {
+        sqlx::query!(
+            "DELETE FROM release_software_title WHERE release_id = ? AND software_title_id = ?",
+            release_id,
+            software_title_id
+        )
+        .execute(&mut **transaction)
         .await?;
         Ok(())
     }
@@ -439,13 +480,14 @@ impl ReleaseRepository {
         release_id: i64,
         software_title_id: i64,
     ) -> Result<(), DatabaseError> {
-        sqlx::query!(
-            "DELETE FROM release_software_title WHERE release_id = ? AND software_title_id = ?",
+        let mut transaction = self.pool.begin().await?;
+        self.remove_software_title_from_release_with_tx(
             release_id,
-            software_title_id
+            software_title_id,
+            &mut transaction,
         )
-        .execute(&*self.pool)
         .await?;
+        transaction.commit().await?;
         Ok(())
     }
 
@@ -497,7 +539,7 @@ mod tests {
             .unwrap();
 
         let release = release_repository
-            .get_releases_with_software_title(software_title_id)
+            .get_releases_by_software_title(software_title_id)
             .await
             .unwrap();
         assert_eq!(release.len(), 1);
@@ -640,7 +682,7 @@ mod tests {
 
         // Verify the software title was added
         let releases = release_repository
-            .get_releases_with_software_title(software_title_1_id)
+            .get_releases_by_software_title(software_title_1_id)
             .await
             .unwrap();
         assert_eq!(releases.len(), 1);
@@ -691,19 +733,19 @@ mod tests {
 
         // Verify the software titles were updated
         let releases = release_repository
-            .get_releases_with_software_title(software_title_2_id)
+            .get_releases_by_software_title(software_title_2_id)
             .await
             .unwrap();
         assert_eq!(releases.len(), 1);
         assert_eq!(releases[0].name, "Updated Release");
         let releases = release_repository
-            .get_releases_with_software_title(software_title_3_id)
+            .get_releases_by_software_title(software_title_3_id)
             .await
             .unwrap();
         assert_eq!(releases.len(), 1);
         assert_eq!(releases[0].name, "Updated Release");
         let releases = release_repository
-            .get_releases_with_software_title(software_title_1_id)
+            .get_releases_by_software_title(software_title_1_id)
             .await
             .unwrap();
         assert_eq!(releases.len(), 0);

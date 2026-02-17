@@ -14,5 +14,6 @@ pub mod file_type_migration;
 pub mod mass_import;
 pub mod pipeline;
 pub mod settings_service;
+pub mod software_title_service;
 pub mod view_model_service;
 pub mod view_models;
