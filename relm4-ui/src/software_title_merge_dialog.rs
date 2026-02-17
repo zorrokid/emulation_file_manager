@@ -125,13 +125,13 @@ impl Component for SoftwareTitleMergeDialog {
                 software_titles_to_merge,
             } => {
                 self.software_titles_to_merge = software_titles_to_merge;
-                self.selected_list_item = None;
-                self.list_view_wrapper.clear();
                 self.list_view_wrapper
                     .extend_from_iter(self.software_titles_to_merge.clone());
                 root.show();
             }
             SoftwareTitleMergeDialogMsg::Hide => {
+                self.selected_list_item = None;
+                self.list_view_wrapper.clear();
                 root.hide();
             }
             SoftwareTitleMergeDialogMsg::SelectionChanged => {

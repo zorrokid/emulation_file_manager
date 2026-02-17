@@ -7,6 +7,7 @@ pub enum SoftwareTitleServiceError {
     DatabaseError(String),
 }
 
+#[derive(Debug)]
 pub struct SoftwareTitleService {
     repository_manager: Arc<RepositoryManager>,
 }
@@ -32,6 +33,16 @@ impl SoftwareTitleService {
         base_software_title_id: i64,
         software_title_ids_to_merge: &[i64],
     ) -> Result<(), SoftwareTitleServiceError> {
+        if software_title_ids_to_merge.is_empty() {
+            return Ok(());
+        }
+        // Ensure the base software title is not included in the list of software titles to merge
+        let software_title_ids_to_merge = software_title_ids_to_merge
+            .iter()
+            .filter(|id| **id != base_software_title_id)
+            .cloned()
+            .collect::<Vec<_>>();
+
         let mut transaction = self
             .repository_manager
             .begin_transaction()
@@ -51,7 +62,7 @@ impl SoftwareTitleService {
             let releases = self
                 .repository_manager
                 .get_release_repository()
-                .get_releases_by_software_title_with_tx(*id, &mut transaction)
+                .get_releases_by_software_title_with_tx(id, &mut transaction)
                 .await
                 .map_err(|e| SoftwareTitleServiceError::DatabaseError(format!("{:?}", e)))?;
 
@@ -60,7 +71,7 @@ impl SoftwareTitleService {
             for release_id in &release_ids {
                 self.repository_manager
                     .get_release_repository()
-                    .remove_software_title_from_release_with_tx(*release_id, *id, &mut transaction)
+                    .remove_software_title_from_release_with_tx(*release_id, id, &mut transaction)
                     .await
                     .map_err(|e| SoftwareTitleServiceError::DatabaseError(format!("{:?}", e)))?;
 
@@ -91,7 +102,7 @@ impl SoftwareTitleService {
             }
             self.repository_manager
                 .get_software_title_repository()
-                .delete_software_title_with_tx(*id, &mut transaction)
+                .delete_software_title_with_tx(id, &mut transaction)
                 .await
                 .map_err(|e| SoftwareTitleServiceError::DatabaseError(format!("{:?}", e)))?;
         }

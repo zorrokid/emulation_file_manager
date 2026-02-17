@@ -34,6 +34,7 @@ pub enum ReleasesMsg {
     SofwareTitleUpdated(SoftwareTitleListModel),
     RemoveRelease,
     EditRelease,
+    Clear,
 }
 
 #[derive(Debug)]
@@ -174,6 +175,11 @@ impl Component for ReleasesModel {
                 tracing::info!(id = id, "Software title deselected");
                 self.selected_software_title_ids.retain(|&x| x != id);
                 sender.input(ReleasesMsg::FetchReleases);
+            }
+            ReleasesMsg::Clear => {
+                tracing::info!("Clearing selected software titles");
+                self.selected_software_title_ids.clear();
+                self.releases_list_view_wrapper.clear();
             }
             ReleasesMsg::FetchReleases => {
                 tracing::info!(
