@@ -100,6 +100,22 @@ impl SoftwareTitleRepository {
         Ok(software_title.id)
     }
 
+    pub async fn delete_software_title_with_tx(
+        &self,
+        id: i64,
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    ) -> Result<i64, DatabaseError> {
+        let tx = &mut **tx;
+
+        if self.is_software_title_in_use_with_tx(&mut *tx, id).await? {
+            return Err(DatabaseError::InUse);
+        }
+        sqlx::query!("DELETE FROM software_title WHERE id = ?", id)
+            .execute(&mut *tx)
+            .await?;
+        Ok(id)
+    }
+
     pub async fn delete_software_title(&self, id: i64) -> Result<i64, DatabaseError> {
         if self.is_software_title_in_use(id).await? {
             return Err(DatabaseError::InUse);
@@ -110,14 +126,28 @@ impl SoftwareTitleRepository {
         Ok(id)
     }
 
-    pub async fn is_software_title_in_use(&self, id: i64) -> Result<bool, DatabaseError> {
+    async fn is_software_title_in_use_with_tx<'e, E>(
+        &self,
+        executor: E,
+        id: i64,
+    ) -> Result<bool, DatabaseError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+    {
         let count = sqlx::query_scalar!(
             "SELECT COUNT(*) FROM release_software_title WHERE software_title_id = ?",
             id
         )
-        .fetch_one(&*self.pool)
+        .fetch_one(executor)
         .await?;
         Ok(count > 0)
+    }
+
+    pub async fn is_software_title_in_use(&self, id: i64) -> Result<bool, DatabaseError> {
+        let mut tx = self.pool.begin().await?;
+        let res = self.is_software_title_in_use_with_tx(&mut *tx, id).await?;
+        tx.commit().await?;
+        Ok(res)
     }
 }
 
