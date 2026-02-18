@@ -47,6 +47,7 @@ pub enum AppMsg {
     Initialize,
     SoftwareTitleSelected { id: i64 },
     SoftwareTitleDeselected { id: i64 },
+    ClearSelectedSoftwareTitles,
     SoftwareTitleCreated(SoftwareTitleListModel),
     SoftwareTitleUpdated(SoftwareTitleListModel),
     ReleaseSelected { id: i64 },
@@ -59,6 +60,7 @@ pub enum AppMsg {
     UpdateSettings,
     CloseRequested,
     ShowError(String),
+    ShowMessage(String),
     OpenImportDialog,
 }
 
@@ -239,6 +241,17 @@ impl Component for AppModel {
                     .sender()
                     .emit(ReleaseMsg::Clear);
             }
+            AppMsg::ClearSelectedSoftwareTitles => {
+                self.releases
+                    .get()
+                    .expect("ReleasesModel not initialized")
+                    .emit(ReleasesMsg::Clear);
+                self.release
+                    .get()
+                    .expect("Release widget not initialized")
+                    .sender()
+                    .emit(ReleaseMsg::Clear);
+            }
             AppMsg::SoftwareTitleCreated(software_title_list_model) => {
                 self.software_titles
                     .get()
@@ -267,6 +280,7 @@ impl Component for AppModel {
             }
             AppMsg::CloseRequested => self.process_close_requested(root),
             AppMsg::ShowError(error_msg) => show_error_dialog(error_msg, root),
+            AppMsg::ShowMessage(msg) => show_info_dialog(msg, root),
             AppMsg::OpenImportDialog => self.open_import_dialog(root),
         }
     }
@@ -660,8 +674,12 @@ impl AppModel {
 
     fn post_process_initialize(&self, sender: &ComponentSender<Self>, init_result: InitResult) {
         let view_model_service = Arc::clone(&init_result.view_model_service);
+        let repository_manager = Arc::clone(&init_result.repository_manager);
 
-        let software_title_list_init = SoftwareTitleListInit { view_model_service };
+        let software_title_list_init = SoftwareTitleListInit {
+            view_model_service,
+            repository_manager,
+        };
 
         let software_titles_list = SoftwareTitlesList::builder()
             .launch(software_title_list_init)
@@ -672,8 +690,10 @@ impl AppModel {
                 SoftwareTitleListOutMsg::SoftwareTitleDeselected { id } => {
                     AppMsg::SoftwareTitleDeselected { id }
                 }
+                SoftwareTitleListOutMsg::ClearSelected => AppMsg::ClearSelectedSoftwareTitles,
 
                 SoftwareTitleListOutMsg::ShowError(err_msg) => AppMsg::ShowError(err_msg),
+                SoftwareTitleListOutMsg::ShowMessage(msg) => AppMsg::ShowMessage(msg),
             });
 
         let view_model_service = Arc::clone(&init_result.view_model_service);

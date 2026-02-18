@@ -1,25 +1,36 @@
 use std::sync::Arc;
 
+use database::repository_manager::RepositoryManager;
 use relm4::{
-    Component, ComponentParts, ComponentSender, RelmWidgetExt,
+    Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
         self,
-        glib::{clone, object::ObjectExt},
-        prelude::{BoxExt, OrientableExt, SelectionModelExt, WidgetExt},
+        glib::clone,
+        prelude::{BoxExt, ButtonExt, OrientableExt, SelectionModelExt, WidgetExt},
     },
     typed_view::list::TypedListView,
 };
 use service::{
-    error::Error, view_model_service::ViewModelService, view_models::SoftwareTitleListModel,
+    error::Error,
+    software_title_service::{SoftwareTitleService, SoftwareTitleServiceError},
+    view_model_service::ViewModelService,
+    view_models::SoftwareTitleListModel,
 };
 
-use crate::list_item::ListItem;
+use crate::{
+    list_item::ListItem,
+    software_title_merge_dialog::{
+        SoftwareTitleMergeDialog, SoftwareTitleMergeDialogMsg, SoftwareTitleMergeDialogOutputMsg,
+    },
+};
 
 #[derive(Debug)]
 pub struct SoftwareTitlesList {
     view_model_service: Arc<ViewModelService>,
     list_view_wrapper: TypedListView<ListItem, gtk::MultiSelection>,
     selected_items: Vec<ListItem>,
+    merge_dialog_controller: Controller<SoftwareTitleMergeDialog>,
+    software_title_service: Arc<SoftwareTitleService>,
 }
 
 #[derive(Debug)]
@@ -28,22 +39,28 @@ pub enum SoftwareTitleListMsg {
     FetchSoftwareTitles,
     AddSoftwareTitle(SoftwareTitleListModel),
     SelectionChanged { position: u32, n_items: u32 },
+    StartMerge,
+    StartMergeWith(i64),
 }
 
 #[derive(Debug)]
 pub enum SoftwareTitleListCmdMsg {
     SoftwareTitlesFetched(Result<Vec<SoftwareTitleListModel>, Error>),
+    ProcessMergeResult(Result<(), SoftwareTitleServiceError>),
 }
 
 #[derive(Debug)]
 pub enum SoftwareTitleListOutMsg {
     SoftwareTitleSelected { id: i64 },
     SoftwareTitleDeselected { id: i64 },
+    ClearSelected,
     ShowError(String),
+    ShowMessage(String),
 }
 
 #[derive(Debug)]
 pub struct SoftwareTitleListInit {
+    pub repository_manager: Arc<RepositoryManager>,
     pub view_model_service: Arc<ViewModelService>,
 }
 
@@ -66,6 +83,13 @@ impl Component for SoftwareTitlesList {
                 #[local_ref]
                 list_view -> gtk::ListView {}
             },
+
+            gtk::Button {
+                set_label: "Merge",
+                connect_clicked => SoftwareTitleListMsg::StartMerge,
+                #[watch]
+                set_sensitive: model.selected_items.len() > 1,
+            }
         }
     }
 
@@ -77,16 +101,28 @@ impl Component for SoftwareTitlesList {
         let list_view_wrapper: TypedListView<ListItem, gtk::MultiSelection> =
             TypedListView::with_sorting();
 
+        let merge_dialog_controller = SoftwareTitleMergeDialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                SoftwareTitleMergeDialogOutputMsg::Selected(item) => {
+                    SoftwareTitleListMsg::StartMergeWith(item.id)
+                }
+            });
+
+        let software_title_service = Arc::new(SoftwareTitleService::new(Arc::clone(
+            &init_model.repository_manager,
+        )));
+
         let model = SoftwareTitlesList {
             view_model_service: init_model.view_model_service,
             list_view_wrapper,
             selected_items: Vec::new(),
+            merge_dialog_controller,
+            software_title_service,
         };
         let list_view = &model.list_view_wrapper.view;
         let selection_model = &model.list_view_wrapper.selection_model;
-        for prop in selection_model.list_properties() {
-            println!("property: {}", prop.name());
-        }
 
         selection_model.connect_selection_changed(clone!(
             #[strong]
@@ -114,11 +150,13 @@ impl Component for SoftwareTitlesList {
                 let item = self.list_view_wrapper.get_visible(index);
                 if let Some(item) = item {
                     let id = item.borrow().id;
-                    sender
-                        .output(SoftwareTitleListOutMsg::SoftwareTitleSelected { id })
-                        .unwrap_or_else(|res| {
-                            eprintln!("Failed to send SoftwareTitleSelected message: {:?}", res);
-                        });
+                    let res = sender.output(SoftwareTitleListOutMsg::SoftwareTitleSelected { id });
+                    if let Err(e) = res {
+                        tracing::error!(
+                            error = ?e,
+                            "Failed to send SoftwareTitleSelected message"
+                        );
+                    }
                 }
             }
             SoftwareTitleListMsg::AddSoftwareTitle(software_title) => {
@@ -139,17 +177,51 @@ impl Component for SoftwareTitlesList {
                             let id = software_title.id;
                             println!("Selected: {:?}", software_title);
                             self.selected_items.push(software_title);
-                            sender.output(SoftwareTitleListOutMsg::SoftwareTitleSelected { id });
+                            let res = sender
+                                .output(SoftwareTitleListOutMsg::SoftwareTitleSelected { id });
+                            if let Err(e) = res {
+                                tracing::error!(
+                                    error = ?e,
+                                    "Failed to send SoftwareTitleSelected message"
+                                );
+                            }
                         }
                     } else if let Some(software_title) = self.list_view_wrapper.get_visible(i) {
                         let software_title = software_title.borrow().clone();
                         let id = software_title.id;
-                        println!("Deselected: {:?}", software_title);
                         self.selected_items
                             .retain(|item| item.id != software_title.id);
-                        sender.output(SoftwareTitleListOutMsg::SoftwareTitleDeselected { id });
+                        let res =
+                            sender.output(SoftwareTitleListOutMsg::SoftwareTitleDeselected { id });
+                        if let Err(e) = res {
+                            tracing::error!(
+                                error = ?e,
+                                "Failed to send SoftwareTitleDeselected message"
+                            );
+                        }
                     }
                 }
+            }
+            SoftwareTitleListMsg::StartMerge => {
+                let items_to_merge: Vec<ListItem> = self.selected_items.clone();
+                self.merge_dialog_controller
+                    .emit(SoftwareTitleMergeDialogMsg::Show {
+                        software_titles_to_merge: items_to_merge,
+                    });
+                println!("Start merge");
+            }
+            SoftwareTitleListMsg::StartMergeWith(id) => {
+                let service = Arc::clone(&self.software_title_service);
+                let ids_to_be_merged: Vec<i64> = self
+                    .selected_items
+                    .iter()
+                    .filter(|item| item.id != id)
+                    .map(|item| item.id)
+                    .collect();
+                sender.oneshot_command(async move {
+                    let res = service.merge(id, &ids_to_be_merged).await;
+                    SoftwareTitleListCmdMsg::ProcessMergeResult(res)
+                });
             }
         }
     }
@@ -172,18 +244,52 @@ impl Component for SoftwareTitlesList {
                 self.list_view_wrapper.extend_from_iter(items);
             }
             SoftwareTitleListCmdMsg::SoftwareTitlesFetched(Err(err)) => {
-                tracing::error!(error = ?err, "Failed to fetch software titles");
-                sender
-                    .output(SoftwareTitleListOutMsg::ShowError(format!(
-                        "Failed to fetch software titles: {:?}",
-                        err
-                    )))
-                    .unwrap_or_else(|e| {
-                        tracing::error!(
-                        error = ?e, "Failed to send ShowError message"
-                        )
-                    });
+                self.show_error(&sender, "Failed to fetch software titles", &err);
             }
+            SoftwareTitleListCmdMsg::ProcessMergeResult(Ok(())) => {
+                self.show_message(&sender, "Software titles merged successfully");
+                self.selected_items.clear();
+                sender.input(SoftwareTitleListMsg::FetchSoftwareTitles);
+                let res = sender.output(SoftwareTitleListOutMsg::ClearSelected);
+                if let Err(e) = res {
+                    tracing::error!(
+                        error = ?e,
+                        "Failed to send ClearSelected message"
+                    );
+                }
+            }
+            SoftwareTitleListCmdMsg::ProcessMergeResult(Err(err)) => {
+                self.show_error(&sender, "Failed to merge software titles", &err);
+            }
+        }
+    }
+}
+
+impl SoftwareTitlesList {
+    fn show_error(
+        &self,
+        sender: &ComponentSender<Self>,
+        message: &str,
+        err: &impl std::fmt::Debug,
+    ) {
+        tracing::error!(error = ?err, message);
+        let res = sender.output(SoftwareTitleListOutMsg::ShowError(format!(
+            "{}: {:?}",
+            message, err
+        )));
+        if let Err(e) = res {
+            tracing::error!(
+            error = ?e, "Failed to send ShowError message"
+            );
+        }
+    }
+
+    fn show_message(&self, sender: &ComponentSender<Self>, message: &str) {
+        let res = sender.output(SoftwareTitleListOutMsg::ShowMessage(message.to_string()));
+        if let Err(e) = res {
+            tracing::error!(
+            error = ?e, "Failed to send ShowMessage message"
+            );
         }
     }
 }
