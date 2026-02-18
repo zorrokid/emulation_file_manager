@@ -1,6 +1,7 @@
 use gtk::prelude::*;
 use gtk::{Box as GtkBox, Label, Orientation, ProgressBar};
 use relm4::prelude::*;
+use relm4::typed_view::list::{RelmListItem, TypedListView};
 
 #[derive(Debug)]
 pub enum StatusBarMsg {
@@ -11,12 +12,57 @@ pub enum StatusBarMsg {
     Fail(String),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum MessageStatus {
+    Info,
+    Warning,
+    Error,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MessageListItem {
+    message: String,
+    status: MessageStatus,
+}
+
+pub struct ListItemWidgets {
+    label: gtk::Label,
+}
+
+impl RelmListItem for MessageListItem {
+    type Root = gtk::Box;
+    type Widgets = ListItemWidgets;
+
+    fn setup(_item: &gtk::ListItem) -> (gtk::Box, ListItemWidgets) {
+        relm4::view! {
+            my_box = gtk::Box {
+                set_orientation: gtk::Orientation::Horizontal,
+                #[name = "label"]
+                gtk::Label,
+                // TODO: add an icon for the status
+            }
+        }
+
+        let widgets = ListItemWidgets { label };
+
+        (my_box, widgets)
+    }
+
+    fn bind(&mut self, widgets: &mut Self::Widgets, _root: &mut Self::Root) {
+        let ListItemWidgets { label } = widgets;
+        label.set_label(self.message.as_str());
+        // TODO: set the icon based on the status
+    }
+}
+
 #[tracker::track]
 pub struct StatusBarModel {
     status_text: String,
     total: i64,
     done: i64,
     syncing: bool,
+    #[tracker::do_not_track]
+    message_list_view_wrapper: TypedListView<MessageListItem, gtk::NoSelection>,
 }
 
 #[relm4::component(pub)]
@@ -28,38 +74,53 @@ impl SimpleComponent for StatusBarModel {
     view! {
         #[root]
         GtkBox {
-            set_orientation: Orientation::Horizontal,
+            set_orientation: Orientation::Vertical,
             set_spacing: 8,
             set_margin_all: 6,
 
-            Label {
-                #[watch]
-                set_label: &model.status_text,
+            GtkBox {
+                set_orientation: Orientation::Horizontal,
+                set_spacing: 8,
+                set_margin_all: 6,
+
+                Label {
+                    #[watch]
+                    set_label: &model.status_text,
+                },
+
+                ProgressBar {
+                    #[watch]
+                    set_visible: model.syncing,
+                    #[watch]
+                    set_fraction: if model.total > 0 {
+                        model.done as f64 / model.total as f64
+                    } else {
+                        0.0
+                    },
+                    set_hexpand: true,
+                }
+            },
+            gtk::ScrolledWindow {
+                set_vexpand: true,
+                #[local_ref]
+                message_list -> gtk::ListView {},
             },
 
-            ProgressBar {
-                #[watch]
-                set_visible: model.syncing,
-                #[watch]
-                set_fraction: if model.total > 0 {
-                    model.done as f64 / model.total as f64
-                } else {
-                    0.0
-                },
-                set_hexpand: true,
-            }
         }
     }
 
     fn init(_init: (), root: Self::Root, _sender: ComponentSender<Self>) -> ComponentParts<Self> {
+        let message_list_view_wrapper = TypedListView::<MessageListItem, gtk::NoSelection>::new();
         let model = StatusBarModel {
             status_text: "Ready.".into(),
             total: 0,
             done: 0,
             syncing: false,
             tracker: 0,
+            message_list_view_wrapper,
         };
 
+        let message_list = &model.message_list_view_wrapper.view;
         let widgets = view_output!();
         ComponentParts { model, widgets }
     }
