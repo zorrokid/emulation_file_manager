@@ -38,7 +38,7 @@ pub enum SyncEvent {
         file_number: i64,
         total_files: i64,
     },
-    SyncCompleted {},
+    SyncCompleted,
     FileDeletionStarted {
         key: String,
         file_number: i64,
@@ -55,7 +55,7 @@ pub enum SyncEvent {
         file_number: i64,
         total_files: i64,
     },
-    SyncCancelled {},
+    SyncCancelled,
 }
 
 #[derive(Debug, Clone)]

@@ -436,7 +436,7 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
                         // check for cancellation
                         if context.cancel_rx.try_recv().is_ok() {
                             tracing::info!("Cloud sync cancelled by user");
-                            send_progress_event(SyncEvent::SyncCancelled {}, &context.progress_tx).await;
+                            send_progress_event(SyncEvent::SyncCancelled, &context.progress_tx).await;
 
                             return StepAction::Abort(Error::OperationCancelled);
                         }

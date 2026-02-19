@@ -167,30 +167,74 @@ impl StatusBarModel {
                 sender.input(StatusBarMsg::StartProgress {
                     total: total_files_count,
                 });
+                self.message_list_view_wrapper.clear();
+                self.message_list_view_wrapper.append(MessageListItem {
+                    message: "Sync started.".into(),
+                    status: MessageStatus::Info,
+                });
             }
-            SyncEvent::FileUploadStarted { .. } => {}
-            SyncEvent::PartUploaded { .. } => {}
-            SyncEvent::FileUploadCompleted {
+            SyncEvent::FileUploadStarted {
+                key,
                 file_number,
                 total_files,
-                ..
+            } => {
+                self.message_list_view_wrapper.append(MessageListItem {
+                    message: format!("Uploading file {file_number}/{total_files}: {key}"),
+                    status: MessageStatus::Info,
+                });
+            }
+            SyncEvent::PartUploaded { key, part } => {
+                self.message_list_view_wrapper.append(MessageListItem {
+                    message: format!("Uploaded part {part} of file: {key}"),
+                    status: MessageStatus::Info,
+                });
+            }
+            SyncEvent::FileUploadCompleted {
+                key,
+                file_number,
+                total_files,
             } => {
                 sender.input(StatusBarMsg::UpdateProgress {
                     done: file_number,
                     total: total_files,
                 });
+                self.message_list_view_wrapper.append(MessageListItem {
+                    message: format!("Completed upload of file {file_number}/{total_files}: {key}"),
+                    status: MessageStatus::Info,
+                });
             }
-            SyncEvent::FileUploadFailed { .. } => {
-                // TODO
+            SyncEvent::FileUploadFailed {
+                key,
+                error,
+                file_number,
+                total_files,
+            } => {
+                self.message_list_view_wrapper.append(MessageListItem {
+                    message: format!(
+                        "Failed to upload file {file_number}/{total_files}: {key}. Error: {error}"
+                    ),
+                    status: MessageStatus::Error,
+                });
             }
-            SyncEvent::SyncCompleted { .. } => {
+            SyncEvent::SyncCompleted => {
                 sender.input(StatusBarMsg::Finish);
+                self.message_list_view_wrapper.append(MessageListItem {
+                    message: "Sync completed successfully.".into(),
+                    status: MessageStatus::Info,
+                });
             }
-            SyncEvent::PartUploadFailed { .. } => {
-                // TODO.
+            SyncEvent::PartUploadFailed { key, error } => {
+                self.message_list_view_wrapper.append(MessageListItem {
+                    message: format!("Failed to upload part of file: {key}. Error: {error}"),
+                    status: MessageStatus::Error,
+                });
             }
-            SyncEvent::SyncCancelled { .. } => {
+            SyncEvent::SyncCancelled => {
                 sender.input(StatusBarMsg::Finish);
+                self.message_list_view_wrapper.append(MessageListItem {
+                    message: "Sync cancelled.".into(),
+                    status: MessageStatus::Warning,
+                });
             }
             _ => { /* Handle other events as needed */ }
         }
