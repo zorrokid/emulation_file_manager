@@ -41,7 +41,6 @@ impl RelmListItem for MessageListItem {
                 set_orientation: gtk::Orientation::Horizontal,
                 #[name = "label"]
                 gtk::Label,
-                // TODO: add an icon for the status
             }
         }
 
@@ -52,8 +51,12 @@ impl RelmListItem for MessageListItem {
 
     fn bind(&mut self, widgets: &mut Self::Widgets, _root: &mut Self::Root) {
         let ListItemWidgets { label } = widgets;
-        label.set_label(self.message.as_str());
-        // TODO: set the icon based on the status
+        let status_icon = match self.status {
+            MessageStatus::Info => "🟢",
+            MessageStatus::Warning => "🟡",
+            MessageStatus::Error => "🔴",
+        };
+        label.set_label(format!("{} {}", status_icon, self.message).as_str());
     }
 }
 
