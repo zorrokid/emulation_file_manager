@@ -62,9 +62,21 @@ The application is split in four main layers consisting of:
 
 Emulation files can be different kind of files (see `core_types::FileType` enum). Some of the files are used with emulators, some with external viewers, some internal viewers in this application.
 
-Files are currently stored in local file system, collection directory is determined in `file_system` crate with `ProjectDirs`. I'm planning to add support for cloud storage in the future.
+Files are stored in local file system, collection directory is determined in `file_system` crate with `ProjectDirs` (for Debian Linux this is under `.local/share`. Collection directory can be also changed in settings. Optionally files can be synced to cloud. 
 
-When files are imported for software release, files are imported as file set whether it's a single file or multiple files. One file in file set can belong to multiple file sets. Each file set can have only files of certain `FileType`. Because of this, each file in file set is stored separately and different kind of file sets can be composed from files. 
+For cloud sync you need to have a S3 compatible cloud storage, enable cloud sync from settings dialog and set the following environment variables: `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`. For example in Bash this can be set to `.bashrc` file like this:
+
+```bash
+export AWS_ACCESS_KEY_ID=your_access_key_id
+export AWS_SECRET_ACCESS_KEY=your_secret_access_key
+```
+
+(There is also an option to store the credentials in keyring from settings dialog, but for me the credentials have been resetting for some reason and I haven't had time to investigate this issue yet, so I recommend setting the credentials with environment variables for now. Credentials from environment variables are anyway used as a fallback.)
+
+When files are added for a software release, files are imported as file set in both cases whether it's a single file or multiple files. Each file set can have only files of certain `FileType`. 
+
+One file in file set can belong to multiple file sets. Because of this, each file in file set is stored separately and different kind of file sets can be composed from files. 
+
 When storing files, each file gets a unique file name to avoid conflicts in file names. Original file name is stored in database as part of oringal imported file set. Files are also compressed using zstd compression. 
 
 File info and file set meta data is stored in database with this structure:
