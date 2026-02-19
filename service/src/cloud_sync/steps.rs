@@ -1,10 +1,22 @@
 
+use async_std::channel::Sender;
 use core_types::{events::SyncEvent, FileSyncStatus};
 
 use crate::{
     cloud_sync::context::{FileSyncResult, SyncContext},
     error::Error, pipeline::pipeline_step::{StepAction, PipelineStep},
 };
+
+// TODO move to utils module?
+async fn send_progress_event(event: SyncEvent, progress_tx: &Sender<SyncEvent>) {
+    let res = progress_tx
+        .send(event)
+        .await;
+
+    if let Err(e) = res {
+        tracing::error!("Sending sync event failed {}", e);
+    }
+}
 
 /// Step 1: Prepare files for upload. This involves marking files as pending upload in the
 /// database and collecting total number of files to be uploaded.
@@ -143,13 +155,12 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
         tracing::debug!("Uploading pending files to cloud storage");
         let mut file_count = 0;
 
-        context
-            .progress_tx
-            .send(SyncEvent::SyncStarted {
+        send_progress_event(
+            SyncEvent::SyncStarted {
                 total_files_count: context.files_prepared_for_upload,
-            })
-            .await
-            .ok(); // TODO: add error handling
+            },
+            &context.progress_tx
+        ).await;
 
         let mut offset = 0;
 
@@ -186,10 +197,7 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                         // check for cancellation
                         if context.cancel_rx.try_recv().is_ok() {
                             tracing::info!("Cloud sync cancelled by user");
-                            context.progress_tx
-                                .send(SyncEvent::SyncCancelled {})
-                                .await
-                                .ok(); // TODO: add error handling
+                            send_progress_event(SyncEvent::SyncCancelled {}, &context.progress_tx).await;
                             return StepAction::Abort(Error::OperationCancelled);
                         }
 
@@ -200,16 +208,14 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                         );
                         file_count += 1;
 
-                        // TODO: maybe trigger only these events for progress tracking
-                        context
-                            .progress_tx
-                            .send(SyncEvent::FileUploadStarted {
+                        send_progress_event(
+                            SyncEvent::FileUploadStarted {
                                 key: file.cloud_key.clone(),
                                 file_number: file_count,
                                 total_files: context.files_prepared_for_upload,
-                            })
-                            .await
-                            .ok();
+                            },
+                            &context.progress_tx
+                        ).await;
 
                         let mut file_sync_result = FileSyncResult {
                             file_info_id: file.file_info_id,
@@ -241,16 +247,15 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                             context
                                 .upload_results
                                 .insert(file.cloud_key.clone(), file_sync_result);
-                            context
-                                .progress_tx
-                                .send(SyncEvent::FileUploadFailed {
+                            send_progress_event(
+                                SyncEvent::FileUploadFailed {
                                     key: file.cloud_key.clone(),
                                     error: format!("{}", e),
                                     file_number: file_count,
                                     total_files: context.files_prepared_for_upload,
-                                })
-                                .await
-                                .ok(); // TODO: add error handling
+                                },
+                                &context.progress_tx
+                            ).await;
 
                             // Skip this file and continue with the next one, since status update
                             // failed this will be retried in the next sync run
@@ -313,15 +318,14 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                                     }
                                 }
 
-                                context
-                                    .progress_tx
-                                    .send(SyncEvent::FileUploadCompleted {
+                                send_progress_event(
+                                    SyncEvent::FileUploadCompleted {
                                         key: file.cloud_key.clone(),
                                         file_number: file_count,
                                         total_files: context.files_prepared_for_upload,
-                                    })
-                                    .await
-                                    .ok(); // TODO: add error handling
+                                    },
+                                    &context.progress_tx
+                                ).await;
                             }
                             Err(e) => {
                                 tracing::error!(
@@ -358,17 +362,16 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                                     }
                                 }
 
-                                context
-                                    .progress_tx
-                                    .send(SyncEvent::FileUploadFailed {
+                                send_progress_event(
+                                    SyncEvent::FileUploadFailed {
                                         key: file.cloud_key.clone(),
                                         error: format!("{}", e),
                                         file_number: file_count,
                                         total_files: context.files_prepared_for_upload,
-                                    })
-                                    .await
-                                    .ok(); // TODO: add error handling
-                            }
+                                    },
+                                    &context.progress_tx
+                                ).await;
+                           }
                         }
                         context
                             .upload_results
@@ -377,11 +380,7 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                 }
             }
         }
-        context
-            .progress_tx
-            .send(SyncEvent::SyncCompleted {})
-            .await
-            .ok(); // TODO: add error handling
+        send_progress_event(SyncEvent::SyncCompleted {}, &context.progress_tx).await;
         tracing::debug!("Pending file uploads completed");
         StepAction::Continue
     }
@@ -437,23 +436,19 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
                         // check for cancellation
                         if context.cancel_rx.try_recv().is_ok() {
                             tracing::info!("Cloud sync cancelled by user");
-                            context.progress_tx
-                                .send(SyncEvent::SyncCancelled {})
-                                .await
-                                .ok(); // TODO: add error handling
+                            send_progress_event(SyncEvent::SyncCancelled {}, &context.progress_tx).await;
 
                             return StepAction::Abort(Error::OperationCancelled);
                         }
 
-                        context
-                            .progress_tx
-                            .send(SyncEvent::FileDeletionStarted {
+                        send_progress_event(
+                            SyncEvent::FileDeletionStarted {
                                 key: file.cloud_key.clone(),
                                 file_number: file_count,
                                 total_files: context.files_prepared_for_deletion,
-                            })
-                            .await
-                            .ok(); // TODO: add error handling
+                            },
+                            &context.progress_tx
+                        ).await;
 
                         let mut file_deletion_result = FileSyncResult {
                             file_info_id: file.id,
@@ -486,16 +481,15 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
                             context
                                 .deletion_results
                                 .insert(file.cloud_key.clone(), file_deletion_result);
-                            context
-                                .progress_tx
-                                .send(SyncEvent::FileDeletionFailed {
+                            send_progress_event(
+                                SyncEvent::FileDeletionFailed {
                                     key: file.cloud_key.clone(),
                                     error: format!("{}", e),
                                     file_number: file_count,
                                     total_files: context.files_prepared_for_deletion,
-                                })
-                                .await
-                                .ok(); // TODO: add error handling
+                                },
+                                &context.progress_tx
+                            ).await;
 
                             // Skip this file and continue with the next one, since status update
                             // failed this will be retried in the next sync run
@@ -539,16 +533,15 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
                                     }
                                 }
 
-                                context
-                                    .progress_tx
-                                    .send(SyncEvent::FileDeletionCompleted {
+                                send_progress_event(
+                                    SyncEvent::FileDeletionCompleted {
                                         key: file.cloud_key.clone(),
                                         file_number: file_count,
                                         total_files: context.files_prepared_for_deletion,
-                                    })
-                                    .await
-                                    .ok(); // TODO: add error handling
-                            }
+                                    },
+                                    &context.progress_tx
+                                ).await;
+                           }
                             Err(e) => {
                                 tracing::error!(
                                     file_info_id = file.id,
@@ -578,16 +571,15 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
                                     }
                                 }
 
-                                context
-                                    .progress_tx
-                                    .send(SyncEvent::FileDeletionFailed {
+                                send_progress_event(
+                                    SyncEvent::FileDeletionFailed {
                                         key: file.cloud_key.clone(),
                                         error: format!("{}", e),
                                         file_number: file_count,
                                         total_files: context.files_prepared_for_deletion,
-                                    })
-                                    .await
-                                    .ok(); //  TODO: add error handling
+                                    },
+                                    &context.progress_tx
+                                ).await;
                             }
                         }
                         context
@@ -973,3 +965,5 @@ mod tests {
         assert!(matches!(messages[6], SyncEvent::SyncCompleted {}));
      }
 }
+
+
