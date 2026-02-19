@@ -43,6 +43,12 @@ rsync -avz --checksum ~/.local/share/efm/files/ /path/to/new/collection/root/
 
 In the future, I will add support for moving files to new collection root directory automatically when user changes the collection root directory in settings and / or support for multiple collection root directories. 
 
+# Features
+
+## Cloud Sync
+
+![Cloud sync progress](docs/images/cloud-sync.png)
+
 # Technologies
 
 - [Rust](https://www.rust-lang.org/): The primary programming language used for development.
@@ -90,8 +96,7 @@ File info and file set meta data is stored in database with this structure:
          |                       | 
          | *                     |  
    +------------------+          |                +----------+ 1
-   | file_info_system |          |                |  release |----------+
-   +------------------+          |                +----------+          |
+   | file_info_system |          |                |  release |----------+ +------------------+          |                +----------+          |
           | *                    |                     1|               |
           |                      |                      |               |
           | 1                    | 1                  * |               |*
