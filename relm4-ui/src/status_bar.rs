@@ -1,3 +1,4 @@
+use core_types::events::SyncEvent;
 use gtk::prelude::*;
 use gtk::{Box as GtkBox, Label, Orientation, ProgressBar};
 use relm4::prelude::*;
@@ -8,6 +9,7 @@ pub enum StatusBarMsg {
     SetStatus(String),
     StartProgress { total: i64 },
     UpdateProgress { done: i64, total: i64 },
+    SyncEventReceived(SyncEvent),
     Finish,
     Fail(String),
 }
@@ -125,10 +127,13 @@ impl SimpleComponent for StatusBarModel {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, msg: StatusBarMsg, _sender: ComponentSender<Self>) {
+    fn update(&mut self, msg: StatusBarMsg, sender: ComponentSender<Self>) {
         self.reset();
 
         match msg {
+            StatusBarMsg::SyncEventReceived(event) => {
+                self.process_sync_event(event, &sender);
+            }
             StatusBarMsg::SetStatus(text) => {
                 self.status_text = text;
             }
@@ -151,6 +156,43 @@ impl SimpleComponent for StatusBarModel {
                 self.status_text = format!("Sync failed: {error}");
                 self.syncing = false;
             }
+        }
+    }
+}
+
+impl StatusBarModel {
+    fn process_sync_event(&mut self, event: SyncEvent, sender: &ComponentSender<Self>) {
+        match event {
+            SyncEvent::SyncStarted { total_files_count } => {
+                sender.input(StatusBarMsg::StartProgress {
+                    total: total_files_count,
+                });
+            }
+            SyncEvent::FileUploadStarted { .. } => {}
+            SyncEvent::PartUploaded { .. } => {}
+            SyncEvent::FileUploadCompleted {
+                file_number,
+                total_files,
+                ..
+            } => {
+                sender.input(StatusBarMsg::UpdateProgress {
+                    done: file_number,
+                    total: total_files,
+                });
+            }
+            SyncEvent::FileUploadFailed { .. } => {
+                // TODO
+            }
+            SyncEvent::SyncCompleted { .. } => {
+                sender.input(StatusBarMsg::Finish);
+            }
+            SyncEvent::PartUploadFailed { .. } => {
+                // TODO.
+            }
+            SyncEvent::SyncCancelled { .. } => {
+                sender.input(StatusBarMsg::Finish);
+            }
+            _ => { /* Handle other events as needed */ }
         }
     }
 }

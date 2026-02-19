@@ -273,7 +273,9 @@ impl Component for AppModel {
             AppMsg::ExportFolderSelected(path) => self.export_all_files(&sender, path),
             AppMsg::SyncWithCloud => self.sync_with_cloud(&sender),
             AppMsg::MigrateFileTypes => self.migrate_file_types(&sender),
-            AppMsg::ProcessFileSyncEvent(event) => self.process_file_sync_event(event),
+            AppMsg::ProcessFileSyncEvent(event) => {
+                self.status_bar.emit(StatusBarMsg::SyncEventReceived(event))
+            }
             AppMsg::OpenSettings => self.open_settings(&sender, root),
             AppMsg::UpdateSettings => {
                 // TODO
@@ -533,41 +535,6 @@ impl AppModel {
             let res = sync_service.sync_to_cloud(progress_tx, cancel_rx).await;
             CommandMsg::SyncToCloudCompleted(res)
         });
-    }
-
-    fn process_file_sync_event(&self, event: SyncEvent) {
-        match event {
-            SyncEvent::SyncStarted { total_files_count } => {
-                self.status_bar.emit(StatusBarMsg::StartProgress {
-                    total: total_files_count,
-                });
-            }
-            SyncEvent::FileUploadStarted { .. } => {}
-            SyncEvent::PartUploaded { .. } => {}
-            SyncEvent::FileUploadCompleted {
-                file_number,
-                total_files,
-                ..
-            } => {
-                self.status_bar.emit(StatusBarMsg::UpdateProgress {
-                    done: file_number,
-                    total: total_files,
-                });
-            }
-            SyncEvent::FileUploadFailed { .. } => {
-                // self.status_bar.emit(StatusBarMsg::Fail(error));
-            }
-            SyncEvent::SyncCompleted { .. } => {
-                self.status_bar.emit(StatusBarMsg::Finish);
-            }
-            SyncEvent::PartUploadFailed { .. } => {
-                // self.status_bar.emit(StatusBarMsg::Fail(error));
-            }
-            SyncEvent::SyncCancelled { .. } => {
-                self.status_bar.emit(StatusBarMsg::Finish);
-            }
-            _ => { /* Handle other events as needed */ }
-        }
     }
 
     fn open_settings(&self, sender: &ComponentSender<Self>, root: &gtk::Window) {
