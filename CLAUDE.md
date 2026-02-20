@@ -115,6 +115,50 @@ let repo_manager = setup_test_repository_manager(&db).await;
 
 Integration tests live in `<crate>/tests/`. Unit tests are embedded in source files.
 
+## Spec-Driven Development
+
+Any change that introduces or modifies behavior requires a spec. **Do not start implementing without a spec in place.**
+
+### When a spec is required
+
+- New features
+- Bug fixes with non-trivial logic
+- Changes to existing behavior
+
+Refactoring does **not** require a spec — the existing tests define correct behavior. If they stay green, the refactoring is safe.
+
+### Spec files
+
+Specs live in `specs/` and come in pairs:
+
+- `specs/<N>-feature.md` — behavior description, requirements, acceptance criteria
+- `specs/<N>-feature-tasks.md` — task breakdown with explicit test cases and manual verification checklist
+
+### Before implementing
+
+1. Confirm `specs/<N>-feature.md` exists and is complete
+2. Confirm `specs/<N>-feature-tasks.md` exists with test cases listed
+3. If either is missing, create them first
+
+### Implementation order
+
+1. Write failing test stubs derived from the task list (use `todo!()`)
+2. Implement until tests pass
+3. Complete manual verification checklist for any GUI changes
+
+### After implementing
+
+Verify the implementation is complete by checking all three:
+
+1. **Code review** — read through the implementation and confirm it matches the spec requirements
+2. **Automated tests** — `cargo test` must pass, covering all test cases listed in the task file
+3. **Manual checklist** — all GUI verification items in the task file must be ticked off
+
+### Test vs manual verification split
+
+- Backend behavior (repositories, pipelines, domain logic) → automated tests in `<crate>/tests/` or inline `#[cfg(test)]`
+- GUI behavior (dialogs, layout, widget state) → manual verification checklist in the task file
+
 ## Database Migrations
 
 Migrations are in `database/migrations/`. Each migration is a numbered SQL file. When adding a migration:
