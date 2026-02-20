@@ -14,7 +14,7 @@ use relm4::{
             FileChooserExt, GtkWindowExt, OrientableExt, WidgetExt,
         },
     },
-    typed_view::list::TypedListView,
+    typed_view::list::{RelmListItem, TypedListView},
 };
 use service::{
     error::Error,
@@ -44,7 +44,7 @@ pub struct ListItemWidgets {
     label: gtk::Label,
 }
 
-impl relm4::typed_view::list::RelmListItem for ImportListItem {
+impl RelmListItem for ImportListItem {
     type Root = gtk::Box;
     type Widgets = ListItemWidgets;
 
