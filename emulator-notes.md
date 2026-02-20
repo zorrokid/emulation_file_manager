@@ -10,6 +10,13 @@ LOAD"FILE
 |TAPE
 RUN"
 
+# Colecovision
+
+## Colem
+
+Some games start with '-'-key
+Game options usually with number keys
+
 # Dragon 32 / 64
 
 ## Loading from Tape
