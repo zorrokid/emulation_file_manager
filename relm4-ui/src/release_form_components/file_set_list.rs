@@ -266,11 +266,8 @@ impl Component for FileSetList {
                 self.notify_items_changed(&sender);
             }
             FileSetListMsg::UnlinkFileSet => {
-                let selected_id = get_selected_item_id(&self.selected_file_sets_list_view_wrapper);
-                if let Some(selected_id) = selected_id {
-                    remove_selected(&mut self.selected_file_sets_list_view_wrapper);
-                    self.notify_items_changed(&sender);
-                }
+                remove_selected(&mut self.selected_file_sets_list_view_wrapper);
+                self.notify_items_changed(&sender);
             }
             FileSetListMsg::FileSetUpdated(file_set) => {
                 for i in 0..self.selected_file_sets_list_view_wrapper.len() {

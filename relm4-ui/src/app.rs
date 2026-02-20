@@ -14,7 +14,6 @@ use relm4::{
 use service::{
     app_services::AppServices,
     cloud_sync::service::{CloudStorageSyncService, SyncResult},
-    export_service::ExportService,
     file_type_migration::service::FileTypeMigrationService,
     view_models::{Settings, SoftwareTitleListModel},
 };
@@ -421,13 +420,20 @@ impl AppModel {
             //       `CommandMsg::InitializationDone`.
             let pool = get_db_pool().await.expect("DB pool initialization failed");
             let repository_manager = Arc::new(RepositoryManager::new(pool));
-            let app_services = Arc::new(AppServices::new(Arc::clone(&repository_manager)));
-            let settings = app_services
-                .view_model
+
+            let settings: Settings = repository_manager
+                .get_settings_repository()
                 .get_settings()
                 .await
-                .expect("Failed to get config");
+                .expect("Failed to get settings from repository")
+                .into();
+
             let settings = Arc::new(settings);
+
+            let app_services = Arc::new(AppServices::new(
+                Arc::clone(&repository_manager),
+                Arc::clone(&settings),
+            ));
 
             CommandMsg::InitializationDone(InitResult {
                 repository_manager,
@@ -467,15 +473,13 @@ impl AppModel {
 
     fn export_all_files(&self, sender: &ComponentSender<Self>, path: PathBuf) {
         if path.is_dir() {
-            let repository_manager = Arc::clone(
-                self.repository_manager
+            let app_services = Arc::clone(
+                self.app_services
                     .get()
-                    .expect("Repository manager not initialized"),
+                    .expect("App services not initialized"),
             );
-            // TODO: move export service to app_services
             sender.oneshot_command(async move {
-                let export_service = ExportService::new(repository_manager);
-                let res = export_service.export_all_files(&path).await;
+                let res = app_services.export.export_all_files(&path).await;
                 CommandMsg::ExportFinished(res)
             });
         } else {

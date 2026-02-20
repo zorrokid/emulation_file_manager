@@ -20,14 +20,10 @@ use relm4::{
     prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque},
 };
 use service::{
-    download_service::DownloadService,
     error::Error,
-    file_import::{
-        model::{
-            FileImportPrepareResult, FileImportResult, FileImportSource, FileSetImportModel,
-            UpdateFileSetModel,
-        },
-        service::FileImportService,
+    file_import::model::{
+        FileImportPrepareResult, FileImportResult, FileImportSource, FileSetImportModel,
+        UpdateFileSetModel,
     },
     view_models::{FileSetListModel, FileSetViewModel, Settings},
 };
@@ -178,8 +174,6 @@ pub struct FileSetFormModel {
 
     dropdown: Controller<FileTypeDropDown>,
     processing: bool,
-    file_import_service: Arc<FileImportService>,
-    download_service: Arc<DownloadService>,
     settings: Arc<Settings>,
     selected_file_type: Option<FileType>,
     selected_files_in_picked_files: Vec<Sha1Checksum>,
@@ -425,16 +419,6 @@ impl Component for FileSetFormModel {
 
         let dropdown = Self::create_dropdown(None, &sender);
 
-        let file_import_service = Arc::new(FileImportService::new(
-            Arc::clone(&init_model.repository_manager),
-            Arc::clone(&init_model.settings),
-        ));
-
-        let download_service = Arc::new(DownloadService::new(
-            Arc::clone(&init_model.repository_manager),
-            Arc::clone(&init_model.settings),
-        ));
-
         let item_type_dropdown = ItemTypeDropdown::builder().launch(()).forward(
             sender.input_sender(),
             |msg| match msg {
@@ -453,8 +437,6 @@ impl Component for FileSetFormModel {
             source: String::new(),
             dropdown,
             processing: false,
-            file_import_service,
-            download_service,
             settings: Arc::clone(&init_model.settings),
             selected_file_type: None,
             selected_files_in_picked_files: Vec::new(),
@@ -508,10 +490,11 @@ impl Component for FileSetFormModel {
 
             FileSetFormMsg::FileSelected(path) => {
                 if let Some(file_type) = self.selected_file_type {
-                    let prepare_file_import_service = Arc::clone(&self.file_import_service);
+                    let app_services = Arc::clone(&self.app_services);
                     self.processing = true;
                     sender.oneshot_command(async move {
-                        let res = prepare_file_import_service
+                        let res = app_services
+                            .file_import
                             .prepare_import(&path, file_type)
                             .await;
                         CommandMsg::FileImportPrepared(res)
@@ -562,7 +545,6 @@ impl Component for FileSetFormModel {
 
             FileSetFormMsg::DownloadFromUrl(url) => {
                 if let Some(file_type) = self.selected_file_type {
-                    let download_service = Arc::clone(&self.download_service);
                     let temp_dir = self.settings.temp_output_dir.clone();
                     self.source = url.clone();
                     self.processing = true;
@@ -590,8 +572,10 @@ impl Component for FileSetFormModel {
                         }
                     });
 
+                    let app_services = Arc::clone(&self.app_services);
                     sender.oneshot_command(async move {
-                        let res = download_service
+                        let res = app_services
+                            .download
                             .download_and_prepare_import(
                                 &url,
                                 file_type,
@@ -847,10 +831,13 @@ impl FileSetFormModel {
             dat_file_id: None,
         };
 
-        let file_import_service = Arc::clone(&self.file_import_service);
+        let app_services = Arc::clone(&self.app_services);
 
         sender.oneshot_command(async move {
-            let import_result = file_import_service.create_file_set(file_import_model).await;
+            let import_result = app_services
+                .file_import
+                .create_file_set(file_import_model)
+                .await;
             CommandMsg::ProcessCreateOrUpdateFileSetResult(import_result)
         });
     }
@@ -879,10 +866,9 @@ impl FileSetFormModel {
             item_types,
         };
 
-        let file_import_service = Arc::clone(&self.file_import_service);
-
+        let app_services = Arc::clone(&self.app_services);
         sender.oneshot_command(async move {
-            let import_result = file_import_service.update_file_set(update_model).await;
+            let import_result = app_services.file_import.update_file_set(update_model).await;
             CommandMsg::ProcessCreateOrUpdateFileSetResult(import_result)
         });
     }
