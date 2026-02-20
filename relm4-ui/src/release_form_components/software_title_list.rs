@@ -9,10 +9,7 @@ use relm4::{
     },
     typed_view::list::TypedListView,
 };
-use service::{
-    app_services::AppServices, view_model_service::ViewModelService,
-    view_models::SoftwareTitleListModel,
-};
+use service::{app_services::AppServices, view_models::SoftwareTitleListModel};
 
 use crate::{
     list_item::ListItem,
@@ -41,14 +38,12 @@ pub enum SoftwareTitleListOutputMsg {
 }
 
 pub struct SoftwareTitleListInit {
-    pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
     pub app_services: Arc<AppServices>,
 }
 
 #[derive(Debug)]
 pub struct SoftwareTitleList {
-    view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
     app_services: Arc<AppServices>,
     software_title_selector: Controller<SoftwareTitleSelectModel>,
@@ -99,7 +94,6 @@ impl Component for SoftwareTitleList {
         > = TypedListView::new();
 
         let software_title_selector_init = SoftwareTitleSelectInit {
-            view_model_service: Arc::clone(&init_model.view_model_service),
             repository_manager: Arc::clone(&init_model.repository_manager),
             app_services: Arc::clone(&init_model.app_services),
         };
@@ -120,7 +114,6 @@ impl Component for SoftwareTitleList {
             });
 
         let model = SoftwareTitleList {
-            view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
             app_services: init_model.app_services,
             software_title_selector,

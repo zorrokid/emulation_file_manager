@@ -14,7 +14,6 @@ use relm4::{
 use service::{
     app_services::AppServices,
     error::Error as ServiceError,
-    view_model_service::ViewModelService,
     view_models::{
         FileSetListModel, ReleaseViewModel, Settings, SoftwareTitleListModel, SystemListModel,
     },
@@ -64,7 +63,6 @@ pub enum CommandMsg {
 
 #[derive(Debug)]
 pub struct ReleaseFormModel {
-    view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
     app_services: Arc<AppServices>,
 
@@ -82,7 +80,6 @@ pub struct ReleaseFormModel {
 }
 
 pub struct ReleaseFormInit {
-    pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
     pub app_services: Arc<AppServices>,
     pub settings: Arc<Settings>,
@@ -147,7 +144,6 @@ impl Component for ReleaseFormModel {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let file_set_list_init = FileSetListInit {
-            view_model_service: Arc::clone(&init_model.view_model_service),
             repository_manager: Arc::clone(&init_model.repository_manager),
             app_services: Arc::clone(&init_model.app_services),
             settings: Arc::clone(&init_model.settings),
@@ -163,7 +159,6 @@ impl Component for ReleaseFormModel {
         );
 
         let system_list_init = SystemListInit {
-            view_model_service: Arc::clone(&init_model.view_model_service),
             repository_manager: Arc::clone(&init_model.repository_manager),
             app_services: Arc::clone(&init_model.app_services),
         };
@@ -177,7 +172,6 @@ impl Component for ReleaseFormModel {
                 });
 
         let software_title_list_init = SoftwareTitleListInit {
-            view_model_service: Arc::clone(&init_model.view_model_service),
             repository_manager: Arc::clone(&init_model.repository_manager),
             app_services: Arc::clone(&init_model.app_services),
         };
@@ -209,7 +203,6 @@ impl Component for ReleaseFormModel {
                 });
 
         let model = ReleaseFormModel {
-            view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
             app_services: init_model.app_services,
             release: None,

@@ -12,7 +12,6 @@ use relm4::{
 };
 use service::{
     app_services::AppServices,
-    view_model_service::ViewModelService,
     view_models::{FileSetListModel, Settings},
 };
 
@@ -104,7 +103,6 @@ pub enum CommandMsg {
 
 #[derive(Debug)]
 pub struct FileSetList {
-    view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
     app_services: Arc<AppServices>,
 
@@ -118,7 +116,6 @@ pub struct FileSetList {
 }
 
 pub struct FileSetListInit {
-    pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
     pub app_services: Arc<AppServices>,
     pub settings: Arc<Settings>,
@@ -130,7 +127,6 @@ impl FileSetList {
         if self.file_set_form.get().is_none() {
             tracing::info!("Initializing file set form");
             let file_set_form_init = FileSetFormInit {
-                view_model_service: Arc::clone(&self.view_model_service),
                 repository_manager: Arc::clone(&self.repository_manager),
                 app_services: Arc::clone(&self.app_services),
                 settings: Arc::clone(&self.settings),
@@ -211,7 +207,6 @@ impl Component for FileSetList {
             gtk::SingleSelection,
         > = TypedListView::new();
         let file_selector_init_model = FileSetSelectorInit {
-            view_model_service: Arc::clone(&init_model.view_model_service),
             repository_manager: Arc::clone(&init_model.repository_manager),
             app_services: Arc::clone(&init_model.app_services),
             settings: Arc::clone(&init_model.settings),
@@ -227,7 +222,6 @@ impl Component for FileSetList {
             });
 
         let model = FileSetList {
-            view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
             app_services: init_model.app_services,
             settings: init_model.settings,

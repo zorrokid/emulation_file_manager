@@ -485,6 +485,7 @@ impl AppModel {
                     .expect("View model service not initialized"),
             );
             let settings = Arc::clone(self.settings.get().expect("Settings not initialized"));
+            // TODO: move export service to app_services
             sender.oneshot_command(async move {
                 let export_service =
                     ExportService::new(repository_manager, view_model_service, settings);
@@ -655,7 +656,6 @@ impl AppModel {
         let app_services = Arc::clone(&init_result.app_services);
 
         let software_title_list_init = SoftwareTitleListInit {
-            view_model_service,
             repository_manager,
             app_services,
         };
@@ -679,7 +679,6 @@ impl AppModel {
         let repository_manager = Arc::clone(&init_result.repository_manager);
         let app_services = Arc::clone(&init_result.app_services);
         let releases_init = ReleasesInit {
-            view_model_service,
             repository_manager,
             app_services,
             settings: Arc::clone(&init_result.settings),
@@ -707,7 +706,6 @@ impl AppModel {
         self.releases.set(releases).expect("releases already set");
 
         let release_init_model = ReleaseInitModel {
-            view_model_service: Arc::clone(&init_result.view_model_service),
             repository_manager: Arc::clone(&init_result.repository_manager),
             app_services: Arc::clone(&init_result.app_services),
             settings: Arc::clone(&init_result.settings),
@@ -839,11 +837,6 @@ impl AppModel {
                     self.repository_manager
                         .get()
                         .expect("Repository manager not initialized"),
-                ),
-                view_model_service: Arc::clone(
-                    self.view_model_service
-                        .get()
-                        .expect("View model service not initialized"),
                 ),
                 app_services: Arc::clone(
                     self.app_services

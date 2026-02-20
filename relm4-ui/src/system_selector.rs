@@ -10,10 +10,7 @@ use relm4::{
     },
     typed_view::list::TypedListView,
 };
-use service::{
-    error::Error as ServiceError, view_model_service::ViewModelService,
-    view_models::SystemListModel,
-};
+use service::{error::Error as ServiceError, view_models::SystemListModel};
 use ui_components::confirm_dialog::{
     ConfirmDialog, ConfirmDialogInit, ConfirmDialogMsg, ConfirmDialogOutputMsg,
 };
@@ -55,14 +52,12 @@ pub enum CommandMsg {
 }
 
 pub struct SystemSelectInit {
-    pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
     pub app_services: Arc<service::app_services::AppServices>,
 }
 
 #[derive(Debug)]
 pub struct SystemSelectModel {
-    view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
     app_services: Arc<service::app_services::AppServices>,
     list_view_wrapper: TypedListView<DeletableListItem, gtk::SingleSelection>,
@@ -177,7 +172,6 @@ impl Component for SystemSelectModel {
             });
 
         let model = SystemSelectModel {
-            view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
             app_services: init_model.app_services,
             list_view_wrapper,

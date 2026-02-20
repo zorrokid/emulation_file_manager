@@ -12,10 +12,7 @@ use relm4::{
         },
     },
 };
-use service::{
-    view_model_service::ViewModelService,
-    view_models::{EmulatorListModel, EmulatorViewModel, SystemListModel},
-};
+use service::view_models::{EmulatorListModel, EmulatorViewModel, SystemListModel};
 
 use crate::{
     argument_list::{ArgumentList, ArgumentListMsg, ArgumentListOutputMsg},
@@ -54,7 +51,6 @@ pub enum EmulatorFormCommandMsg {
 
 #[derive(Debug)]
 pub struct EmulatorFormInit {
-    pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
     pub app_services: Arc<service::app_services::AppServices>,
 }
@@ -343,7 +339,6 @@ impl Component for EmulatorFormModel {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let init_model = SystemSelectInit {
-            view_model_service: Arc::clone(&init.view_model_service),
             repository_manager: Arc::clone(&init.repository_manager),
             app_services: Arc::clone(&init.app_services),
         };

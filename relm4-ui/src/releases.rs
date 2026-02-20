@@ -12,7 +12,7 @@ use relm4::{
 };
 use service::{
     error::Error,
-    view_model_service::{ReleaseFilter, ViewModelService},
+    view_model_service::ReleaseFilter,
     view_models::{ReleaseListModel, Settings, SoftwareTitleListModel},
 };
 
@@ -45,7 +45,6 @@ pub enum CommandMsg {
 
 #[derive(Debug)]
 pub struct ReleasesModel {
-    view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
     app_services: Arc<service::app_services::AppServices>,
     release_form: Controller<ReleaseFormModel>,
@@ -54,7 +53,6 @@ pub struct ReleasesModel {
 }
 
 pub struct ReleasesInit {
-    pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
     pub app_services: Arc<service::app_services::AppServices>,
     pub settings: Arc<Settings>,
@@ -122,7 +120,6 @@ impl Component for ReleasesModel {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let release_form_init_model = ReleaseFormInit {
-            view_model_service: Arc::clone(&init_model.view_model_service),
             repository_manager: Arc::clone(&init_model.repository_manager),
             app_services: Arc::clone(&init_model.app_services),
             settings: Arc::clone(&init_model.settings),
@@ -147,7 +144,6 @@ impl Component for ReleasesModel {
             });
 
         let model = ReleasesModel {
-            view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
             app_services: init_model.app_services,
             release_form,
@@ -191,10 +187,11 @@ impl Component for ReleasesModel {
                     "Fetching releases for software title",
                 );
 
-                let view_model_service = Arc::clone(&self.view_model_service);
+                let app_services = Arc::clone(&self.app_services);
                 let software_title_ids = self.selected_software_title_ids.clone();
                 sender.oneshot_command(async move {
-                    let releases_result = view_model_service
+                    let releases_result = app_services
+                        .view_model
                         .get_release_list_models(ReleaseFilter {
                             software_title_ids,
                             system_id: None,

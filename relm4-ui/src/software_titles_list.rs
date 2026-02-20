@@ -14,7 +14,6 @@ use service::{
     app_services::AppServices,
     error::Error,
     software_title_service::{SoftwareTitleService, SoftwareTitleServiceError},
-    view_model_service::ViewModelService,
     view_models::SoftwareTitleListModel,
 };
 
@@ -27,7 +26,6 @@ use crate::{
 
 #[derive(Debug)]
 pub struct SoftwareTitlesList {
-    view_model_service: Arc<ViewModelService>,
     app_services: Arc<AppServices>,
     list_view_wrapper: TypedListView<ListItem, gtk::MultiSelection>,
     selected_items: Vec<ListItem>,
@@ -63,7 +61,6 @@ pub enum SoftwareTitleListOutMsg {
 #[derive(Debug)]
 pub struct SoftwareTitleListInit {
     pub repository_manager: Arc<RepositoryManager>,
-    pub view_model_service: Arc<ViewModelService>,
     pub app_services: Arc<AppServices>,
 }
 
@@ -118,7 +115,6 @@ impl Component for SoftwareTitlesList {
         )));
 
         let model = SoftwareTitlesList {
-            view_model_service: init_model.view_model_service,
             app_services: init_model.app_services,
             list_view_wrapper,
             selected_items: Vec::new(),
@@ -144,9 +140,12 @@ impl Component for SoftwareTitlesList {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match msg {
             SoftwareTitleListMsg::FetchSoftwareTitles => {
-                let view_model_service = Arc::clone(&self.view_model_service);
+                let app_services = Arc::clone(&self.app_services);
                 sender.oneshot_command(async move {
-                    let res = view_model_service.get_software_title_list_models().await;
+                    let res = app_services
+                        .view_model
+                        .get_software_title_list_models()
+                        .await;
                     SoftwareTitleListCmdMsg::SoftwareTitlesFetched(res)
                 });
             }

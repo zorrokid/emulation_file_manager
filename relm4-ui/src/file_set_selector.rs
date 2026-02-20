@@ -14,7 +14,6 @@ use relm4::{
 use service::{
     error::Error as ServiceError,
     file_set_deletion::{model::FileDeletionResult, service::FileSetDeletionService},
-    view_model_service::ViewModelService,
     view_models::{FileSetListModel, Settings},
 };
 use ui_components::{DropDownOutputMsg, FileTypeDropDown, FileTypeSelectedMsg};
@@ -61,7 +60,6 @@ pub enum CommandMsg {
 }
 
 pub struct FileSetSelectorInit {
-    pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
     pub app_services: Arc<service::app_services::AppServices>,
     pub settings: Arc<Settings>,
@@ -69,7 +67,6 @@ pub struct FileSetSelectorInit {
 
 #[derive(Debug)]
 pub struct FileSetSelector {
-    view_model_service: Arc<ViewModelService>,
     app_services: Arc<service::app_services::AppServices>,
     file_sets: Vec<FileSetListModel>,
     list_view_wrapper: TypedListView<FileSetListItem, gtk::SingleSelection>,
@@ -188,7 +185,6 @@ impl Component for FileSetSelector {
             repository_manager: Arc::clone(&init_model.repository_manager),
             app_services: Arc::clone(&init_model.app_services),
             settings: Arc::clone(&init_model.settings),
-            view_model_service: Arc::clone(&init_model.view_model_service),
         };
 
         let file_set_form = FileSetFormModel::builder()
@@ -202,7 +198,6 @@ impl Component for FileSetSelector {
             });
 
         let file_set_details_view_init = FileSetDetailsInit {
-            view_model_service: Arc::clone(&init_model.view_model_service),
             app_services: Arc::clone(&init_model.app_services),
         };
 
@@ -218,7 +213,6 @@ impl Component for FileSetSelector {
         ));
 
         let model = FileSetSelector {
-            view_model_service: init_model.view_model_service,
             app_services: init_model.app_services,
             file_sets: Vec::new(),
             list_view_wrapper,

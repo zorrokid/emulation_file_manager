@@ -14,7 +14,6 @@ use relm4::{
 use service::{
     error::Error,
     file_set_download::service::DownloadService,
-    view_model_service::ViewModelService,
     view_models::{
         FileSetViewModel, ReleaseListModel, ReleaseViewModel, Settings, SoftwareTitleListModel,
     },
@@ -32,7 +31,6 @@ use crate::{
 
 #[derive(Debug)]
 pub struct ReleaseModel {
-    view_model_service: Arc<ViewModelService>,
     app_services: Arc<service::app_services::AppServices>,
 
     selected_release: Option<ReleaseViewModel>,
@@ -53,7 +51,6 @@ pub struct ReleaseModel {
 
 #[derive(Debug)]
 pub struct ReleaseInitModel {
-    pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
     pub app_services: Arc<service::app_services::AppServices>,
     pub settings: Arc<Settings>,
@@ -216,7 +213,6 @@ impl Component for ReleaseModel {
             });
 
         let emulator_runner_init_model = EmulatorRunnerInit {
-            view_model_service: Arc::clone(&init_model.view_model_service),
             repository_manager: Arc::clone(&init_model.repository_manager),
             app_services: Arc::clone(&init_model.app_services),
             settings: Arc::clone(&init_model.settings),
@@ -235,7 +231,6 @@ impl Component for ReleaseModel {
             .detach();
 
         let document_viewer_init_model = DocumentViewerInit {
-            view_model_service: Arc::clone(&init_model.view_model_service),
             repository_manager: Arc::clone(&init_model.repository_manager),
             app_services: Arc::clone(&init_model.app_services),
             settings: Arc::clone(&init_model.settings),
@@ -246,7 +241,6 @@ impl Component for ReleaseModel {
             .detach();
 
         let model = ReleaseModel {
-            view_model_service: init_model.view_model_service,
             app_services: init_model.app_services,
 
             selected_release: None,

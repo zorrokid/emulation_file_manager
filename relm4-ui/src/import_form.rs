@@ -22,7 +22,6 @@ use service::{
         models::{FileSetImportStatus, MassImportInput, MassImportResult, MassImportSyncEvent},
         service::MassImportService,
     },
-    view_model_service::ViewModelService,
     view_models::{Settings, SystemListModel},
 };
 use ui_components::{DropDownOutputMsg, FileTypeDropDown, FileTypeSelectedMsg};
@@ -107,7 +106,6 @@ pub enum CommandMsg {
 }
 
 pub struct ImportFormInit {
-    pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
     pub app_services: Arc<service::app_services::AppServices>,
     pub settings: Arc<Settings>,
@@ -256,7 +254,6 @@ impl Component for ImportForm {
         ));
 
         let init_model = SystemSelectInit {
-            view_model_service: Arc::clone(&init_model.view_model_service),
             repository_manager: Arc::clone(&init_model.repository_manager),
             app_services: Arc::clone(&init_model.app_services),
         };

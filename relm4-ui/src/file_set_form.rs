@@ -29,7 +29,6 @@ use service::{
         },
         service::FileImportService,
     },
-    view_model_service::ViewModelService,
     view_models::{FileSetListModel, FileSetViewModel, Settings},
 };
 use ui_components::{DropDownMsg, DropDownOutputMsg, FileTypeDropDown, FileTypeSelectedMsg};
@@ -165,11 +164,11 @@ pub struct FileSetFormInit {
     pub repository_manager: Arc<RepositoryManager>,
     pub app_services: Arc<service::app_services::AppServices>,
     pub settings: Arc<Settings>,
-    pub view_model_service: Arc<ViewModelService>,
 }
 
 #[derive(Debug)]
 pub struct FileSetFormModel {
+    app_services: Arc<service::app_services::AppServices>,
     files: FactoryVecDeque<File>,
     selected_system_ids: Vec<i64>,
     file_set_name: String,
@@ -181,7 +180,6 @@ pub struct FileSetFormModel {
     processing: bool,
     file_import_service: Arc<FileImportService>,
     download_service: Arc<DownloadService>,
-    view_model_service: Arc<ViewModelService>,
     settings: Arc<Settings>,
     selected_file_type: Option<FileType>,
     selected_files_in_picked_files: Vec<Sha1Checksum>,
@@ -447,6 +445,7 @@ impl Component for FileSetFormModel {
         );
 
         let model = FileSetFormModel {
+            app_services: Arc::clone(&init_model.app_services),
             files,
             selected_system_ids: Vec::new(),
             file_set_name: String::new(),
@@ -456,7 +455,6 @@ impl Component for FileSetFormModel {
             processing: false,
             file_import_service,
             download_service,
-            view_model_service: init_model.view_model_service,
             settings: Arc::clone(&init_model.settings),
             selected_file_type: None,
             selected_files_in_picked_files: Vec::new(),
@@ -662,9 +660,10 @@ impl Component for FileSetFormModel {
             }
             FileSetFormMsg::ShowEdit { file_set_id } => {
                 tracing::info!(file_set_id = file_set_id, "Showing file set for editing");
-                let view_model_service = Arc::clone(&self.view_model_service);
+                let app_services = Arc::clone(&self.app_services);
                 sender.oneshot_command(async move {
-                    let res = view_model_service
+                    let res = app_services
+                        .view_model
                         .get_file_set_view_model(file_set_id)
                         .await;
                     CommandMsg::ProcessFileSetResponse(res)

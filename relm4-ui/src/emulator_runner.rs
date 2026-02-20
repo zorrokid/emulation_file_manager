@@ -18,7 +18,6 @@ use relm4::{
 use service::{
     error::Error as ServiceError,
     external_executable_runner::service::{ExecutableRunnerModel, ExternalExecutableRunnerService},
-    view_model_service::ViewModelService,
     view_models::{
         EmulatorListModel, EmulatorViewModel, FileSetFileInfoViewModel, FileSetViewModel, Settings,
     },
@@ -71,7 +70,6 @@ pub enum EmulatorRunnerCommandMsg {
 }
 
 pub struct EmulatorRunnerInit {
-    pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
     pub app_services: Arc<service::app_services::AppServices>,
     pub settings: Arc<Settings>,
@@ -80,7 +78,6 @@ pub struct EmulatorRunnerInit {
 #[derive(Debug)]
 pub struct EmulatorRunnerModel {
     // services
-    view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
     app_services: Arc<service::app_services::AppServices>,
     external_executable_runner_service: Arc<ExternalExecutableRunnerService>,
@@ -170,7 +167,6 @@ impl Component for EmulatorRunnerModel {
         let system_list_view_wrapper = TypedListView::<ListItem, gtk::SingleSelection>::new();
 
         let init_model = EmulatorFormInit {
-            view_model_service: Arc::clone(&init.view_model_service),
             repository_manager: Arc::clone(&init.repository_manager),
             app_services: Arc::clone(&init.app_services),
         };
@@ -204,7 +200,6 @@ impl Component for EmulatorRunnerModel {
         ));
 
         let model = EmulatorRunnerModel {
-            view_model_service: init.view_model_service,
             repository_manager: init.repository_manager,
             app_services: init.app_services,
             external_executable_runner_service,

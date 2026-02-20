@@ -10,10 +10,7 @@ use relm4::{
     },
     typed_view::list::TypedListView,
 };
-use service::{
-    error::Error as ServiceError, view_model_service::ViewModelService,
-    view_models::SoftwareTitleListModel,
-};
+use service::{error::Error as ServiceError, view_models::SoftwareTitleListModel};
 
 use crate::{
     list_item::DeletableListItem,
@@ -60,14 +57,12 @@ pub enum CommandMsg {
 }
 
 pub struct SoftwareTitleSelectInit {
-    pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
     pub app_services: Arc<service::app_services::AppServices>,
 }
 
 #[derive(Debug)]
 pub struct SoftwareTitleSelectModel {
-    view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
     app_services: Arc<service::app_services::AppServices>,
     software_titles: Vec<SoftwareTitleListModel>,
@@ -178,7 +173,6 @@ impl Component for SoftwareTitleSelectModel {
             });
 
         let model = SoftwareTitleSelectModel {
-            view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
             app_services: init_model.app_services,
             software_titles: Vec::new(),
