@@ -58,7 +58,7 @@ pub enum ReleaseFormOutputMsg {
 
 #[derive(Debug)]
 pub enum CommandMsg {
-    ReleaseCreatedOrUpdated(Result<i64, Error>),
+    ReleaseCreatedOrUpdated(Result<i64, ServiceError>),
     ReleaseFetched(Result<ReleaseViewModel, ServiceError>),
 }
 
@@ -271,7 +271,7 @@ impl Component for ReleaseFormModel {
             }
             ReleaseFormMsg::StartSaveRelease => {
                 tracing::info!("Starting to save release with selected systems and file sets");
-                let repository_manager = Arc::clone(&self.repository_manager);
+                let app_services = Arc::clone(&self.app_services);
                 let software_title_ids = self.selected_software_title_ids.clone();
                 let system_ids = self.selected_system_ids.clone();
 
@@ -307,9 +307,9 @@ impl Component for ReleaseFormModel {
                         let res = match release_id {
                             Some(id) => {
                                 tracing::info!(id = id, "Editing existing release");
-                                repository_manager
-                                    .get_release_repository()
-                                    .update_release_full(
+                                app_services
+                                    .release
+                                    .update_release(
                                         id,
                                         release_name.as_str(),
                                         &software_title_ids,
@@ -320,9 +320,9 @@ impl Component for ReleaseFormModel {
                             }
                             _ => {
                                 tracing::info!(name = release_name, "Creating new release");
-                                repository_manager
-                                    .get_release_repository()
-                                    .add_release_full(
+                                app_services
+                                    .release
+                                    .add_release(
                                         release_name.as_str(),
                                         &software_title_ids,
                                         &file_set_ids,

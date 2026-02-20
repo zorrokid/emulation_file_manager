@@ -67,7 +67,7 @@ pub enum EmulatorRunnerMsg {
 pub enum EmulatorRunnerCommandMsg {
     EmulatorsFetched(Result<Vec<EmulatorViewModel>, ServiceError>),
     FinishedRunningEmulator(Result<(), ServiceError>),
-    EmulatorDeleted(Result<i64, Error>),
+    EmulatorDeleted(Result<i64, ServiceError>),
 }
 
 pub struct EmulatorRunnerInit {
@@ -334,12 +334,9 @@ impl Component for EmulatorRunnerModel {
             EmulatorRunnerMsg::DeleteConfirmed => {
                 if let Some(selected_emulator) = &self.selected_emulator {
                     let emulator_id = selected_emulator.id;
-                    let repository_manager = Arc::clone(&self.repository_manager);
+                    let app_services = Arc::clone(&self.app_services);
                     sender.oneshot_command(async move {
-                        let res = repository_manager
-                            .get_emulator_repository()
-                            .delete_emulator(emulator_id)
-                            .await;
+                        let res = app_services.emulator.delete_emulator(emulator_id).await;
                         EmulatorRunnerCommandMsg::EmulatorDeleted(res)
                     });
                 }

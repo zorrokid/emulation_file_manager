@@ -56,7 +56,7 @@ pub enum SoftwareTitleSelectOutputMsg {
 #[derive(Debug)]
 pub enum CommandMsg {
     SoftwareTitlesFetched(Result<Vec<SoftwareTitleListModel>, ServiceError>),
-    Deleted(Result<i64, DatabaseError>),
+    Deleted(Result<i64, ServiceError>),
 }
 
 pub struct SoftwareTitleSelectInit {
@@ -242,14 +242,11 @@ impl Component for SoftwareTitleSelectModel {
                 tracing::info!("Deletion canceled by user.");
             }
             SoftwareTitleSelectMsg::DeleteConfirmed => {
-                let repository_manager = Arc::clone(&self.repository_manager);
+                let app_services = Arc::clone(&self.app_services);
                 if let Some(id) = self.get_selected_list_item().map(|item| item.id) {
                     sender.oneshot_command(async move {
                         tracing::info!(id = id, "Deleting software_title");
-                        let result = repository_manager
-                            .get_software_title_repository()
-                            .delete_software_title(id)
-                            .await;
+                        let result = app_services.software_title.delete_software_title(id).await;
                         CommandMsg::Deleted(result)
                     });
                 }

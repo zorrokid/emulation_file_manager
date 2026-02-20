@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use database::{database_error::DatabaseError, repository_manager::RepositoryManager};
+use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
@@ -40,7 +40,7 @@ pub enum ReleasesMsg {
 #[derive(Debug)]
 pub enum CommandMsg {
     FetchedReleases(Result<Vec<ReleaseListModel>, Error>),
-    ReleaseDeleted(Result<i64, DatabaseError>),
+    ReleaseDeleted(Result<i64, Error>),
 }
 
 #[derive(Debug)]
@@ -258,12 +258,9 @@ impl Component for ReleasesModel {
             }
             ReleasesMsg::RemoveRelease => {
                 if let Some(release_id) = self.get_selected_release_id() {
-                    let repository_manager = Arc::clone(&self.repository_manager);
+                    let app_services = Arc::clone(&self.app_services);
                     sender.oneshot_command(async move {
-                        let result = repository_manager
-                            .get_release_repository()
-                            .delete_release(release_id)
-                            .await;
+                        let result = app_services.release.delete_release(release_id).await;
                         CommandMsg::ReleaseDeleted(result)
                     });
                 }

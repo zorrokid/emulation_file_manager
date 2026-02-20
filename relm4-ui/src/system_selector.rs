@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use database::{database_error::DatabaseError, repository_manager::RepositoryManager};
+use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
@@ -49,7 +49,7 @@ pub enum SystemSelectOutputMsg {
 pub enum CommandMsg {
     SystemsFetched(Result<Vec<SystemListModel>, ServiceError>),
     Deleted {
-        result: Result<(), DatabaseError>,
+        result: Result<(), ServiceError>,
         id: i64,
     },
 }
@@ -237,14 +237,11 @@ impl Component for SystemSelectModel {
                 self.confirm_dialog_controller.emit(ConfirmDialogMsg::Show);
             }
             SystemSelectMsg::DeleteConfirmed => {
-                let repository_manager = Arc::clone(&self.repository_manager);
+                let app_services = Arc::clone(&self.app_services);
                 if let Some(id) = self.get_selected_system_list_model().map(|item| item.id) {
                     sender.oneshot_command(async move {
                         tracing::info!(id = id, "Deleting system");
-                        let result = repository_manager
-                            .get_system_repository()
-                            .delete_system(id)
-                            .await;
+                        let result = app_services.system.delete_system(id).await;
                         CommandMsg::Deleted { result, id }
                     });
                 }

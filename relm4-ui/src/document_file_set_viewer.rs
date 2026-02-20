@@ -8,7 +8,7 @@ use crate::{
     list_item::ListItem,
     utils::dialog_utils::show_error_dialog,
 };
-use database::{database_error::DatabaseError, repository_manager::RepositoryManager};
+use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
@@ -60,7 +60,7 @@ pub enum DocumentViewerMsg {
 pub enum DocumentViewerCommandMsg {
     ViewersFetched(Result<Vec<DocumentViewerViewModel>, ServiceError>),
     FinishedRunningViewer(Result<(), ServiceError>),
-    Deleted(Result<i64, DatabaseError>),
+    Deleted(Result<i64, ServiceError>),
 }
 
 pub struct DocumentViewerInit {
@@ -328,11 +328,11 @@ impl Component for DocumentViewer {
             DocumentViewerMsg::DeleteConfirmed => {
                 if let Some(selected_viewer) = &self.selected_viewer {
                     let viewer_id = selected_viewer.id;
-                    let repository_manager = Arc::clone(&self.repository_manager);
+                    let app_services = Arc::clone(&self.app_services);
                     sender.oneshot_command(async move {
-                        let res = repository_manager
-                            .get_document_viewer_repository()
-                            .delete(viewer_id)
+                        let res = app_services
+                            .document_viewer
+                            .delete_document_viewer(viewer_id)
                             .await;
                         DocumentViewerCommandMsg::Deleted(res)
                     });

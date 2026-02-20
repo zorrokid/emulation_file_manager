@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use core_types::{ArgumentType, DocumentType};
-use database::{database_error::DatabaseError, repository_manager::RepositoryManager};
+use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
@@ -12,7 +12,10 @@ use relm4::{
         },
     },
 };
-use service::view_models::{DocumentViewerListModel, DocumentViewerViewModel};
+use service::{
+    error::Error,
+    view_models::{DocumentViewerListModel, DocumentViewerViewModel},
+};
 use ui_components::{
     DropDownOutputMsg,
     drop_down::{DocumentTypeDropDown, DocumentTypeSelectedMsg},
@@ -45,8 +48,8 @@ pub enum DocumentViewerFormOutputMsg {
 
 #[derive(Debug)]
 pub enum DocumentViewerFormCommandMsg {
-    DocumentViewerSubmitted(Result<i64, DatabaseError>),
-    DocumentViewerUpdated(Result<i64, DatabaseError>),
+    DocumentViewerSubmitted(Result<i64, Error>),
+    DocumentViewerUpdated(Result<i64, Error>),
 }
 
 pub struct DocumentViewerFormInit {
@@ -188,16 +191,17 @@ impl Component for DocumentViewerFormModel {
             }
             DocumentViewerFormMsg::Submit => {
                 if let Some(document_type) = self.selected_document_type {
-                    let repository_manager = Arc::clone(&self.repository_manager);
                     let executable = self.executable.clone();
                     let name = self.name.clone();
                     let arguments = self.arguments.clone();
                     let cleanup_temp_files = self.cleanup_temp_files;
 
+                    let app_services = Arc::clone(&self.app_services);
+
                     if let Some(editable_id) = self.editable_viewer_id {
                         sender.oneshot_command(async move {
-                            let res = repository_manager
-                                .get_document_viewer_repository()
+                            let res = app_services
+                                .document_viewer
                                 .update_document_viewer(
                                     editable_id,
                                     &name,
@@ -211,8 +215,8 @@ impl Component for DocumentViewerFormModel {
                         });
                     } else {
                         sender.oneshot_command(async move {
-                            let res = repository_manager
-                                .get_document_viewer_repository()
+                            let res = app_services
+                                .document_viewer
                                 .add_document_viewer(
                                     &name,
                                     &executable,
