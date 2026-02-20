@@ -5,11 +5,7 @@ use crate::{
     list_item::ListItem,
     utils::dialog_utils::show_error_dialog,
 };
-use database::{
-    database_error::Error,
-    models::{FileSetFileInfo, System},
-    repository_manager::RepositoryManager,
-};
+use database::{database_error::Error, models::System, repository_manager::RepositoryManager};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
@@ -77,6 +73,7 @@ pub enum EmulatorRunnerCommandMsg {
 pub struct EmulatorRunnerInit {
     pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
+    pub app_services: Arc<service::app_services::AppServices>,
     pub settings: Arc<Settings>,
 }
 
@@ -85,6 +82,7 @@ pub struct EmulatorRunnerModel {
     // services
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
+    app_services: Arc<service::app_services::AppServices>,
     external_executable_runner_service: Arc<ExternalExecutableRunnerService>,
 
     // list views
@@ -174,6 +172,7 @@ impl Component for EmulatorRunnerModel {
         let init_model = EmulatorFormInit {
             view_model_service: Arc::clone(&init.view_model_service),
             repository_manager: Arc::clone(&init.repository_manager),
+            app_services: Arc::clone(&init.app_services),
         };
 
         let emulator_form = EmulatorFormModel::builder()
@@ -207,6 +206,7 @@ impl Component for EmulatorRunnerModel {
         let model = EmulatorRunnerModel {
             view_model_service: init.view_model_service,
             repository_manager: init.repository_manager,
+            app_services: init.app_services,
             external_executable_runner_service,
 
             systems: Vec::new(),

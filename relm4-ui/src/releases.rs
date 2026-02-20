@@ -47,6 +47,7 @@ pub enum CommandMsg {
 pub struct ReleasesModel {
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
+    app_services: Arc<service::app_services::AppServices>,
     release_form: Controller<ReleaseFormModel>,
     releases_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     selected_software_title_ids: Vec<i64>,
@@ -55,6 +56,7 @@ pub struct ReleasesModel {
 pub struct ReleasesInit {
     pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
+    pub app_services: Arc<service::app_services::AppServices>,
     pub settings: Arc<Settings>,
 }
 
@@ -122,6 +124,7 @@ impl Component for ReleasesModel {
         let release_form_init_model = ReleaseFormInit {
             view_model_service: Arc::clone(&init_model.view_model_service),
             repository_manager: Arc::clone(&init_model.repository_manager),
+            app_services: Arc::clone(&init_model.app_services),
             settings: Arc::clone(&init_model.settings),
         };
 
@@ -146,6 +149,7 @@ impl Component for ReleasesModel {
         let model = ReleasesModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
+            app_services: init_model.app_services,
             release_form,
             releases_list_view_wrapper: TypedListView::new(),
             selected_software_title_ids: vec![],

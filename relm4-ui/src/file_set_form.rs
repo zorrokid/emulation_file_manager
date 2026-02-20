@@ -163,6 +163,7 @@ pub enum CommandMsg {
 
 pub struct FileSetFormInit {
     pub repository_manager: Arc<RepositoryManager>,
+    pub app_services: Arc<service::app_services::AppServices>,
     pub settings: Arc<Settings>,
     pub view_model_service: Arc<ViewModelService>,
 }

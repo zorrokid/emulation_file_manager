@@ -54,6 +54,7 @@ pub struct ReleaseModel {
 pub struct ReleaseInitModel {
     pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
+    pub app_services: Arc<service::app_services::AppServices>,
     pub settings: Arc<Settings>,
 }
 
@@ -216,6 +217,7 @@ impl Component for ReleaseModel {
         let emulator_runner_init_model = EmulatorRunnerInit {
             view_model_service: Arc::clone(&init_model.view_model_service),
             repository_manager: Arc::clone(&init_model.repository_manager),
+            app_services: Arc::clone(&init_model.app_services),
             settings: Arc::clone(&init_model.settings),
         };
         let emulator_runner = EmulatorRunnerModel::builder()
@@ -234,6 +236,7 @@ impl Component for ReleaseModel {
         let document_viewer_init_model = DocumentViewerInit {
             view_model_service: Arc::clone(&init_model.view_model_service),
             repository_manager: Arc::clone(&init_model.repository_manager),
+            app_services: Arc::clone(&init_model.app_services),
             settings: Arc::clone(&init_model.settings),
         };
         let document_file_set_viewer = DocumentViewer::builder()
@@ -318,7 +321,10 @@ impl Component for ReleaseModel {
             }
             ReleaseMsg::StartImageFileSetViewer => {
                 if let Some(file_set) = &self.selected_image_file_set {
-                    tracing::info!(id = file_set.id, "Starting image file set viewer for file set");
+                    tracing::info!(
+                        id = file_set.id,
+                        "Starting image file set viewer for file set"
+                    );
                     self.image_file_set_viewer
                         .emit(ImageFilesetViewerMsg::Show {
                             file_set: file_set.clone(),

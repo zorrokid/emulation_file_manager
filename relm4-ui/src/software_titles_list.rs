@@ -11,6 +11,7 @@ use relm4::{
     typed_view::list::TypedListView,
 };
 use service::{
+    app_services::AppServices,
     error::Error,
     software_title_service::{SoftwareTitleService, SoftwareTitleServiceError},
     view_model_service::ViewModelService,
@@ -27,6 +28,7 @@ use crate::{
 #[derive(Debug)]
 pub struct SoftwareTitlesList {
     view_model_service: Arc<ViewModelService>,
+    app_services: Arc<AppServices>,
     list_view_wrapper: TypedListView<ListItem, gtk::MultiSelection>,
     selected_items: Vec<ListItem>,
     merge_dialog_controller: Controller<SoftwareTitleMergeDialog>,
@@ -62,6 +64,7 @@ pub enum SoftwareTitleListOutMsg {
 pub struct SoftwareTitleListInit {
     pub repository_manager: Arc<RepositoryManager>,
     pub view_model_service: Arc<ViewModelService>,
+    pub app_services: Arc<AppServices>,
 }
 
 #[relm4::component(pub)]
@@ -116,6 +119,7 @@ impl Component for SoftwareTitlesList {
 
         let model = SoftwareTitlesList {
             view_model_service: init_model.view_model_service,
+            app_services: init_model.app_services,
             list_view_wrapper,
             selected_items: Vec::new(),
             merge_dialog_controller,

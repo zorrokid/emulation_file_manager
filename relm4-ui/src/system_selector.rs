@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use database::{database_error::Error as DatabaseError, repository_manager::RepositoryManager};
+use database::{database_error::DatabaseError, repository_manager::RepositoryManager};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
@@ -57,12 +57,14 @@ pub enum CommandMsg {
 pub struct SystemSelectInit {
     pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
+    pub app_services: Arc<service::app_services::AppServices>,
 }
 
 #[derive(Debug)]
 pub struct SystemSelectModel {
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
+    app_services: Arc<service::app_services::AppServices>,
     list_view_wrapper: TypedListView<DeletableListItem, gtk::SingleSelection>,
     selected_system_ids: Vec<i64>,
     system_form_controller: Controller<SystemFormModel>,
@@ -163,7 +165,7 @@ impl Component for SystemSelectModel {
         let system_form_controller = SystemFormModel::builder()
             .transient_for(&root)
             .launch(SystemFormInit {
-                repository_manager: Arc::clone(&init_model.repository_manager),
+                app_services: Arc::clone(&init_model.app_services),
             })
             .forward(sender.input_sender(), |msg| match msg {
                 SystemFormOutputMsg::SystemAdded(software_title_list_model) => {
@@ -177,6 +179,7 @@ impl Component for SystemSelectModel {
         let model = SystemSelectModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
+            app_services: init_model.app_services,
             list_view_wrapper,
             selected_system_ids: Vec::new(),
             system_form_controller,

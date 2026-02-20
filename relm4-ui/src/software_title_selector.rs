@@ -62,12 +62,14 @@ pub enum CommandMsg {
 pub struct SoftwareTitleSelectInit {
     pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
+    pub app_services: Arc<service::app_services::AppServices>,
 }
 
 #[derive(Debug)]
 pub struct SoftwareTitleSelectModel {
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
+    app_services: Arc<service::app_services::AppServices>,
     software_titles: Vec<SoftwareTitleListModel>,
     list_view_wrapper: TypedListView<DeletableListItem, gtk::SingleSelection>,
     selected_software_title_ids: Vec<i64>,
@@ -164,7 +166,7 @@ impl Component for SoftwareTitleSelectModel {
         let software_title_form_controller = SoftwareTitleFormModel::builder()
             .transient_for(&root)
             .launch(SoftwareTitleFormInit {
-                repository_manager: Arc::clone(&init_model.repository_manager),
+                app_services: Arc::clone(&init_model.app_services),
             })
             .forward(sender.input_sender(), |msg| match msg {
                 SoftwareTitleFormOutputMsg::SoftwareTitleAdded(software_title_list_model) => {
@@ -178,6 +180,7 @@ impl Component for SoftwareTitleSelectModel {
         let model = SoftwareTitleSelectModel {
             view_model_service: init_model.view_model_service,
             repository_manager: init_model.repository_manager,
+            app_services: init_model.app_services,
             software_titles: Vec::new(),
             list_view_wrapper,
             selected_software_title_ids: Vec::new(),

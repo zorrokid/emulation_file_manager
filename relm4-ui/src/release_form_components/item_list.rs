@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use database::{database_error::Error, repository_manager::RepositoryManager};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
@@ -11,7 +10,7 @@ use relm4::{
     once_cell::sync::OnceCell,
     typed_view::list::TypedListView,
 };
-use service::view_models::ReleaseItemListModel;
+use service::{app_services::AppServices, error::Error as ServiceError, view_models::ReleaseItemListModel};
 
 use crate::{
     list_item::ListItem,
@@ -38,17 +37,17 @@ pub enum ItemListOutputMsg {
 
 #[derive(Debug)]
 pub enum ItemListCommandMsg {
-    ProcessDeleteItemResult(Result<(), Error>),
+    ProcessDeleteItemResult(Result<(), ServiceError>),
 }
 
 pub struct ItemListInit {
-    pub repository_manager: Arc<RepositoryManager>,
+    pub app_services: Arc<AppServices>,
     pub release_id: Option<i64>,
 }
 
 #[derive(Debug)]
 pub struct ItemList {
-    repository_manager: Arc<RepositoryManager>,
+    app_services: Arc<AppServices>,
     release_id: Option<i64>,
     selected_items_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     item_form: OnceCell<Controller<ItemForm>>,
@@ -114,7 +113,7 @@ impl Component for ItemList {
             TypedListView::new();
 
         let model = ItemList {
-            repository_manager: init_model.repository_manager,
+            app_services: init_model.app_services,
             release_id: init_model.release_id,
             selected_items_list_view_wrapper,
             item_form: OnceCell::new(),
@@ -167,15 +166,10 @@ impl Component for ItemList {
             ItemListMsg::RemoveItem => {
                 if let Some(item_id) = self.selected_item {
                     remove_by_id(&mut self.selected_items_list_view_wrapper, item_id);
-                    let repository_manager = Arc::clone(&self.repository_manager);
+                    let app_services = Arc::clone(&self.app_services);
                     sender.oneshot_command(async move {
                         tracing::info!(item_id, "Removing release item with ID");
-
-                        let result = repository_manager
-                            .get_release_item_repository()
-                            .delete_item(item_id)
-                            .await;
-
+                        let result = app_services.release_item.delete_item(item_id).await;
                         ItemListCommandMsg::ProcessDeleteItemResult(result)
                     });
                 }
@@ -258,8 +252,8 @@ impl ItemList {
 
     fn ensure_item_form(&self, root: &gtk::Box, sender: &ComponentSender<Self>) {
         if self.item_form.get().is_none() {
-            let repository_manager = Arc::clone(&self.repository_manager);
-            let item_form_init = ItemFormInit { repository_manager };
+            let app_services = Arc::clone(&self.app_services);
+            let item_form_init = ItemFormInit { app_services };
 
             let item_form = ItemForm::builder()
                 .transient_for(root)

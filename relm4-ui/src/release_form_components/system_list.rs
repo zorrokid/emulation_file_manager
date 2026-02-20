@@ -9,7 +9,9 @@ use relm4::{
     },
     typed_view::list::TypedListView,
 };
-use service::{view_model_service::ViewModelService, view_models::SystemListModel};
+use service::{
+    app_services::AppServices, view_model_service::ViewModelService, view_models::SystemListModel,
+};
 
 use crate::{
     list_item::ListItem,
@@ -35,11 +37,13 @@ pub enum SystemListOutputMsg {
 pub struct SystemListInit {
     pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
+    pub app_services: Arc<AppServices>,
 }
 
 #[derive(Debug)]
 pub struct SystemList {
     view_model_service: Arc<ViewModelService>,
+    app_services: Arc<AppServices>,
     system_selector: Controller<SystemSelectModel>,
     selected_systems_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
 }
@@ -88,6 +92,7 @@ impl Component for SystemList {
         let system_selector_init_model = SystemSelectInit {
             view_model_service: Arc::clone(&init_model.view_model_service),
             repository_manager: Arc::clone(&init_model.repository_manager),
+            app_services: Arc::clone(&init_model.app_services),
         };
 
         let system_selector = SystemSelectModel::builder()
@@ -101,6 +106,7 @@ impl Component for SystemList {
 
         let model = SystemList {
             view_model_service: init_model.view_model_service,
+            app_services: init_model.app_services,
             system_selector,
             selected_systems_list_view_wrapper,
         };

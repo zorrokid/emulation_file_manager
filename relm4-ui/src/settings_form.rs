@@ -58,6 +58,7 @@ impl SettingsForm {
 
 pub struct SettingsFormInit {
     pub repository_manager: Arc<RepositoryManager>,
+    pub app_services: Arc<service::app_services::AppServices>,
     pub settings: Arc<Settings>,
 }
 

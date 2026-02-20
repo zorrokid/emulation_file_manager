@@ -15,6 +15,7 @@ use crate::list_item::ListItem;
 #[derive(Debug)]
 pub struct FileInfoDetails {
     view_model_service: Arc<ViewModelService>,
+    app_services: Arc<service::app_services::AppServices>,
     file_info_view_model: Option<FileInfoViewModel>,
     file_sets_list_view_wrapper: TypedListView<ListItem, gtk::NoSelection>,
 }
@@ -31,6 +32,7 @@ pub enum FileInfoDetailsCmdMsg {
 
 pub struct FileInfoDetailsInit {
     pub view_model_service: Arc<ViewModelService>,
+    pub app_services: Arc<service::app_services::AppServices>,
 }
 
 #[derive(Debug)]
@@ -74,6 +76,7 @@ impl relm4::Component for FileInfoDetails {
         let file_sets_list_view_wrapper = TypedListView::<ListItem, gtk::NoSelection>::new();
         let model = FileInfoDetails {
             view_model_service: init.view_model_service,
+            app_services: init.app_services,
             file_info_view_model: None,
             file_sets_list_view_wrapper,
         };

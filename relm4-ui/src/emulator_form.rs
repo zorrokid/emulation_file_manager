@@ -56,11 +56,13 @@ pub enum EmulatorFormCommandMsg {
 pub struct EmulatorFormInit {
     pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
+    pub app_services: Arc<service::app_services::AppServices>,
 }
 
 #[derive(Debug)]
 pub struct EmulatorFormModel {
     pub repository_manager: Arc<RepositoryManager>,
+    pub app_services: Arc<service::app_services::AppServices>,
     pub name: String,
     pub executable: String,
     pub extract_files: bool,
@@ -343,6 +345,7 @@ impl Component for EmulatorFormModel {
         let init_model = SystemSelectInit {
             view_model_service: Arc::clone(&init.view_model_service),
             repository_manager: Arc::clone(&init.repository_manager),
+            app_services: Arc::clone(&init.app_services),
         };
 
         let system_selector = SystemSelectModel::builder()
@@ -365,6 +368,7 @@ impl Component for EmulatorFormModel {
 
         let model = Self {
             repository_manager: init.repository_manager,
+            app_services: init.app_services,
             executable: String::new(),
             extract_files: false,
             selected_system: None,

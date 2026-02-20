@@ -51,11 +51,13 @@ pub enum DocumentViewerFormCommandMsg {
 
 pub struct DocumentViewerFormInit {
     pub repository_manager: Arc<RepositoryManager>,
+    pub app_services: Arc<service::app_services::AppServices>,
 }
 
 #[derive(Debug)]
 pub struct DocumentViewerFormModel {
     pub repository_manager: Arc<RepositoryManager>,
+    pub app_services: Arc<service::app_services::AppServices>,
     pub name: String,
     pub executable: String,
     pub selected_document_type: Option<DocumentType>,
@@ -348,6 +350,7 @@ impl Component for DocumentViewerFormModel {
 
         let model = Self {
             repository_manager: init.repository_manager,
+            app_services: init.app_services,
             executable: String::new(),
             arguments: Vec::new(),
             name: String::new(),

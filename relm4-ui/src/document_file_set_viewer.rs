@@ -8,9 +8,7 @@ use crate::{
     list_item::ListItem,
     utils::dialog_utils::show_error_dialog,
 };
-use database::{
-    database_error::DatabaseError, models::FileSetFileInfo, repository_manager::RepositoryManager,
-};
+use database::{database_error::DatabaseError, repository_manager::RepositoryManager};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
@@ -21,6 +19,7 @@ use relm4::{
     typed_view::list::TypedListView,
 };
 use service::{
+    app_services::AppServices,
     error::Error as ServiceError,
     external_executable_runner::service::{ExecutableRunnerModel, ExternalExecutableRunnerService},
     view_model_service::ViewModelService,
@@ -67,6 +66,7 @@ pub enum DocumentViewerCommandMsg {
 pub struct DocumentViewerInit {
     pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
+    pub app_services: Arc<AppServices>,
     pub settings: Arc<Settings>,
 }
 
@@ -75,6 +75,7 @@ pub struct DocumentViewer {
     // services
     view_model_service: Arc<ViewModelService>,
     repository_manager: Arc<RepositoryManager>,
+    app_services: Arc<AppServices>,
     external_executable_runner_service: Arc<ExternalExecutableRunnerService>,
 
     // list views
@@ -159,6 +160,7 @@ impl Component for DocumentViewer {
 
         let init_model = DocumentViewerFormInit {
             repository_manager: Arc::clone(&init.repository_manager),
+            app_services: Arc::clone(&init.app_services),
         };
         let viewer_form = DocumentViewerFormModel::builder()
             .transient_for(&root)
@@ -192,6 +194,7 @@ impl Component for DocumentViewer {
         let model = DocumentViewer {
             view_model_service: init.view_model_service,
             repository_manager: init.repository_manager,
+            app_services: init.app_services,
             external_executable_runner_service,
 
             viewers: Vec::new(),

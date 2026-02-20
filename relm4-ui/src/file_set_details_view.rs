@@ -25,6 +25,7 @@ use crate::{
 #[derive(Debug)]
 pub struct FileSetDetailsView {
     view_model_service: Arc<ViewModelService>,
+    app_services: Arc<service::app_services::AppServices>,
     files_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     systems_list_view_wrapper: TypedListView<ListItem, gtk::NoSelection>,
     software_titles_list_view_wrapper: TypedListView<ListItem, gtk::NoSelection>,
@@ -53,6 +54,7 @@ pub enum FileSetDetailsOutputMsg {
 #[derive(Debug)]
 pub struct FileSetDetailsInit {
     pub view_model_service: Arc<ViewModelService>,
+    pub app_services: Arc<service::app_services::AppServices>,
 }
 
 #[relm4::component(pub)]
@@ -123,6 +125,7 @@ impl relm4::Component for FileSetDetailsView {
         let software_titles_list_view_wrapper = TypedListView::<ListItem, gtk::NoSelection>::new();
         let file_info_details_init = FileInfoDetailsInit {
             view_model_service: Arc::clone(&init.view_model_service),
+            app_services: Arc::clone(&init.app_services),
         };
         let file_info_details = FileInfoDetails::builder()
             .launch(file_info_details_init)
@@ -134,6 +137,7 @@ impl relm4::Component for FileSetDetailsView {
 
         let model = FileSetDetailsView {
             view_model_service: init.view_model_service,
+            app_services: init.app_services,
             files_list_view_wrapper,
             systems_list_view_wrapper,
             software_titles_list_view_wrapper,

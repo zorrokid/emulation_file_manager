@@ -63,6 +63,7 @@ pub enum CommandMsg {
 pub struct FileSetSelectorInit {
     pub view_model_service: Arc<ViewModelService>,
     pub repository_manager: Arc<RepositoryManager>,
+    pub app_services: Arc<service::app_services::AppServices>,
     pub settings: Arc<Settings>,
 }
 
@@ -184,6 +185,7 @@ impl Component for FileSetSelector {
 
         let file_set_form_init_model = FileSetFormInit {
             repository_manager: Arc::clone(&init_model.repository_manager),
+            app_services: Arc::clone(&init_model.app_services),
             settings: Arc::clone(&init_model.settings),
             view_model_service: Arc::clone(&init_model.view_model_service),
         };
@@ -200,6 +202,7 @@ impl Component for FileSetSelector {
 
         let file_set_details_view_init = FileSetDetailsInit {
             view_model_service: Arc::clone(&init_model.view_model_service),
+            app_services: Arc::clone(&init_model.app_services),
         };
 
         let file_set_details_view = FileSetDetailsView::builder()

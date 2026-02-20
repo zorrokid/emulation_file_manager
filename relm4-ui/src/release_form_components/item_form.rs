@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use core_types::item_type::ItemType;
-use database::{database_error::Error, models::ReleaseItem, repository_manager::RepositoryManager};
+use database::models::ReleaseItem;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
@@ -12,7 +12,7 @@ use relm4::{
         },
     },
 };
-use service::view_models::ReleaseItemListModel;
+use service::{app_services::AppServices, error::Error as ServiceError, view_models::ReleaseItemListModel};
 use ui_components::{
     DropDownMsg, DropDownOutputMsg,
     drop_down::{ItemTypeDropDown, ItemTypeSelectedMsg},
@@ -22,7 +22,7 @@ use crate::utils::dialog_utils::show_error_dialog;
 
 #[derive(Debug)]
 pub struct ItemForm {
-    pub repository_manager: Arc<RepositoryManager>,
+    pub app_services: Arc<AppServices>,
     pub item_type: Option<ItemType>,
     pub notes: String,
     pub release_item_id: Option<i64>,
@@ -51,13 +51,13 @@ pub enum ItemFormOutputMsg {
 
 #[derive(Debug)]
 pub enum ItemFormCommandMsg {
-    ItemSubmitted(Result<i64, Error>),
-    ProcessGetEditItemResult(Result<ReleaseItem, Error>),
+    ItemSubmitted(Result<i64, ServiceError>),
+    ProcessGetEditItemResult(Result<ReleaseItem, ServiceError>),
 }
 
 #[derive(Debug)]
 pub struct ItemFormInit {
-    pub repository_manager: Arc<RepositoryManager>,
+    pub app_services: Arc<AppServices>,
 }
 
 #[relm4::component(pub)]
@@ -141,7 +141,7 @@ impl Component for ItemForm {
         let model = ItemForm {
             item_type: None,
             notes: String::new(),
-            repository_manager: init_model.repository_manager,
+            app_services: init_model.app_services,
             item_type_dropdown,
             release_item_id: None,
             release_id: None,
@@ -182,26 +182,24 @@ impl Component for ItemForm {
                         item_type, notes
                     );
 
-                    let repository_manager = Arc::clone(&self.repository_manager);
+                    let app_services = Arc::clone(&self.app_services);
 
                     if let Some(edit_item_id) = self.release_item_id {
                         sender.oneshot_command(async move {
                             tracing::info!(item_id = edit_item_id, item_type = ?item_type, "Updating release item");
-                            let result = repository_manager
-                                .get_release_item_repository()
+                            let result = app_services
+                                .release_item
                                 .update_item(edit_item_id, item_type, notes)
                                 .await;
-
                             ItemFormCommandMsg::ItemSubmitted(result)
                         });
                     } else {
                         sender.oneshot_command(async move {
                             tracing::info!(item_type = ?item_type, "Adding new release item");
-                            let result = repository_manager
-                                .get_release_item_repository()
+                            let result = app_services
+                                .release_item
                                 .create_item(release_id, item_type, notes)
                                 .await;
-
                             ItemFormCommandMsg::ItemSubmitted(result)
                         });
                     }
@@ -221,13 +219,10 @@ impl Component for ItemForm {
 
                 if let Some(edit_item_id) = edit_item_id {
                     tracing::info!(item_id = edit_item_id, "Preparing to edit release item");
-                    let repository_manager = Arc::clone(&self.repository_manager);
+                    let app_services = Arc::clone(&self.app_services);
                     sender.oneshot_command(async move {
                         tracing::info!(item_id = edit_item_id, "Fetching release item for editing");
-                        let result = repository_manager
-                            .get_release_item_repository()
-                            .get_item(edit_item_id)
-                            .await;
+                        let result = app_services.release_item.get_item(edit_item_id).await;
                         ItemFormCommandMsg::ProcessGetEditItemResult(result)
                     });
                     // Don't show yet - wait until data is loaded
