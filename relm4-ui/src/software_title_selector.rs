@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use database::{database_error::DatabaseError, repository_manager::RepositoryManager};
+use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
@@ -200,10 +200,12 @@ impl Component for SoftwareTitleSelectModel {
         match msg {
             SoftwareTitleSelectMsg::FetchSoftwareTitles => {
                 tracing::info!("Fetching software_titles.");
-                let view_model_service = Arc::clone(&self.view_model_service);
+                let app_services = Arc::clone(&self.app_services);
                 sender.oneshot_command(async move {
-                    let software_titles_result =
-                        view_model_service.get_software_title_list_models().await;
+                    let software_titles_result = app_services
+                        .view_model
+                        .get_software_title_list_models()
+                        .await;
                     CommandMsg::SoftwareTitlesFetched(software_titles_result)
                 });
             }

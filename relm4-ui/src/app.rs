@@ -428,7 +428,8 @@ impl AppModel {
             let view_model_service =
                 Arc::new(ViewModelService::new(Arc::clone(&repository_manager)));
             let app_services = Arc::new(AppServices::new(Arc::clone(&repository_manager)));
-            let settings = view_model_service
+            let settings = app_services
+                .view_model
                 .get_settings()
                 .await
                 .expect("Failed to get config");

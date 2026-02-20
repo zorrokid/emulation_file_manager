@@ -5,7 +5,7 @@ use crate::{
     list_item::ListItem,
     utils::dialog_utils::show_error_dialog,
 };
-use database::{database_error::Error, models::System, repository_manager::RepositoryManager};
+use database::{models::System, repository_manager::RepositoryManager};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
@@ -313,9 +313,10 @@ impl Component for EmulatorRunnerModel {
                 }
             }
             EmulatorRunnerMsg::FetchEmulators { system_id } => {
-                let view_model_service = Arc::clone(&self.view_model_service);
+                let app_services = Arc::clone(&self.app_services);
                 sender.oneshot_command(async move {
-                    let emulators_result = view_model_service
+                    let emulators_result = app_services
+                        .view_model
                         .get_emulator_view_models_for_systems(&[system_id])
                         .await;
                     EmulatorRunnerCommandMsg::EmulatorsFetched(emulators_result)

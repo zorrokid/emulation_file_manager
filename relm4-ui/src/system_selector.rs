@@ -198,9 +198,9 @@ impl Component for SystemSelectModel {
         match msg {
             SystemSelectMsg::FetchSystems => {
                 tracing::info!("Fetching systems.");
-                let view_model_service = Arc::clone(&self.view_model_service);
+                let app_services = Arc::clone(&self.app_services);
                 sender.oneshot_command(async move {
-                    let systems_result = view_model_service.get_system_list_models().await;
+                    let systems_result = app_services.view_model.get_system_list_models().await;
                     CommandMsg::SystemsFetched(systems_result)
                 });
             }

@@ -33,6 +33,7 @@ use crate::{
 #[derive(Debug)]
 pub struct ReleaseModel {
     view_model_service: Arc<ViewModelService>,
+    app_services: Arc<service::app_services::AppServices>,
 
     selected_release: Option<ReleaseViewModel>,
     selected_release_system_names: String,
@@ -246,6 +247,7 @@ impl Component for ReleaseModel {
 
         let model = ReleaseModel {
             view_model_service: init_model.view_model_service,
+            app_services: init_model.app_services,
 
             selected_release: None,
             selected_release_system_names: String::new(),
@@ -302,10 +304,10 @@ impl Component for ReleaseModel {
                 sender.input(ReleaseMsg::FetchRelease { id });
             }
             ReleaseMsg::FetchRelease { id } => {
-                let view_model_service = Arc::clone(&self.view_model_service);
+                let app_services = Arc::clone(&self.app_services);
 
                 sender.oneshot_command(async move {
-                    let release = view_model_service.get_release_view_model(id).await;
+                    let release = app_services.view_model.get_release_view_model(id).await;
                     ReleaseCommandMsg::FetchedRelease(release)
                 });
             }

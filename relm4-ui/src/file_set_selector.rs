@@ -70,6 +70,7 @@ pub struct FileSetSelectorInit {
 #[derive(Debug)]
 pub struct FileSetSelector {
     view_model_service: Arc<ViewModelService>,
+    app_services: Arc<service::app_services::AppServices>,
     file_sets: Vec<FileSetListModel>,
     list_view_wrapper: TypedListView<FileSetListItem, gtk::SingleSelection>,
     file_set_form: Controller<FileSetFormModel>,
@@ -218,6 +219,7 @@ impl Component for FileSetSelector {
 
         let model = FileSetSelector {
             view_model_service: init_model.view_model_service,
+            app_services: init_model.app_services,
             file_sets: Vec::new(),
             list_view_wrapper,
             file_set_form,
@@ -291,13 +293,14 @@ impl Component for FileSetSelector {
             FileSetSelectorMsg::FetchFiles => {
                 tracing::info!("Fetching file sets for selected systems and file type");
                 if let Some(file_type) = self.selected_file_type {
-                    let view_model_service = Arc::clone(&self.view_model_service);
+                    let app_services = Arc::clone(&self.app_services);
                     let system_ids = self.selected_system_ids.clone();
                     sender.oneshot_command(clone!(
                         #[strong]
-                        view_model_service,
+                        app_services,
                         async move {
-                            let file_sets = view_model_service
+                            let file_sets = app_services
+                                .view_model
                                 .get_file_set_list_models(file_type, &system_ids)
                                 .await;
                             CommandMsg::FilesFetched(file_sets)

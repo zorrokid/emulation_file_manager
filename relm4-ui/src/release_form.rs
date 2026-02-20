@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use database::{database_error::Error, repository_manager::RepositoryManager};
+use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
@@ -433,9 +433,10 @@ impl Component for ReleaseFormModel {
             ReleaseFormMsg::Show { release_id } => {
                 if let Some(id) = release_id {
                     tracing::info!(id = id, "Loading release");
-                    let view_model_service = Arc::clone(&self.view_model_service);
+                    let app_services = Arc::clone(&self.app_services);
                     sender.oneshot_command(async move {
-                        let release_result = view_model_service.get_release_view_model(id).await;
+                        let release_result =
+                            app_services.view_model.get_release_view_model(id).await;
                         CommandMsg::ReleaseFetched(release_result)
                     });
                 } else {

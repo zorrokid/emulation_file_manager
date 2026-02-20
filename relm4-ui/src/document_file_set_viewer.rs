@@ -289,9 +289,12 @@ impl Component for DocumentViewer {
                 sender.input(DocumentViewerMsg::FetchViewers);
             }
             DocumentViewerMsg::FetchViewers => {
-                let view_model_service = Arc::clone(&self.view_model_service);
+                let app_services = Arc::clone(&self.app_services);
                 sender.oneshot_command(async move {
-                    let viewers_result = view_model_service.get_document_viewer_view_models().await;
+                    let viewers_result = app_services
+                        .view_model
+                        .get_document_viewer_view_models()
+                        .await;
                     DocumentViewerCommandMsg::ViewersFetched(viewers_result)
                 });
             }

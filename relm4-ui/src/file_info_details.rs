@@ -88,9 +88,10 @@ impl relm4::Component for FileInfoDetails {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match msg {
             FileInfoDetailsMsg::LoadFileInfo(file_info_id) => {
-                let view_model_service = Arc::clone(&self.view_model_service);
+                let app_services = Arc::clone(&self.app_services);
                 sender.oneshot_command(async move {
-                    let result = view_model_service
+                    let result = app_services
+                        .view_model
                         .get_file_info_view_model(file_info_id)
                         .await;
                     FileInfoDetailsCmdMsg::FileInfoLoaded(result)

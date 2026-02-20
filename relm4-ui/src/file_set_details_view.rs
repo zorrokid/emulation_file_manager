@@ -168,17 +168,19 @@ impl relm4::Component for FileSetDetailsView {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match msg {
             FileSetDetailsMsg::LoadFileSet(file_set_id) => {
-                let view_model_service = Arc::clone(&self.view_model_service);
+                let app_services = Arc::clone(&self.app_services);
                 sender.oneshot_command(async move {
-                    let result = view_model_service
+                    let result = app_services
+                        .view_model
                         .get_file_set_view_model(file_set_id)
                         .await;
                     FileSetDetailsCmdMsg::FileSetLoaded(result)
                 });
 
-                let view_model_service = Arc::clone(&self.view_model_service.clone());
+                let app_services = Arc::clone(&self.app_services);
                 sender.oneshot_command(async move {
-                    let result = view_model_service
+                    let result = app_services
+                        .view_model
                         .get_release_list_models(ReleaseFilter {
                             file_set_id: Some(file_set_id),
                             ..Default::default()
@@ -186,9 +188,10 @@ impl relm4::Component for FileSetDetailsView {
                         .await;
                     FileSetDetailsCmdMsg::ReleasesLoaded(result)
                 });
-                let view_model_service = Arc::clone(&self.view_model_service);
+                let app_services = Arc::clone(&self.app_services);
                 sender.oneshot_command(async move {
-                    let result = view_model_service
+                    let result = app_services
+                        .view_model
                         .get_systems_for_file_set(file_set_id)
                         .await;
                     FileSetDetailsCmdMsg::FileSetSystemsLoaded(result)
