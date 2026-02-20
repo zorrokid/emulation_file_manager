@@ -3,12 +3,9 @@ use std::sync::Arc;
 use database::repository_manager::RepositoryManager;
 
 use crate::{
-    document_viewer_service::DocumentViewerService,
-    emulator_service::EmulatorService,
-    release_item_service::ReleaseItemService,
-    release_service::ReleaseService,
-    software_title_service::SoftwareTitleService,
-    system_service::SystemService,
+    document_viewer_service::DocumentViewerService, emulator_service::EmulatorService,
+    release_item_service::ReleaseItemService, release_service::ReleaseService,
+    software_title_service::SoftwareTitleService, system_service::SystemService,
     view_model_service::ViewModelService,
 };
 

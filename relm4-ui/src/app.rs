@@ -16,7 +16,6 @@ use service::{
     cloud_sync::service::{CloudStorageSyncService, SyncResult},
     export_service::ExportService,
     file_type_migration::service::FileTypeMigrationService,
-    view_model_service::ViewModelService,
     view_models::{Settings, SoftwareTitleListModel},
 };
 use std::{
@@ -40,7 +39,6 @@ use crate::{
 #[derive(Debug)]
 pub struct InitResult {
     repository_manager: Arc<RepositoryManager>,
-    view_model_service: Arc<ViewModelService>,
     app_services: Arc<AppServices>,
     settings: Arc<Settings>,
 }
@@ -83,7 +81,6 @@ struct Flags {
 
 pub struct AppModel {
     repository_manager: OnceCell<Arc<RepositoryManager>>,
-    view_model_service: OnceCell<Arc<ViewModelService>>,
     app_services: OnceCell<Arc<AppServices>>,
     settings: OnceCell<Arc<Settings>>,
     sync_service: OnceCell<Arc<CloudStorageSyncService>>,
@@ -197,7 +194,6 @@ impl Component for AppModel {
 
         let model = AppModel {
             repository_manager: OnceCell::new(),
-            view_model_service: OnceCell::new(),
             app_services: OnceCell::new(),
             settings: OnceCell::new(),
             releases_view: left_vbox, // both software titles and releases will be in left_vbox
@@ -425,8 +421,6 @@ impl AppModel {
             //       `CommandMsg::InitializationDone`.
             let pool = get_db_pool().await.expect("DB pool initialization failed");
             let repository_manager = Arc::new(RepositoryManager::new(pool));
-            let view_model_service =
-                Arc::new(ViewModelService::new(Arc::clone(&repository_manager)));
             let app_services = Arc::new(AppServices::new(Arc::clone(&repository_manager)));
             let settings = app_services
                 .view_model
@@ -437,7 +431,6 @@ impl AppModel {
 
             CommandMsg::InitializationDone(InitResult {
                 repository_manager,
-                view_model_service,
                 app_services,
                 settings,
             })
@@ -479,16 +472,9 @@ impl AppModel {
                     .get()
                     .expect("Repository manager not initialized"),
             );
-            let view_model_service = Arc::clone(
-                self.view_model_service
-                    .get()
-                    .expect("View model service not initialized"),
-            );
-            let settings = Arc::clone(self.settings.get().expect("Settings not initialized"));
             // TODO: move export service to app_services
             sender.oneshot_command(async move {
-                let export_service =
-                    ExportService::new(repository_manager, view_model_service, settings);
+                let export_service = ExportService::new(repository_manager);
                 let res = export_service.export_all_files(&path).await;
                 CommandMsg::ExportFinished(res)
             });
@@ -651,7 +637,6 @@ impl AppModel {
     }
 
     fn post_process_initialize(&self, sender: &ComponentSender<Self>, init_result: InitResult) {
-        let view_model_service = Arc::clone(&init_result.view_model_service);
         let repository_manager = Arc::clone(&init_result.repository_manager);
         let app_services = Arc::clone(&init_result.app_services);
 
@@ -675,7 +660,6 @@ impl AppModel {
                 SoftwareTitleListOutMsg::ShowMessage(msg) => AppMsg::ShowMessage(msg),
             });
 
-        let view_model_service = Arc::clone(&init_result.view_model_service);
         let repository_manager = Arc::clone(&init_result.repository_manager);
         let app_services = Arc::clone(&init_result.app_services);
         let releases_init = ReleasesInit {
@@ -731,9 +715,6 @@ impl AppModel {
             Arc::clone(&init_result.settings),
         ));
 
-        self.view_model_service
-            .set(init_result.view_model_service)
-            .expect("view model service already initialized?");
         self.repository_manager
             .set(init_result.repository_manager)
             .expect("repository manger already initialized");
