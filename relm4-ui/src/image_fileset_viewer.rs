@@ -11,10 +11,7 @@ use relm4::{
     typed_view::grid::{RelmGridItem, TypedGridView},
 };
 use service::error::Error as ServiceError;
-use service::{
-    file_set_download::service::{DownloadResult, DownloadService},
-    view_models::FileSetViewModel,
-};
+use service::{file_set_download::service::DownloadResult, view_models::FileSetViewModel};
 use thumbnails::{ThumbnailPathMap, get_image_size};
 
 // grid
@@ -213,7 +210,7 @@ impl Component for ImageFilesetViewer {
                 let file_set_id = file_set.id;
                 self.file_set = Some(file_set);
 
-                let download_service = self.app_services.file_set_download.clone();
+                let download_service = self.app_services.file_set_download().clone();
 
                 sender.oneshot_command(async move {
                     let download_result = download_service

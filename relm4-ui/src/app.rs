@@ -479,7 +479,7 @@ impl AppModel {
                     .expect("App services not initialized"),
             );
             sender.oneshot_command(async move {
-                let res = app_services.export.export_all_files(&path).await;
+                let res = app_services.export().export_all_files(&path).await;
                 CommandMsg::ExportFinished(res)
             });
         } else {

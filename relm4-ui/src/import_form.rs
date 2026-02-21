@@ -401,7 +401,7 @@ impl Component for ImportForm {
                         selected_system,
                     );
 
-                    let mass_import_service = self.app_services.import.clone();
+                    let mass_import_service = self.app_services.import().clone();
 
                     let input = MassImportInput {
                         source_path: directory_path.clone(),

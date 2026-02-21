@@ -5,10 +5,7 @@ use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{self, prelude::*},
 };
-use service::{
-    file_set_download::service::DownloadService,
-    view_models::{FileSetViewModel, Settings},
-};
+use service::view_models::{FileSetViewModel, Settings};
 
 use crate::image_viewer::{ImageViewer, ImageViewerInit, ImageViewerOutputMsg};
 

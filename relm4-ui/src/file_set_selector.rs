@@ -307,7 +307,7 @@ impl Component for FileSetSelector {
             FileSetSelectorMsg::DeleteClicked => {
                 if let Some(selected_file_set) = &self.selected_file_set {
                     tracing::info!(id = selected_file_set.id, "Deleting file set");
-                    let file_set_deletion_service = self.app_services.file_set_deletion.clone();
+                    let file_set_deletion_service = self.app_services.file_set_deletion().clone();
                     let file_set_id = selected_file_set.id;
 
                     sender.oneshot_command(clone!(

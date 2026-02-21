@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use database::repository_manager::RepositoryManager;
 
@@ -23,15 +23,17 @@ pub struct AppServices {
     pub software_title: Arc<SoftwareTitleService>,
     pub emulator: Arc<EmulatorService>,
     pub document_viewer: Arc<DocumentViewerService>,
-    pub file_import: Arc<FileImportService>,
-    pub download: Arc<DownloadService>,
-    pub export: Arc<ExportService>,
+    file_import: OnceLock<Arc<FileImportService>>,
+    download: OnceLock<Arc<DownloadService>>,
+    export: OnceLock<Arc<ExportService>>,
     // TODO: combine with file set service
-    pub file_set_deletion: Arc<FileSetDeletionService>,
-    pub file_set_download: Arc<FileSetDownloadService>,
-    pub runner: Arc<ExternalExecutableRunnerService>,
-    pub import: Arc<MassImportService>,
-    pub settings: Arc<SettingsService>,
+    file_set_deletion: OnceLock<Arc<FileSetDeletionService>>,
+    file_set_download: OnceLock<Arc<FileSetDownloadService>>,
+    runner: OnceLock<Arc<ExternalExecutableRunnerService>>,
+    import: OnceLock<Arc<MassImportService>>,
+    settings: OnceLock<Arc<SettingsService>>,
+    repository_manager: Arc<RepositoryManager>,
+    app_settings: Arc<Settings>,
 }
 
 impl AppServices {
@@ -46,32 +48,94 @@ impl AppServices {
             software_title: Arc::new(SoftwareTitleService::new(Arc::clone(&repository_manager))),
             emulator: Arc::new(EmulatorService::new(Arc::clone(&repository_manager))),
             document_viewer: Arc::new(DocumentViewerService::new(Arc::clone(&repository_manager))),
-            file_import: Arc::new(FileImportService::new(
-                Arc::clone(&repository_manager),
-                Arc::clone(&settings),
-            )),
-            download: Arc::new(DownloadService::new(
-                Arc::clone(&repository_manager),
-                Arc::clone(&settings),
-            )),
-            export: Arc::new(ExportService::new(Arc::clone(&repository_manager))),
-            file_set_deletion: Arc::new(FileSetDeletionService::new(
-                Arc::clone(&repository_manager),
-                Arc::clone(&settings),
-            )),
-            file_set_download: Arc::new(FileSetDownloadService::new(
-                Arc::clone(&repository_manager),
-                Arc::clone(&settings),
-            )),
-            runner: Arc::new(ExternalExecutableRunnerService::new(
-                Arc::clone(&settings),
-                Arc::clone(&repository_manager),
-            )),
-            import: Arc::new(MassImportService::new(
-                Arc::clone(&repository_manager),
-                Arc::clone(&settings),
-            )),
-            settings: Arc::new(SettingsService::new(Arc::clone(&repository_manager))),
+            file_import: OnceLock::new(),
+            download: OnceLock::new(),
+            export: OnceLock::new(),
+            file_set_deletion: OnceLock::new(),
+            file_set_download: OnceLock::new(),
+            runner: OnceLock::new(),
+            import: OnceLock::new(),
+            settings: OnceLock::new(),
+            repository_manager,
+            app_settings: settings,
         }
+    }
+
+    pub fn file_import(&self) -> Arc<FileImportService> {
+        self.file_import
+            .get_or_init(|| {
+                Arc::new(FileImportService::new(
+                    Arc::clone(&self.repository_manager),
+                    Arc::clone(&self.app_settings),
+                ))
+            })
+            .clone()
+    }
+
+    pub fn download(&self) -> Arc<DownloadService> {
+        self.download
+            .get_or_init(|| {
+                Arc::new(DownloadService::new(
+                    Arc::clone(&self.repository_manager),
+                    Arc::clone(&self.app_settings),
+                ))
+            })
+            .clone()
+    }
+
+    pub fn export(&self) -> Arc<ExportService> {
+        self.export
+            .get_or_init(|| Arc::new(ExportService::new(Arc::clone(&self.repository_manager))))
+            .clone()
+    }
+
+    pub fn file_set_deletion(&self) -> Arc<FileSetDeletionService> {
+        self.file_set_deletion
+            .get_or_init(|| {
+                Arc::new(FileSetDeletionService::new(
+                    Arc::clone(&self.repository_manager),
+                    Arc::clone(&self.app_settings),
+                ))
+            })
+            .clone()
+    }
+
+    pub fn file_set_download(&self) -> Arc<FileSetDownloadService> {
+        self.file_set_download
+            .get_or_init(|| {
+                Arc::new(FileSetDownloadService::new(
+                    Arc::clone(&self.repository_manager),
+                    Arc::clone(&self.app_settings),
+                ))
+            })
+            .clone()
+    }
+
+    pub fn runner(&self) -> Arc<ExternalExecutableRunnerService> {
+        self.runner
+            .get_or_init(|| {
+                Arc::new(ExternalExecutableRunnerService::new(
+                    Arc::clone(&self.app_settings),
+                    Arc::clone(&self.repository_manager),
+                ))
+            })
+            .clone()
+    }
+
+    pub fn import(&self) -> Arc<MassImportService> {
+        self.import
+            .get_or_init(|| {
+                Arc::new(MassImportService::new(
+                    Arc::clone(&self.repository_manager),
+                    Arc::clone(&self.app_settings),
+                ))
+            })
+            .clone()
+    }
+
+    pub fn settings(&self) -> Arc<SettingsService> {
+        self.settings
+            .get_or_init(|| Arc::new(SettingsService::new(Arc::clone(&self.repository_manager))))
+            .clone()
     }
 }

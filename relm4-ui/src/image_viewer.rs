@@ -9,7 +9,7 @@ use relm4::{
 };
 use service::{
     error::Error as ServiceError,
-    file_set_download::service::{DownloadResult, DownloadService},
+    file_set_download::service::DownloadResult,
     view_models::{FileSetViewModel, Settings},
 };
 
@@ -141,7 +141,7 @@ impl Component for ImageViewer {
                 let file_set_id = file_set.id;
                 self.file_set = Some(file_set);
 
-                let download_service = Arc::clone(&self.app_services.file_set_download);
+                let download_service = Arc::clone(&self.app_services.file_set_download());
                 sender.oneshot_command(async move {
                     let res = download_service
                         .download_file_set(file_set_id, true, None)

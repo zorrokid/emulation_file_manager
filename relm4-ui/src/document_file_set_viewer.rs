@@ -20,7 +20,7 @@ use relm4::{
 use service::{
     app_services::AppServices,
     error::Error as ServiceError,
-    external_executable_runner::service::{ExecutableRunnerModel, ExternalExecutableRunnerService},
+    external_executable_runner::service::ExecutableRunnerModel,
     view_models::{
         DocumentViewerListModel, DocumentViewerViewModel, FileSetFileInfoViewModel,
         FileSetViewModel, Settings,
@@ -234,7 +234,7 @@ impl Component for DocumentViewer {
                     // TODO: create a viewer view model that has processed arguments already to
                     // correct format
                     let arguments = Vec::new(); // TODO: viewer.arguments.clone();
-                    let executable_runner_service = self.app_services.runner.clone();
+                    let executable_runner_service = self.app_services.runner().clone();
 
                     let executable_runner_model = ExecutableRunnerModel {
                         executable,

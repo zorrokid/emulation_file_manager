@@ -428,7 +428,7 @@ impl EmulatorRunnerModel {
                 file_set.file_set_name.clone()
             };
 
-            let executable_runner_service = self.app_services.runner.clone();
+            let executable_runner_service = self.app_services.runner().clone();
 
             let executable_runner_model = ExecutableRunnerModel {
                 executable,

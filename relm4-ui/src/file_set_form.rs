@@ -492,7 +492,7 @@ impl Component for FileSetFormModel {
                     self.processing = true;
                     sender.oneshot_command(async move {
                         let res = app_services
-                            .file_import
+                            .file_import()
                             .prepare_import(&path, file_type)
                             .await;
                         CommandMsg::FileImportPrepared(res)
@@ -573,7 +573,7 @@ impl Component for FileSetFormModel {
                     let app_services = Arc::clone(&self.app_services);
                     sender.oneshot_command(async move {
                         let res = app_services
-                            .download
+                            .download()
                             .download_and_prepare_import(
                                 &url,
                                 file_type,
@@ -833,7 +833,7 @@ impl FileSetFormModel {
 
         sender.oneshot_command(async move {
             let import_result = app_services
-                .file_import
+                .file_import()
                 .create_file_set(file_import_model)
                 .await;
             CommandMsg::ProcessCreateOrUpdateFileSetResult(import_result)
@@ -866,7 +866,10 @@ impl FileSetFormModel {
 
         let app_services = Arc::clone(&self.app_services);
         sender.oneshot_command(async move {
-            let import_result = app_services.file_import.update_file_set(update_model).await;
+            let import_result = app_services
+                .file_import()
+                .update_file_set(update_model)
+                .await;
             CommandMsg::ProcessCreateOrUpdateFileSetResult(import_result)
         });
     }
