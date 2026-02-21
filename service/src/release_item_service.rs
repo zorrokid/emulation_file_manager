@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use core_types::item_type::ItemType;
-use database::{models::ReleaseItem, repository_manager::RepositoryManager};
+use database::repository_manager::RepositoryManager;
+use domain::models::ReleaseItem;
 
 use crate::error::Error;
 
@@ -34,6 +35,7 @@ impl ReleaseItemService {
             .get_item(item_id)
             .await
             .map_err(|e| Error::DbError(e.to_string()))
+            .map(ReleaseItem::from)
     }
 
     pub async fn update_item(
@@ -90,7 +92,11 @@ mod tests {
         let service = ReleaseItemService::new(Arc::clone(&repo_manager));
         let release_id = create_test_release(&repo_manager).await;
         let id = service
-            .create_item(release_id, ItemType::DiskOrSetOfDisks, Some("side A".to_string()))
+            .create_item(
+                release_id,
+                ItemType::DiskOrSetOfDisks,
+                Some("side A".to_string()),
+            )
             .await
             .unwrap();
         let item = service.get_item(id).await.unwrap();
@@ -107,10 +113,7 @@ mod tests {
             .create_item(release_id, ItemType::Manual, None)
             .await
             .unwrap();
-        service
-            .update_item(id, ItemType::Box, None)
-            .await
-            .unwrap();
+        service.update_item(id, ItemType::Box, None).await.unwrap();
         let item = service.get_item(id).await.unwrap();
         assert_eq!(item.item_type, ItemType::Box);
     }
@@ -124,7 +127,10 @@ mod tests {
             .create_item(release_id, ItemType::Manual, Some("some notes".to_string()))
             .await
             .unwrap();
-        service.update_item(id, ItemType::Manual, None).await.unwrap();
+        service
+            .update_item(id, ItemType::Manual, None)
+            .await
+            .unwrap();
         let item = service.get_item(id).await.unwrap();
         assert!(item.notes.is_empty());
     }

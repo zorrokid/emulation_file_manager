@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use core_types::item_type::ItemType;
-use database::models::ReleaseItem;
+use domain::models::ReleaseItem;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
@@ -12,7 +12,9 @@ use relm4::{
         },
     },
 };
-use service::{app_services::AppServices, error::Error as ServiceError, view_models::ReleaseItemListModel};
+use service::{
+    app_services::AppServices, error::Error as ServiceError, view_models::ReleaseItemListModel,
+};
 use ui_components::{
     DropDownMsg, DropDownOutputMsg,
     drop_down::{ItemTypeDropDown, ItemTypeSelectedMsg},

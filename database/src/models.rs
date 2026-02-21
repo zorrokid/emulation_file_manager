@@ -164,6 +164,17 @@ pub struct ReleaseItem {
     pub notes: String,
 }
 
+impl From<ReleaseItem> for domain::models::ReleaseItem {
+    fn from(release_item: ReleaseItem) -> Self {
+        domain::models::ReleaseItem {
+            id: release_item.id,
+            release_id: release_item.release_id,
+            item_type: release_item.item_type,
+            notes: release_item.notes.clone(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct DatFile {
     pub id: i64,
