@@ -10,7 +10,9 @@ use relm4::{
     once_cell::sync::OnceCell,
     typed_view::list::TypedListView,
 };
-use service::{app_services::AppServices, error::Error as ServiceError, view_models::ReleaseItemListModel};
+use service::{
+    app_services::AppServices, error::Error as ServiceError, view_models::ReleaseItemListModel,
+};
 
 use crate::{
     list_item::ListItem,
@@ -169,7 +171,7 @@ impl Component for ItemList {
                     let app_services = Arc::clone(&self.app_services);
                     sender.oneshot_command(async move {
                         tracing::info!(item_id, "Removing release item with ID");
-                        let result = app_services.release_item.delete_item(item_id).await;
+                        let result = app_services.release_item().delete_item(item_id).await;
                         ItemListCommandMsg::ProcessDeleteItemResult(result)
                     });
                 }

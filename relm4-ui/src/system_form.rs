@@ -10,7 +10,9 @@ use relm4::{
         },
     },
 };
-use service::{app_services::AppServices, error::Error as ServiceError, view_models::SystemListModel};
+use service::{
+    app_services::AppServices, error::Error as ServiceError, view_models::SystemListModel,
+};
 
 use crate::utils::dialog_utils::show_error_dialog;
 
@@ -115,11 +117,11 @@ impl Component for SystemFormModel {
                 sender.oneshot_command(async move {
                     if let Some(edit_id) = edit_id {
                         tracing::info!(id = edit_id, "Updating system with ID");
-                        let result = app_services.system.update_system(edit_id, &name).await;
+                        let result = app_services.system().update_system(edit_id, &name).await;
                         SystemFormCommandMsg::SystemSubmitted(result)
                     } else {
                         tracing::info!(name = name, "Adding new system");
-                        let result = app_services.system.add_system(&name).await;
+                        let result = app_services.system().add_system(&name).await;
                         SystemFormCommandMsg::SystemSubmitted(result)
                     }
                 });

@@ -10,7 +10,9 @@ use relm4::{
         },
     },
 };
-use service::{app_services::AppServices, error::Error as ServiceError, view_models::SoftwareTitleListModel};
+use service::{
+    app_services::AppServices, error::Error as ServiceError, view_models::SoftwareTitleListModel,
+};
 
 use crate::utils::dialog_utils::show_error_dialog;
 
@@ -116,13 +118,16 @@ impl Component for SoftwareTitleFormModel {
                     if let Some(edit_id) = edit_id {
                         tracing::info!(id = edit_id, "Submitting update for software title");
                         let result = app_services
-                            .software_title
+                            .software_title()
                             .update_software_title(edit_id, &name)
                             .await;
                         SoftwareTitleFormCommandMsg::SoftwareTitleSubmitted(result)
                     } else {
                         tracing::info!(name = name, "Adding new software title");
-                        let result = app_services.software_title.add_software_title(&name).await;
+                        let result = app_services
+                            .software_title()
+                            .add_software_title(&name)
+                            .await;
                         SoftwareTitleFormCommandMsg::SoftwareTitleSubmitted(result)
                     }
                 });

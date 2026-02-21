@@ -292,7 +292,7 @@ impl Component for ReleaseModel {
                 let app_services = Arc::clone(&self.app_services);
 
                 sender.oneshot_command(async move {
-                    let release = app_services.view_model.get_release_view_model(id).await;
+                    let release = app_services.view_model().get_release_view_model(id).await;
                     ReleaseCommandMsg::FetchedRelease(release)
                 });
             }

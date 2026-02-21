@@ -218,7 +218,7 @@ impl Component for EmulatorFormModel {
                         // Update existing emulator
                         sender.oneshot_command(async move {
                             let res = app_services
-                                .emulator
+                                .emulator()
                                 .update_emulator(
                                     editable_emulator_id,
                                     &name,
@@ -233,7 +233,7 @@ impl Component for EmulatorFormModel {
                     } else {
                         sender.oneshot_command(async move {
                             let res = app_services
-                                .emulator
+                                .emulator()
                                 .add_emulator(
                                     &name,
                                     &executable,

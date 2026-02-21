@@ -193,7 +193,7 @@ impl Component for SoftwareTitleSelectModel {
                 let app_services = Arc::clone(&self.app_services);
                 sender.oneshot_command(async move {
                     let software_titles_result = app_services
-                        .view_model
+                        .view_model()
                         .get_software_title_list_models()
                         .await;
                     CommandMsg::SoftwareTitlesFetched(software_titles_result)
@@ -238,7 +238,10 @@ impl Component for SoftwareTitleSelectModel {
                 if let Some(id) = self.get_selected_list_item().map(|item| item.id) {
                     sender.oneshot_command(async move {
                         tracing::info!(id = id, "Deleting software_title");
-                        let result = app_services.software_title.delete_software_title(id).await;
+                        let result = app_services
+                            .software_title()
+                            .delete_software_title(id)
+                            .await;
                         CommandMsg::Deleted(result)
                     });
                 }

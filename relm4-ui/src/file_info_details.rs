@@ -88,7 +88,7 @@ impl relm4::Component for FileInfoDetails {
                 let app_services = Arc::clone(&self.app_services);
                 sender.oneshot_command(async move {
                     let result = app_services
-                        .view_model
+                        .view_model()
                         .get_file_info_view_model(file_info_id)
                         .await;
                     FileInfoDetailsCmdMsg::FileInfoLoaded(result)

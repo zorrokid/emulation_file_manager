@@ -300,7 +300,7 @@ impl Component for EmulatorRunnerModel {
                 let app_services = Arc::clone(&self.app_services);
                 sender.oneshot_command(async move {
                     let emulators_result = app_services
-                        .view_model
+                        .view_model()
                         .get_emulator_view_models_for_systems(&[system_id])
                         .await;
                     EmulatorRunnerCommandMsg::EmulatorsFetched(emulators_result)
@@ -321,7 +321,7 @@ impl Component for EmulatorRunnerModel {
                     let emulator_id = selected_emulator.id;
                     let app_services = Arc::clone(&self.app_services);
                     sender.oneshot_command(async move {
-                        let res = app_services.emulator.delete_emulator(emulator_id).await;
+                        let res = app_services.emulator().delete_emulator(emulator_id).await;
                         EmulatorRunnerCommandMsg::EmulatorDeleted(res)
                     });
                 }

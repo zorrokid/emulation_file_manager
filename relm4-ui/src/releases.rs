@@ -186,7 +186,7 @@ impl Component for ReleasesModel {
                 let software_title_ids = self.selected_software_title_ids.clone();
                 sender.oneshot_command(async move {
                     let releases_result = app_services
-                        .view_model
+                        .view_model()
                         .get_release_list_models(ReleaseFilter {
                             software_title_ids,
                             system_id: None,
@@ -252,7 +252,7 @@ impl Component for ReleasesModel {
                 if let Some(release_id) = self.get_selected_release_id() {
                     let app_services = Arc::clone(&self.app_services);
                     sender.oneshot_command(async move {
-                        let result = app_services.release.delete_release(release_id).await;
+                        let result = app_services.release().delete_release(release_id).await;
                         CommandMsg::ReleaseDeleted(result)
                     });
                 }

@@ -133,7 +133,7 @@ impl Component for SoftwareTitlesList {
                 let app_services = Arc::clone(&self.app_services);
                 sender.oneshot_command(async move {
                     let res = app_services
-                        .view_model
+                        .view_model()
                         .get_software_title_list_models()
                         .await;
                     SoftwareTitleListCmdMsg::SoftwareTitlesFetched(res)
@@ -212,7 +212,7 @@ impl Component for SoftwareTitlesList {
                     .map(|item| item.id)
                     .collect();
                 sender.oneshot_command(async move {
-                    let res = service.software_title.merge(id, &ids_to_be_merged).await;
+                    let res = service.software_title().merge(id, &ids_to_be_merged).await;
                     SoftwareTitleListCmdMsg::ProcessMergeResult(res)
                 });
             }

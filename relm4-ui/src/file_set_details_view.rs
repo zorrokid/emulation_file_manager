@@ -167,7 +167,7 @@ impl relm4::Component for FileSetDetailsView {
                 let app_services = Arc::clone(&self.app_services);
                 sender.oneshot_command(async move {
                     let result = app_services
-                        .view_model
+                        .view_model()
                         .get_file_set_view_model(file_set_id)
                         .await;
                     FileSetDetailsCmdMsg::FileSetLoaded(result)
@@ -176,7 +176,7 @@ impl relm4::Component for FileSetDetailsView {
                 let app_services = Arc::clone(&self.app_services);
                 sender.oneshot_command(async move {
                     let result = app_services
-                        .view_model
+                        .view_model()
                         .get_release_list_models(ReleaseFilter {
                             file_set_id: Some(file_set_id),
                             ..Default::default()
@@ -187,7 +187,7 @@ impl relm4::Component for FileSetDetailsView {
                 let app_services = Arc::clone(&self.app_services);
                 sender.oneshot_command(async move {
                     let result = app_services
-                        .view_model
+                        .view_model()
                         .get_systems_for_file_set(file_set_id)
                         .await;
                     FileSetDetailsCmdMsg::FileSetSystemsLoaded(result)

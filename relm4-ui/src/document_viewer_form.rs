@@ -198,7 +198,7 @@ impl Component for DocumentViewerFormModel {
                     if let Some(editable_id) = self.editable_viewer_id {
                         sender.oneshot_command(async move {
                             let res = app_services
-                                .document_viewer
+                                .document_viewer()
                                 .update_document_viewer(
                                     editable_id,
                                     &name,
@@ -213,7 +213,7 @@ impl Component for DocumentViewerFormModel {
                     } else {
                         sender.oneshot_command(async move {
                             let res = app_services
-                                .document_viewer
+                                .document_viewer()
                                 .add_document_viewer(
                                     &name,
                                     &executable,

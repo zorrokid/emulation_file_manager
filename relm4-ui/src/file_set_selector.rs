@@ -284,7 +284,7 @@ impl Component for FileSetSelector {
                         app_services,
                         async move {
                             let file_sets = app_services
-                                .view_model
+                                .view_model()
                                 .get_file_set_list_models(file_type, &system_ids)
                                 .await;
                             CommandMsg::FilesFetched(file_sets)

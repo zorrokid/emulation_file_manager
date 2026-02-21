@@ -190,7 +190,7 @@ impl Component for ItemForm {
                         sender.oneshot_command(async move {
                             tracing::info!(item_id = edit_item_id, item_type = ?item_type, "Updating release item");
                             let result = app_services
-                                .release_item
+                                .release_item()
                                 .update_item(edit_item_id, item_type, notes)
                                 .await;
                             ItemFormCommandMsg::ItemSubmitted(result)
@@ -199,7 +199,7 @@ impl Component for ItemForm {
                         sender.oneshot_command(async move {
                             tracing::info!(item_type = ?item_type, "Adding new release item");
                             let result = app_services
-                                .release_item
+                                .release_item()
                                 .create_item(release_id, item_type, notes)
                                 .await;
                             ItemFormCommandMsg::ItemSubmitted(result)
@@ -224,7 +224,7 @@ impl Component for ItemForm {
                     let app_services = Arc::clone(&self.app_services);
                     sender.oneshot_command(async move {
                         tracing::info!(item_id = edit_item_id, "Fetching release item for editing");
-                        let result = app_services.release_item.get_item(edit_item_id).await;
+                        let result = app_services.release_item().get_item(edit_item_id).await;
                         ItemFormCommandMsg::ProcessGetEditItemResult(result)
                     });
                     // Don't show yet - wait until data is loaded

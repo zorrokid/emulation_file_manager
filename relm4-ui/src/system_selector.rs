@@ -190,7 +190,7 @@ impl Component for SystemSelectModel {
                 tracing::info!("Fetching systems.");
                 let app_services = Arc::clone(&self.app_services);
                 sender.oneshot_command(async move {
-                    let systems_result = app_services.view_model.get_system_list_models().await;
+                    let systems_result = app_services.view_model().get_system_list_models().await;
                     CommandMsg::SystemsFetched(systems_result)
                 });
             }
@@ -231,7 +231,7 @@ impl Component for SystemSelectModel {
                 if let Some(id) = self.get_selected_system_list_model().map(|item| item.id) {
                     sender.oneshot_command(async move {
                         tracing::info!(id = id, "Deleting system");
-                        let result = app_services.system.delete_system(id).await;
+                        let result = app_services.system().delete_system(id).await;
                         CommandMsg::Deleted { result, id }
                     });
                 }

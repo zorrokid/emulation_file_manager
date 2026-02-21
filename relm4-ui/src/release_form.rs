@@ -294,7 +294,7 @@ impl Component for ReleaseFormModel {
                             Some(id) => {
                                 tracing::info!(id = id, "Editing existing release");
                                 app_services
-                                    .release
+                                    .release()
                                     .update_release(
                                         id,
                                         release_name.as_str(),
@@ -307,7 +307,7 @@ impl Component for ReleaseFormModel {
                             _ => {
                                 tracing::info!(name = release_name, "Creating new release");
                                 app_services
-                                    .release
+                                    .release()
                                     .add_release(
                                         release_name.as_str(),
                                         &software_title_ids,
@@ -422,7 +422,7 @@ impl Component for ReleaseFormModel {
                     let app_services = Arc::clone(&self.app_services);
                     sender.oneshot_command(async move {
                         let release_result =
-                            app_services.view_model.get_release_view_model(id).await;
+                            app_services.view_model().get_release_view_model(id).await;
                         CommandMsg::ReleaseFetched(release_result)
                     });
                 } else {

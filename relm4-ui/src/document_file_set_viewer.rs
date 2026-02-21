@@ -275,7 +275,7 @@ impl Component for DocumentViewer {
                 let app_services = Arc::clone(&self.app_services);
                 sender.oneshot_command(async move {
                     let viewers_result = app_services
-                        .view_model
+                        .view_model()
                         .get_document_viewer_view_models()
                         .await;
                     DocumentViewerCommandMsg::ViewersFetched(viewers_result)
@@ -317,7 +317,7 @@ impl Component for DocumentViewer {
                     let app_services = Arc::clone(&self.app_services);
                     sender.oneshot_command(async move {
                         let res = app_services
-                            .document_viewer
+                            .document_viewer()
                             .delete_document_viewer(viewer_id)
                             .await;
                         DocumentViewerCommandMsg::Deleted(res)

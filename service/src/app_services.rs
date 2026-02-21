@@ -16,13 +16,13 @@ use crate::{
 
 #[derive(Debug)]
 pub struct AppServices {
-    pub view_model: Arc<ViewModelService>,
-    pub system: Arc<SystemService>,
-    pub release: Arc<ReleaseService>,
-    pub release_item: Arc<ReleaseItemService>,
-    pub software_title: Arc<SoftwareTitleService>,
-    pub emulator: Arc<EmulatorService>,
-    pub document_viewer: Arc<DocumentViewerService>,
+    view_model: OnceLock<Arc<ViewModelService>>,
+    system: OnceLock<Arc<SystemService>>,
+    release: OnceLock<Arc<ReleaseService>>,
+    release_item: OnceLock<Arc<ReleaseItemService>>,
+    software_title: OnceLock<Arc<SoftwareTitleService>>,
+    emulator: OnceLock<Arc<EmulatorService>>,
+    document_viewer: OnceLock<Arc<DocumentViewerService>>,
     file_import: OnceLock<Arc<FileImportService>>,
     download: OnceLock<Arc<DownloadService>>,
     export: OnceLock<Arc<ExportService>>,
@@ -37,17 +37,15 @@ pub struct AppServices {
 }
 
 impl AppServices {
-    // TODO: maybe just store the repository manager and settings in AppServices and create the
-    // individual services on demand?
     pub fn new(repository_manager: Arc<RepositoryManager>, settings: Arc<Settings>) -> Self {
         Self {
-            view_model: Arc::new(ViewModelService::new(Arc::clone(&repository_manager))),
-            system: Arc::new(SystemService::new(Arc::clone(&repository_manager))),
-            release: Arc::new(ReleaseService::new(Arc::clone(&repository_manager))),
-            release_item: Arc::new(ReleaseItemService::new(Arc::clone(&repository_manager))),
-            software_title: Arc::new(SoftwareTitleService::new(Arc::clone(&repository_manager))),
-            emulator: Arc::new(EmulatorService::new(Arc::clone(&repository_manager))),
-            document_viewer: Arc::new(DocumentViewerService::new(Arc::clone(&repository_manager))),
+            view_model: OnceLock::new(),
+            system: OnceLock::new(),
+            release: OnceLock::new(),
+            release_item: OnceLock::new(),
+            software_title: OnceLock::new(),
+            emulator: OnceLock::new(),
+            document_viewer: OnceLock::new(),
             file_import: OnceLock::new(),
             download: OnceLock::new(),
             export: OnceLock::new(),
@@ -59,6 +57,58 @@ impl AppServices {
             repository_manager,
             app_settings: settings,
         }
+    }
+
+    pub fn view_model(&self) -> Arc<ViewModelService> {
+        self.view_model
+            .get_or_init(|| Arc::new(ViewModelService::new(Arc::clone(&self.repository_manager))))
+            .clone()
+    }
+
+    pub fn system(&self) -> Arc<SystemService> {
+        self.system
+            .get_or_init(|| Arc::new(SystemService::new(Arc::clone(&self.repository_manager))))
+            .clone()
+    }
+
+    pub fn release(&self) -> Arc<ReleaseService> {
+        self.release
+            .get_or_init(|| Arc::new(ReleaseService::new(Arc::clone(&self.repository_manager))))
+            .clone()
+    }
+
+    pub fn release_item(&self) -> Arc<ReleaseItemService> {
+        self.release_item
+            .get_or_init(|| {
+                Arc::new(ReleaseItemService::new(Arc::clone(
+                    &self.repository_manager,
+                )))
+            })
+            .clone()
+    }
+    pub fn software_title(&self) -> Arc<SoftwareTitleService> {
+        self.software_title
+            .get_or_init(|| {
+                Arc::new(SoftwareTitleService::new(Arc::clone(
+                    &self.repository_manager,
+                )))
+            })
+            .clone()
+    }
+    pub fn emulator(&self) -> Arc<EmulatorService> {
+        self.emulator
+            .get_or_init(|| Arc::new(EmulatorService::new(Arc::clone(&self.repository_manager))))
+            .clone()
+    }
+
+    pub fn document_viewer(&self) -> Arc<DocumentViewerService> {
+        self.document_viewer
+            .get_or_init(|| {
+                Arc::new(DocumentViewerService::new(Arc::clone(
+                    &self.repository_manager,
+                )))
+            })
+            .clone()
     }
 
     pub fn file_import(&self) -> Arc<FileImportService> {
