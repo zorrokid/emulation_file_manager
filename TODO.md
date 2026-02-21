@@ -1,5 +1,0 @@
-- add notes field for file set.
-    - for example Dragon 32 Chuckie Egg:
-        - load with CLOADM
-        - when the program is loaded, type EXEC to run it.
-    - or maybe System could have notes field for such instructions.
