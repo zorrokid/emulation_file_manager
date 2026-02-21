@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use database::{database_error::Error as DatabaseError, repository_manager::RepositoryManager};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
@@ -10,10 +9,7 @@ use relm4::{
     },
     typed_view::list::TypedListView,
 };
-use service::{
-    error::Error as ServiceError, view_model_service::ViewModelService,
-    view_models::SystemListModel,
-};
+use service::{error::Error as ServiceError, view_models::SystemListModel};
 use ui_components::confirm_dialog::{
     ConfirmDialog, ConfirmDialogInit, ConfirmDialogMsg, ConfirmDialogOutputMsg,
 };
@@ -49,20 +45,18 @@ pub enum SystemSelectOutputMsg {
 pub enum CommandMsg {
     SystemsFetched(Result<Vec<SystemListModel>, ServiceError>),
     Deleted {
-        result: Result<(), DatabaseError>,
+        result: Result<(), ServiceError>,
         id: i64,
     },
 }
 
 pub struct SystemSelectInit {
-    pub view_model_service: Arc<ViewModelService>,
-    pub repository_manager: Arc<RepositoryManager>,
+    pub app_services: Arc<service::app_services::AppServices>,
 }
 
 #[derive(Debug)]
 pub struct SystemSelectModel {
-    view_model_service: Arc<ViewModelService>,
-    repository_manager: Arc<RepositoryManager>,
+    app_services: Arc<service::app_services::AppServices>,
     list_view_wrapper: TypedListView<DeletableListItem, gtk::SingleSelection>,
     selected_system_ids: Vec<i64>,
     system_form_controller: Controller<SystemFormModel>,
@@ -163,7 +157,7 @@ impl Component for SystemSelectModel {
         let system_form_controller = SystemFormModel::builder()
             .transient_for(&root)
             .launch(SystemFormInit {
-                repository_manager: Arc::clone(&init_model.repository_manager),
+                app_services: Arc::clone(&init_model.app_services),
             })
             .forward(sender.input_sender(), |msg| match msg {
                 SystemFormOutputMsg::SystemAdded(software_title_list_model) => {
@@ -175,8 +169,7 @@ impl Component for SystemSelectModel {
             });
 
         let model = SystemSelectModel {
-            view_model_service: init_model.view_model_service,
-            repository_manager: init_model.repository_manager,
+            app_services: init_model.app_services,
             list_view_wrapper,
             selected_system_ids: Vec::new(),
             system_form_controller,
@@ -195,9 +188,9 @@ impl Component for SystemSelectModel {
         match msg {
             SystemSelectMsg::FetchSystems => {
                 tracing::info!("Fetching systems.");
-                let view_model_service = Arc::clone(&self.view_model_service);
+                let app_services = Arc::clone(&self.app_services);
                 sender.oneshot_command(async move {
-                    let systems_result = view_model_service.get_system_list_models().await;
+                    let systems_result = app_services.view_model().get_system_list_models().await;
                     CommandMsg::SystemsFetched(systems_result)
                 });
             }
@@ -234,14 +227,11 @@ impl Component for SystemSelectModel {
                 self.confirm_dialog_controller.emit(ConfirmDialogMsg::Show);
             }
             SystemSelectMsg::DeleteConfirmed => {
-                let repository_manager = Arc::clone(&self.repository_manager);
+                let app_services = Arc::clone(&self.app_services);
                 if let Some(id) = self.get_selected_system_list_model().map(|item| item.id) {
                     sender.oneshot_command(async move {
                         tracing::info!(id = id, "Deleting system");
-                        let result = repository_manager
-                            .get_system_repository()
-                            .delete_system(id)
-                            .await;
+                        let result = app_services.system().delete_system(id).await;
                         CommandMsg::Deleted { result, id }
                     });
                 }

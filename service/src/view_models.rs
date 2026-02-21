@@ -311,7 +311,7 @@ impl Display for ReleaseListModel {
 pub struct ReleaseViewModel {
     pub id: i64,
     pub name: String,
-    pub systems: Vec<System>,
+    pub systems: Vec<domain::models::System>,
     pub software_titles: Vec<SoftwareTitle>,
     pub file_sets: Vec<FileSetViewModel>,
     pub items: Vec<ReleaseItemViewModel>,

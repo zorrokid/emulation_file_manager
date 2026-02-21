@@ -8,9 +8,6 @@ use crate::{
     list_item::ListItem,
     utils::dialog_utils::show_error_dialog,
 };
-use database::{
-    database_error::DatabaseError, models::FileSetFileInfo, repository_manager::RepositoryManager,
-};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
@@ -21,9 +18,9 @@ use relm4::{
     typed_view::list::TypedListView,
 };
 use service::{
+    app_services::AppServices,
     error::Error as ServiceError,
-    external_executable_runner::service::{ExecutableRunnerModel, ExternalExecutableRunnerService},
-    view_model_service::ViewModelService,
+    external_executable_runner::service::ExecutableRunnerModel,
     view_models::{
         DocumentViewerListModel, DocumentViewerViewModel, FileSetFileInfoViewModel,
         FileSetViewModel, Settings,
@@ -61,21 +58,18 @@ pub enum DocumentViewerMsg {
 pub enum DocumentViewerCommandMsg {
     ViewersFetched(Result<Vec<DocumentViewerViewModel>, ServiceError>),
     FinishedRunningViewer(Result<(), ServiceError>),
-    Deleted(Result<i64, DatabaseError>),
+    Deleted(Result<i64, ServiceError>),
 }
 
 pub struct DocumentViewerInit {
-    pub view_model_service: Arc<ViewModelService>,
-    pub repository_manager: Arc<RepositoryManager>,
+    pub app_services: Arc<AppServices>,
     pub settings: Arc<Settings>,
 }
 
 #[derive(Debug)]
 pub struct DocumentViewer {
     // services
-    view_model_service: Arc<ViewModelService>,
-    repository_manager: Arc<RepositoryManager>,
-    external_executable_runner_service: Arc<ExternalExecutableRunnerService>,
+    app_services: Arc<AppServices>,
 
     // list views
     file_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
@@ -158,7 +152,7 @@ impl Component for DocumentViewer {
         let viewer_list_view_wrapper = TypedListView::<ListItem, gtk::SingleSelection>::new();
 
         let init_model = DocumentViewerFormInit {
-            repository_manager: Arc::clone(&init.repository_manager),
+            app_services: Arc::clone(&init.app_services),
         };
         let viewer_form = DocumentViewerFormModel::builder()
             .transient_for(&root)
@@ -184,15 +178,8 @@ impl Component for DocumentViewer {
                 ConfirmDialogOutputMsg::Canceled => DocumentViewerMsg::Ignore,
             });
 
-        let external_executable_runner_service = Arc::new(ExternalExecutableRunnerService::new(
-            Arc::clone(&init.settings),
-            Arc::clone(&init.repository_manager),
-        ));
-
         let model = DocumentViewer {
-            view_model_service: init.view_model_service,
-            repository_manager: init.repository_manager,
-            external_executable_runner_service,
+            app_services: init.app_services,
 
             viewers: Vec::new(),
             file_set: None,
@@ -247,8 +234,7 @@ impl Component for DocumentViewer {
                     // TODO: create a viewer view model that has processed arguments already to
                     // correct format
                     let arguments = Vec::new(); // TODO: viewer.arguments.clone();
-                    let executable_runner_service =
-                        Arc::clone(&self.external_executable_runner_service);
+                    let executable_runner_service = self.app_services.runner().clone();
 
                     let executable_runner_model = ExecutableRunnerModel {
                         executable,
@@ -286,9 +272,12 @@ impl Component for DocumentViewer {
                 sender.input(DocumentViewerMsg::FetchViewers);
             }
             DocumentViewerMsg::FetchViewers => {
-                let view_model_service = Arc::clone(&self.view_model_service);
+                let app_services = Arc::clone(&self.app_services);
                 sender.oneshot_command(async move {
-                    let viewers_result = view_model_service.get_document_viewer_view_models().await;
+                    let viewers_result = app_services
+                        .view_model()
+                        .get_document_viewer_view_models()
+                        .await;
                     DocumentViewerCommandMsg::ViewersFetched(viewers_result)
                 });
             }
@@ -325,11 +314,11 @@ impl Component for DocumentViewer {
             DocumentViewerMsg::DeleteConfirmed => {
                 if let Some(selected_viewer) = &self.selected_viewer {
                     let viewer_id = selected_viewer.id;
-                    let repository_manager = Arc::clone(&self.repository_manager);
+                    let app_services = Arc::clone(&self.app_services);
                     sender.oneshot_command(async move {
-                        let res = repository_manager
-                            .get_document_viewer_repository()
-                            .delete(viewer_id)
+                        let res = app_services
+                            .document_viewer()
+                            .delete_document_viewer(viewer_id)
                             .await;
                         DocumentViewerCommandMsg::Deleted(res)
                     });

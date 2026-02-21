@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
-use database::repository_manager::RepositoryManager;
+use database::{models::SoftwareTitle, repository_manager::RepositoryManager};
+
+use crate::error::Error;
 
 #[derive(Debug)]
 pub enum SoftwareTitleServiceError {
@@ -113,6 +115,35 @@ impl SoftwareTitleService {
             .map_err(|e| SoftwareTitleServiceError::DatabaseError(format!("{:?}", e)))?;
 
         Ok(())
+    }
+
+    pub async fn add_software_title(&self, name: &str) -> Result<i64, Error> {
+        self.repository_manager
+            .get_software_title_repository()
+            .add_software_title(name, None)
+            .await
+            .map_err(|e| Error::DbError(e.to_string()))
+    }
+
+    pub async fn update_software_title(&self, id: i64, name: &str) -> Result<i64, Error> {
+        let software_title = SoftwareTitle {
+            id,
+            name: name.to_string(),
+            franchise_id: None,
+        };
+        self.repository_manager
+            .get_software_title_repository()
+            .update_software_title(&software_title)
+            .await
+            .map_err(|e| Error::DbError(e.to_string()))
+    }
+
+    pub async fn delete_software_title(&self, id: i64) -> Result<i64, Error> {
+        self.repository_manager
+            .get_software_title_repository()
+            .delete_software_title(id)
+            .await
+            .map_err(Into::into)
     }
 }
 
@@ -236,5 +267,67 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(base_title.name, "Base Title");
+    }
+
+    #[async_std::test]
+    async fn add_software_title_returns_positive_id() {
+        let repo_manager = database::setup_test_repository_manager().await;
+        let service = SoftwareTitleService::new(repo_manager);
+        let id = service.add_software_title("Super Mario Bros").await.unwrap();
+        assert!(id > 0);
+    }
+
+    #[async_std::test]
+    async fn add_software_title_persists() {
+        let repo_manager = database::setup_test_repository_manager().await;
+        let service = SoftwareTitleService::new(Arc::clone(&repo_manager));
+        let id = service.add_software_title("Super Mario Bros").await.unwrap();
+        let title = repo_manager
+            .get_software_title_repository()
+            .get_software_title(id)
+            .await
+            .unwrap();
+        assert_eq!(title.name, "Super Mario Bros");
+    }
+
+    #[async_std::test]
+    async fn update_software_title_changes_name() {
+        let repo_manager = database::setup_test_repository_manager().await;
+        let service = SoftwareTitleService::new(Arc::clone(&repo_manager));
+        let id = service.add_software_title("Old Name").await.unwrap();
+        service.update_software_title(id, "New Name").await.unwrap();
+        let title = repo_manager
+            .get_software_title_repository()
+            .get_software_title(id)
+            .await
+            .unwrap();
+        assert_eq!(title.name, "New Name");
+    }
+
+    #[async_std::test]
+    async fn delete_software_title_removes_record() {
+        let repo_manager = database::setup_test_repository_manager().await;
+        let service = SoftwareTitleService::new(Arc::clone(&repo_manager));
+        let id = service.add_software_title("Deletable Title").await.unwrap();
+        service.delete_software_title(id).await.unwrap();
+        let result = repo_manager
+            .get_software_title_repository()
+            .get_software_title(id)
+            .await;
+        assert!(result.is_err());
+    }
+
+    #[async_std::test]
+    async fn delete_software_title_in_use_returns_error() {
+        let repo_manager = database::setup_test_repository_manager().await;
+        let service = SoftwareTitleService::new(Arc::clone(&repo_manager));
+        let title_id = service.add_software_title("In Use Title").await.unwrap();
+        repo_manager
+            .get_release_repository()
+            .add_release_full("Test Release", &[title_id], &[], &[])
+            .await
+            .unwrap();
+        let result = service.delete_software_title(title_id).await;
+        assert!(result.is_err());
     }
 }

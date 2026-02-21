@@ -64,7 +64,7 @@ impl SystemRepository {
         Ok(systems)
     }
 
-    pub async fn is_system_in_use(&self, system_id: i64) -> Result<bool, Error> {
+    pub async fn is_system_in_use(&self, system_id: i64) -> Result<bool, DatabaseError> {
         let releases_count = sqlx::query_scalar!(
             "SELECT COUNT(*) 
              FROM release_system 
@@ -108,9 +108,9 @@ impl SystemRepository {
         Ok(id)
     }
 
-    pub async fn delete_system(&self, id: i64) -> Result<(), Error> {
+    pub async fn delete_system(&self, id: i64) -> Result<(), DatabaseError> {
         if self.is_system_in_use(id).await? {
-            return Err(Error::InUse);
+            return Err(DatabaseError::InUse);
         }
         sqlx::query!("DELETE FROM system WHERE id = ?", id)
             .execute(&*self.pool)

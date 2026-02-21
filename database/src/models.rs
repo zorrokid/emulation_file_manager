@@ -94,6 +94,15 @@ pub struct System {
     pub name: String,
 }
 
+impl From<System> for domain::models::System {
+    fn from(system: System) -> domain::models::System {
+        domain::models::System {
+            id: system.id,
+            name: system.name,
+        }
+    }
+}
+
 impl Display for System {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.name)
@@ -162,6 +171,17 @@ pub struct ReleaseItem {
     pub release_id: i64,
     pub item_type: ItemType,
     pub notes: String,
+}
+
+impl From<ReleaseItem> for domain::models::ReleaseItem {
+    fn from(release_item: ReleaseItem) -> Self {
+        domain::models::ReleaseItem {
+            id: release_item.id,
+            release_id: release_item.release_id,
+            item_type: release_item.item_type,
+            notes: release_item.notes.clone(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]

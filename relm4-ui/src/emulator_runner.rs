@@ -5,11 +5,7 @@ use crate::{
     list_item::ListItem,
     utils::dialog_utils::show_error_dialog,
 };
-use database::{
-    database_error::Error,
-    models::{FileSetFileInfo, System},
-    repository_manager::RepositoryManager,
-};
+use domain::models::System;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
@@ -22,7 +18,6 @@ use relm4::{
 use service::{
     error::Error as ServiceError,
     external_executable_runner::service::{ExecutableRunnerModel, ExternalExecutableRunnerService},
-    view_model_service::ViewModelService,
     view_models::{
         EmulatorListModel, EmulatorViewModel, FileSetFileInfoViewModel, FileSetViewModel, Settings,
     },
@@ -71,21 +66,18 @@ pub enum EmulatorRunnerMsg {
 pub enum EmulatorRunnerCommandMsg {
     EmulatorsFetched(Result<Vec<EmulatorViewModel>, ServiceError>),
     FinishedRunningEmulator(Result<(), ServiceError>),
-    EmulatorDeleted(Result<i64, Error>),
+    EmulatorDeleted(Result<i64, ServiceError>),
 }
 
 pub struct EmulatorRunnerInit {
-    pub view_model_service: Arc<ViewModelService>,
-    pub repository_manager: Arc<RepositoryManager>,
+    pub app_services: Arc<service::app_services::AppServices>,
     pub settings: Arc<Settings>,
 }
 
 #[derive(Debug)]
 pub struct EmulatorRunnerModel {
     // services
-    view_model_service: Arc<ViewModelService>,
-    repository_manager: Arc<RepositoryManager>,
-    external_executable_runner_service: Arc<ExternalExecutableRunnerService>,
+    app_services: Arc<service::app_services::AppServices>,
 
     // list views
     file_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
@@ -172,8 +164,7 @@ impl Component for EmulatorRunnerModel {
         let system_list_view_wrapper = TypedListView::<ListItem, gtk::SingleSelection>::new();
 
         let init_model = EmulatorFormInit {
-            view_model_service: Arc::clone(&init.view_model_service),
-            repository_manager: Arc::clone(&init.repository_manager),
+            app_services: Arc::clone(&init.app_services),
         };
 
         let emulator_form = EmulatorFormModel::builder()
@@ -199,15 +190,8 @@ impl Component for EmulatorRunnerModel {
                 ConfirmDialogOutputMsg::Canceled => EmulatorRunnerMsg::Ignore,
             });
 
-        let external_executable_runner_service = Arc::new(ExternalExecutableRunnerService::new(
-            Arc::clone(&init.settings),
-            Arc::clone(&init.repository_manager),
-        ));
-
         let model = EmulatorRunnerModel {
-            view_model_service: init.view_model_service,
-            repository_manager: init.repository_manager,
-            external_executable_runner_service,
+            app_services: init.app_services,
 
             systems: Vec::new(),
             emulators: Vec::new(),
@@ -313,9 +297,10 @@ impl Component for EmulatorRunnerModel {
                 }
             }
             EmulatorRunnerMsg::FetchEmulators { system_id } => {
-                let view_model_service = Arc::clone(&self.view_model_service);
+                let app_services = Arc::clone(&self.app_services);
                 sender.oneshot_command(async move {
-                    let emulators_result = view_model_service
+                    let emulators_result = app_services
+                        .view_model()
                         .get_emulator_view_models_for_systems(&[system_id])
                         .await;
                     EmulatorRunnerCommandMsg::EmulatorsFetched(emulators_result)
@@ -334,12 +319,9 @@ impl Component for EmulatorRunnerModel {
             EmulatorRunnerMsg::DeleteConfirmed => {
                 if let Some(selected_emulator) = &self.selected_emulator {
                     let emulator_id = selected_emulator.id;
-                    let repository_manager = Arc::clone(&self.repository_manager);
+                    let app_services = Arc::clone(&self.app_services);
                     sender.oneshot_command(async move {
-                        let res = repository_manager
-                            .get_emulator_repository()
-                            .delete_emulator(emulator_id)
-                            .await;
+                        let res = app_services.emulator().delete_emulator(emulator_id).await;
                         EmulatorRunnerCommandMsg::EmulatorDeleted(res)
                     });
                 }
@@ -446,7 +428,7 @@ impl EmulatorRunnerModel {
                 file_set.file_set_name.clone()
             };
 
-            let executable_runner_service = Arc::clone(&self.external_executable_runner_service);
+            let executable_runner_service = self.app_services.runner().clone();
 
             let executable_runner_model = ExecutableRunnerModel {
                 executable,

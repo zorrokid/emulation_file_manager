@@ -9,7 +9,7 @@ use relm4::{
 };
 use service::{
     error::Error as ServiceError,
-    file_set_download::service::{DownloadResult, DownloadService},
+    file_set_download::service::DownloadResult,
     view_models::{FileSetViewModel, Settings},
 };
 
@@ -41,7 +41,7 @@ pub enum ImageViewerOutputMsg {
 pub struct ImageViewerInit {
     pub settings: Arc<Settings>,
     pub file_set: Option<FileSetViewModel>,
-    pub download_service: Arc<DownloadService>,
+    pub app_services: Arc<service::app_services::AppServices>,
 }
 
 #[derive(Debug)]
@@ -51,7 +51,7 @@ pub struct ImageViewer {
     settings: Arc<Settings>,
     selected_image: PathBuf,
     image_file_set_viewer: Controller<ImageFilesetViewer>,
-    download_service: Arc<DownloadService>,
+    app_services: Arc<service::app_services::AppServices>,
 }
 
 #[relm4::component(pub)]
@@ -105,7 +105,7 @@ impl Component for ImageViewer {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let init_model = ImageFileSetViewerInit {
-            download_service: Arc::clone(&init.download_service),
+            app_services: Arc::clone(&init.app_services),
         };
         let image_file_set_viewer = ImageFilesetViewer::builder()
             .transient_for(&root)
@@ -120,7 +120,7 @@ impl Component for ImageViewer {
             selected_image: PathBuf::new(),
             current_file_index: None,
             image_file_set_viewer,
-            download_service: init.download_service,
+            app_services: Arc::clone(&init.app_services),
         };
         if let Some(file_set) = init.file_set {
             sender.input(ImageViewerMsg::SetFileSet { file_set });
@@ -141,7 +141,7 @@ impl Component for ImageViewer {
                 let file_set_id = file_set.id;
                 self.file_set = Some(file_set);
 
-                let download_service = Arc::clone(&self.download_service);
+                let download_service = Arc::clone(&self.app_services.file_set_download());
                 sender.oneshot_command(async move {
                     let res = download_service
                         .download_file_set(file_set_id, true, None)

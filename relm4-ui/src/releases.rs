@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use database::{database_error::DatabaseError, repository_manager::RepositoryManager};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
@@ -12,7 +11,7 @@ use relm4::{
 };
 use service::{
     error::Error,
-    view_model_service::{ReleaseFilter, ViewModelService},
+    view_model_service::ReleaseFilter,
     view_models::{ReleaseListModel, Settings, SoftwareTitleListModel},
 };
 
@@ -40,21 +39,19 @@ pub enum ReleasesMsg {
 #[derive(Debug)]
 pub enum CommandMsg {
     FetchedReleases(Result<Vec<ReleaseListModel>, Error>),
-    ReleaseDeleted(Result<i64, DatabaseError>),
+    ReleaseDeleted(Result<i64, Error>),
 }
 
 #[derive(Debug)]
 pub struct ReleasesModel {
-    view_model_service: Arc<ViewModelService>,
-    repository_manager: Arc<RepositoryManager>,
+    app_services: Arc<service::app_services::AppServices>,
     release_form: Controller<ReleaseFormModel>,
     releases_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
     selected_software_title_ids: Vec<i64>,
 }
 
 pub struct ReleasesInit {
-    pub view_model_service: Arc<ViewModelService>,
-    pub repository_manager: Arc<RepositoryManager>,
+    pub app_services: Arc<service::app_services::AppServices>,
     pub settings: Arc<Settings>,
 }
 
@@ -120,8 +117,7 @@ impl Component for ReleasesModel {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let release_form_init_model = ReleaseFormInit {
-            view_model_service: Arc::clone(&init_model.view_model_service),
-            repository_manager: Arc::clone(&init_model.repository_manager),
+            app_services: Arc::clone(&init_model.app_services),
             settings: Arc::clone(&init_model.settings),
         };
 
@@ -144,8 +140,7 @@ impl Component for ReleasesModel {
             });
 
         let model = ReleasesModel {
-            view_model_service: init_model.view_model_service,
-            repository_manager: init_model.repository_manager,
+            app_services: init_model.app_services,
             release_form,
             releases_list_view_wrapper: TypedListView::new(),
             selected_software_title_ids: vec![],
@@ -187,10 +182,11 @@ impl Component for ReleasesModel {
                     "Fetching releases for software title",
                 );
 
-                let view_model_service = Arc::clone(&self.view_model_service);
+                let app_services = Arc::clone(&self.app_services);
                 let software_title_ids = self.selected_software_title_ids.clone();
                 sender.oneshot_command(async move {
-                    let releases_result = view_model_service
+                    let releases_result = app_services
+                        .view_model()
                         .get_release_list_models(ReleaseFilter {
                             software_title_ids,
                             system_id: None,
@@ -254,12 +250,9 @@ impl Component for ReleasesModel {
             }
             ReleasesMsg::RemoveRelease => {
                 if let Some(release_id) = self.get_selected_release_id() {
-                    let repository_manager = Arc::clone(&self.repository_manager);
+                    let app_services = Arc::clone(&self.app_services);
                     sender.oneshot_command(async move {
-                        let result = repository_manager
-                            .get_release_repository()
-                            .delete_release(release_id)
-                            .await;
+                        let result = app_services.release().delete_release(release_id).await;
                         CommandMsg::ReleaseDeleted(result)
                     });
                 }

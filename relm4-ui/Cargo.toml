@@ -26,6 +26,7 @@ cloud_storage = { path = "../cloud_storage" }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "time"] }
 tracing-appender = "0.2"
+domain = { path = "../domain" }
 
 
 [package.metadata.deb]

@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use core_types::{DOCUMENT_FILE_TYPES, EMULATOR_FILE_TYPES, IMAGE_FILE_TYPES};
-use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
@@ -13,8 +12,6 @@ use relm4::{
 };
 use service::{
     error::Error,
-    file_set_download::service::DownloadService,
-    view_model_service::ViewModelService,
     view_models::{
         FileSetViewModel, ReleaseListModel, ReleaseViewModel, Settings, SoftwareTitleListModel,
     },
@@ -32,7 +29,7 @@ use crate::{
 
 #[derive(Debug)]
 pub struct ReleaseModel {
-    view_model_service: Arc<ViewModelService>,
+    app_services: Arc<service::app_services::AppServices>,
 
     selected_release: Option<ReleaseViewModel>,
     selected_release_system_names: String,
@@ -52,8 +49,7 @@ pub struct ReleaseModel {
 
 #[derive(Debug)]
 pub struct ReleaseInitModel {
-    pub view_model_service: Arc<ViewModelService>,
-    pub repository_manager: Arc<RepositoryManager>,
+    pub app_services: Arc<service::app_services::AppServices>,
     pub settings: Arc<Settings>,
 }
 
@@ -199,13 +195,10 @@ impl Component for ReleaseModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let download_service = Arc::new(DownloadService::new(
-            Arc::clone(&init_model.repository_manager),
-            Arc::clone(&init_model.settings),
-        ));
+        let app_services = Arc::clone(&init_model.app_services);
         let tabbed_image_viewer_init = TabbedImageViewerInit {
             settings: Arc::clone(&init_model.settings),
-            download_service: Arc::clone(&download_service),
+            app_services,
         };
         let tabbed_image_viewer = TabbedImageViewer::builder()
             .launch(tabbed_image_viewer_init)
@@ -214,8 +207,7 @@ impl Component for ReleaseModel {
             });
 
         let emulator_runner_init_model = EmulatorRunnerInit {
-            view_model_service: Arc::clone(&init_model.view_model_service),
-            repository_manager: Arc::clone(&init_model.repository_manager),
+            app_services: Arc::clone(&init_model.app_services),
             settings: Arc::clone(&init_model.settings),
         };
         let emulator_runner = EmulatorRunnerModel::builder()
@@ -223,17 +215,15 @@ impl Component for ReleaseModel {
             .launch(emulator_runner_init_model)
             .detach();
 
-        let image_file_set_viewer_init_model = ImageFileSetViewerInit {
-            download_service: Arc::clone(&download_service),
-        };
+        let app_services = Arc::clone(&init_model.app_services);
+        let image_file_set_viewer_init_model = ImageFileSetViewerInit { app_services };
         let image_file_set_viewer = ImageFilesetViewer::builder()
             .transient_for(&root)
             .launch(image_file_set_viewer_init_model)
             .detach();
 
         let document_viewer_init_model = DocumentViewerInit {
-            view_model_service: Arc::clone(&init_model.view_model_service),
-            repository_manager: Arc::clone(&init_model.repository_manager),
+            app_services: Arc::clone(&init_model.app_services),
             settings: Arc::clone(&init_model.settings),
         };
         let document_file_set_viewer = DocumentViewer::builder()
@@ -242,7 +232,7 @@ impl Component for ReleaseModel {
             .detach();
 
         let model = ReleaseModel {
-            view_model_service: init_model.view_model_service,
+            app_services: init_model.app_services,
 
             selected_release: None,
             selected_release_system_names: String::new(),
@@ -299,10 +289,10 @@ impl Component for ReleaseModel {
                 sender.input(ReleaseMsg::FetchRelease { id });
             }
             ReleaseMsg::FetchRelease { id } => {
-                let view_model_service = Arc::clone(&self.view_model_service);
+                let app_services = Arc::clone(&self.app_services);
 
                 sender.oneshot_command(async move {
-                    let release = view_model_service.get_release_view_model(id).await;
+                    let release = app_services.view_model().get_release_view_model(id).await;
                     ReleaseCommandMsg::FetchedRelease(release)
                 });
             }
@@ -318,7 +308,10 @@ impl Component for ReleaseModel {
             }
             ReleaseMsg::StartImageFileSetViewer => {
                 if let Some(file_set) = &self.selected_image_file_set {
-                    tracing::info!(id = file_set.id, "Starting image file set viewer for file set");
+                    tracing::info!(
+                        id = file_set.id,
+                        "Starting image file set viewer for file set"
+                    );
                     self.image_file_set_viewer
                         .emit(ImageFilesetViewerMsg::Show {
                             file_set: file_set.clone(),

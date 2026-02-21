@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
@@ -11,7 +10,7 @@ use relm4::{
     typed_view::list::{RelmListItem, TypedListView},
 };
 use service::{
-    view_model_service::ViewModelService,
+    app_services::AppServices,
     view_models::{FileSetListModel, Settings},
 };
 
@@ -21,7 +20,7 @@ use crate::{
         FileSetSelector, FileSetSelectorInit, FileSetSelectorMsg, FileSetSelectorOutputMsg,
     },
     list_item::HasId,
-    utils::typed_list_view_utils::{get_item_ids, get_selected_item_id, remove_selected},
+    utils::typed_list_view_utils::{get_item_ids, remove_selected},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -103,8 +102,8 @@ pub enum CommandMsg {
 
 #[derive(Debug)]
 pub struct FileSetList {
-    view_model_service: Arc<ViewModelService>,
-    repository_manager: Arc<RepositoryManager>,
+    app_services: Arc<AppServices>,
+
     settings: Arc<Settings>,
 
     selected_file_sets_list_view_wrapper: TypedListView<FileSetListItem, gtk::SingleSelection>,
@@ -115,8 +114,7 @@ pub struct FileSetList {
 }
 
 pub struct FileSetListInit {
-    pub view_model_service: Arc<ViewModelService>,
-    pub repository_manager: Arc<RepositoryManager>,
+    pub app_services: Arc<AppServices>,
     pub settings: Arc<Settings>,
     pub selected_system_ids: Vec<i64>,
 }
@@ -126,8 +124,7 @@ impl FileSetList {
         if self.file_set_form.get().is_none() {
             tracing::info!("Initializing file set form");
             let file_set_form_init = FileSetFormInit {
-                view_model_service: Arc::clone(&self.view_model_service),
-                repository_manager: Arc::clone(&self.repository_manager),
+                app_services: Arc::clone(&self.app_services),
                 settings: Arc::clone(&self.settings),
             };
             let file_set_form = FileSetFormModel::builder()
@@ -206,8 +203,7 @@ impl Component for FileSetList {
             gtk::SingleSelection,
         > = TypedListView::new();
         let file_selector_init_model = FileSetSelectorInit {
-            view_model_service: Arc::clone(&init_model.view_model_service),
-            repository_manager: Arc::clone(&init_model.repository_manager),
+            app_services: Arc::clone(&init_model.app_services),
             settings: Arc::clone(&init_model.settings),
         };
 
@@ -221,8 +217,7 @@ impl Component for FileSetList {
             });
 
         let model = FileSetList {
-            view_model_service: init_model.view_model_service,
-            repository_manager: init_model.repository_manager,
+            app_services: init_model.app_services,
             settings: init_model.settings,
             selected_file_sets_list_view_wrapper,
             file_set_form: OnceCell::new(),
@@ -265,11 +260,8 @@ impl Component for FileSetList {
                 self.notify_items_changed(&sender);
             }
             FileSetListMsg::UnlinkFileSet => {
-                let selected_id = get_selected_item_id(&self.selected_file_sets_list_view_wrapper);
-                if let Some(selected_id) = selected_id {
-                    remove_selected(&mut self.selected_file_sets_list_view_wrapper);
-                    self.notify_items_changed(&sender);
-                }
+                remove_selected(&mut self.selected_file_sets_list_view_wrapper);
+                self.notify_items_changed(&sender);
             }
             FileSetListMsg::FileSetUpdated(file_set) => {
                 for i in 0..self.selected_file_sets_list_view_wrapper.len() {

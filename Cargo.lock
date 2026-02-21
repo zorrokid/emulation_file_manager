@@ -1222,6 +1222,7 @@ dependencies = [
 name = "domain"
 version = "0.1.0"
 dependencies = [
+ "core_types",
  "regex",
 ]
 
@@ -1245,6 +1246,7 @@ dependencies = [
  "cloud_storage",
  "core_types",
  "database",
+ "domain",
  "file_export",
  "file_import",
  "file_system",

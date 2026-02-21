@@ -8,13 +8,13 @@ use relm4::{
     },
     typed_view::list::TypedListView,
 };
-use service::{view_model_service::ViewModelService, view_models::FileInfoViewModel};
+use service::view_models::FileInfoViewModel;
 
 use crate::list_item::ListItem;
 
 #[derive(Debug)]
 pub struct FileInfoDetails {
-    view_model_service: Arc<ViewModelService>,
+    app_services: Arc<service::app_services::AppServices>,
     file_info_view_model: Option<FileInfoViewModel>,
     file_sets_list_view_wrapper: TypedListView<ListItem, gtk::NoSelection>,
 }
@@ -30,7 +30,7 @@ pub enum FileInfoDetailsCmdMsg {
 }
 
 pub struct FileInfoDetailsInit {
-    pub view_model_service: Arc<ViewModelService>,
+    pub app_services: Arc<service::app_services::AppServices>,
 }
 
 #[derive(Debug)]
@@ -73,7 +73,7 @@ impl relm4::Component for FileInfoDetails {
     ) -> ComponentParts<Self> {
         let file_sets_list_view_wrapper = TypedListView::<ListItem, gtk::NoSelection>::new();
         let model = FileInfoDetails {
-            view_model_service: init.view_model_service,
+            app_services: init.app_services,
             file_info_view_model: None,
             file_sets_list_view_wrapper,
         };
@@ -85,9 +85,10 @@ impl relm4::Component for FileInfoDetails {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match msg {
             FileInfoDetailsMsg::LoadFileInfo(file_info_id) => {
-                let view_model_service = Arc::clone(&self.view_model_service);
+                let app_services = Arc::clone(&self.app_services);
                 sender.oneshot_command(async move {
-                    let result = view_model_service
+                    let result = app_services
+                        .view_model()
                         .get_file_info_view_model(file_info_id)
                         .await;
                     FileInfoDetailsCmdMsg::FileInfoLoaded(result)
