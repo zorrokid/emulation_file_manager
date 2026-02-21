@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use database::{database_error::Error, repository_manager::RepositoryManager};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
@@ -12,8 +11,8 @@ use relm4::{
     },
 };
 use service::{
+    app_services::AppServices,
     error::Error as ServiceError,
-    view_model_service::ViewModelService,
     view_models::{
         FileSetListModel, ReleaseViewModel, Settings, SoftwareTitleListModel, SystemListModel,
     },
@@ -57,14 +56,13 @@ pub enum ReleaseFormOutputMsg {
 
 #[derive(Debug)]
 pub enum CommandMsg {
-    ReleaseCreatedOrUpdated(Result<i64, Error>),
+    ReleaseCreatedOrUpdated(Result<i64, ServiceError>),
     ReleaseFetched(Result<ReleaseViewModel, ServiceError>),
 }
 
 #[derive(Debug)]
 pub struct ReleaseFormModel {
-    view_model_service: Arc<ViewModelService>,
-    repository_manager: Arc<RepositoryManager>,
+    app_services: Arc<AppServices>,
 
     release: Option<ReleaseViewModel>,
     release_name: String,
@@ -80,8 +78,7 @@ pub struct ReleaseFormModel {
 }
 
 pub struct ReleaseFormInit {
-    pub view_model_service: Arc<ViewModelService>,
-    pub repository_manager: Arc<RepositoryManager>,
+    pub app_services: Arc<AppServices>,
     pub settings: Arc<Settings>,
 }
 
@@ -144,8 +141,7 @@ impl Component for ReleaseFormModel {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let file_set_list_init = FileSetListInit {
-            view_model_service: Arc::clone(&init_model.view_model_service),
-            repository_manager: Arc::clone(&init_model.repository_manager),
+            app_services: Arc::clone(&init_model.app_services),
             settings: Arc::clone(&init_model.settings),
             selected_system_ids: vec![],
         };
@@ -159,8 +155,7 @@ impl Component for ReleaseFormModel {
         );
 
         let system_list_init = SystemListInit {
-            view_model_service: Arc::clone(&init_model.view_model_service),
-            repository_manager: Arc::clone(&init_model.repository_manager),
+            app_services: Arc::clone(&init_model.app_services),
         };
         let system_list =
             SystemList::builder()
@@ -172,8 +167,7 @@ impl Component for ReleaseFormModel {
                 });
 
         let software_title_list_init = SoftwareTitleListInit {
-            view_model_service: Arc::clone(&init_model.view_model_service),
-            repository_manager: Arc::clone(&init_model.repository_manager),
+            app_services: Arc::clone(&init_model.app_services),
         };
         let software_title_list = SoftwareTitleList::builder()
             .launch(software_title_list_init)
@@ -191,7 +185,7 @@ impl Component for ReleaseFormModel {
 
         let item_list_init = ItemListInit {
             release_id: None,
-            repository_manager: Arc::clone(&init_model.repository_manager),
+            app_services: Arc::clone(&init_model.app_services),
         };
         let item_list =
             ItemList::builder()
@@ -203,8 +197,7 @@ impl Component for ReleaseFormModel {
                 });
 
         let model = ReleaseFormModel {
-            view_model_service: init_model.view_model_service,
-            repository_manager: init_model.repository_manager,
+            app_services: init_model.app_services,
             release: None,
             release_name: String::new(),
             file_set_list,
@@ -264,7 +257,7 @@ impl Component for ReleaseFormModel {
             }
             ReleaseFormMsg::StartSaveRelease => {
                 tracing::info!("Starting to save release with selected systems and file sets");
-                let repository_manager = Arc::clone(&self.repository_manager);
+                let app_services = Arc::clone(&self.app_services);
                 let software_title_ids = self.selected_software_title_ids.clone();
                 let system_ids = self.selected_system_ids.clone();
 
@@ -300,9 +293,9 @@ impl Component for ReleaseFormModel {
                         let res = match release_id {
                             Some(id) => {
                                 tracing::info!(id = id, "Editing existing release");
-                                repository_manager
-                                    .get_release_repository()
-                                    .update_release_full(
+                                app_services
+                                    .release()
+                                    .update_release(
                                         id,
                                         release_name.as_str(),
                                         &software_title_ids,
@@ -313,9 +306,9 @@ impl Component for ReleaseFormModel {
                             }
                             _ => {
                                 tracing::info!(name = release_name, "Creating new release");
-                                repository_manager
-                                    .get_release_repository()
-                                    .add_release_full(
+                                app_services
+                                    .release()
+                                    .add_release(
                                         release_name.as_str(),
                                         &software_title_ids,
                                         &file_set_ids,
@@ -426,9 +419,10 @@ impl Component for ReleaseFormModel {
             ReleaseFormMsg::Show { release_id } => {
                 if let Some(id) = release_id {
                     tracing::info!(id = id, "Loading release");
-                    let view_model_service = Arc::clone(&self.view_model_service);
+                    let app_services = Arc::clone(&self.app_services);
                     sender.oneshot_command(async move {
-                        let release_result = view_model_service.get_release_view_model(id).await;
+                        let release_result =
+                            app_services.view_model().get_release_view_model(id).await;
                         CommandMsg::ReleaseFetched(release_result)
                     });
                 } else {

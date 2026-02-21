@@ -1,6 +1,5 @@
 use std::{path::PathBuf, sync::Arc};
 
-use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentParts, ComponentSender, RelmWidgetExt,
     gtk::{
@@ -13,11 +12,7 @@ use relm4::{
         },
     },
 };
-use service::{
-    error::Error,
-    settings_service::{SettingsSaveModel, SettingsService},
-    view_models::Settings,
-};
+use service::{error::Error, settings_service::SettingsSaveModel, view_models::Settings};
 
 use crate::utils::dialog_utils::show_error_dialog;
 
@@ -38,7 +33,7 @@ pub struct SettingsForm {
     pub credentials_stored: bool,
     pub stored_access_key_preview: Option<String>,
 
-    pub settings_service: Arc<SettingsService>,
+    pub app_services: Arc<service::app_services::AppServices>,
 }
 
 impl SettingsForm {
@@ -57,7 +52,7 @@ impl SettingsForm {
 }
 
 pub struct SettingsFormInit {
-    pub repository_manager: Arc<RepositoryManager>,
+    pub app_services: Arc<service::app_services::AppServices>,
     pub settings: Arc<Settings>,
 }
 
@@ -310,7 +305,6 @@ impl Component for SettingsForm {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let s3_settings = init.settings.s3_settings.clone().unwrap_or_default();
-        let settings_service = Arc::new(SettingsService::new(Arc::clone(&init.repository_manager)));
         let model = Self {
             s3_bucket_name: s3_settings.bucket.clone(),
             s3_endpoint: s3_settings.endpoint.clone(),
@@ -320,8 +314,8 @@ impl Component for SettingsForm {
             s3_sync_enabled: init.settings.s3_sync_enabled,
             credentials_stored: false,
             stored_access_key_preview: None,
-            settings_service: settings_service.clone(),
             collection_root_dir: Some(init.settings.collection_root_dir.clone()),
+            app_services: init.app_services,
         };
         let widgets = view_output!();
 
@@ -373,9 +367,9 @@ impl Component for SettingsForm {
                 widgets.s3_secret_key_entry.set_text("");
 
                 // Delete from keyring
-                let settings_service = Arc::clone(&self.settings_service);
+                let app_services = self.app_services.clone();
                 sender.oneshot_command(async move {
-                    let result = settings_service.delete_credentials().await;
+                    let result = app_services.settings().delete_credentials().await;
                     if let Err(ref e) = result {
                         tracing::error!(error = ?e, "Error deleting credentials");
                     }
@@ -388,7 +382,7 @@ impl Component for SettingsForm {
                 });
             }
             SettingsFormMsg::Submit => {
-                let settings_service = Arc::clone(&self.settings_service);
+                let app_services = Arc::clone(&self.app_services);
 
                 let settings = SettingsSaveModel {
                     bucket: self.s3_bucket_name.clone(),
@@ -401,11 +395,11 @@ impl Component for SettingsForm {
                 };
 
                 sender.oneshot_command(async move {
-                    let save_result = settings_service.save_settings(settings).await;
+                    let save_result = app_services.settings().save_settings(settings).await;
 
                     // Check credential status after save attempt
                     let (credentials_stored, stored_key_preview) =
-                        match settings_service.load_credentials().await {
+                        match app_services.settings().load_credentials().await {
                             Ok(Some(creds)) => {
                                 let preview = Self::format_access_key_preview(&creds.access_key_id);
                                 (true, Some(preview))
@@ -421,9 +415,9 @@ impl Component for SettingsForm {
                 });
             }
             SettingsFormMsg::LoadCredentialStatus => {
-                let settings_service = Arc::clone(&self.settings_service);
+                let app_services = Arc::clone(&self.app_services);
                 sender.oneshot_command(async move {
-                    match settings_service.load_credentials().await {
+                    match app_services.settings().load_credentials().await {
                         Ok(Some(creds)) => {
                             let preview = Self::format_access_key_preview(&creds.access_key_id);
                             SettingsFormCommandMsg::CredentialStatusLoaded {

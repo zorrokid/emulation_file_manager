@@ -8,11 +8,7 @@ use core_types::{FileType, Sha1Checksum};
 use database::{models::System, repository_manager::RepositoryManager};
 use file_export::{FileSetExportModel, OutputFile, export_files_zipped};
 
-use crate::{
-    error::Error,
-    view_model_service::ViewModelService,
-    view_models::{FileSetViewModel, Settings},
-};
+use crate::{error::Error, view_model_service::ViewModelService, view_models::FileSetViewModel};
 
 /// Service responsible for exporting all the files from the collection to a specified destination.
 // TODO: refactor to use download service for exporting files
@@ -20,19 +16,14 @@ use crate::{
 pub struct ExportService {
     repository_manager: Arc<RepositoryManager>,
     view_model_service: Arc<ViewModelService>,
-    settings: Arc<Settings>,
 }
 
 impl ExportService {
-    pub fn new(
-        repository_manager: Arc<RepositoryManager>,
-        view_model_service: Arc<ViewModelService>,
-        settings: Arc<Settings>,
-    ) -> Self {
+    pub fn new(repository_manager: Arc<RepositoryManager>) -> Self {
+        let view_model_service = Arc::new(ViewModelService::new(Arc::clone(&repository_manager)));
         Self {
             repository_manager,
             view_model_service,
-            settings,
         }
     }
 
@@ -93,9 +84,16 @@ impl ExportService {
 
             println!("Destionation path: {:?}", destination_path.display());
 
+            let collection_root_dir = self
+                .view_model_service
+                .get_settings()
+                .await
+                .map_err(|e| Error::SettingsError(e.to_string()))?
+                .collection_root_dir;
+
             let export_model = prepare_fileset_for_export(
                 &file_set_view_model,
-                &self.settings.collection_root_dir,
+                &collection_root_dir,
                 &destination_path,
                 true,
             );

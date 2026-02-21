@@ -41,6 +41,12 @@ impl From<database::database_error::DatabaseError> for Error {
     }
 }
 
+impl From<database::database_error::Error> for Error {
+    fn from(err: database::database_error::Error) -> Self {
+        Error::DbError(err.to_string())
+    }
+}
+
 impl From<cloud_storage::CloudStorageError> for Error {
     fn from(err: cloud_storage::CloudStorageError) -> Self {
         Error::CloudSyncError(err.to_string())

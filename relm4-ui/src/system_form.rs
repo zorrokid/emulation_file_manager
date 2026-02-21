@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use database::{database_error::Error, repository_manager::RepositoryManager};
 use relm4::{
     Component, ComponentParts, ComponentSender,
     gtk::{
@@ -11,7 +10,9 @@ use relm4::{
         },
     },
 };
-use service::view_models::SystemListModel;
+use service::{
+    app_services::AppServices, error::Error as ServiceError, view_models::SystemListModel,
+};
 
 use crate::utils::dialog_utils::show_error_dialog;
 
@@ -20,7 +21,7 @@ pub struct SystemFormModel {
     pub name: String,
     pub edit_system_id: Option<i64>,
     pub can_delete: bool,
-    pub repository_manager: Arc<RepositoryManager>,
+    pub app_services: Arc<AppServices>,
 }
 
 #[derive(Debug)]
@@ -41,12 +42,12 @@ pub enum SystemFormOutputMsg {
 
 #[derive(Debug)]
 pub enum SystemFormCommandMsg {
-    SystemSubmitted(Result<i64, Error>),
+    SystemSubmitted(Result<i64, ServiceError>),
 }
 
 #[derive(Debug)]
 pub struct SystemFormInit {
-    pub repository_manager: Arc<RepositoryManager>,
+    pub app_services: Arc<AppServices>,
 }
 
 #[relm4::component(pub)]
@@ -111,22 +112,16 @@ impl Component for SystemFormModel {
             }
             SystemFormMsg::Submit => {
                 let name = self.name.clone();
-                let repository_manager = Arc::clone(&self.repository_manager);
+                let app_services = Arc::clone(&self.app_services);
                 let edit_id = self.edit_system_id;
                 sender.oneshot_command(async move {
                     if let Some(edit_id) = edit_id {
                         tracing::info!(id = edit_id, "Updating system with ID");
-                        let result = repository_manager
-                            .get_system_repository()
-                            .update_system(edit_id, &name)
-                            .await;
+                        let result = app_services.system().update_system(edit_id, &name).await;
                         SystemFormCommandMsg::SystemSubmitted(result)
                     } else {
-                        tracing::info!(name = name, "Adding new software title");
-                        let result = repository_manager
-                            .get_system_repository()
-                            .add_system(&name)
-                            .await;
+                        tracing::info!(name = name, "Adding new system");
+                        let result = app_services.system().add_system(&name).await;
                         SystemFormCommandMsg::SystemSubmitted(result)
                     }
                 });
@@ -196,7 +191,7 @@ impl Component for SystemFormModel {
             name: "".to_string(),
             edit_system_id: None,
             can_delete: false,
-            repository_manager: init.repository_manager,
+            app_services: init.app_services,
         };
         let widgets = view_output!();
         ComponentParts { model, widgets }

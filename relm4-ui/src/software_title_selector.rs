@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use database::{database_error::DatabaseError, repository_manager::RepositoryManager};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
@@ -10,10 +9,7 @@ use relm4::{
     },
     typed_view::list::TypedListView,
 };
-use service::{
-    error::Error as ServiceError, view_model_service::ViewModelService,
-    view_models::SoftwareTitleListModel,
-};
+use service::{error::Error as ServiceError, view_models::SoftwareTitleListModel};
 
 use crate::{
     list_item::DeletableListItem,
@@ -56,18 +52,16 @@ pub enum SoftwareTitleSelectOutputMsg {
 #[derive(Debug)]
 pub enum CommandMsg {
     SoftwareTitlesFetched(Result<Vec<SoftwareTitleListModel>, ServiceError>),
-    Deleted(Result<i64, DatabaseError>),
+    Deleted(Result<i64, ServiceError>),
 }
 
 pub struct SoftwareTitleSelectInit {
-    pub view_model_service: Arc<ViewModelService>,
-    pub repository_manager: Arc<RepositoryManager>,
+    pub app_services: Arc<service::app_services::AppServices>,
 }
 
 #[derive(Debug)]
 pub struct SoftwareTitleSelectModel {
-    view_model_service: Arc<ViewModelService>,
-    repository_manager: Arc<RepositoryManager>,
+    app_services: Arc<service::app_services::AppServices>,
     software_titles: Vec<SoftwareTitleListModel>,
     list_view_wrapper: TypedListView<DeletableListItem, gtk::SingleSelection>,
     selected_software_title_ids: Vec<i64>,
@@ -164,7 +158,7 @@ impl Component for SoftwareTitleSelectModel {
         let software_title_form_controller = SoftwareTitleFormModel::builder()
             .transient_for(&root)
             .launch(SoftwareTitleFormInit {
-                repository_manager: Arc::clone(&init_model.repository_manager),
+                app_services: Arc::clone(&init_model.app_services),
             })
             .forward(sender.input_sender(), |msg| match msg {
                 SoftwareTitleFormOutputMsg::SoftwareTitleAdded(software_title_list_model) => {
@@ -176,8 +170,7 @@ impl Component for SoftwareTitleSelectModel {
             });
 
         let model = SoftwareTitleSelectModel {
-            view_model_service: init_model.view_model_service,
-            repository_manager: init_model.repository_manager,
+            app_services: init_model.app_services,
             software_titles: Vec::new(),
             list_view_wrapper,
             selected_software_title_ids: Vec::new(),
@@ -197,10 +190,12 @@ impl Component for SoftwareTitleSelectModel {
         match msg {
             SoftwareTitleSelectMsg::FetchSoftwareTitles => {
                 tracing::info!("Fetching software_titles.");
-                let view_model_service = Arc::clone(&self.view_model_service);
+                let app_services = Arc::clone(&self.app_services);
                 sender.oneshot_command(async move {
-                    let software_titles_result =
-                        view_model_service.get_software_title_list_models().await;
+                    let software_titles_result = app_services
+                        .view_model()
+                        .get_software_title_list_models()
+                        .await;
                     CommandMsg::SoftwareTitlesFetched(software_titles_result)
                 });
             }
@@ -239,12 +234,12 @@ impl Component for SoftwareTitleSelectModel {
                 tracing::info!("Deletion canceled by user.");
             }
             SoftwareTitleSelectMsg::DeleteConfirmed => {
-                let repository_manager = Arc::clone(&self.repository_manager);
+                let app_services = Arc::clone(&self.app_services);
                 if let Some(id) = self.get_selected_list_item().map(|item| item.id) {
                     sender.oneshot_command(async move {
                         tracing::info!(id = id, "Deleting software_title");
-                        let result = repository_manager
-                            .get_software_title_repository()
+                        let result = app_services
+                            .software_title()
                             .delete_software_title(id)
                             .await;
                         CommandMsg::Deleted(result)
