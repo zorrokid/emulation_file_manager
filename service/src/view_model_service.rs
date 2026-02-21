@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use database::repository_manager::RepositoryManager;
+use database::{models::System, repository_manager::RepositoryManager};
 
 use crate::{
     error::Error,
@@ -325,12 +325,15 @@ impl ViewModelService {
             .await
             .map_err(|err| Error::DbError(err.to_string()))?;
 
-        let systems = self
+        let systems: Vec<domain::models::System> = self
             .repository_manager
             .get_system_repository()
             .get_systems_by_release(release_id)
             .await
-            .map_err(|err| Error::DbError(err.to_string()))?;
+            .map_err(|err| Error::DbError(err.to_string()))?
+            .into_iter()
+            .map(domain::models::System::from)
+            .collect();
 
         let file_sets = self
             .repository_manager

@@ -5,7 +5,7 @@ use crate::{
     list_item::ListItem,
     utils::dialog_utils::show_error_dialog,
 };
-use database::models::System; // TODO: replace with view model
+use domain::models::System;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{

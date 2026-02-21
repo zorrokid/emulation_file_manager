@@ -7,3 +7,9 @@ pub struct ReleaseItem {
     pub item_type: ItemType,
     pub notes: String,
 }
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct System {
+    pub id: i64,
+    pub name: String,
+}

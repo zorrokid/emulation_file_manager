@@ -94,6 +94,15 @@ pub struct System {
     pub name: String,
 }
 
+impl From<System> for domain::models::System {
+    fn from(system: System) -> domain::models::System {
+        domain::models::System {
+            id: system.id,
+            name: system.name,
+        }
+    }
+}
+
 impl Display for System {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.name)
