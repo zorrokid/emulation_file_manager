@@ -21,7 +21,7 @@ use crate::{
         FileSetSelector, FileSetSelectorInit, FileSetSelectorMsg, FileSetSelectorOutputMsg,
     },
     list_item::HasId,
-    utils::typed_list_view_utils::{get_item_ids, get_selected_item_id, remove_selected},
+    utils::typed_list_view_utils::{get_item_ids, remove_selected},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -103,7 +103,6 @@ pub enum CommandMsg {
 
 #[derive(Debug)]
 pub struct FileSetList {
-    repository_manager: Arc<RepositoryManager>,
     app_services: Arc<AppServices>,
 
     settings: Arc<Settings>,
@@ -116,7 +115,6 @@ pub struct FileSetList {
 }
 
 pub struct FileSetListInit {
-    pub repository_manager: Arc<RepositoryManager>,
     pub app_services: Arc<AppServices>,
     pub settings: Arc<Settings>,
     pub selected_system_ids: Vec<i64>,
@@ -127,7 +125,6 @@ impl FileSetList {
         if self.file_set_form.get().is_none() {
             tracing::info!("Initializing file set form");
             let file_set_form_init = FileSetFormInit {
-                repository_manager: Arc::clone(&self.repository_manager),
                 app_services: Arc::clone(&self.app_services),
                 settings: Arc::clone(&self.settings),
             };
@@ -207,7 +204,6 @@ impl Component for FileSetList {
             gtk::SingleSelection,
         > = TypedListView::new();
         let file_selector_init_model = FileSetSelectorInit {
-            repository_manager: Arc::clone(&init_model.repository_manager),
             app_services: Arc::clone(&init_model.app_services),
             settings: Arc::clone(&init_model.settings),
         };
@@ -222,7 +218,6 @@ impl Component for FileSetList {
             });
 
         let model = FileSetList {
-            repository_manager: init_model.repository_manager,
             app_services: init_model.app_services,
             settings: init_model.settings,
             selected_file_sets_list_view_wrapper,

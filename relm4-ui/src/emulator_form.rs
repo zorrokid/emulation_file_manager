@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use core_types::ArgumentType;
-use database::{database_error::DatabaseError, repository_manager::RepositoryManager};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
@@ -12,7 +11,10 @@ use relm4::{
         },
     },
 };
-use service::view_models::{EmulatorListModel, EmulatorViewModel, SystemListModel};
+use service::{
+    error::Error,
+    view_models::{EmulatorListModel, EmulatorViewModel, SystemListModel},
+};
 
 use crate::{
     argument_list::{ArgumentList, ArgumentListMsg, ArgumentListOutputMsg},
@@ -45,19 +47,17 @@ pub enum EmulatorFormOutputMsg {
 
 #[derive(Debug)]
 pub enum EmulatorFormCommandMsg {
-    EmulatorSubmitted(Result<i64, DatabaseError>),
-    EmulatorUpdated(Result<i64, DatabaseError>),
+    EmulatorSubmitted(Result<i64, Error>),
+    EmulatorUpdated(Result<i64, Error>),
 }
 
 #[derive(Debug)]
 pub struct EmulatorFormInit {
-    pub repository_manager: Arc<RepositoryManager>,
     pub app_services: Arc<service::app_services::AppServices>,
 }
 
 #[derive(Debug)]
 pub struct EmulatorFormModel {
-    pub repository_manager: Arc<RepositoryManager>,
     pub app_services: Arc<service::app_services::AppServices>,
     pub name: String,
     pub executable: String,
@@ -206,7 +206,7 @@ impl Component for EmulatorFormModel {
                     tracing::info!(
                         executable = %self.executable,
                         "Submitting emulator executable");
-                    let repository_manager = Arc::clone(&self.repository_manager);
+                    let app_services = Arc::clone(&self.app_services);
                     let executable = self.executable.clone();
                     let name = self.name.clone();
                     let extract_files = self.extract_files;
@@ -217,8 +217,8 @@ impl Component for EmulatorFormModel {
                     if let Some(editable_emulator_id) = self.editable_emulator_id {
                         // Update existing emulator
                         sender.oneshot_command(async move {
-                            let res = repository_manager
-                                .get_emulator_repository()
+                            let res = app_services
+                                .emulator
                                 .update_emulator(
                                     editable_emulator_id,
                                     &name,
@@ -232,8 +232,8 @@ impl Component for EmulatorFormModel {
                         });
                     } else {
                         sender.oneshot_command(async move {
-                            let res = repository_manager
-                                .get_emulator_repository()
+                            let res = app_services
+                                .emulator
                                 .add_emulator(
                                     &name,
                                     &executable,
@@ -339,7 +339,6 @@ impl Component for EmulatorFormModel {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let init_model = SystemSelectInit {
-            repository_manager: Arc::clone(&init.repository_manager),
             app_services: Arc::clone(&init.app_services),
         };
 
@@ -362,7 +361,6 @@ impl Component for EmulatorFormModel {
                 });
 
         let model = Self {
-            repository_manager: init.repository_manager,
             app_services: init.app_services,
             executable: String::new(),
             extract_files: false,

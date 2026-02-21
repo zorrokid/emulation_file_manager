@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use core_types::{ArgumentType, DocumentType};
-use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
@@ -53,13 +52,11 @@ pub enum DocumentViewerFormCommandMsg {
 }
 
 pub struct DocumentViewerFormInit {
-    pub repository_manager: Arc<RepositoryManager>,
     pub app_services: Arc<service::app_services::AppServices>,
 }
 
 #[derive(Debug)]
 pub struct DocumentViewerFormModel {
-    pub repository_manager: Arc<RepositoryManager>,
     pub app_services: Arc<service::app_services::AppServices>,
     pub name: String,
     pub executable: String,
@@ -353,7 +350,6 @@ impl Component for DocumentViewerFormModel {
         let dropdown = Self::create_dropdown(None, &sender);
 
         let model = Self {
-            repository_manager: init.repository_manager,
             app_services: init.app_services,
             executable: String::new(),
             arguments: Vec::new(),

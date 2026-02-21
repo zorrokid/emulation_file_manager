@@ -24,13 +24,13 @@ pub struct TabbedImageViewer {
     viewers: Vec<Controller<ImageViewer>>,
     settings: Arc<Settings>,
     page_numbers: Vec<u32>,
-    download_service: Arc<DownloadService>,
+    app_services: Arc<service::app_services::AppServices>,
 }
 
 #[derive(Debug)]
 pub struct TabbedImageViewerInit {
     pub settings: Arc<Settings>,
-    pub download_service: Arc<DownloadService>,
+    pub app_services: Arc<service::app_services::AppServices>,
 }
 
 #[derive(Debug)]
@@ -65,7 +65,7 @@ impl Component for TabbedImageViewer {
                 viewers: vec![],
                 settings: init_model.settings,
                 page_numbers: Vec::new(),
-                download_service: init_model.download_service,
+                app_services: init_model.app_services,
             },
             widgets,
         }
@@ -89,7 +89,7 @@ impl Component for TabbedImageViewer {
                         let image_viewer_init = ImageViewerInit {
                             settings: Arc::clone(&self.settings),
                             file_set: Some(file_set.clone()),
-                            download_service: Arc::clone(&self.download_service),
+                            app_services: Arc::clone(&self.app_services),
                         };
 
                         let box_scan_image_viewer = ImageViewer::builder()

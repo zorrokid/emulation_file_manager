@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
@@ -45,7 +44,6 @@ pub enum CommandMsg {
 
 #[derive(Debug)]
 pub struct ReleasesModel {
-    repository_manager: Arc<RepositoryManager>,
     app_services: Arc<service::app_services::AppServices>,
     release_form: Controller<ReleaseFormModel>,
     releases_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
@@ -53,7 +51,6 @@ pub struct ReleasesModel {
 }
 
 pub struct ReleasesInit {
-    pub repository_manager: Arc<RepositoryManager>,
     pub app_services: Arc<service::app_services::AppServices>,
     pub settings: Arc<Settings>,
 }
@@ -120,7 +117,6 @@ impl Component for ReleasesModel {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let release_form_init_model = ReleaseFormInit {
-            repository_manager: Arc::clone(&init_model.repository_manager),
             app_services: Arc::clone(&init_model.app_services),
             settings: Arc::clone(&init_model.settings),
         };
@@ -144,7 +140,6 @@ impl Component for ReleasesModel {
             });
 
         let model = ReleasesModel {
-            repository_manager: init_model.repository_manager,
             app_services: init_model.app_services,
             release_form,
             releases_list_view_wrapper: TypedListView::new(),

@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
@@ -33,7 +32,6 @@ pub enum SystemListOutputMsg {
 }
 
 pub struct SystemListInit {
-    pub repository_manager: Arc<RepositoryManager>,
     pub app_services: Arc<AppServices>,
 }
 
@@ -86,7 +84,6 @@ impl Component for SystemList {
             TypedListView::new();
 
         let system_selector_init_model = SystemSelectInit {
-            repository_manager: Arc::clone(&init_model.repository_manager),
             app_services: Arc::clone(&init_model.app_services),
         };
 

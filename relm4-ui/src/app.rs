@@ -536,11 +536,6 @@ impl AppModel {
     fn open_settings(&self, sender: &ComponentSender<Self>, root: &gtk::Window) {
         if self.settings_form.get().is_none() {
             let settings_form_init = SettingsFormInit {
-                repository_manager: Arc::clone(
-                    self.repository_manager
-                        .get()
-                        .expect("Repository manager not initialized"),
-                ),
                 app_services: Arc::clone(
                     self.app_services
                         .get()
@@ -644,10 +639,7 @@ impl AppModel {
         let repository_manager = Arc::clone(&init_result.repository_manager);
         let app_services = Arc::clone(&init_result.app_services);
 
-        let software_title_list_init = SoftwareTitleListInit {
-            repository_manager,
-            app_services,
-        };
+        let software_title_list_init = SoftwareTitleListInit { app_services };
 
         let software_titles_list = SoftwareTitlesList::builder()
             .launch(software_title_list_init)
@@ -667,7 +659,6 @@ impl AppModel {
         let repository_manager = Arc::clone(&init_result.repository_manager);
         let app_services = Arc::clone(&init_result.app_services);
         let releases_init = ReleasesInit {
-            repository_manager,
             app_services,
             settings: Arc::clone(&init_result.settings),
         };
@@ -694,7 +685,6 @@ impl AppModel {
         self.releases.set(releases).expect("releases already set");
 
         let release_init_model = ReleaseInitModel {
-            repository_manager: Arc::clone(&init_result.repository_manager),
             app_services: Arc::clone(&init_result.app_services),
             settings: Arc::clone(&init_result.settings),
         };
@@ -818,11 +808,6 @@ impl AppModel {
     fn open_import_dialog(&self, root: &gtk::Window) {
         if self.import_form.get().is_none() {
             let import_form_init = ImportFormInit {
-                repository_manager: Arc::clone(
-                    self.repository_manager
-                        .get()
-                        .expect("Repository manager not initialized"),
-                ),
                 app_services: Arc::clone(
                     self.app_services
                         .get()

@@ -93,7 +93,7 @@ pub enum ImageFileSetViewerOutputMsg {
 }
 
 pub struct ImageFileSetViewerInit {
-    pub download_service: Arc<DownloadService>,
+    pub app_services: Arc<service::app_services::AppServices>,
 }
 
 #[derive(Debug)]
@@ -103,7 +103,7 @@ pub struct ImageFilesetViewer {
     grid_view_wrapper: TypedGridView<MyGridItem, gtk::SingleSelection>,
     selected_image: PathBuf,
     image_dimensions: (u32, u32),
-    file_download_service: Arc<DownloadService>,
+    app_services: Arc<service::app_services::AppServices>,
 }
 
 #[relm4::component(pub)]
@@ -187,7 +187,7 @@ impl Component for ImageFilesetViewer {
             grid_view_wrapper,
             selected_image: PathBuf::new(),
             image_dimensions: (0, 0),
-            file_download_service: init.download_service,
+            app_services: init.app_services,
         };
         let my_view = &model.grid_view_wrapper.view;
         let widgets = view_output!();
@@ -213,7 +213,7 @@ impl Component for ImageFilesetViewer {
                 let file_set_id = file_set.id;
                 self.file_set = Some(file_set);
 
-                let download_service = self.file_download_service.clone();
+                let download_service = self.app_services.file_set_download.clone();
 
                 sender.oneshot_command(async move {
                     let download_result = download_service

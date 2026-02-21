@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
@@ -63,7 +62,6 @@ pub enum CommandMsg {
 
 #[derive(Debug)]
 pub struct ReleaseFormModel {
-    repository_manager: Arc<RepositoryManager>,
     app_services: Arc<AppServices>,
 
     release: Option<ReleaseViewModel>,
@@ -80,7 +78,6 @@ pub struct ReleaseFormModel {
 }
 
 pub struct ReleaseFormInit {
-    pub repository_manager: Arc<RepositoryManager>,
     pub app_services: Arc<AppServices>,
     pub settings: Arc<Settings>,
 }
@@ -144,7 +141,6 @@ impl Component for ReleaseFormModel {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let file_set_list_init = FileSetListInit {
-            repository_manager: Arc::clone(&init_model.repository_manager),
             app_services: Arc::clone(&init_model.app_services),
             settings: Arc::clone(&init_model.settings),
             selected_system_ids: vec![],
@@ -159,7 +155,6 @@ impl Component for ReleaseFormModel {
         );
 
         let system_list_init = SystemListInit {
-            repository_manager: Arc::clone(&init_model.repository_manager),
             app_services: Arc::clone(&init_model.app_services),
         };
         let system_list =
@@ -172,7 +167,6 @@ impl Component for ReleaseFormModel {
                 });
 
         let software_title_list_init = SoftwareTitleListInit {
-            repository_manager: Arc::clone(&init_model.repository_manager),
             app_services: Arc::clone(&init_model.app_services),
         };
         let software_title_list = SoftwareTitleList::builder()
@@ -203,7 +197,6 @@ impl Component for ReleaseFormModel {
                 });
 
         let model = ReleaseFormModel {
-            repository_manager: init_model.repository_manager,
             app_services: init_model.app_services,
             release: None,
             release_name: String::new(),

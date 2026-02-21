@@ -4,7 +4,6 @@ use async_std::{channel::unbounded, task};
 use core_types::{
     FileType, ReadFile, Sha1Checksum, events::HttpDownloadEvent, item_type::ItemType,
 };
-use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, FactorySender,
     RelmWidgetExt,
@@ -157,7 +156,6 @@ pub enum CommandMsg {
 }
 
 pub struct FileSetFormInit {
-    pub repository_manager: Arc<RepositoryManager>,
     pub app_services: Arc<service::app_services::AppServices>,
     pub settings: Arc<Settings>,
 }

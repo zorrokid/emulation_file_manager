@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
@@ -57,13 +56,11 @@ pub enum CommandMsg {
 }
 
 pub struct SoftwareTitleSelectInit {
-    pub repository_manager: Arc<RepositoryManager>,
     pub app_services: Arc<service::app_services::AppServices>,
 }
 
 #[derive(Debug)]
 pub struct SoftwareTitleSelectModel {
-    repository_manager: Arc<RepositoryManager>,
     app_services: Arc<service::app_services::AppServices>,
     software_titles: Vec<SoftwareTitleListModel>,
     list_view_wrapper: TypedListView<DeletableListItem, gtk::SingleSelection>,
@@ -173,7 +170,6 @@ impl Component for SoftwareTitleSelectModel {
             });
 
         let model = SoftwareTitleSelectModel {
-            repository_manager: init_model.repository_manager,
             app_services: init_model.app_services,
             software_titles: Vec::new(),
             list_view_wrapper,

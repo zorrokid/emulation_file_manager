@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use core_types::FileType;
-use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
@@ -13,7 +12,7 @@ use relm4::{
 };
 use service::{
     error::Error as ServiceError,
-    file_set_deletion::{model::FileDeletionResult, service::FileSetDeletionService},
+    file_set_deletion::model::FileDeletionResult,
     view_models::{FileSetListModel, Settings},
 };
 use ui_components::{DropDownOutputMsg, FileTypeDropDown, FileTypeSelectedMsg};
@@ -60,7 +59,6 @@ pub enum CommandMsg {
 }
 
 pub struct FileSetSelectorInit {
-    pub repository_manager: Arc<RepositoryManager>,
     pub app_services: Arc<service::app_services::AppServices>,
     pub settings: Arc<Settings>,
 }
@@ -77,7 +75,6 @@ pub struct FileSetSelector {
     selected_file_set_ids: Vec<i64>,
     dropdown: Controller<FileTypeDropDown>,
     file_set_details_view: Controller<FileSetDetailsView>,
-    file_set_deletion_service: Arc<FileSetDeletionService>,
 }
 
 #[relm4::component(pub)]
@@ -182,7 +179,6 @@ impl Component for FileSetSelector {
         );
 
         let file_set_form_init_model = FileSetFormInit {
-            repository_manager: Arc::clone(&init_model.repository_manager),
             app_services: Arc::clone(&init_model.app_services),
             settings: Arc::clone(&init_model.settings),
         };
@@ -207,11 +203,6 @@ impl Component for FileSetSelector {
                 FileSetDetailsOutputMsg::ShowError(msg) => FileSetSelectorMsg::ShowError(msg),
             });
 
-        let file_set_deletion_service = Arc::new(FileSetDeletionService::new(
-            Arc::clone(&init_model.repository_manager),
-            Arc::clone(&init_model.settings),
-        ));
-
         let model = FileSetSelector {
             app_services: init_model.app_services,
             file_sets: Vec::new(),
@@ -223,7 +214,6 @@ impl Component for FileSetSelector {
             selected_file_set_ids: Vec::new(),
             dropdown,
             file_set_details_view,
-            file_set_deletion_service,
         };
         let file_types_dropdown = model.dropdown.widget();
         let file_set_list_view = &model.list_view_wrapper.view;
@@ -317,7 +307,7 @@ impl Component for FileSetSelector {
             FileSetSelectorMsg::DeleteClicked => {
                 if let Some(selected_file_set) = &self.selected_file_set {
                     tracing::info!(id = selected_file_set.id, "Deleting file set");
-                    let file_set_deletion_service = self.file_set_deletion_service.clone();
+                    let file_set_deletion_service = self.app_services.file_set_deletion.clone();
                     let file_set_id = selected_file_set.id;
 
                     sender.oneshot_command(clone!(

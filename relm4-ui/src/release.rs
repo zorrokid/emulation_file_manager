@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use core_types::{DOCUMENT_FILE_TYPES, EMULATOR_FILE_TYPES, IMAGE_FILE_TYPES};
-use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
@@ -13,7 +12,6 @@ use relm4::{
 };
 use service::{
     error::Error,
-    file_set_download::service::DownloadService,
     view_models::{
         FileSetViewModel, ReleaseListModel, ReleaseViewModel, Settings, SoftwareTitleListModel,
     },
@@ -51,7 +49,6 @@ pub struct ReleaseModel {
 
 #[derive(Debug)]
 pub struct ReleaseInitModel {
-    pub repository_manager: Arc<RepositoryManager>,
     pub app_services: Arc<service::app_services::AppServices>,
     pub settings: Arc<Settings>,
 }
@@ -198,13 +195,10 @@ impl Component for ReleaseModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let download_service = Arc::new(DownloadService::new(
-            Arc::clone(&init_model.repository_manager),
-            Arc::clone(&init_model.settings),
-        ));
+        let app_services = Arc::clone(&init_model.app_services);
         let tabbed_image_viewer_init = TabbedImageViewerInit {
             settings: Arc::clone(&init_model.settings),
-            download_service: Arc::clone(&download_service),
+            app_services,
         };
         let tabbed_image_viewer = TabbedImageViewer::builder()
             .launch(tabbed_image_viewer_init)
@@ -213,7 +207,6 @@ impl Component for ReleaseModel {
             });
 
         let emulator_runner_init_model = EmulatorRunnerInit {
-            repository_manager: Arc::clone(&init_model.repository_manager),
             app_services: Arc::clone(&init_model.app_services),
             settings: Arc::clone(&init_model.settings),
         };
@@ -222,16 +215,14 @@ impl Component for ReleaseModel {
             .launch(emulator_runner_init_model)
             .detach();
 
-        let image_file_set_viewer_init_model = ImageFileSetViewerInit {
-            download_service: Arc::clone(&download_service),
-        };
+        let app_services = Arc::clone(&init_model.app_services);
+        let image_file_set_viewer_init_model = ImageFileSetViewerInit { app_services };
         let image_file_set_viewer = ImageFilesetViewer::builder()
             .transient_for(&root)
             .launch(image_file_set_viewer_init_model)
             .detach();
 
         let document_viewer_init_model = DocumentViewerInit {
-            repository_manager: Arc::clone(&init_model.repository_manager),
             app_services: Arc::clone(&init_model.app_services),
             settings: Arc::clone(&init_model.settings),
         };

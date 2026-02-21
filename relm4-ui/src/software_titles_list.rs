@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
@@ -11,9 +10,7 @@ use relm4::{
     typed_view::list::TypedListView,
 };
 use service::{
-    app_services::AppServices,
-    error::Error,
-    software_title_service::{SoftwareTitleService, SoftwareTitleServiceError},
+    app_services::AppServices, error::Error, software_title_service::SoftwareTitleServiceError,
     view_models::SoftwareTitleListModel,
 };
 
@@ -30,7 +27,6 @@ pub struct SoftwareTitlesList {
     list_view_wrapper: TypedListView<ListItem, gtk::MultiSelection>,
     selected_items: Vec<ListItem>,
     merge_dialog_controller: Controller<SoftwareTitleMergeDialog>,
-    software_title_service: Arc<SoftwareTitleService>,
 }
 
 #[derive(Debug)]
@@ -60,7 +56,6 @@ pub enum SoftwareTitleListOutMsg {
 
 #[derive(Debug)]
 pub struct SoftwareTitleListInit {
-    pub repository_manager: Arc<RepositoryManager>,
     pub app_services: Arc<AppServices>,
 }
 
@@ -110,16 +105,11 @@ impl Component for SoftwareTitlesList {
                 }
             });
 
-        let software_title_service = Arc::new(SoftwareTitleService::new(Arc::clone(
-            &init_model.repository_manager,
-        )));
-
         let model = SoftwareTitlesList {
             app_services: init_model.app_services,
             list_view_wrapper,
             selected_items: Vec::new(),
             merge_dialog_controller,
-            software_title_service,
         };
         let list_view = &model.list_view_wrapper.view;
         let selection_model = &model.list_view_wrapper.selection_model;
@@ -214,7 +204,7 @@ impl Component for SoftwareTitlesList {
                 println!("Start merge");
             }
             SoftwareTitleListMsg::StartMergeWith(id) => {
-                let service = Arc::clone(&self.software_title_service);
+                let service = Arc::clone(&self.app_services);
                 let ids_to_be_merged: Vec<i64> = self
                     .selected_items
                     .iter()
@@ -222,7 +212,7 @@ impl Component for SoftwareTitlesList {
                     .map(|item| item.id)
                     .collect();
                 sender.oneshot_command(async move {
-                    let res = service.merge(id, &ids_to_be_merged).await;
+                    let res = service.software_title.merge(id, &ids_to_be_merged).await;
                     SoftwareTitleListCmdMsg::ProcessMergeResult(res)
                 });
             }

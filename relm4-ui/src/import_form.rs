@@ -2,7 +2,6 @@ use std::{path::PathBuf, sync::Arc};
 
 use async_std::{channel::unbounded, task};
 use core_types::{FileType, item_type::ItemType};
-use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
@@ -18,9 +17,8 @@ use relm4::{
 };
 use service::{
     error::Error,
-    mass_import::{
-        models::{FileSetImportStatus, MassImportInput, MassImportResult, MassImportSyncEvent},
-        service::MassImportService,
+    mass_import::models::{
+        FileSetImportStatus, MassImportInput, MassImportResult, MassImportSyncEvent,
     },
     view_models::{Settings, SystemListModel},
 };
@@ -69,6 +67,7 @@ impl RelmListItem for ImportListItem {
 
 #[derive(Debug)]
 pub struct ImportForm {
+    app_services: Arc<service::app_services::AppServices>,
     directory_path: Option<PathBuf>,
     dat_file_path: Option<PathBuf>,
     selected_system: Option<SystemListModel>,
@@ -77,7 +76,6 @@ pub struct ImportForm {
     source: String,
     file_type_dropdown: Controller<FileTypeDropDown>,
     system_selector: Controller<SystemSelectModel>,
-    mass_import_service: Arc<MassImportService>,
     item_type_dropdown: Controller<ItemTypeDropdown>,
     imported_sets_list_view_wrapper: TypedListView<ImportListItem, gtk::NoSelection>,
 }
@@ -106,7 +104,6 @@ pub enum CommandMsg {
 }
 
 pub struct ImportFormInit {
-    pub repository_manager: Arc<RepositoryManager>,
     pub app_services: Arc<service::app_services::AppServices>,
     pub settings: Arc<Settings>,
 }
@@ -247,14 +244,9 @@ impl Component for ImportForm {
 
         let imported_sets_list_view_wrapper =
             TypedListView::<ImportListItem, gtk::NoSelection>::new();
-
-        let mass_import_service = Arc::new(MassImportService::new(
-            Arc::clone(&init_model.repository_manager),
-            Arc::clone(&init_model.settings),
-        ));
+        let app_services = Arc::clone(&init_model.app_services);
 
         let init_model = SystemSelectInit {
-            repository_manager: Arc::clone(&init_model.repository_manager),
             app_services: Arc::clone(&init_model.app_services),
         };
 
@@ -285,9 +277,9 @@ impl Component for ImportForm {
             file_type_dropdown,
             source: String::new(),
             system_selector,
-            mass_import_service,
             item_type_dropdown,
             imported_sets_list_view_wrapper,
+            app_services,
         };
 
         let file_types_dropdown = model.file_type_dropdown.widget();
@@ -409,7 +401,7 @@ impl Component for ImportForm {
                         selected_system,
                     );
 
-                    let mass_import_service = Arc::clone(&self.mass_import_service);
+                    let mass_import_service = self.app_services.import.clone();
 
                     let input = MassImportInput {
                         source_path: directory_path.clone(),

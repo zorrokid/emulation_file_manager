@@ -8,7 +8,6 @@ use crate::{
     list_item::ListItem,
     utils::dialog_utils::show_error_dialog,
 };
-use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
@@ -63,7 +62,6 @@ pub enum DocumentViewerCommandMsg {
 }
 
 pub struct DocumentViewerInit {
-    pub repository_manager: Arc<RepositoryManager>,
     pub app_services: Arc<AppServices>,
     pub settings: Arc<Settings>,
 }
@@ -71,9 +69,7 @@ pub struct DocumentViewerInit {
 #[derive(Debug)]
 pub struct DocumentViewer {
     // services
-    repository_manager: Arc<RepositoryManager>,
     app_services: Arc<AppServices>,
-    external_executable_runner_service: Arc<ExternalExecutableRunnerService>,
 
     // list views
     file_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
@@ -156,7 +152,6 @@ impl Component for DocumentViewer {
         let viewer_list_view_wrapper = TypedListView::<ListItem, gtk::SingleSelection>::new();
 
         let init_model = DocumentViewerFormInit {
-            repository_manager: Arc::clone(&init.repository_manager),
             app_services: Arc::clone(&init.app_services),
         };
         let viewer_form = DocumentViewerFormModel::builder()
@@ -183,15 +178,8 @@ impl Component for DocumentViewer {
                 ConfirmDialogOutputMsg::Canceled => DocumentViewerMsg::Ignore,
             });
 
-        let external_executable_runner_service = Arc::new(ExternalExecutableRunnerService::new(
-            Arc::clone(&init.settings),
-            Arc::clone(&init.repository_manager),
-        ));
-
         let model = DocumentViewer {
-            repository_manager: init.repository_manager,
             app_services: init.app_services,
-            external_executable_runner_service,
 
             viewers: Vec::new(),
             file_set: None,
@@ -246,8 +234,7 @@ impl Component for DocumentViewer {
                     // TODO: create a viewer view model that has processed arguments already to
                     // correct format
                     let arguments = Vec::new(); // TODO: viewer.arguments.clone();
-                    let executable_runner_service =
-                        Arc::clone(&self.external_executable_runner_service);
+                    let executable_runner_service = self.app_services.runner.clone();
 
                     let executable_runner_model = ExecutableRunnerModel {
                         executable,

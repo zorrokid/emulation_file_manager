@@ -5,7 +5,7 @@ use crate::{
     list_item::ListItem,
     utils::dialog_utils::show_error_dialog,
 };
-use database::{models::System, repository_manager::RepositoryManager};
+use database::models::System; // TODO: replace with view model
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
@@ -70,7 +70,6 @@ pub enum EmulatorRunnerCommandMsg {
 }
 
 pub struct EmulatorRunnerInit {
-    pub repository_manager: Arc<RepositoryManager>,
     pub app_services: Arc<service::app_services::AppServices>,
     pub settings: Arc<Settings>,
 }
@@ -78,9 +77,7 @@ pub struct EmulatorRunnerInit {
 #[derive(Debug)]
 pub struct EmulatorRunnerModel {
     // services
-    repository_manager: Arc<RepositoryManager>,
     app_services: Arc<service::app_services::AppServices>,
-    external_executable_runner_service: Arc<ExternalExecutableRunnerService>,
 
     // list views
     file_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,
@@ -167,7 +164,6 @@ impl Component for EmulatorRunnerModel {
         let system_list_view_wrapper = TypedListView::<ListItem, gtk::SingleSelection>::new();
 
         let init_model = EmulatorFormInit {
-            repository_manager: Arc::clone(&init.repository_manager),
             app_services: Arc::clone(&init.app_services),
         };
 
@@ -194,15 +190,8 @@ impl Component for EmulatorRunnerModel {
                 ConfirmDialogOutputMsg::Canceled => EmulatorRunnerMsg::Ignore,
             });
 
-        let external_executable_runner_service = Arc::new(ExternalExecutableRunnerService::new(
-            Arc::clone(&init.settings),
-            Arc::clone(&init.repository_manager),
-        ));
-
         let model = EmulatorRunnerModel {
-            repository_manager: init.repository_manager,
             app_services: init.app_services,
-            external_executable_runner_service,
 
             systems: Vec::new(),
             emulators: Vec::new(),
@@ -439,7 +428,7 @@ impl EmulatorRunnerModel {
                 file_set.file_set_name.clone()
             };
 
-            let executable_runner_service = Arc::clone(&self.external_executable_runner_service);
+            let executable_runner_service = self.app_services.runner.clone();
 
             let executable_runner_model = ExecutableRunnerModel {
                 executable,

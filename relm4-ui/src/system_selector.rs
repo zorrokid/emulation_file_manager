@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use database::repository_manager::RepositoryManager;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
@@ -52,13 +51,11 @@ pub enum CommandMsg {
 }
 
 pub struct SystemSelectInit {
-    pub repository_manager: Arc<RepositoryManager>,
     pub app_services: Arc<service::app_services::AppServices>,
 }
 
 #[derive(Debug)]
 pub struct SystemSelectModel {
-    repository_manager: Arc<RepositoryManager>,
     app_services: Arc<service::app_services::AppServices>,
     list_view_wrapper: TypedListView<DeletableListItem, gtk::SingleSelection>,
     selected_system_ids: Vec<i64>,
@@ -172,7 +169,6 @@ impl Component for SystemSelectModel {
             });
 
         let model = SystemSelectModel {
-            repository_manager: init_model.repository_manager,
             app_services: init_model.app_services,
             list_view_wrapper,
             selected_system_ids: Vec::new(),

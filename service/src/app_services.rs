@@ -5,9 +5,13 @@ use database::repository_manager::RepositoryManager;
 use crate::{
     document_viewer_service::DocumentViewerService, download_service::DownloadService,
     emulator_service::EmulatorService, export_service::ExportService,
-    file_import::service::FileImportService, release_item_service::ReleaseItemService,
-    release_service::ReleaseService, software_title_service::SoftwareTitleService,
-    system_service::SystemService, view_model_service::ViewModelService, view_models::Settings,
+    external_executable_runner::service::ExternalExecutableRunnerService,
+    file_import::service::FileImportService, file_set_deletion::service::FileSetDeletionService,
+    file_set_download::service::DownloadService as FileSetDownloadService,
+    mass_import::service::MassImportService, release_item_service::ReleaseItemService,
+    release_service::ReleaseService, settings_service::SettingsService,
+    software_title_service::SoftwareTitleService, system_service::SystemService,
+    view_model_service::ViewModelService, view_models::Settings,
 };
 
 #[derive(Debug)]
@@ -22,6 +26,12 @@ pub struct AppServices {
     pub file_import: Arc<FileImportService>,
     pub download: Arc<DownloadService>,
     pub export: Arc<ExportService>,
+    // TODO: combine with file set service
+    pub file_set_deletion: Arc<FileSetDeletionService>,
+    pub file_set_download: Arc<FileSetDownloadService>,
+    pub runner: Arc<ExternalExecutableRunnerService>,
+    pub import: Arc<MassImportService>,
+    pub settings: Arc<SettingsService>,
 }
 
 impl AppServices {
@@ -45,6 +55,23 @@ impl AppServices {
                 Arc::clone(&settings),
             )),
             export: Arc::new(ExportService::new(Arc::clone(&repository_manager))),
+            file_set_deletion: Arc::new(FileSetDeletionService::new(
+                Arc::clone(&repository_manager),
+                Arc::clone(&settings),
+            )),
+            file_set_download: Arc::new(FileSetDownloadService::new(
+                Arc::clone(&repository_manager),
+                Arc::clone(&settings),
+            )),
+            runner: Arc::new(ExternalExecutableRunnerService::new(
+                Arc::clone(&settings),
+                Arc::clone(&repository_manager),
+            )),
+            import: Arc::new(MassImportService::new(
+                Arc::clone(&repository_manager),
+                Arc::clone(&settings),
+            )),
+            settings: Arc::new(SettingsService::new(Arc::clone(&repository_manager))),
         }
     }
 }
