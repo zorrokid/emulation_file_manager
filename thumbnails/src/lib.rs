@@ -98,16 +98,16 @@ pub fn prepare_thumbnails_from_output_dir(
         let thumbnail_path = thumbnails_dir.join(format!("{}.png", archive_file_name));
         let exported_file_path = exported_files_dir.join(&output_file.output_file_name);
 
-        println!(
-            "Generating thumbnail for archive file name '{}' output file name '{}' at '{}'",
-            archive_file_name,
-            exported_file_path.display(),
-            thumbnail_path.display()
-        );
-
         if thumbnail_path.exists() {
             thumbnail_path_mapp.insert(output_file.output_file_name.clone(), thumbnail_path);
         } else {
+            println!(
+                "Generating thumbnail for archive file name '{}' output file name '{}' at '{}'",
+                archive_file_name,
+                exported_file_path.display(),
+                thumbnail_path.display()
+            );
+
             let image = image::open(&exported_file_path).map_err(|err| {
                 ThumbnailsError::IoError(format!(
                     "Failed opening image {} with error: {}",
