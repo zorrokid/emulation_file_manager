@@ -289,9 +289,11 @@ impl Component for AppModel {
     }
 
     fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
-        widgets
-            .sync_button
-            .set_sensitive(self.get_settings().s3_sync_enabled);
+        widgets.sync_button.set_sensitive(
+            self.get_settings()
+                .map(|s| s.s3_sync_enabled)
+                .unwrap_or(false),
+        );
     }
 }
 
@@ -692,8 +694,10 @@ impl AppModel {
         }
     }
 
-    fn get_settings(&self) -> Arc<Settings> {
-        self.get_app_services().app_settings()
+    fn get_settings(&self) -> Option<Arc<Settings>> {
+        self.app_services
+            .get()
+            .map(|services| services.app_settings())
     }
 
     fn get_app_services(&self) -> Arc<AppServices> {

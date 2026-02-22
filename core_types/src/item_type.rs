@@ -29,6 +29,7 @@ pub enum ItemType {
     Book,      // No associated FileType yet
     Brochure,  // No associated FileType yet
     Other,     // No associated FileType yet
+    Addendum,  // No associated FileType yet
 }
 
 impl ItemType {
@@ -55,6 +56,7 @@ impl ItemType {
             14 => Ok(ItemType::Book),
             15 => Ok(ItemType::Brochure),
             16 => Ok(ItemType::Other),
+            17 => Ok(ItemType::Addendum),
             _ => Err(CoreTypeError::ConversionError(
                 "Failed convert to ItemType".to_string(),
             )),

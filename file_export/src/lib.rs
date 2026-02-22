@@ -170,8 +170,10 @@ fn decompress_zstd_file(
     let mut zstd_reader = zstd::Decoder::new(file)?;
     if let Some(parent) = output_path.parent() {
         println!(
-            "Creating parent directory: {}",
-            parent.to_str().unwrap_or("Invalid path")
+            "Creating parent directory {} for output file {} from input file {}",
+            parent.to_str().unwrap_or("Invalid path"),
+            output_path.to_str().unwrap_or("Invalid path"),
+            input_path.to_str().unwrap_or("Invalid path")
         );
         std::fs::create_dir_all(parent)?;
     }
