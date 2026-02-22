@@ -12,7 +12,7 @@ use relm4::{
         },
     },
 };
-use service::{error::Error, settings_service::SettingsSaveModel, view_models::Settings};
+use service::{error::Error, settings_service::SettingsSaveModel};
 
 use crate::utils::dialog_utils::show_error_dialog;
 
@@ -53,7 +53,6 @@ impl SettingsForm {
 
 pub struct SettingsFormInit {
     pub app_services: Arc<service::app_services::AppServices>,
-    pub settings: Arc<Settings>,
 }
 
 #[derive(Debug)]
@@ -304,17 +303,18 @@ impl Component for SettingsForm {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let s3_settings = init.settings.s3_settings.clone().unwrap_or_default();
+        let settings = init.app_services.app_settings();
+        let s3_settings = settings.s3_settings.clone().unwrap_or_default();
         let model = Self {
             s3_bucket_name: s3_settings.bucket.clone(),
             s3_endpoint: s3_settings.endpoint.clone(),
             s3_region: s3_settings.region.clone(),
             s3_access_key_id: String::new(),
             s3_secret_access_key: String::new(),
-            s3_sync_enabled: init.settings.s3_sync_enabled,
+            s3_sync_enabled: settings.s3_sync_enabled,
             credentials_stored: false,
             stored_access_key_preview: None,
-            collection_root_dir: Some(init.settings.collection_root_dir.clone()),
+            collection_root_dir: Some(settings.collection_root_dir.clone()),
             app_services: init.app_services,
         };
         let widgets = view_output!();

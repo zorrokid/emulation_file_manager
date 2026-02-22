@@ -12,9 +12,7 @@ use relm4::{
 };
 use service::{
     error::Error,
-    view_models::{
-        FileSetViewModel, ReleaseListModel, ReleaseViewModel, Settings, SoftwareTitleListModel,
-    },
+    view_models::{FileSetViewModel, ReleaseListModel, ReleaseViewModel, SoftwareTitleListModel},
 };
 
 use crate::{
@@ -50,7 +48,6 @@ pub struct ReleaseModel {
 #[derive(Debug)]
 pub struct ReleaseInitModel {
     pub app_services: Arc<service::app_services::AppServices>,
-    pub settings: Arc<Settings>,
 }
 
 #[derive(Debug)]
@@ -196,10 +193,7 @@ impl Component for ReleaseModel {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let app_services = Arc::clone(&init_model.app_services);
-        let tabbed_image_viewer_init = TabbedImageViewerInit {
-            settings: Arc::clone(&init_model.settings),
-            app_services,
-        };
+        let tabbed_image_viewer_init = TabbedImageViewerInit { app_services };
         let tabbed_image_viewer = TabbedImageViewer::builder()
             .launch(tabbed_image_viewer_init)
             .forward(sender.input_sender(), |msg| match msg {
@@ -208,7 +202,6 @@ impl Component for ReleaseModel {
 
         let emulator_runner_init_model = EmulatorRunnerInit {
             app_services: Arc::clone(&init_model.app_services),
-            settings: Arc::clone(&init_model.settings),
         };
         let emulator_runner = EmulatorRunnerModel::builder()
             .transient_for(&root)
@@ -224,7 +217,6 @@ impl Component for ReleaseModel {
 
         let document_viewer_init_model = DocumentViewerInit {
             app_services: Arc::clone(&init_model.app_services),
-            settings: Arc::clone(&init_model.settings),
         };
         let document_file_set_viewer = DocumentViewer::builder()
             .transient_for(&root)

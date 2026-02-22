@@ -20,7 +20,7 @@ use service::{
     mass_import::models::{
         FileSetImportStatus, MassImportInput, MassImportResult, MassImportSyncEvent,
     },
-    view_models::{Settings, SystemListModel},
+    view_models::SystemListModel,
 };
 use ui_components::{DropDownOutputMsg, FileTypeDropDown, FileTypeSelectedMsg};
 
@@ -105,7 +105,6 @@ pub enum CommandMsg {
 
 pub struct ImportFormInit {
     pub app_services: Arc<service::app_services::AppServices>,
-    pub settings: Arc<Settings>,
 }
 
 impl ImportForm {
