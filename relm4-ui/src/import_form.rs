@@ -207,9 +207,8 @@ impl Component for ImportForm {
                 },
                 gtk::Entry {
                     set_placeholder_text: Some("Source (e.g. website URL)"),
-                    #[watch]
                     set_text: &model.source,
-                    connect_activate[sender] => move |entry| {
+                    connect_changed[sender] => move |entry| {
                         let buffer = entry.buffer();
                         sender.input(
                             ImportFormMsg::SourceChanged(buffer.text().into()),
@@ -287,7 +286,13 @@ impl Component for ImportForm {
         let widgets = view_output!();
         ComponentParts { model, widgets }
     }
-    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
+    fn update_with_view(
+        &mut self,
+        widgets: &mut Self::Widgets,
+        msg: Self::Input,
+        sender: ComponentSender<Self>,
+        root: &Self::Root,
+    ) {
         match msg {
             ImportFormMsg::OpenDirectorySelector => {
                 let dialog = FileChooserDialog::builder()
@@ -443,6 +448,8 @@ impl Component for ImportForm {
                 root.hide();
             }
         }
+        // This is essential:
+        self.update_view(widgets, sender);
     }
 
     fn update_cmd(
