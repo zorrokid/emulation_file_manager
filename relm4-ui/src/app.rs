@@ -13,6 +13,7 @@ use relm4::{
 use service::{
     app_services::{AppServices, create_app_services},
     cloud_sync::service::SyncResult,
+    file_system_ops::{FileSystemOps, StdFileSystemOps},
     view_models::{Settings, SoftwareTitleListModel},
 };
 use std::{
@@ -563,6 +564,24 @@ impl AppModel {
 
     fn post_process_initialize(&self, sender: &ComponentSender<Self>, init_result: InitResult) {
         let app_services = Arc::clone(&init_result.app_services);
+
+        let collection_root_dir = &app_services.app_settings().collection_root_dir;
+
+        let fs_ops = StdFileSystemOps;
+        if fs_ops.is_accesssible_dir(collection_root_dir) {
+            tracing::info!(
+                "Collection root directory is accessible: {:?}",
+                collection_root_dir
+            );
+        } else {
+            show_error_dialog(
+                format!(
+                    "Collection root directory is not accessible: {:?}. Please check your settings and ensure the drive is mounted.",
+                    collection_root_dir
+                ),
+                &gtk::Window::new(),
+            );
+        }
 
         let software_title_list_init = SoftwareTitleListInit { app_services };
 

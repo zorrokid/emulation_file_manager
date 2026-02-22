@@ -34,6 +34,7 @@
 //! assert!(mock_fs.was_deleted("/test/rom/game.zst"));
 //! ```
 
+use std::fs::read_dir;
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -66,6 +67,9 @@ pub trait FileSystemOps: Send + Sync {
         &self,
         path: &Path,
     ) -> io::Result<Box<dyn Iterator<Item = Result<SimpleDirEntry, Error>>>>;
+
+    /// Check if a directory is accessible (exists, is a directory, and can be read)
+    fn is_accesssible_dir(&self, path: &Path) -> bool;
 }
 
 /// Production implementation using std::fs
@@ -102,6 +106,18 @@ impl FileSystemOps for StdFileSystemOps {
             res.map_err(Error::from)
                 .map(|entry| SimpleDirEntry { path: entry.path() })
         })))
+    }
+
+    fn is_accesssible_dir(&self, path: &Path) -> bool {
+        if !path.exists() || !path.is_dir() {
+            return false;
+        }
+
+        // Do a read check if the dir is actually mounted and accessible:
+        match read_dir(path) {
+            Ok(mut entries) => entries.next().is_some(),
+            Err(_) => false,
+        }
     }
 }
 
@@ -184,8 +200,13 @@ pub mod mock {
         fn exists(&self, path: &Path) -> bool {
             let state = self.state.lock().unwrap();
             println!("Checking existence of path: {}", path.display());
-            println!("Existing files in mock file system: {:?}", state.existing_files);
-            state.existing_files.contains(path.to_string_lossy().as_ref())
+            println!(
+                "Existing files in mock file system: {:?}",
+                state.existing_files
+            );
+            state
+                .existing_files
+                .contains(path.to_string_lossy().as_ref())
         }
 
         fn remove_file(&self, path: &Path) -> io::Result<()> {
@@ -238,6 +259,11 @@ pub mod mock {
         ) -> io::Result<Box<dyn Iterator<Item = Result<SimpleDirEntry, Error>>>> {
             let state = self.state.lock().unwrap();
             Ok(Box::new(state.entries.clone().into_iter()))
+        }
+
+        fn is_accesssible_dir(&self, _: &Path) -> bool {
+            // For testing purposes, we can assume all directories are accessible.
+            true
         }
     }
 }
