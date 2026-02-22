@@ -5,7 +5,7 @@ use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{self, prelude::*},
 };
-use service::view_models::{FileSetViewModel, Settings};
+use service::view_models::FileSetViewModel;
 
 use crate::image_viewer::{ImageViewer, ImageViewerInit, ImageViewerOutputMsg};
 
@@ -19,14 +19,12 @@ pub enum TabbedImageViewerMsg {
 #[derive(Debug)]
 pub struct TabbedImageViewer {
     viewers: Vec<Controller<ImageViewer>>,
-    settings: Arc<Settings>,
     page_numbers: Vec<u32>,
     app_services: Arc<service::app_services::AppServices>,
 }
 
 #[derive(Debug)]
 pub struct TabbedImageViewerInit {
-    pub settings: Arc<Settings>,
     pub app_services: Arc<service::app_services::AppServices>,
 }
 
@@ -60,7 +58,6 @@ impl Component for TabbedImageViewer {
         ComponentParts {
             model: TabbedImageViewer {
                 viewers: vec![],
-                settings: init_model.settings,
                 page_numbers: Vec::new(),
                 app_services: init_model.app_services,
             },
@@ -84,7 +81,6 @@ impl Component for TabbedImageViewer {
                             continue; // Skip empty file sets
                         }
                         let image_viewer_init = ImageViewerInit {
-                            settings: Arc::clone(&self.settings),
                             file_set: Some(file_set.clone()),
                             app_services: Arc::clone(&self.app_services),
                         };

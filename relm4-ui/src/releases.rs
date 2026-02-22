@@ -12,7 +12,7 @@ use relm4::{
 use service::{
     error::Error,
     view_model_service::ReleaseFilter,
-    view_models::{ReleaseListModel, Settings, SoftwareTitleListModel},
+    view_models::{ReleaseListModel, SoftwareTitleListModel},
 };
 
 use crate::{
@@ -52,7 +52,6 @@ pub struct ReleasesModel {
 
 pub struct ReleasesInit {
     pub app_services: Arc<service::app_services::AppServices>,
-    pub settings: Arc<Settings>,
 }
 
 #[derive(Debug)]
@@ -118,7 +117,6 @@ impl Component for ReleasesModel {
     ) -> ComponentParts<Self> {
         let release_form_init_model = ReleaseFormInit {
             app_services: Arc::clone(&init_model.app_services),
-            settings: Arc::clone(&init_model.settings),
         };
 
         let release_form = ReleaseFormModel::builder()

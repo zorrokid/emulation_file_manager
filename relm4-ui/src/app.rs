@@ -1,6 +1,5 @@
 use async_std::{channel::unbounded, task};
 use core_types::events::SyncEvent;
-use database::{get_db_pool, repository_manager::RepositoryManager};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
@@ -12,9 +11,8 @@ use relm4::{
     once_cell::sync::OnceCell,
 };
 use service::{
-    app_services::AppServices,
-    cloud_sync::service::{CloudStorageSyncService, SyncResult},
-    file_type_migration::service::FileTypeMigrationService,
+    app_services::{AppServices, create_app_services},
+    cloud_sync::service::SyncResult,
     view_models::{Settings, SoftwareTitleListModel},
 };
 use std::{
@@ -37,9 +35,7 @@ use crate::{
 
 #[derive(Debug)]
 pub struct InitResult {
-    repository_manager: Arc<RepositoryManager>,
     app_services: Arc<AppServices>,
-    settings: Arc<Settings>,
 }
 
 #[derive(Debug)]
@@ -54,7 +50,6 @@ pub enum AppMsg {
     ExportAllFiles,
     ExportFolderSelected(PathBuf),
     SyncWithCloud,
-    MigrateFileTypes,
     ProcessFileSyncEvent(SyncEvent),
     OpenSettings,
     UpdateSettings,
@@ -69,7 +64,6 @@ pub enum CommandMsg {
     InitializationDone(InitResult),
     ExportFinished(Result<(), service::error::Error>),
     SyncToCloudCompleted(Result<SyncResult, service::error::Error>),
-    MigrationDone(Result<(), service::error::Error>),
 }
 
 struct Flags {
@@ -79,11 +73,7 @@ struct Flags {
 }
 
 pub struct AppModel {
-    repository_manager: OnceCell<Arc<RepositoryManager>>,
     app_services: OnceCell<Arc<AppServices>>,
-    settings: OnceCell<Arc<Settings>>,
-    sync_service: OnceCell<Arc<CloudStorageSyncService>>,
-    file_type_migration_service: OnceCell<Arc<FileTypeMigrationService>>,
     software_titles: OnceCell<Controller<SoftwareTitlesList>>,
     releases_view: gtk::Box,
     releases: OnceCell<Controller<ReleasesModel>>,
@@ -92,7 +82,6 @@ pub struct AppModel {
     settings_form: OnceCell<Controller<SettingsForm>>,
     import_form: OnceCell<Controller<ImportForm>>,
     status_bar: Controller<StatusBarModel>,
-    // Wrapping the flags in a single Mutex to prevent possible race conditions.
     flags: Arc<Mutex<Flags>>,
     cloud_sync_cancel_tx: Option<async_std::channel::Sender<()>>,
 }
@@ -192,16 +181,12 @@ impl Component for AppModel {
         let widgets = AppWidgets { sync_button };
 
         let model = AppModel {
-            repository_manager: OnceCell::new(),
             app_services: OnceCell::new(),
-            settings: OnceCell::new(),
             releases_view: left_vbox, // both software titles and releases will be in left_vbox
             release_view: right_vbox,
             releases: OnceCell::new(),
             release: OnceCell::new(),
             software_titles: OnceCell::new(),
-            sync_service: OnceCell::new(),
-            file_type_migration_service: OnceCell::new(),
             settings_form: OnceCell::new(),
             import_form: OnceCell::new(),
             status_bar,
@@ -272,7 +257,6 @@ impl Component for AppModel {
             AppMsg::ExportAllFiles => self.start_export_all_files(&sender, root),
             AppMsg::ExportFolderSelected(path) => self.export_all_files(&sender, path),
             AppMsg::SyncWithCloud => self.sync_with_cloud(&sender),
-            AppMsg::MigrateFileTypes => self.migrate_file_types(&sender),
             AppMsg::ProcessFileSyncEvent(event) => {
                 self.status_bar.emit(StatusBarMsg::SyncEventReceived(event))
             }
@@ -301,23 +285,13 @@ impl Component for AppModel {
             CommandMsg::SyncToCloudCompleted(result) => {
                 self.process_sync_to_cloud_completed(result, root)
             }
-            CommandMsg::MigrationDone(result) => match result {
-                Ok(_) => show_info_dialog(
-                    "File type migration completed successfully.".to_string(),
-                    root,
-                ),
-                Err(e) => show_error_dialog(format!("File type migration failed: {}", e), root),
-            },
         }
     }
 
     fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
-        let is_sync_enabled = self
-            .settings
-            .get()
-            .map(|s| s.s3_sync_enabled)
-            .unwrap_or(false);
-        widgets.sync_button.set_sensitive(is_sync_enabled);
+        widgets
+            .sync_button
+            .set_sensitive(self.get_settings().s3_sync_enabled);
     }
 }
 
@@ -352,23 +326,9 @@ impl AppModel {
             }
         ));
 
-        let migrate_button = gtk::Button::builder()
-            .icon_name("document-revert-symbolic")
-            .tooltip_text("Migrate File Types")
-            .build();
-
-        migrate_button.connect_clicked(clone!(
-            #[strong]
-            sender,
-            move |_| {
-                sender.input(AppMsg::MigrateFileTypes);
-            }
-        ));
-
         sync_button.set_sensitive(false);
 
         header_bar.pack_end(&sync_button);
-        header_bar.pack_end(&migrate_button);
 
         let menu_button = gtk::MenuButton::builder()
             .icon_name("open-menu-symbolic")
@@ -414,31 +374,8 @@ impl AppModel {
 impl AppModel {
     fn initialize(&self, sender: &ComponentSender<Self>) {
         sender.oneshot_command(async {
-            // TODO: Replace `expect` calls with proper error handling.
-            //       Instead of panicking on initialization failure,
-            //       return a `Result<InitResult, InitError>` and handle it in
-            //       `CommandMsg::InitializationDone`.
-            let pool = get_db_pool().await.expect("DB pool initialization failed");
-            let repository_manager = Arc::new(RepositoryManager::new(pool));
-
-            let settings: Settings = repository_manager
-                .get_settings_repository()
-                .get_settings()
-                .await
-                .expect("Failed to get settings from repository")
-                .into();
-
-            let settings = Arc::new(settings);
-
-            let app_services = Arc::new(AppServices::new(
-                Arc::clone(&repository_manager),
-                Arc::clone(&settings),
-            ));
-
             CommandMsg::InitializationDone(InitResult {
-                repository_manager,
-                app_services,
-                settings,
+                app_services: create_app_services().await,
             })
         });
     }
@@ -473,11 +410,7 @@ impl AppModel {
 
     fn export_all_files(&self, sender: &ComponentSender<Self>, path: PathBuf) {
         if path.is_dir() {
-            let app_services = Arc::clone(
-                self.app_services
-                    .get()
-                    .expect("App services not initialized"),
-            );
+            let app_services = self.get_app_services();
             sender.oneshot_command(async move {
                 let res = app_services.export().export_all_files(&path).await;
                 CommandMsg::ExportFinished(res)
@@ -507,11 +440,7 @@ impl AppModel {
             return;
         }
 
-        let sync_service = self
-            .sync_service
-            .get()
-            .expect("Sync service not initialized");
-        let sync_service = Arc::clone(sync_service);
+        let sync_service = self.get_app_services().cloud_storage();
         let ui_sender = sender.clone();
 
         let (progress_tx, progress_rx) = unbounded::<SyncEvent>();
@@ -536,12 +465,7 @@ impl AppModel {
     fn open_settings(&self, sender: &ComponentSender<Self>, root: &gtk::Window) {
         if self.settings_form.get().is_none() {
             let settings_form_init = SettingsFormInit {
-                app_services: Arc::clone(
-                    self.app_services
-                        .get()
-                        .expect("App services not initialized"),
-                ),
-                settings: Arc::clone(self.settings.get().expect("Settings not initialized")),
+                app_services: self.get_app_services(),
             };
             let settings_form = SettingsForm::builder()
                 .transient_for(root)
@@ -636,7 +560,6 @@ impl AppModel {
     }
 
     fn post_process_initialize(&self, sender: &ComponentSender<Self>, init_result: InitResult) {
-        let repository_manager = Arc::clone(&init_result.repository_manager);
         let app_services = Arc::clone(&init_result.app_services);
 
         let software_title_list_init = SoftwareTitleListInit { app_services };
@@ -656,12 +579,8 @@ impl AppModel {
                 SoftwareTitleListOutMsg::ShowMessage(msg) => AppMsg::ShowMessage(msg),
             });
 
-        let repository_manager = Arc::clone(&init_result.repository_manager);
         let app_services = Arc::clone(&init_result.app_services);
-        let releases_init = ReleasesInit {
-            app_services,
-            settings: Arc::clone(&init_result.settings),
-        };
+        let releases_init = ReleasesInit { app_services };
 
         let releases =
             ReleasesModel::builder()
@@ -686,7 +605,6 @@ impl AppModel {
 
         let release_init_model = ReleaseInitModel {
             app_services: Arc::clone(&init_result.app_services),
-            settings: Arc::clone(&init_result.settings),
         };
         let release_model = ReleaseModel::builder().launch(release_init_model).forward(
             sender.input_sender(),
@@ -699,31 +617,12 @@ impl AppModel {
         );
         self.release_view.append(release_model.widget());
 
-        let sync_service = Arc::new(CloudStorageSyncService::new(
-            Arc::clone(&init_result.repository_manager),
-            Arc::clone(&init_result.settings),
-        ));
-
-        let file_type_migration_service = Arc::new(FileTypeMigrationService::new(
-            Arc::clone(&init_result.repository_manager),
-            Arc::clone(&init_result.settings),
-        ));
-
-        self.repository_manager
-            .set(init_result.repository_manager)
-            .expect("repository manger already initialized");
-        self.settings
-            .set(init_result.settings)
-            .expect("Settings already initialized");
-        self.sync_service
-            .set(sync_service)
-            .expect("Sync service already initialized");
-        self.file_type_migration_service
-            .set(file_type_migration_service)
-            .expect("File type migration service already initialized");
         self.release
             .set(release_model)
             .expect("ReleaseModel already initialized");
+        self.app_services
+            .set(init_result.app_services)
+            .expect("App services already initialized");
     }
 
     fn process_sync_to_cloud_completed(
@@ -793,27 +692,21 @@ impl AppModel {
         }
     }
 
-    fn migrate_file_types(&mut self, sender: &ComponentSender<Self>) {
-        let migration_service = self
-            .file_type_migration_service
+    fn get_settings(&self) -> Arc<Settings> {
+        self.get_app_services().app_settings()
+    }
+
+    fn get_app_services(&self) -> Arc<AppServices> {
+        self.app_services
             .get()
-            .expect("File type migration service not initialized");
-        let migration_service = Arc::clone(migration_service);
-        sender.oneshot_command(async move {
-            let res = migration_service.migrate_file_types(false).await;
-            CommandMsg::MigrationDone(res)
-        });
+            .expect("App services not initialized")
+            .clone()
     }
 
     fn open_import_dialog(&self, root: &gtk::Window) {
         if self.import_form.get().is_none() {
             let import_form_init = ImportFormInit {
-                app_services: Arc::clone(
-                    self.app_services
-                        .get()
-                        .expect("App services not initialized"),
-                ),
-                settings: Arc::clone(self.settings.get().expect("Settings not initialized")),
+                app_services: self.get_app_services(),
             };
             let import_form = ImportForm::builder()
                 .transient_for(root)

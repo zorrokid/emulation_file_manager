@@ -9,10 +9,7 @@ use relm4::{
     once_cell::sync::OnceCell,
     typed_view::list::{RelmListItem, TypedListView},
 };
-use service::{
-    app_services::AppServices,
-    view_models::{FileSetListModel, Settings},
-};
+use service::{app_services::AppServices, view_models::FileSetListModel};
 
 use crate::{
     file_set_form::{FileSetFormInit, FileSetFormModel, FileSetFormMsg, FileSetFormOutputMsg},
@@ -104,8 +101,6 @@ pub enum CommandMsg {
 pub struct FileSetList {
     app_services: Arc<AppServices>,
 
-    settings: Arc<Settings>,
-
     selected_file_sets_list_view_wrapper: TypedListView<FileSetListItem, gtk::SingleSelection>,
 
     file_set_form: OnceCell<Controller<FileSetFormModel>>,
@@ -115,7 +110,6 @@ pub struct FileSetList {
 
 pub struct FileSetListInit {
     pub app_services: Arc<AppServices>,
-    pub settings: Arc<Settings>,
     pub selected_system_ids: Vec<i64>,
 }
 
@@ -125,7 +119,6 @@ impl FileSetList {
             tracing::info!("Initializing file set form");
             let file_set_form_init = FileSetFormInit {
                 app_services: Arc::clone(&self.app_services),
-                settings: Arc::clone(&self.settings),
             };
             let file_set_form = FileSetFormModel::builder()
                 .transient_for(root)
@@ -204,7 +197,6 @@ impl Component for FileSetList {
         > = TypedListView::new();
         let file_selector_init_model = FileSetSelectorInit {
             app_services: Arc::clone(&init_model.app_services),
-            settings: Arc::clone(&init_model.settings),
         };
 
         let file_selector = FileSetSelector::builder()
@@ -218,7 +210,6 @@ impl Component for FileSetList {
 
         let model = FileSetList {
             app_services: init_model.app_services,
-            settings: init_model.settings,
             selected_file_sets_list_view_wrapper,
             file_set_form: OnceCell::new(),
             file_selector,

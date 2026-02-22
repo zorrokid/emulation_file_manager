@@ -24,7 +24,7 @@ use service::{
         FileImportPrepareResult, FileImportResult, FileImportSource, FileSetImportModel,
         UpdateFileSetModel,
     },
-    view_models::{FileSetListModel, FileSetViewModel, Settings},
+    view_models::{FileSetListModel, FileSetViewModel},
 };
 use ui_components::{DropDownMsg, DropDownOutputMsg, FileTypeDropDown, FileTypeSelectedMsg};
 
@@ -157,7 +157,6 @@ pub enum CommandMsg {
 
 pub struct FileSetFormInit {
     pub app_services: Arc<service::app_services::AppServices>,
-    pub settings: Arc<Settings>,
 }
 
 #[derive(Debug)]
@@ -172,7 +171,6 @@ pub struct FileSetFormModel {
 
     dropdown: Controller<FileTypeDropDown>,
     processing: bool,
-    settings: Arc<Settings>,
     selected_file_type: Option<FileType>,
     selected_files_in_picked_files: Vec<Sha1Checksum>,
     /// This contains newly picked files for import
@@ -435,7 +433,6 @@ impl Component for FileSetFormModel {
             source: String::new(),
             dropdown,
             processing: false,
-            settings: Arc::clone(&init_model.settings),
             selected_file_type: None,
             selected_files_in_picked_files: Vec::new(),
             picked_files: Vec::new(),
@@ -543,7 +540,7 @@ impl Component for FileSetFormModel {
 
             FileSetFormMsg::DownloadFromUrl(url) => {
                 if let Some(file_type) = self.selected_file_type {
-                    let temp_dir = self.settings.temp_output_dir.clone();
+                    let temp_dir = self.app_services.app_settings().temp_output_dir.clone();
                     self.source = url.clone();
                     self.processing = true;
 
@@ -620,6 +617,7 @@ impl Component for FileSetFormModel {
                 self.file_set_file_name = name;
             }
             FileSetFormMsg::SourceChanged(source) => {
+                tracing::info!(source = source, "Source changed");
                 self.source = source;
             }
             FileSetFormMsg::FileTypeChanged(file_type) => {
@@ -815,6 +813,7 @@ impl FileSetFormModel {
         } else {
             vec![]
         };
+        tracing::info!(source = self.source, "Source in create_file_set");
         let file_import_model = FileSetImportModel {
             file_set_name: self.file_set_name.clone(),
             file_set_file_name: self.file_set_file_name.clone(),

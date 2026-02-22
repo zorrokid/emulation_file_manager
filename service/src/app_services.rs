@@ -1,10 +1,11 @@
 use std::sync::{Arc, OnceLock};
 
-use database::repository_manager::RepositoryManager;
+use database::{get_db_pool, repository_manager::RepositoryManager};
 
 use crate::{
-    document_viewer_service::DocumentViewerService, download_service::DownloadService,
-    emulator_service::EmulatorService, export_service::ExportService,
+    cloud_sync::service::CloudStorageSyncService, document_viewer_service::DocumentViewerService,
+    download_service::DownloadService, emulator_service::EmulatorService,
+    export_service::ExportService,
     external_executable_runner::service::ExternalExecutableRunnerService,
     file_import::service::FileImportService, file_set_deletion::service::FileSetDeletionService,
     file_set_download::service::DownloadService as FileSetDownloadService,
@@ -13,6 +14,25 @@ use crate::{
     software_title_service::SoftwareTitleService, system_service::SystemService,
     view_model_service::ViewModelService, view_models::Settings,
 };
+
+pub async fn create_app_services() -> Arc<AppServices> {
+    let pool = get_db_pool().await.expect("DB pool initialization failed");
+    let repository_manager = Arc::new(RepositoryManager::new(pool));
+
+    let settings: Settings = repository_manager
+        .get_settings_repository()
+        .get_settings()
+        .await
+        .expect("Failed to get settings from repository")
+        .into();
+
+    let settings = Arc::new(settings);
+
+    Arc::new(AppServices::new(
+        Arc::clone(&repository_manager),
+        Arc::clone(&settings),
+    ))
+}
 
 #[derive(Debug)]
 pub struct AppServices {
@@ -34,6 +54,7 @@ pub struct AppServices {
     settings: OnceLock<Arc<SettingsService>>,
     repository_manager: Arc<RepositoryManager>,
     app_settings: Arc<Settings>,
+    cloud_storage: OnceLock<Arc<CloudStorageSyncService>>,
 }
 
 impl AppServices {
@@ -56,6 +77,7 @@ impl AppServices {
             settings: OnceLock::new(),
             repository_manager,
             app_settings: settings,
+            cloud_storage: OnceLock::new(),
         }
     }
 
@@ -187,5 +209,20 @@ impl AppServices {
         self.settings
             .get_or_init(|| Arc::new(SettingsService::new(Arc::clone(&self.repository_manager))))
             .clone()
+    }
+
+    pub fn cloud_storage(&self) -> Arc<CloudStorageSyncService> {
+        self.cloud_storage
+            .get_or_init(|| {
+                Arc::new(CloudStorageSyncService::new(
+                    Arc::clone(&self.repository_manager),
+                    Arc::clone(&self.app_settings),
+                ))
+            })
+            .clone()
+    }
+
+    pub fn app_settings(&self) -> Arc<Settings> {
+        Arc::clone(&self.app_settings)
     }
 }
