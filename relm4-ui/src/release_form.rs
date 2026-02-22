@@ -13,9 +13,7 @@ use relm4::{
 use service::{
     app_services::AppServices,
     error::Error as ServiceError,
-    view_models::{
-        FileSetListModel, ReleaseViewModel, Settings, SoftwareTitleListModel, SystemListModel,
-    },
+    view_models::{FileSetListModel, ReleaseViewModel, SoftwareTitleListModel, SystemListModel},
 };
 
 use crate::{
@@ -79,7 +77,6 @@ pub struct ReleaseFormModel {
 
 pub struct ReleaseFormInit {
     pub app_services: Arc<AppServices>,
-    pub settings: Arc<Settings>,
 }
 
 #[relm4::component(pub)]
@@ -142,7 +139,6 @@ impl Component for ReleaseFormModel {
     ) -> ComponentParts<Self> {
         let file_set_list_init = FileSetListInit {
             app_services: Arc::clone(&init_model.app_services),
-            settings: Arc::clone(&init_model.settings),
             selected_system_ids: vec![],
         };
         let file_set_list = FileSetList::builder().launch(file_set_list_init).forward(

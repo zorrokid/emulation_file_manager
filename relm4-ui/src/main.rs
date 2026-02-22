@@ -37,10 +37,10 @@ fn main() {
     // Initialize logging - keep guard alive for entire program
     let _logging_guard = logging::init_logging();
 
-    tracing::info!("Starting EFM Relm4 UI");
+    tracing::info!("Starting Emulation File Manager.");
 
     let app = RelmApp::new("org.zorrokid.efcm");
     app.run::<AppModel>(());
 
-    tracing::info!("Application shutdown");
+    tracing::info!("Emulation File Manager shutting down.");
 }

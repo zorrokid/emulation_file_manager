@@ -23,7 +23,7 @@ use service::{
     external_executable_runner::service::ExecutableRunnerModel,
     view_models::{
         DocumentViewerListModel, DocumentViewerViewModel, FileSetFileInfoViewModel,
-        FileSetViewModel, Settings,
+        FileSetViewModel,
     },
 };
 use ui_components::confirm_dialog::{
@@ -63,7 +63,6 @@ pub enum DocumentViewerCommandMsg {
 
 pub struct DocumentViewerInit {
     pub app_services: Arc<AppServices>,
-    pub settings: Arc<Settings>,
 }
 
 #[derive(Debug)]

@@ -17,9 +17,9 @@ use relm4::{
 };
 use service::{
     error::Error as ServiceError,
-    external_executable_runner::service::{ExecutableRunnerModel, ExternalExecutableRunnerService},
+    external_executable_runner::service::ExecutableRunnerModel,
     view_models::{
-        EmulatorListModel, EmulatorViewModel, FileSetFileInfoViewModel, FileSetViewModel, Settings,
+        EmulatorListModel, EmulatorViewModel, FileSetFileInfoViewModel, FileSetViewModel,
     },
 };
 use ui_components::confirm_dialog::{
@@ -71,7 +71,6 @@ pub enum EmulatorRunnerCommandMsg {
 
 pub struct EmulatorRunnerInit {
     pub app_services: Arc<service::app_services::AppServices>,
-    pub settings: Arc<Settings>,
 }
 
 #[derive(Debug)]

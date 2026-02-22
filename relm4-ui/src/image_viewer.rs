@@ -8,9 +8,8 @@ use relm4::{
     },
 };
 use service::{
-    error::Error as ServiceError,
-    file_set_download::service::DownloadResult,
-    view_models::{FileSetViewModel, Settings},
+    error::Error as ServiceError, file_set_download::service::DownloadResult,
+    view_models::FileSetViewModel,
 };
 
 use crate::image_fileset_viewer::{
@@ -39,7 +38,6 @@ pub enum ImageViewerOutputMsg {
 
 #[derive(Debug, Clone)]
 pub struct ImageViewerInit {
-    pub settings: Arc<Settings>,
     pub file_set: Option<FileSetViewModel>,
     pub app_services: Arc<service::app_services::AppServices>,
 }
@@ -48,7 +46,6 @@ pub struct ImageViewerInit {
 pub struct ImageViewer {
     file_set: Option<FileSetViewModel>,
     current_file_index: Option<usize>,
-    settings: Arc<Settings>,
     selected_image: PathBuf,
     image_file_set_viewer: Controller<ImageFilesetViewer>,
     app_services: Arc<service::app_services::AppServices>,
@@ -116,7 +113,6 @@ impl Component for ImageViewer {
 
         let model = ImageViewer {
             file_set: None,
-            settings: init.settings,
             selected_image: PathBuf::new(),
             current_file_index: None,
             image_file_set_viewer,
@@ -157,7 +153,11 @@ impl Component for ImageViewer {
                     let new_index = index + 1;
                     self.current_file_index = Some(new_index);
                     let next_image = file_set.files[new_index].file_name.clone();
-                    let file_path = self.settings.temp_output_dir.join(&next_image);
+                    let file_path = self
+                        .app_services
+                        .app_settings()
+                        .temp_output_dir
+                        .join(&next_image);
                     self.selected_image = file_path;
                 }
             }
@@ -168,7 +168,11 @@ impl Component for ImageViewer {
                     let new_index = index - 1;
                     self.current_file_index = Some(new_index);
                     let previous_image = file_set.files[new_index].file_name.clone();
-                    let file_path = self.settings.temp_output_dir.join(&previous_image);
+                    let file_path = self
+                        .app_services
+                        .app_settings()
+                        .temp_output_dir
+                        .join(&previous_image);
                     self.selected_image = file_path;
                 }
             }
@@ -217,7 +221,7 @@ impl Component for ImageViewer {
                         .iter()
                         .find(|f| f.file_name == selected_image_name)
                     {
-                        let temp_output_dir = &self.settings.temp_output_dir;
+                        let temp_output_dir = &self.app_services.app_settings().temp_output_dir;
                         let image_path = temp_output_dir.join(&selected_file.file_name);
 
                         self.selected_image = image_path;

@@ -11,9 +11,8 @@ use relm4::{
     typed_view::list::TypedListView,
 };
 use service::{
-    error::Error as ServiceError,
-    file_set_deletion::model::FileDeletionResult,
-    view_models::{FileSetListModel, Settings},
+    error::Error as ServiceError, file_set_deletion::model::FileDeletionResult,
+    view_models::FileSetListModel,
 };
 use ui_components::{DropDownOutputMsg, FileTypeDropDown, FileTypeSelectedMsg};
 
@@ -60,7 +59,6 @@ pub enum CommandMsg {
 
 pub struct FileSetSelectorInit {
     pub app_services: Arc<service::app_services::AppServices>,
-    pub settings: Arc<Settings>,
 }
 
 #[derive(Debug)]
@@ -180,7 +178,6 @@ impl Component for FileSetSelector {
 
         let file_set_form_init_model = FileSetFormInit {
             app_services: Arc::clone(&init_model.app_services),
-            settings: Arc::clone(&init_model.settings),
         };
 
         let file_set_form = FileSetFormModel::builder()
