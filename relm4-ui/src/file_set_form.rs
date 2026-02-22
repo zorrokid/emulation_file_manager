@@ -140,6 +140,7 @@ pub enum FileSetFormMsg {
     ProcessDownloadEvent(HttpDownloadEvent),
     CancelDownload,
     ItemTypeChanged(Option<ItemType>),
+    Update(FileSetViewModel),
 }
 
 #[derive(Debug)]
@@ -368,11 +369,11 @@ impl Component for FileSetFormModel {
                     },
                 },
 
+                #[name = "source_entry"]
                 gtk::Entry {
                     set_placeholder_text: Some("Source (e.g. website URL)"),
-                    #[watch]
                     set_text: &model.source,
-                    connect_activate[sender] => move |entry| {
+                    connect_changed[sender] => move |entry| {
                         let buffer = entry.buffer();
                         sender.input(
                             FileSetFormMsg::SourceChanged(buffer.text().into()),
@@ -454,7 +455,13 @@ impl Component for FileSetFormModel {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
+    fn update_with_view(
+        &mut self,
+        widgets: &mut Self::Widgets,
+        msg: Self::Input,
+        sender: ComponentSender<Self>,
+        root: &Self::Root,
+    ) {
         match msg {
             FileSetFormMsg::OpenFileSelector => {
                 let dialog = FileChooserDialog::builder()
@@ -604,9 +611,9 @@ impl Component for FileSetFormModel {
                     self.processing = true;
 
                     if let Some(file_set_id) = self.file_set_id {
-                        self.update_file_set(sender, file_type, file_set_id);
+                        self.update_file_set(&sender, file_type, file_set_id);
                     } else {
-                        self.create_file_set(sender, file_type);
+                        self.create_file_set(&sender, file_type);
                     }
                 }
             }
@@ -690,7 +697,42 @@ impl Component for FileSetFormModel {
                 tracing::info!("Item type changed (new component): {:?}", opt_item_type);
                 self.selected_item_type = opt_item_type;
             }
+            FileSetFormMsg::Update(file_set_view_model) => {
+                self.file_set_id = Some(file_set_view_model.id);
+                self.selected_file_type = Some(file_set_view_model.file_type);
+                self.dropdown
+                    .emit(DropDownMsg::SetSelected(file_set_view_model.file_type));
+                // TODO: set system ids - why system ids are not included in FileSetViewModel?
+                // Maybe they should be? Then there could be file sets without releases? Is that
+                // needed?
+                self.file_set_name = file_set_view_model.file_set_name.clone();
+                self.file_set_file_name = file_set_view_model.file_name.clone();
+                self.source = file_set_view_model.source.clone();
+                // TODO: support multiple item types
+                self.selected_item_type = file_set_view_model.item_types.first().cloned();
+                tracing::info!(
+                    "Setting selected item type in item type dropdown: {:?}",
+                    self.selected_item_type
+                );
+                self.item_type_dropdown
+                    .emit(ItemTypeDropDownMsg::SetSelectedItemType(
+                        self.selected_item_type,
+                    ));
+                self.files.guard().clear();
+                for file in file_set_view_model.files.iter() {
+                    self.files.guard().push_back(ReadFile {
+                        file_name: file.file_name.clone(),
+                        sha1_checksum: file.sha1_checksum,
+                        file_size: file.file_size,
+                    });
+                    // pre-select all files initially
+                    self.selected_files_in_picked_files.push(file.sha1_checksum);
+                }
+                widgets.source_entry.set_text(&self.source);
+            }
         }
+        // This is essential:
+        self.update_view(widgets, sender);
     }
 
     fn update_cmd(
@@ -763,36 +805,7 @@ impl Component for FileSetFormModel {
                     file_set_id = file_set_view_model.id,
                     "Loaded file set for editing",
                 );
-                self.file_set_id = Some(file_set_view_model.id);
-                self.selected_file_type = Some(file_set_view_model.file_type);
-                self.dropdown
-                    .emit(DropDownMsg::SetSelected(file_set_view_model.file_type));
-                // TODO: set system ids - why system ids are not included in FileSetViewModel?
-                // Maybe they should be? Then there could be file sets without releases? Is that
-                // needed?
-                self.file_set_name = file_set_view_model.file_set_name.clone();
-                self.file_set_file_name = file_set_view_model.file_name.clone();
-                self.source = file_set_view_model.source.clone();
-                // TODO: support multiple item types
-                self.selected_item_type = file_set_view_model.item_types.first().cloned();
-                tracing::info!(
-                    "Setting selected item type in item type dropdown: {:?}",
-                    self.selected_item_type
-                );
-                self.item_type_dropdown
-                    .emit(ItemTypeDropDownMsg::SetSelectedItemType(
-                        self.selected_item_type,
-                    ));
-                self.files.guard().clear();
-                for file in file_set_view_model.files.iter() {
-                    self.files.guard().push_back(ReadFile {
-                        file_name: file.file_name.clone(),
-                        sha1_checksum: file.sha1_checksum,
-                        file_size: file.file_size,
-                    });
-                    // pre-select all files initially
-                    self.selected_files_in_picked_files.push(file.sha1_checksum);
-                }
+                sender.input(FileSetFormMsg::Update(file_set_view_model));
             }
             CommandMsg::ProcessFileSetResponse(Err(e)) => {
                 tracing::error!(error = ?e, "Failed to load file set for editing");
@@ -806,7 +819,7 @@ impl Component for FileSetFormModel {
 }
 
 impl FileSetFormModel {
-    fn create_file_set(&self, sender: ComponentSender<Self>, file_type: FileType) {
+    fn create_file_set(&self, sender: &ComponentSender<Self>, file_type: FileType) {
         tracing::info!("Creating new file set");
         let item_types = if let Some(item_type) = self.selected_item_type {
             vec![item_type]
@@ -841,7 +854,7 @@ impl FileSetFormModel {
 
     fn update_file_set(
         &self,
-        sender: ComponentSender<Self>,
+        sender: &ComponentSender<Self>,
         file_type: FileType,
         file_set_id: i64,
     ) {
