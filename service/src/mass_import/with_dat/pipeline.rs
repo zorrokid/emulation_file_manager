@@ -1,5 +1,5 @@
 use crate::{
-    mass_import::{
+    mass_import::with_dat::{
         context::MassImportContext,
         steps::{
             CheckExistingDatFileStep, FilterExistingFileSetsStep, ImportDatFileStep,

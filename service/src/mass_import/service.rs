@@ -11,8 +11,10 @@ use crate::{
     file_set::{FileSetServiceOps, file_set_service::FileSetService},
     file_system_ops::{FileSystemOps, StdFileSystemOps},
     mass_import::{
-        context::{MassImportContext, MassImportDeps, MassImportOps, SendReaderFactoryFn},
         models::{MassImportInput, MassImportResult, MassImportSyncEvent},
+        with_dat::context::{
+            MassImportContext, MassImportDeps, MassImportOps, SendReaderFactoryFn,
+        },
     },
     pipeline::generic_pipeline::Pipeline,
     view_models::Settings,
@@ -83,9 +85,10 @@ impl MassImportService {
     ///
     /// For simplicity, let's start with creating new software titles and releases for each import.
     ///
-    /// User can remove duplicated from UI. Theere will be also a functionality to merge software
-    /// titles and releases in the future.
+    /// User can remove duplicated from UI. There is a functionality to merge software
+    /// titles releases in the future:
     /// - when merging two software titles, all linked releases will be moved to the target software title.
+    /// There will be also an option to merge releases in the future:
     /// - when merging two releases, all linked file sets will be moved to the target release.
     ///
     pub async fn import(

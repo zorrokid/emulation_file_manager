@@ -4,7 +4,7 @@ use core_types::{FileType, ReadFile, item_type::ItemType};
 
 use crate::{
     error::Error,
-    mass_import::context::{ImportItem, MassImportState},
+    mass_import::with_dat::context::{ImportItem, MassImportState},
 };
 use domain::naming_conventions::no_intro::DatFile;
 

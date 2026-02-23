@@ -4,8 +4,8 @@ use crate::{
     error::Error,
     file_import::model::CreateReleaseParams,
     mass_import::{
-        context::MassImportContext,
         models::{FileSetImportResult, FileSetImportStatus},
+        with_dat::context::MassImportContext,
     },
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
@@ -171,19 +171,19 @@ impl PipelineStep<MassImportContext> for ReadFilesStep {
             .ops
             .fs_ops
             .read_dir(context.input.source_path.as_path());
-        println!(
-            "Reading files from source path: {}",
-            context.input.source_path.display()
+        tracing::info!(
+            source_path = %context.input.source_path.display(),
+            "Reading files from source path",
         );
 
         let files = match files_res {
             Ok(files) => files,
 
             Err(e) => {
-                println!(
-                    "Failed to read source path {}: {}",
-                    context.input.source_path.display(),
-                    e
+                tracing::error!(
+                    error = ?e,
+                    path = %context.input.source_path.display(),
+                    "Failed to read source path",
                 );
                 return StepAction::Abort(Error::IoError(format!(
                     "Failed to read source path {}: {}",
@@ -194,22 +194,20 @@ impl PipelineStep<MassImportContext> for ReadFilesStep {
         };
 
         for file_res in files {
-            println!(
-                "Processing file entry from source path: {}",
-                context.input.source_path.display()
+            tracing::info!(
+                source_path = %context.input.source_path.display(),
+                "Processing file entry from source path",
             );
             match file_res {
                 Ok(file) => {
-                    println!("Successfully read file entry: {}", file.path.display());
+                    tracing::info!(
+                        file_path = %file.path.display(),
+                        "Successfully read file entry from source path",
+                    );
                     tracing::info!("Found file: {}", file.path.display());
                     context.state.read_ok_files.push(file.path.clone());
                 }
                 Err(e) => {
-                    println!(
-                        "Failed to read file entry from source path {}: {}",
-                        context.input.source_path.display(),
-                        e
-                    );
                     tracing::error!(
                         error = ?e,
                         path = %context.input.source_path.display(),
@@ -598,9 +596,9 @@ mod tests {
         file_set::mock_file_set_service::MockFileSetService,
         file_system_ops::{FileSystemOps, SimpleDirEntry, mock::MockFileSystemOps},
         mass_import::{
-            context::{MassImportDeps, MassImportOps, SendReaderFactoryFn},
             models::MassImportInput,
             test_utils::create_mock_reader_factory,
+            with_dat::context::{MassImportDeps, MassImportOps, SendReaderFactoryFn},
         },
     };
 
