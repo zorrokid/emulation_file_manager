@@ -5,7 +5,10 @@ use relm4::{
     gtk::{
         self,
         glib::clone,
-        prelude::{BoxExt, ButtonExt, OrientableExt, SelectionModelExt, WidgetExt},
+        prelude::{
+            BoxExt, ButtonExt, EditableExt, EntryBufferExtManual, EntryExt, OrientableExt,
+            SelectionModelExt, WidgetExt,
+        },
     },
     typed_view::list::TypedListView,
 };
@@ -37,6 +40,7 @@ pub enum SoftwareTitleListMsg {
     SelectionChanged { position: u32, n_items: u32 },
     StartMerge,
     StartMergeWith(i64),
+    FilterChanged(String),
 }
 
 #[derive(Debug)]
@@ -72,6 +76,15 @@ impl Component for SoftwareTitlesList {
             set_orientation: gtk::Orientation::Vertical,
             set_spacing: 10,
             set_margin_all: 10,
+
+            #[name = "filter_entry"]
+            gtk::Entry {
+                set_placeholder_text: Some("Filter"),
+                connect_changed[sender] => move |entry| {
+                    let buffer = entry.buffer();
+                    sender.input(SoftwareTitleListMsg::FilterChanged(buffer.text().into()));
+                }
+            },
 
             gtk::ScrolledWindow {
                 set_vexpand: true,
@@ -160,7 +173,6 @@ impl Component for SoftwareTitlesList {
                 self.list_view_wrapper.append(item);
             }
             SoftwareTitleListMsg::SelectionChanged { position, n_items } => {
-                println!("Selection changed");
                 let selection = &self.list_view_wrapper.selection_model;
                 for i in position..position + n_items {
                     if selection.is_selected(i) {
@@ -196,12 +208,12 @@ impl Component for SoftwareTitlesList {
                 }
             }
             SoftwareTitleListMsg::StartMerge => {
+                tracing::info!("Starting merge operation");
                 let items_to_merge: Vec<ListItem> = self.selected_items.clone();
                 self.merge_dialog_controller
                     .emit(SoftwareTitleMergeDialogMsg::Show {
                         software_titles_to_merge: items_to_merge,
                     });
-                println!("Start merge");
             }
             SoftwareTitleListMsg::StartMergeWith(id) => {
                 let service = Arc::clone(&self.app_services);
@@ -214,6 +226,14 @@ impl Component for SoftwareTitlesList {
                 sender.oneshot_command(async move {
                     let res = service.software_title().merge(id, &ids_to_be_merged).await;
                     SoftwareTitleListCmdMsg::ProcessMergeResult(res)
+                });
+            }
+            SoftwareTitleListMsg::FilterChanged(filter) => {
+                self.list_view_wrapper.clear_filters();
+                self.list_view_wrapper.add_filter(move |item| {
+                    item.name
+                        .to_lowercase()
+                        .contains(&filter.clone().to_lowercase())
                 });
             }
         }
