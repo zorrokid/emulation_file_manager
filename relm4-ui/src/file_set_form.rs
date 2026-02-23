@@ -335,11 +335,11 @@ impl Component for FileSetFormModel {
                         set_label: "File Set File Name:",
                     },
 
+                    #[name = "file_set_file_name_entry"]
                     gtk::Entry {
                         set_placeholder_text: Some("File Set File Name"),
-                        #[watch]
                         set_text: &model.file_set_file_name,
-                        connect_activate[sender] => move |entry| {
+                        connect_changed[sender] => move |entry| {
                             let buffer = entry.buffer();
                             sender.input(
                                 FileSetFormMsg::FileSetFileNameChanged(buffer.text().into()),
@@ -356,11 +356,11 @@ impl Component for FileSetFormModel {
                     gtk::Label {
                         set_label: "File Set Display Name:",
                     },
+                    #[name = "file_set_name_entry"]
                     gtk::Entry {
                         set_placeholder_text: Some("File Set Display Name"),
-                        #[watch]
                         set_text: &model.file_set_name,
-                        connect_activate[sender] => move |entry| {
+                        connect_changed[sender] => move |entry| {
                             let buffer = entry.buffer();
                             sender.input(
                                 FileSetFormMsg::FileSetNameChanged(buffer.text().into()),
@@ -728,7 +728,14 @@ impl Component for FileSetFormModel {
                     // pre-select all files initially
                     self.selected_files_in_picked_files.push(file.sha1_checksum);
                 }
+
+                // update widgets, we are not using watch because it doesn't play well with
+                // connect_changed (causes loop)
                 widgets.source_entry.set_text(&self.source);
+                widgets.file_set_name_entry.set_text(&self.file_set_name);
+                widgets
+                    .file_set_file_name_entry
+                    .set_text(&self.file_set_file_name);
             }
         }
         // This is essential:
