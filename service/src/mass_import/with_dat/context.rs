@@ -1,11 +1,18 @@
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use crate::{
     dat_game_status_service::DatGameFileSetStatus,
     error::Error,
     file_import::model::CreateReleaseParams,
     file_set::FileSetServiceOps,
-    mass_import::models::{FileSetImportResult, MassImportInput, MassImportSyncEvent},
+    mass_import::{
+        common_steps::steps::MassImportContextOps,
+        models::{FileSetImportResult, MassImportInput, MassImportSyncEvent},
+    },
 };
 use async_std::channel::Sender;
 use core_types::{ReadFile, Sha1Checksum, sha1_from_hex_string};
@@ -22,7 +29,10 @@ use crate::{
     view_models::Settings,
 };
 
-/// Type alias for a Send-able metadata reader factory function
+/// Type alias for a Send-able (can be safely transferred between threads)
+/// metadata reader factory function.
+///
+/// The + Send + Sync bounds ensure that the closure can be shared and used across threads.
 pub type SendReaderFactoryFn = dyn Fn(
         &std::path::Path,
     ) -> Result<Box<dyn file_metadata::FileMetadataReader>, file_metadata::FileMetadataError>
@@ -117,6 +127,44 @@ pub struct MassImportDependencies {
     pub settings: Arc<Settings>,
 }
 
+impl MassImportContextOps for MassImportContext {
+    fn reader_factory_fn(&self) -> Arc<SendReaderFactoryFn> {
+        self.ops.reader_factory_fn.clone()
+    }
+
+    fn fs_ops(&self) -> Arc<dyn FileSystemOps> {
+        self.ops.fs_ops.clone()
+    }
+
+    fn source_path(&self) -> &Path {
+        &self.input.source_path
+    }
+
+    fn read_ok_files_mut(&mut self) -> &mut Vec<PathBuf> {
+        &mut self.state.read_ok_files
+    }
+
+    fn read_ok_files(&self) -> &Vec<PathBuf> {
+        &self.state.read_ok_files
+    }
+
+    fn read_failed_files(&self) -> &Vec<PathBuf> {
+        &self.state.read_failed_files
+    }
+
+    fn read_failed_files_mut(&mut self) -> &mut Vec<PathBuf> {
+        &mut self.state.read_failed_files
+    }
+
+    fn dir_scan_errors(&mut self) -> &mut Vec<Error> {
+        &mut self.state.dir_scan_errors
+    }
+
+    fn file_metadata(&mut self) -> &mut HashMap<PathBuf, Vec<ReadFile>> {
+        &mut self.state.file_metadata
+    }
+}
+
 impl MassImportContext {
     pub fn new(
         deps: MassImportDeps,
@@ -196,7 +244,7 @@ impl MassImportContext {
                     source_file = source_file.display().to_string().as_str(),
                     "Matched ROM to source file"
                 );
-                available_roms.push(rom.clone().into());
+                available_roms.push(rom.clone());
                 import_files
                     .entry(source_file.clone())
                     .or_default()
@@ -210,7 +258,7 @@ impl MassImportContext {
                     rom_sha1 = rom.sha1.as_str(),
                     "No matching source file found for ROM"
                 );
-                missing_roms.push(rom.clone().into());
+                missing_roms.push(rom.clone());
             }
         }
 
@@ -219,7 +267,7 @@ impl MassImportContext {
             .filter_map(|rom| sha1_from_hex_string(&rom.sha1).ok())
             .collect();
 
-        let game: domain::naming_conventions::no_intro::DatGame = game.clone().into();
+        let game: domain::naming_conventions::no_intro::DatGame = game.clone();
 
         let create_release_params = CreateReleaseParams {
             release_name: game.get_release_name(),

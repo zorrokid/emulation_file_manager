@@ -160,131 +160,6 @@ impl PipelineStep<MassImportContext> for StoreDatFileStep {
     }
 }
 
-pub struct ReadFilesStep;
-#[async_trait::async_trait]
-impl PipelineStep<MassImportContext> for ReadFilesStep {
-    fn name(&self) -> &'static str {
-        "read_files_step"
-    }
-    async fn execute(&self, context: &mut MassImportContext) -> StepAction {
-        let files_res = context
-            .ops
-            .fs_ops
-            .read_dir(context.input.source_path.as_path());
-        tracing::info!(
-            source_path = %context.input.source_path.display(),
-            "Reading files from source path",
-        );
-
-        let files = match files_res {
-            Ok(files) => files,
-
-            Err(e) => {
-                tracing::error!(
-                    error = ?e,
-                    path = %context.input.source_path.display(),
-                    "Failed to read source path",
-                );
-                return StepAction::Abort(Error::IoError(format!(
-                    "Failed to read source path {}: {}",
-                    context.input.source_path.display(),
-                    e
-                )));
-            }
-        };
-
-        for file_res in files {
-            tracing::info!(
-                source_path = %context.input.source_path.display(),
-                "Processing file entry from source path",
-            );
-            match file_res {
-                Ok(file) => {
-                    tracing::info!(
-                        file_path = %file.path.display(),
-                        "Successfully read file entry from source path",
-                    );
-                    tracing::info!("Found file: {}", file.path.display());
-                    context.state.read_ok_files.push(file.path.clone());
-                }
-                Err(e) => {
-                    tracing::error!(
-                        error = ?e,
-                        path = %context.input.source_path.display(),
-                        "Failed to read a file entry"
-                    );
-                    context.state.dir_scan_errors.push(e);
-                }
-            }
-        }
-
-        // Implementation for reading files goes here
-        StepAction::Continue
-    }
-}
-
-pub struct ReadFileMetadataStep;
-
-#[async_trait::async_trait]
-impl PipelineStep<MassImportContext> for ReadFileMetadataStep {
-    fn name(&self) -> &'static str {
-        "read_file_metadata_step"
-    }
-
-    fn should_execute(&self, context: &MassImportContext) -> bool {
-        !context.get_non_failed_files().is_empty()
-    }
-
-    async fn execute(&self, context: &mut MassImportContext) -> StepAction {
-        tracing::info!(
-            len = %context.get_non_failed_files().len(),
-            "Reading metadata for files...",
-        );
-        for file in &mut context.get_non_failed_files() {
-            tracing::info!("Creating metadata reader for file: {}", file.display());
-            let reader_res = (context.ops.reader_factory_fn)(file);
-            match reader_res {
-                Ok(reader) => {
-                    tracing::info!(
-                        file = %file.display(),
-                        "Successfully created metadata reader",
-                    );
-                    let res = reader.read_metadata();
-                    tracing::info!(
-                        file = %file.display(),
-                        "Successfully read metadata",
-                    );
-                    match res {
-                        Ok(metadata_entries) => {
-                            context
-                                .state
-                                .file_metadata
-                                .insert(file.clone(), metadata_entries);
-                        }
-                        Err(e) => {
-                            tracing::error!(
-                                error = ?e,
-                                file = %file.display(),
-                                "Failed to read metadata",
-                            );
-                            context.state.read_failed_files.push(file.clone());
-                        }
-                    }
-                }
-                Err(e) => {
-                    tracing::error!(
-                        error = ?e,
-                        file = %file.display(),
-                        "Failed to create metadata reader",
-                    );
-                    context.state.read_failed_files.push(file.clone());
-                }
-            }
-        }
-        StepAction::Continue
-    }
-}
-
 /// This step will filter out file sets that already exist in the database based on their metadata.
 ///
 /// There can be following cases:
@@ -594,7 +469,7 @@ mod tests {
             CreateMockState, FileImportServiceOps, MockFileImportServiceOps,
         },
         file_set::mock_file_set_service::MockFileSetService,
-        file_system_ops::{FileSystemOps, SimpleDirEntry, mock::MockFileSystemOps},
+        file_system_ops::{FileSystemOps, mock::MockFileSystemOps},
         mass_import::{
             models::MassImportInput,
             test_utils::create_mock_reader_factory,
@@ -633,10 +508,9 @@ mod tests {
     }
 
     async fn get_deps() -> MassImportDeps {
-        let pool = Arc::new(database::setup_test_db().await);
-        let repository_manager =
-            Arc::new(database::repository_manager::RepositoryManager::new(pool));
-        MassImportDeps { repository_manager }
+        MassImportDeps {
+            repository_manager: database::setup_test_repository_manager().await,
+        }
     }
 
     #[async_std::test]
@@ -842,152 +716,6 @@ mod tests {
         // Act
         let step = StoreDatFileStep;
         assert!(!step.should_execute(&context));
-    }
-
-    #[async_std::test]
-    async fn test_read_files_step() {
-        // Prepare mock file system ops to return two files
-        let mut mock_fs_ops = MockFileSystemOps::new();
-        let file1 = String::from("/mock/file1.bin");
-        let file2 = String::from("/mock/file2.bin");
-        //let file3 = String::from("/mock/file3.bin");
-        let entry1: Result<SimpleDirEntry, Error> = Ok(SimpleDirEntry {
-            path: PathBuf::from(&file1),
-        });
-        let entry2: Result<SimpleDirEntry, Error> = Ok(SimpleDirEntry {
-            path: PathBuf::from(&file2),
-        });
-        let entry3_error = Error::IoError("Simulated read failure".to_string());
-        let entry3: Result<SimpleDirEntry, Error> = Err(entry3_error.clone()); // Simulate failure for file3
-
-        mock_fs_ops.add_entry(entry1);
-        mock_fs_ops.add_entry(entry2);
-        mock_fs_ops.add_entry(entry3);
-
-        let ops = get_ops(None, Some(Arc::new(mock_fs_ops)), None, None);
-
-        let mut context = MassImportContext::new(
-            get_deps().await,
-            MassImportInput {
-                source_path: PathBuf::from("/mock"),
-                dat_file_path: None,
-                file_type: core_types::FileType::Rom,
-                item_type: None,
-                system_id: 1,
-            },
-            ops,
-            None,
-        );
-
-        let step = ReadFilesStep;
-        let result = step.execute(&mut context).await;
-        assert!(matches!(result, StepAction::Continue));
-        assert_eq!(context.state.read_ok_files.len(), 2);
-        assert_eq!(context.state.dir_scan_errors.len(), 1);
-        assert!(context.state.read_ok_files.contains(&PathBuf::from(&file1)));
-        assert!(context.state.read_ok_files.contains(&PathBuf::from(&file2)));
-        assert!(context.state.dir_scan_errors.contains(&entry3_error));
-    }
-
-    #[async_std::test]
-    async fn test_read_file_metadata_step() {
-        let mut metadata_by_path = HashMap::new();
-        metadata_by_path.insert(
-            PathBuf::from("/mock/file1.zip"),
-            vec![
-                ReadFile {
-                    file_name: "file1.bin".to_string(),
-                    sha1_checksum: [1u8; 20],
-                    file_size: 123,
-                },
-                ReadFile {
-                    file_name: "file2.bin".to_string(),
-                    sha1_checksum: [3u8; 20],
-                    file_size: 456,
-                },
-            ],
-        );
-        metadata_by_path.insert(
-            PathBuf::from("/mock/file2.zip"),
-            vec![ReadFile {
-                file_name: "file2.bin".to_string(),
-                sha1_checksum: [2u8; 20],
-                file_size: 456,
-            }],
-        );
-        metadata_by_path.insert(
-            PathBuf::from("/mock/file3.zip"),
-            vec![], // This file will simulate failure
-        );
-        let reader_factory =
-            create_mock_reader_factory(metadata_by_path, vec![PathBuf::from("/mock/file3.zip")]);
-        let ops = get_ops(None, None, Some(Arc::new(reader_factory)), None);
-        let mut context = MassImportContext::new(
-            get_deps().await,
-            MassImportInput {
-                source_path: PathBuf::from("/mock"),
-                dat_file_path: None,
-                file_type: core_types::FileType::Rom,
-                item_type: None,
-                system_id: 1,
-            },
-            ops,
-            None,
-        );
-
-        context
-            .state
-            .read_ok_files
-            .push(PathBuf::from("/mock/file1.zip"));
-        context
-            .state
-            .read_ok_files
-            .push(PathBuf::from("/mock/file2.zip"));
-
-        let step = ReadFileMetadataStep;
-        let res = step.execute(&mut context).await;
-        assert!(matches!(res, StepAction::Continue));
-        assert_eq!(context.state.file_metadata.len(), 2);
-        assert!(
-            context
-                .state
-                .file_metadata
-                .contains_key(&PathBuf::from("/mock/file1.zip"))
-        );
-        assert!(
-            context
-                .state
-                .file_metadata
-                .contains_key(&PathBuf::from("/mock/file2.zip"))
-        );
-        assert!(context.state.read_failed_files.is_empty());
-        let file_1_metadata = context
-            .state
-            .file_metadata
-            .get(&PathBuf::from("/mock/file1.zip"))
-            .unwrap();
-        assert_eq!(file_1_metadata.len(), 2);
-        assert_eq!(file_1_metadata[0].file_name, "file1.bin");
-        assert_eq!(file_1_metadata[0].file_size, 123);
-        assert_eq!(file_1_metadata[0].sha1_checksum, [1u8; 20]);
-        assert_eq!(file_1_metadata[1].file_name, "file2.bin");
-        assert_eq!(file_1_metadata[1].file_size, 456);
-        assert_eq!(file_1_metadata[1].sha1_checksum, [3u8; 20]);
-        let file_2_metadata = context
-            .state
-            .file_metadata
-            .get(&PathBuf::from("/mock/file2.zip"))
-            .unwrap();
-        assert_eq!(file_2_metadata.len(), 1);
-        assert_eq!(file_2_metadata[0].file_name, "file2.bin");
-        assert_eq!(file_2_metadata[0].file_size, 456);
-        assert_eq!(file_2_metadata[0].sha1_checksum, [2u8; 20]);
-        assert!(
-            !context
-                .state
-                .read_failed_files
-                .contains(&PathBuf::from("/mock/file1.zip"))
-        );
     }
 
     #[async_std::test]
