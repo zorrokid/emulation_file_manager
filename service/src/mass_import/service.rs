@@ -11,10 +11,9 @@ use crate::{
     file_set::{FileSetServiceOps, file_set_service::FileSetService},
     file_system_ops::{FileSystemOps, StdFileSystemOps},
     mass_import::{
+        common_steps::context::SendReaderFactoryFn,
         models::{MassImportInput, MassImportResult, MassImportSyncEvent},
-        with_dat::context::{
-            MassImportContext, MassImportDeps, MassImportOps, SendReaderFactoryFn,
-        },
+        with_dat::context::{MassImportContext, MassImportDeps, MassImportOps},
     },
     pipeline::generic_pipeline::Pipeline,
     view_models::Settings,

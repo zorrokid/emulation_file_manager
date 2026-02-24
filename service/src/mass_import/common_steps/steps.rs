@@ -1,33 +1,8 @@
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
-
-use core_types::ReadFile;
-
 use crate::{
     error::Error,
-    file_system_ops::FileSystemOps,
-    mass_import::with_dat::context::SendReaderFactoryFn,
+    mass_import::common_steps::context::MassImportContextOps,
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
-
-pub trait MassImportContextOps {
-    fn reader_factory_fn(&self) -> Arc<SendReaderFactoryFn>;
-    fn fs_ops(&self) -> Arc<dyn FileSystemOps>;
-    fn source_path(&self) -> &std::path::Path;
-    // TODO: better name
-    fn read_ok_files_mut(&mut self) -> &mut Vec<PathBuf>;
-    fn read_ok_files(&self) -> &Vec<PathBuf>;
-    // TODO: better name
-    fn read_failed_files(&self) -> &Vec<PathBuf>;
-    fn read_failed_files_mut(&mut self) -> &mut Vec<PathBuf>;
-    fn dir_scan_errors(&mut self) -> &mut Vec<Error>;
-    fn get_non_failed_files(&self) -> Vec<PathBuf> {
-        // TODO check that is correct
-        let mut non_failed_files = self.read_ok_files().clone();
-        non_failed_files.retain(|file| !self.read_failed_files().contains(file));
-        non_failed_files
-    }
-    fn file_metadata(&mut self) -> &mut HashMap<PathBuf, Vec<ReadFile>>;
-}
 
 pub struct ReadFilesStep<T: MassImportContextOps> {
     _phantom: std::marker::PhantomData<T>,
@@ -185,6 +160,9 @@ impl<T: MassImportContextOps + Send + Sync> PipelineStep<T> for ReadFileMetadata
 
 #[cfg(test)]
 mod tests {
+    use std::{collections::HashMap, path::PathBuf, sync::Arc};
+
+    use core_types::ReadFile;
     use dat_file_parser::{DatFileParserError, DatFileParserOps, MockDatParser};
 
     use super::*;
@@ -192,21 +170,28 @@ mod tests {
         error::Error,
         file_import::file_import_service_ops::{FileImportServiceOps, MockFileImportServiceOps},
         file_set::mock_file_set_service::MockFileSetService,
-        file_system_ops::{SimpleDirEntry, mock::MockFileSystemOps},
+        file_system_ops::{FileSystemOps, SimpleDirEntry, mock::MockFileSystemOps},
         mass_import::{
+            common_steps::context::SendReaderFactoryFn,
             models::MassImportInput,
             test_utils::create_mock_reader_factory,
-            with_dat::context::{
-                MassImportDeps, MassImportOps, MassImportState, SendReaderFactoryFn,
-            },
+            with_dat::context::{MassImportDeps, MassImportOps},
         },
     };
 
     struct TestMassImportContext {
-        state: MassImportState,
+        state: TestMassImportState,
         ops: MassImportOps,
         deps: MassImportDeps,
         input: MassImportInput,
+    }
+
+    #[derive(Default, Debug)]
+    pub struct TestMassImportState {
+        pub read_ok_files: Vec<PathBuf>,
+        pub read_failed_files: Vec<PathBuf>,
+        pub dir_scan_errors: Vec<Error>,
+        pub file_metadata: HashMap<PathBuf, Vec<ReadFile>>,
     }
 
     impl TestMassImportContext {
@@ -214,7 +199,7 @@ mod tests {
             deps: MassImportDeps,
             input: MassImportInput,
             ops: MassImportOps,
-            state: Option<MassImportState>,
+            state: Option<TestMassImportState>,
         ) -> Self {
             TestMassImportContext {
                 state: state.unwrap_or_default(),

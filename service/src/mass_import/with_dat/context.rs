@@ -10,7 +10,7 @@ use crate::{
     file_import::model::CreateReleaseParams,
     file_set::FileSetServiceOps,
     mass_import::{
-        common_steps::steps::MassImportContextOps,
+        common_steps::context::{MassImportContextOps, SendReaderFactoryFn},
         models::{FileSetImportResult, MassImportInput, MassImportSyncEvent},
     },
 };
@@ -28,16 +28,6 @@ use crate::{
     file_system_ops::FileSystemOps,
     view_models::Settings,
 };
-
-/// Type alias for a Send-able (can be safely transferred between threads)
-/// metadata reader factory function.
-///
-/// The + Send + Sync bounds ensure that the closure can be shared and used across threads.
-pub type SendReaderFactoryFn = dyn Fn(
-        &std::path::Path,
-    ) -> Result<Box<dyn file_metadata::FileMetadataReader>, file_metadata::FileMetadataError>
-    + Send
-    + Sync;
 
 #[derive(Debug, Clone)]
 pub enum ImportItemStatus {
@@ -201,15 +191,6 @@ impl MassImportContext {
         map
     }
 
-    pub fn get_non_failed_files(&self) -> Vec<PathBuf> {
-        self.state
-            .read_ok_files
-            .iter()
-            .filter(|file| !self.state.read_failed_files.contains(file))
-            .cloned()
-            .collect()
-    }
-
     pub fn build_sha1_to_file_map(&self) -> HashMap<Sha1Checksum, PathBuf> {
         self.state
             .file_metadata
@@ -344,6 +325,50 @@ mod tests {
 
     use super::*;
 
+    async fn create_test_context(
+        dat_file: Option<DatFile>,
+        input: Option<MassImportInput>,
+    ) -> MassImportContext {
+        let dat_file = dat_file.unwrap_or_else(|| DatFile {
+            header: DatHeader {
+                name: "Test DAT".to_string(),
+                version: "1.0".to_string(),
+                ..Default::default()
+            },
+            games: vec![],
+        });
+        let input = input.unwrap_or_else(|| MassImportInput {
+            source_path: PathBuf::from("/test"),
+            dat_file_path: None,
+            file_type: FileType::Rom,
+            item_type: Some(ItemType::Cartridge),
+            system_id: 42,
+        });
+        // Mock factory always returns the same mock reader
+        let mock_factory: Arc<SendReaderFactoryFn> = Arc::new(
+            |_path: &Path| -> Result<Box<dyn FileMetadataReader>, FileMetadataError> {
+                Ok(Box::new(MockFileMetadataReader {
+                    metadata: vec![/* test data */],
+                }))
+            },
+        );
+
+        let file_set_service_ops = Arc::new(MockFileSetService::new());
+        let ops = MassImportOps {
+            fs_ops: Arc::new(MockFileSystemOps::new()),
+            dat_file_parser_ops: Arc::new(MockDatParser::new(Ok(dat_file.clone().into()))),
+            file_import_service_ops: Arc::new(MockFileImportServiceOps::new()),
+            reader_factory_fn: mock_factory,
+            file_set_service_ops,
+        };
+        let pool = Arc::new(database::setup_test_db().await);
+        let repository_manager = Arc::new(RepositoryManager::new(pool));
+        let deps = MassImportDeps { repository_manager };
+        let mut context = MassImportContext::new(deps, input, ops, None);
+        context.state.dat_file = Some(dat_file);
+        context
+    }
+
     #[async_std::test]
     async fn test_get_import_items() {
         // Setup: Create a DAT file with two games
@@ -433,15 +458,6 @@ mod tests {
             }],
         );
 
-        // Mock factory always returns the same mock reader
-        let mock_factory: Arc<SendReaderFactoryFn> = Arc::new(
-            |_path: &Path| -> Result<Box<dyn FileMetadataReader>, FileMetadataError> {
-                Ok(Box::new(MockFileMetadataReader {
-                    metadata: vec![/* test data */],
-                }))
-            },
-        );
-
         // Create context with test data
         let input = MassImportInput {
             source_path: PathBuf::from("/test"),
@@ -450,19 +466,8 @@ mod tests {
             item_type: Some(ItemType::Cartridge),
             system_id: 42,
         };
-        let file_set_service_ops = Arc::new(MockFileSetService::new());
-        let ops = MassImportOps {
-            fs_ops: Arc::new(MockFileSystemOps::new()),
-            dat_file_parser_ops: Arc::new(MockDatParser::new(Ok(dat_file.clone().into()))),
-            file_import_service_ops: Arc::new(MockFileImportServiceOps::new()),
-            reader_factory_fn: mock_factory,
-            file_set_service_ops,
-        };
-        let pool = Arc::new(database::setup_test_db().await);
-        let repository_manager = Arc::new(RepositoryManager::new(pool));
-        let deps = MassImportDeps { repository_manager };
-        let mut context = MassImportContext::new(deps, input, ops, None);
-        context.state.dat_file = Some(dat_file);
+        let mut context = create_test_context(Some(dat_file.clone()), Some(input)).await;
+
         context.state.file_metadata = file_metadata;
         context.state.statuses = statuses;
 
@@ -520,5 +525,25 @@ mod tests {
 
         // Verify: Missing ROM
         assert_eq!(import_items[1].dat_roms_missing[0].name, "game2b.rom");
+    }
+
+    #[async_std::test]
+    async fn test_get_non_failed_files() {
+        let mut context = create_test_context(None, None).await;
+
+        let state = MassImportState {
+            read_ok_files: vec![
+                PathBuf::from("/test/file1.zip"),
+                PathBuf::from("/test/file2.zip"),
+                PathBuf::from("/test/file3.zip"),
+            ],
+            read_failed_files: vec![PathBuf::from("/test/file2.zip")],
+            ..Default::default()
+        };
+        context.state = state;
+        let non_failed_files = context.get_non_failed_files();
+        assert_eq!(non_failed_files.len(), 2);
+        assert!(non_failed_files.contains(&PathBuf::from("/test/file1.zip")));
+        assert!(non_failed_files.contains(&PathBuf::from("/test/file3.zip")));
     }
 }

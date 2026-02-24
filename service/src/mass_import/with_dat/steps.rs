@@ -471,9 +471,10 @@ mod tests {
         file_set::mock_file_set_service::MockFileSetService,
         file_system_ops::{FileSystemOps, mock::MockFileSystemOps},
         mass_import::{
+            common_steps::context::SendReaderFactoryFn,
             models::MassImportInput,
             test_utils::create_mock_reader_factory,
-            with_dat::context::{MassImportDeps, MassImportOps, SendReaderFactoryFn},
+            with_dat::context::{MassImportDeps, MassImportOps},
         },
     };
 
