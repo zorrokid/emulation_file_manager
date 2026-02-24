@@ -3,7 +3,7 @@ use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use core_types::ReadFile;
 use database::repository_manager::RepositoryManager;
 
-use crate::{error::Error, file_system_ops::FileSystemOps};
+use crate::{error::Error, file_import::model::FileSetImportModel, file_system_ops::FileSystemOps};
 
 /// Type alias for a Send-able (can be safely transferred between threads)
 /// metadata reader factory function.
@@ -36,4 +36,5 @@ pub trait MassImportContextOps {
         non_failed_files
     }
     fn file_metadata(&mut self) -> &mut HashMap<PathBuf, Vec<ReadFile>>;
+    fn get_import_file_sets(&self) -> Vec<FileSetImportModel>;
 }

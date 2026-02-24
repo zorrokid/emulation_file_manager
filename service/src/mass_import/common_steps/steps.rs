@@ -168,7 +168,10 @@ mod tests {
     use super::*;
     use crate::{
         error::Error,
-        file_import::file_import_service_ops::{FileImportServiceOps, MockFileImportServiceOps},
+        file_import::{
+            file_import_service_ops::{FileImportServiceOps, MockFileImportServiceOps},
+            model::FileSetImportModel,
+        },
         file_set::mock_file_set_service::MockFileSetService,
         file_system_ops::{FileSystemOps, SimpleDirEntry, mock::MockFileSystemOps},
         mass_import::{
@@ -279,6 +282,10 @@ mod tests {
 
         fn file_metadata(&mut self) -> &mut HashMap<PathBuf, Vec<ReadFile>> {
             &mut self.state.file_metadata
+        }
+
+        fn get_import_file_sets(&self) -> Vec<FileSetImportModel> {
+            vec![]
         }
     }
 

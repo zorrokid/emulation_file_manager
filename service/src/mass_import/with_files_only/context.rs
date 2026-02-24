@@ -4,7 +4,7 @@ use async_std::channel::Sender;
 use core_types::{FileType, item_type::ItemType};
 
 use crate::{
-    file_import::file_import_service_ops::FileImportServiceOps,
+    file_import::{file_import_service_ops::FileImportServiceOps, model::FileSetImportModel},
     file_system_ops::FileSystemOps,
     mass_import::{
         common_steps::context::{MassImportContextOps, MassImportDeps, SendReaderFactoryFn},
@@ -77,5 +77,10 @@ impl MassImportContextOps for MassImportWithFilesOnlyContext {
         &mut self,
     ) -> &mut std::collections::HashMap<std::path::PathBuf, Vec<core_types::ReadFile>> {
         &mut self.state.file_metadata
+    }
+
+    fn get_import_file_sets(&self) -> Vec<FileSetImportModel> {
+        // TODO
+        vec![]
     }
 }

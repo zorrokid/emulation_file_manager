@@ -4,6 +4,7 @@ use crate::{
     error::Error,
     file_import::model::CreateReleaseParams,
     mass_import::{
+        common_steps::context::MassImportContextOps,
         models::{FileSetImportResult, FileSetImportStatus},
         with_dat::context::MassImportContext,
     },
@@ -278,86 +279,80 @@ impl PipelineStep<MassImportContext> for ImportFileSetsStep {
     }
 
     async fn execute(&self, context: &mut MassImportContext) -> StepAction {
-        let import_items = context.get_import_items();
-        for item in import_items {
+        let import_file_sets = context.get_import_file_sets();
+        for file_set in import_file_sets {
             tracing::info!(
-                file_set_name = item.file_set.as_ref().map(|fs| &fs.file_set_name),
-                "Importing file set",
+                 file_set_name = %file_set.file_set_name,
+                "Creating file set for import",
             );
-            if let Some(file_set) = item.file_set {
-                tracing::info!(
-                     file_set_name = %file_set.file_set_name,
-                    "Creating file set for import",
-                );
-                let file_set_name = file_set.file_set_name.clone();
-                let import_res = context
-                    .ops
-                    .file_import_service_ops
-                    .create_file_set(file_set);
-                let (id, status) = match import_res.await {
-                    Ok(import_result) => {
-                        println!(
-                            "Successfully imported file set: {}",
-                            import_result.file_set_id
+            let file_set_name = file_set.file_set_name.clone();
+            let import_res = context
+                .ops
+                .file_import_service_ops
+                .create_file_set(file_set);
+            let (id, status) = match import_res.await {
+                Ok(import_result) => {
+                    println!(
+                        "Successfully imported file set: {}",
+                        import_result.file_set_id
+                    );
+                    if import_result.failed_steps.is_empty() {
+                        tracing::info!(
+                            file_set_id = %import_result.file_set_id,
+                            "Successfully imported file set",
                         );
-                        if import_result.failed_steps.is_empty() {
-                            tracing::info!(
-                                file_set_id = %import_result.file_set_id,
-                                "Successfully imported file set",
-                            );
-                            (
-                                Some(import_result.file_set_id),
-                                FileSetImportStatus::Success,
-                            )
-                        } else {
+                        (
+                            Some(import_result.file_set_id),
+                            FileSetImportStatus::Success,
+                        )
+                    } else {
+                        tracing::warn!(
+                            file_set_id = %import_result.file_set_id,
+                            "File set imported with some failed steps",
+                        );
+                        let errors: Vec<String> = import_result
+                            .failed_steps
+                            .iter()
+                            .map(|(step, error)| format!("{}: {}", step, error))
+                            .collect();
+                        for (step, error) in import_result.failed_steps {
                             tracing::warn!(
-                                file_set_id = %import_result.file_set_id,
-                                "File set imported with some failed steps",
+                                step = %step,
+                                error = %error,
+                                "Failed step in file set import",
                             );
-                            let errors: Vec<String> = import_result
-                                .failed_steps
-                                .iter()
-                                .map(|(step, error)| format!("{}: {}", step, error))
-                                .collect();
-                            for (step, error) in import_result.failed_steps {
-                                tracing::warn!(
-                                    step = %step,
-                                    error = %error,
-                                    "Failed step in file set import",
-                                );
-                            }
-                            (
-                                Some(import_result.file_set_id),
-                                FileSetImportStatus::SucessWithWarnings(errors),
-                            )
                         }
+                        (
+                            Some(import_result.file_set_id),
+                            FileSetImportStatus::SucessWithWarnings(errors),
+                        )
                     }
-                    Err(e) => {
-                        tracing::error!(
-                            error = ?e,
-                            "Failed to import file set",
-                        );
-                        (None, FileSetImportStatus::Failed(format!("{}", e)))
-                    }
+                }
+                Err(e) => {
+                    tracing::error!(
+                        error = ?e,
+                        "Failed to import file set",
+                    );
+                    (None, FileSetImportStatus::Failed(format!("{}", e)))
+                }
+            };
+            println!("Import result for file set {}: {:?}", file_set_name, status);
+
+            context.state.import_results.push(FileSetImportResult {
+                file_set_id: id,
+                status: status.clone(),
+            });
+
+            if let Some(sender_tx) = &context.progress_tx {
+                let event = crate::mass_import::models::MassImportSyncEvent {
+                    file_set_name,
+                    status,
                 };
-                println!("Import result for file set {}: {:?}", file_set_name, status);
-
-                context.state.import_results.push(FileSetImportResult {
-                    file_set_id: id,
-                    status: status.clone(),
-                });
-
-                if let Some(sender_tx) = &context.progress_tx {
-                    let event = crate::mass_import::models::MassImportSyncEvent {
-                        file_set_name,
-                        status,
-                    };
-                    if let Err(e) = sender_tx.send(event).await {
-                        tracing::error!(
-                            error = ?e,
-                            "Failed to send progress event",
-                        );
-                    }
+                if let Err(e) = sender_tx.send(event).await {
+                    tracing::error!(
+                        error = ?e,
+                        "Failed to send progress event",
+                    );
                 }
             }
         }

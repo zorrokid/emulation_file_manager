@@ -148,6 +148,13 @@ impl MassImportContextOps for MassImportContext {
     fn file_metadata(&mut self) -> &mut HashMap<PathBuf, Vec<ReadFile>> {
         &mut self.state.file_metadata
     }
+
+    fn get_import_file_sets(&self) -> Vec<FileSetImportModel> {
+        self.get_import_items()
+            .iter()
+            .filter_map(|item| item.file_set.clone())
+            .collect()
+    }
 }
 
 impl MassImportContext {
