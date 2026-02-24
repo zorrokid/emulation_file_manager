@@ -10,7 +10,7 @@ use crate::{
     file_import::model::CreateReleaseParams,
     file_set::FileSetServiceOps,
     mass_import::{
-        common_steps::context::{MassImportContextOps, SendReaderFactoryFn},
+        common_steps::context::{MassImportContextOps, MassImportDeps, SendReaderFactoryFn},
         models::{FileSetImportResult, MassImportInput, MassImportSyncEvent},
     },
 };
@@ -77,11 +77,6 @@ pub struct MassImportContext {
     pub state: MassImportState,
     pub ops: MassImportOps,
     pub progress_tx: Option<Sender<MassImportSyncEvent>>,
-}
-
-#[derive(Debug)]
-pub struct MassImportDeps {
-    pub repository_manager: Arc<RepositoryManager>,
 }
 
 pub struct MassImportOps {

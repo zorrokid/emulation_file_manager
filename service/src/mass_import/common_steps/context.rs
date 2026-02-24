@@ -1,6 +1,7 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use core_types::ReadFile;
+use database::repository_manager::RepositoryManager;
 
 use crate::{error::Error, file_system_ops::FileSystemOps};
 
@@ -14,6 +15,11 @@ pub type SendReaderFactoryFn = dyn Fn(
     ) -> Result<Box<dyn file_metadata::FileMetadataReader>, file_metadata::FileMetadataError>
     + Send
     + Sync;
+
+#[derive(Debug)]
+pub struct MassImportDeps {
+    pub repository_manager: Arc<RepositoryManager>,
+}
 
 pub trait MassImportContextOps {
     fn reader_factory_fn(&self) -> Arc<SendReaderFactoryFn>;
