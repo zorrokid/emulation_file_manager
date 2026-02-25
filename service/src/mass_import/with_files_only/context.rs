@@ -8,7 +8,7 @@ use crate::{
     file_system_ops::FileSystemOps,
     mass_import::{
         common_steps::context::{MassImportContextOps, MassImportDeps, SendReaderFactoryFn},
-        models::MassImportSyncEvent,
+        models::{FileSetImportResult, MassImportSyncEvent},
     },
 };
 
@@ -23,6 +23,7 @@ struct MassImportWithFilesOnlyState {
     pub read_failed_files: Vec<std::path::PathBuf>,
     pub dir_scan_errors: Vec<crate::error::Error>,
     pub file_metadata: std::collections::HashMap<std::path::PathBuf, Vec<core_types::ReadFile>>,
+    pub import_results: Vec<FileSetImportResult>,
 }
 
 pub struct MassImportWithFilesOnlyInput {
@@ -82,5 +83,18 @@ impl MassImportContextOps for MassImportWithFilesOnlyContext {
     fn get_import_file_sets(&self) -> Vec<FileSetImportModel> {
         // TODO
         vec![]
+    }
+
+    fn import_service_ops(&self) -> Arc<dyn FileImportServiceOps> {
+        self.ops.file_import_service_ops.clone()
+    }
+
+    fn import_results(&mut self) -> &mut Vec<FileSetImportResult> {
+        // TODO
+        unimplemented!()
+    }
+
+    fn progress_tx(&self) -> &Option<Sender<MassImportSyncEvent>> {
+        &self.progress_tx
     }
 }

@@ -162,6 +162,7 @@ impl<T: MassImportContextOps + Send + Sync> PipelineStep<T> for ReadFileMetadata
 mod tests {
     use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
+    use async_std::channel::Sender;
     use core_types::ReadFile;
     use dat_file_parser::{DatFileParserError, DatFileParserOps, MockDatParser};
 
@@ -176,7 +177,7 @@ mod tests {
         file_system_ops::{FileSystemOps, SimpleDirEntry, mock::MockFileSystemOps},
         mass_import::{
             common_steps::context::{MassImportDeps, SendReaderFactoryFn},
-            models::MassImportInput,
+            models::{FileSetImportResult, MassImportInput, MassImportSyncEvent},
             test_utils::create_mock_reader_factory,
             with_dat::context::MassImportOps,
         },
@@ -195,6 +196,7 @@ mod tests {
         pub read_failed_files: Vec<PathBuf>,
         pub dir_scan_errors: Vec<Error>,
         pub file_metadata: HashMap<PathBuf, Vec<ReadFile>>,
+        pub import_results: Vec<FileSetImportResult>,
     }
 
     impl TestMassImportContext {
@@ -286,6 +288,18 @@ mod tests {
 
         fn get_import_file_sets(&self) -> Vec<FileSetImportModel> {
             vec![]
+        }
+
+        fn import_service_ops(&self) -> Arc<dyn FileImportServiceOps> {
+            self.ops.file_import_service_ops.clone()
+        }
+
+        fn import_results(&mut self) -> &mut Vec<FileSetImportResult> {
+            &mut self.state.import_results
+        }
+
+        fn progress_tx(&self) -> &Option<Sender<MassImportSyncEvent>> {
+            &None
         }
     }
 

@@ -155,6 +155,18 @@ impl MassImportContextOps for MassImportContext {
             .filter_map(|item| item.file_set.clone())
             .collect()
     }
+
+    fn import_service_ops(&self) -> Arc<dyn FileImportServiceOps> {
+        self.ops.file_import_service_ops.clone()
+    }
+
+    fn import_results(&mut self) -> &mut Vec<FileSetImportResult> {
+        &mut self.state.import_results
+    }
+
+    fn progress_tx(&self) -> &Option<Sender<MassImportSyncEvent>> {
+        &self.progress_tx
+    }
 }
 
 impl MassImportContext {

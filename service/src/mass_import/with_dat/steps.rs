@@ -262,6 +262,7 @@ impl PipelineStep<MassImportContext> for FilterExistingFileSetsStep {
     }
 }
 
+// TODO: move this to common steps
 pub struct ImportFileSetsStep;
 
 #[async_trait::async_trait]
@@ -286,10 +287,8 @@ impl PipelineStep<MassImportContext> for ImportFileSetsStep {
                 "Creating file set for import",
             );
             let file_set_name = file_set.file_set_name.clone();
-            let import_res = context
-                .ops
-                .file_import_service_ops
-                .create_file_set(file_set);
+            let service = context.import_service_ops();
+            let import_res = service.create_file_set(file_set);
             let (id, status) = match import_res.await {
                 Ok(import_result) => {
                     println!(
@@ -338,12 +337,12 @@ impl PipelineStep<MassImportContext> for ImportFileSetsStep {
             };
             println!("Import result for file set {}: {:?}", file_set_name, status);
 
-            context.state.import_results.push(FileSetImportResult {
+            context.import_results().push(FileSetImportResult {
                 file_set_id: id,
                 status: status.clone(),
             });
 
-            if let Some(sender_tx) = &context.progress_tx {
+            if let Some(sender_tx) = &context.progress_tx() {
                 let event = crate::mass_import::models::MassImportSyncEvent {
                     file_set_name,
                     status,

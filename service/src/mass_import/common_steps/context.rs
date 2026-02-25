@@ -1,9 +1,15 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
+use async_std::channel::Sender;
 use core_types::ReadFile;
 use database::repository_manager::RepositoryManager;
 
-use crate::{error::Error, file_import::model::FileSetImportModel, file_system_ops::FileSystemOps};
+use crate::{
+    error::Error,
+    file_import::{file_import_service_ops::FileImportServiceOps, model::FileSetImportModel},
+    file_system_ops::FileSystemOps,
+    mass_import::models::{FileSetImportResult, MassImportSyncEvent},
+};
 
 /// Type alias for a Send-able (can be safely transferred between threads)
 /// metadata reader factory function.
@@ -37,4 +43,7 @@ pub trait MassImportContextOps {
     }
     fn file_metadata(&mut self) -> &mut HashMap<PathBuf, Vec<ReadFile>>;
     fn get_import_file_sets(&self) -> Vec<FileSetImportModel>;
+    fn import_service_ops(&self) -> Arc<dyn FileImportServiceOps>;
+    fn import_results(&mut self) -> &mut Vec<FileSetImportResult>;
+    fn progress_tx(&self) -> &Option<Sender<MassImportSyncEvent>>;
 }
