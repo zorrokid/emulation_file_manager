@@ -1,6 +1,9 @@
 use crate::{
     error::Error,
-    mass_import::common_steps::context::MassImportContextOps,
+    mass_import::{
+        common_steps::context::MassImportContextOps,
+        models::{FileSetImportResult, FileSetImportStatus},
+    },
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
 
@@ -158,20 +161,133 @@ impl<T: MassImportContextOps + Send + Sync> PipelineStep<T> for ReadFileMetadata
     }
 }
 
+pub struct ImportFileSetsStep<T: MassImportContextOps> {
+    _phantom: std::marker::PhantomData<T>,
+}
+
+impl<T: MassImportContextOps> Default for ImportFileSetsStep<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<T: MassImportContextOps> ImportFileSetsStep<T> {
+    pub fn new() -> Self {
+        Self {
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl<T: MassImportContextOps + Send + Sync> PipelineStep<T> for ImportFileSetsStep<T> {
+    fn name(&self) -> &'static str {
+        "import_file_sets_step"
+    }
+
+    fn should_execute(&self, context: &T) -> bool {
+        !context.get_import_file_sets().is_empty()
+    }
+
+    async fn execute(&self, context: &mut T) -> StepAction {
+        let import_file_sets = context.get_import_file_sets();
+        for file_set in import_file_sets {
+            tracing::info!(
+                 file_set_name = %file_set.file_set_name,
+                "Creating file set for import",
+            );
+            let file_set_name = file_set.file_set_name.clone();
+            let service = context.import_service_ops();
+            let import_res = service.create_file_set(file_set);
+            let (id, status) = match import_res.await {
+                Ok(import_result) => {
+                    println!(
+                        "Successfully imported file set: {}",
+                        import_result.file_set_id
+                    );
+                    if import_result.failed_steps.is_empty() {
+                        tracing::info!(
+                            file_set_id = %import_result.file_set_id,
+                            "Successfully imported file set",
+                        );
+                        (
+                            Some(import_result.file_set_id),
+                            FileSetImportStatus::Success,
+                        )
+                    } else {
+                        tracing::warn!(
+                            file_set_id = %import_result.file_set_id,
+                            "File set imported with some failed steps",
+                        );
+                        let errors: Vec<String> = import_result
+                            .failed_steps
+                            .iter()
+                            .map(|(step, error)| format!("{}: {}", step, error))
+                            .collect();
+                        for (step, error) in import_result.failed_steps {
+                            tracing::warn!(
+                                step = %step,
+                                error = %error,
+                                "Failed step in file set import",
+                            );
+                        }
+                        (
+                            Some(import_result.file_set_id),
+                            FileSetImportStatus::SucessWithWarnings(errors),
+                        )
+                    }
+                }
+                Err(e) => {
+                    tracing::error!(
+                        error = ?e,
+                        "Failed to import file set",
+                    );
+                    (None, FileSetImportStatus::Failed(format!("{}", e)))
+                }
+            };
+            println!("Import result for file set {}: {:?}", file_set_name, status);
+
+            context.import_results().push(FileSetImportResult {
+                file_set_id: id,
+                status: status.clone(),
+            });
+
+            if let Some(sender_tx) = &context.progress_tx() {
+                let event = crate::mass_import::models::MassImportSyncEvent {
+                    file_set_name,
+                    status,
+                };
+                if let Err(e) = sender_tx.send(event).await {
+                    tracing::error!(
+                        error = ?e,
+                        "Failed to send progress event",
+                    );
+                }
+            }
+        }
+
+        StepAction::Continue
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
     use async_std::channel::Sender;
-    use core_types::ReadFile;
-    use dat_file_parser::{DatFileParserError, DatFileParserOps, MockDatParser};
+    use core_types::{ReadFile, sha1_from_hex_string};
+    use dat_file_parser::{
+        DatFile, DatFileParserError, DatFileParserOps, DatHeader, MockDatParser,
+    };
 
     use super::*;
     use crate::{
         error::Error,
         file_import::{
-            file_import_service_ops::{FileImportServiceOps, MockFileImportServiceOps},
-            model::FileSetImportModel,
+            file_import_service_ops::{
+                CreateMockState, FileImportServiceOps, MockFileImportServiceOps,
+            },
+            model::{FileImportSource, FileSetImportModel, ImportFileContent},
         },
         file_set::mock_file_set_service::MockFileSetService,
         file_system_ops::{FileSystemOps, SimpleDirEntry, mock::MockFileSystemOps},
@@ -197,6 +313,7 @@ mod tests {
         pub dir_scan_errors: Vec<Error>,
         pub file_metadata: HashMap<PathBuf, Vec<ReadFile>>,
         pub import_results: Vec<FileSetImportResult>,
+        pub file_sets_to_import: Vec<FileSetImportModel>,
     }
 
     impl TestMassImportContext {
@@ -287,7 +404,7 @@ mod tests {
         }
 
         fn get_import_file_sets(&self) -> Vec<FileSetImportModel> {
-            vec![]
+            self.state.file_sets_to_import.clone()
         }
 
         fn import_service_ops(&self) -> Arc<dyn FileImportServiceOps> {
@@ -447,5 +564,90 @@ mod tests {
                 .read_failed_files
                 .contains(&PathBuf::from("/mock/file1.zip"))
         );
+    }
+
+    #[async_std::test]
+    async fn test_import_file_sets_step_success() {
+        // Arrange
+
+        // file metadata that has been read from file
+        let file_checksum =
+            sha1_from_hex_string("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").unwrap();
+        let file = ReadFile {
+            file_name: "rom1.bin".to_string(),
+            sha1_checksum: file_checksum,
+            file_size: 123,
+        };
+        let file_path = PathBuf::from("/mock/rom1.zip");
+
+        // File metadata matching the ROM SHA1
+        let mut file_metadata = HashMap::new();
+        file_metadata.insert(file_path.clone(), vec![file.clone()]);
+
+        // Mock FileImportServiceOps with deterministic output
+        let mock_file_import_ops = MockFileImportServiceOps::with_create_mock(CreateMockState {
+            file_set_id: 42,
+            release_id: Some(7),
+        });
+
+        let ops = get_ops(None, None, None, Some(Arc::new(mock_file_import_ops)));
+        let mut context = TestMassImportContext::new(
+            get_deps().await,
+            MassImportInput {
+                source_path: PathBuf::from("/mock"),
+                dat_file_path: None,
+                file_type: core_types::FileType::Rom,
+                item_type: None,
+                system_id: 1,
+            },
+            ops,
+            None,
+        );
+
+        // Pre-populate state as if previous steps succeeded
+        context.state.file_metadata = file_metadata;
+
+        let import_file_content = ImportFileContent {
+            file_name: file.file_name.clone(),
+            sha1_checksum: file.sha1_checksum,
+            file_size: file.file_size,
+        };
+
+        // File sets to import are compiled for example based on the DAT file data and file metadata
+        context.state.file_sets_to_import.push(FileSetImportModel {
+            file_set_name: "Test Game".to_string(),
+            file_set_file_name: "Test Game".to_string(),
+            import_files: vec![FileImportSource {
+                path: file_path.clone(),
+                content: HashMap::from([(file_checksum, import_file_content)]),
+            }],
+            selected_files: vec![file_checksum],
+            system_ids: vec![context.input.system_id],
+            source: "dat".to_string(),
+            file_type: context.input.file_type,
+            item_ids: vec![],
+            item_types: vec![],
+            create_release: None,
+            dat_file_id: None,
+        });
+
+        context
+            .state
+            .read_ok_files
+            .push(PathBuf::from("/mock/rom1.zip"));
+
+        // Act
+        let step = ImportFileSetsStep::<TestMassImportContext>::new();
+        let result = step.execute(&mut context).await;
+
+        // Assert
+        assert!(matches!(result, StepAction::Continue));
+        assert_eq!(context.state.import_results.len(), 1);
+        let import_result = &context.state.import_results[0];
+        assert_eq!(import_result.file_set_id, Some(42));
+        match &import_result.status {
+            FileSetImportStatus::Success => {}
+            other => panic!("Unexpected import status: {:?}", other),
+        }
     }
 }

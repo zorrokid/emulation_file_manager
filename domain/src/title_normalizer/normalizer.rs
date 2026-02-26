@@ -7,7 +7,7 @@ use crate::title_normalizer::{
     search_keys::{generate_search_keys, normalize_for_search},
 };
 
-pub struct SoftwareTitle {
+/*pub struct SoftwareTitle {
     pub release_name: String,
     pub software_title_name: String,
 }
@@ -19,7 +19,7 @@ pub fn get_software_title(release_name: &str) -> SoftwareTitle {
         release_name: normalized.original,
         software_title_name: normalized.canonical,
     }
-}
+}*/
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct NormalizedTitle {

@@ -1,11 +1,11 @@
 use crate::{
     mass_import::{
-        common_steps::steps::{ReadFileMetadataStep, ReadFilesStep},
+        common_steps::steps::{ImportFileSetsStep, ReadFileMetadataStep, ReadFilesStep},
         with_dat::{
             context::MassImportContext,
             steps::{
                 CheckExistingDatFileStep, FilterExistingFileSetsStep, ImportDatFileStep,
-                ImportFileSetsStep, LinkExistingFileSetsStep, StoreDatFileStep,
+                LinkExistingFileSetsStep, StoreDatFileStep,
             },
         },
     },
@@ -21,7 +21,7 @@ impl Pipeline<MassImportContext> {
             Box::new(ReadFilesStep::<MassImportContext>::new()),
             Box::new(ReadFileMetadataStep::<MassImportContext>::new()),
             Box::new(FilterExistingFileSetsStep),
-            Box::new(ImportFileSetsStep),
+            Box::new(ImportFileSetsStep::<MassImportContext>::new()),
             Box::new(LinkExistingFileSetsStep),
         ])
     }
