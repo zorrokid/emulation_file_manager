@@ -83,3 +83,178 @@ impl PipelineStep<MassImportWithFilesOnlyContext> for FilterExistingFileSetsStep
         StepAction::Continue
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{collections::HashMap, path::PathBuf, sync::Arc};
+
+    use core_types::{FileType, ImportedFile, ReadFile, Sha1Checksum};
+    use database::repository_manager::RepositoryManager;
+    use file_metadata::create_mock_factory_with_test_data;
+
+    use crate::{
+        file_import::{
+            file_import_service_ops::MockFileImportServiceOps, model::FileSetImportModel,
+        },
+        file_system_ops::mock::MockFileSystemOps,
+        mass_import::{
+            common_steps::context::MassImportDeps,
+            with_files_only::context::{MassImportWithFilesOnlyInput, MassImportWithFilesOnlyOps},
+        },
+    };
+
+    use super::*;
+
+    #[async_std::test]
+    async fn test_filter_existing_file_sets() {
+        let repository_manager = database::setup_test_repository_manager().await;
+        let system_id = add_system(repository_manager.clone()).await;
+        let input: MassImportWithFilesOnlyInput = MassImportWithFilesOnlyInput {
+            source_path: PathBuf::from("/test/path"),
+            file_type: FileType::Rom,
+            item_type: None,
+            system_id,
+            source: "test source".to_string(),
+        };
+
+        let deps = MassImportDeps { repository_manager };
+
+        let ops = MassImportWithFilesOnlyOps {
+            fs_ops: Arc::new(MockFileSystemOps::new()),
+            file_import_service_ops: Arc::new(MockFileImportServiceOps::new()),
+            reader_factory_fn: create_mock_factory_with_test_data(vec![]),
+        };
+
+        let mut context = MassImportWithFilesOnlyContext::new(deps, input, ops, None);
+
+        // TODO: populate context with file metadata
+        // and add some of the file sets to the database
+        // assert that after executing the step, the file metadata for existing file sets is
+        // removed from the context
+        let file_1_sha1_checksum: Sha1Checksum = [0; 20];
+        let file_1_path = PathBuf::from("/test/path/file.zip");
+
+        let file_2_sha1_checksum: Sha1Checksum = [1; 20];
+        let file_2_path = PathBuf::from("/test/path/file2.zip");
+
+        let file_meta_data: HashMap<PathBuf, Vec<ReadFile>> = HashMap::from([
+            (
+                file_1_path.clone(),
+                vec![ReadFile {
+                    file_name: "file_1".to_string(),
+                    file_size: 1024,
+                    sha1_checksum: file_1_sha1_checksum,
+                }],
+            ),
+            (
+                file_2_path.clone(),
+                vec![ReadFile {
+                    file_name: "file_2".to_string(),
+                    file_size: 2048,
+                    sha1_checksum: file_2_sha1_checksum,
+                }],
+            ),
+        ]);
+
+        context.state.file_metadata = file_meta_data;
+
+        insert_file_set_to_db(&context, &file_1_path, FileType::Rom).await;
+
+        // Act
+
+        let step = FilterExistingFileSetsStep;
+        let action = step.execute(&mut context).await;
+
+        // Assert
+        assert!(matches!(action, StepAction::Continue));
+        assert!(!context.state.file_metadata.contains_key(&file_1_path));
+        assert!(context.state.file_metadata.contains_key(&file_2_path));
+
+        // insert first file set to test database
+        /*let import_files = context.get_import_file_sets();
+        let file_1_file_set: &FileSetImportModel = import_files
+            .iter()
+            .find(|file_set| {
+                file_set
+                    .import_files
+                    .iter()
+                    .any(|import_file| import_file.path == file_1_path)
+            })
+            .unwrap();
+
+        let file_1_files = file_1_file_set
+            .import_files
+            .iter()
+            .flat_map(|import_file| import_file.content.values())
+            .collect::<Vec<_>>();
+        let file_set_repository = context.deps.repository_manager.get_file_set_repository();
+        file_set_repository
+            .add_file_set(
+                &file_1_file_set.file_set_name,
+                &file_1_file_set.file_set_file_name,
+                &file_1_file_set.file_type,
+                &context.input.source,
+                &file_1_files
+                    .iter()
+                    .map(|file| ImportedFile {
+                        original_file_name: file.file_name.clone(),
+                        archive_file_name: "1234abcd".to_string(),
+                        sha1_checksum: file.sha1_checksum,
+                        file_size: 1024,
+                    })
+                    .collect::<Vec<_>>(),
+                &[context.input.system_id],
+            )
+            .await
+            .unwrap();*/
+    }
+
+    async fn add_system(repository_manager: Arc<RepositoryManager>) -> i64 {
+        let system_repository = repository_manager.get_system_repository();
+        system_repository.add_system("Test System").await.unwrap()
+    }
+
+    async fn insert_file_set_to_db(
+        context: &MassImportWithFilesOnlyContext,
+        file_path: &PathBuf,
+        file_type: FileType,
+    ) {
+        let import_files = context.get_import_file_sets();
+        let file_set: &FileSetImportModel = import_files
+            .iter()
+            .find(|file_set| {
+                file_set
+                    .import_files
+                    .iter()
+                    .any(|import_file| import_file.path == *file_path)
+            })
+            .unwrap();
+
+        let files = file_set
+            .import_files
+            .iter()
+            .flat_map(|import_file| import_file.content.values())
+            .collect::<Vec<_>>();
+
+        let file_set_repository = context.deps.repository_manager.get_file_set_repository();
+        file_set_repository
+            .add_file_set(
+                &file_set.file_set_name,
+                &file_set.file_set_file_name,
+                &file_type,
+                &context.input.source,
+                &files
+                    .iter()
+                    .map(|file| ImportedFile {
+                        original_file_name: file.file_name.clone(),
+                        archive_file_name: "1234abcd".to_string(),
+                        sha1_checksum: file.sha1_checksum,
+                        file_size: file.file_size,
+                    })
+                    .collect::<Vec<_>>(),
+                &[context.input.system_id],
+            )
+            .await
+            .unwrap();
+    }
+}
