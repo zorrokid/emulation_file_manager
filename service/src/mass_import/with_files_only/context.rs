@@ -14,28 +14,17 @@ use crate::{
     mass_import::{
         common_steps::context::{MassImportContextOps, MassImportDeps},
         models::{FileSetImportResult, MassImportSyncEvent},
-        with_dat::context::ImportItemStatus,
     },
 };
 
-pub struct MassImportWithFilesOnlyOps {
+pub struct FilesOnlyMassImportOps {
     pub fs_ops: Arc<dyn FileSystemOps>,
     pub file_import_service_ops: Arc<dyn FileImportServiceOps>,
     pub reader_factory_fn: Arc<SendReaderFactoryFn>,
 }
 
-#[derive(Debug, Clone)]
-pub struct ImportItem {
-    pub release_name: String,
-    pub software_title_name: String,
-    // This can be passed directly to create_file_set in file_import service to proceed with
-    // actual creation of file sets.
-    pub file_set: Option<FileSetImportModel>,
-    pub status: ImportItemStatus,
-}
-
 #[derive(Default)]
-pub struct MassImportWithFilesOnlyState {
+pub struct FilesOnlyMassImportState {
     pub read_ok_files: Vec<std::path::PathBuf>,
     pub read_failed_files: Vec<std::path::PathBuf>,
     pub dir_scan_errors: Vec<crate::error::Error>,
@@ -45,7 +34,7 @@ pub struct MassImportWithFilesOnlyState {
 }
 
 #[derive(Debug, Clone)]
-pub struct MassImportWithFilesOnlyInput {
+pub struct FilesOnlyMassImportInput {
     pub source_path: PathBuf,
     pub file_type: FileType,
     pub item_type: Option<ItemType>,
@@ -53,32 +42,32 @@ pub struct MassImportWithFilesOnlyInput {
     pub source: String,
 }
 
-pub struct MassImportWithFilesOnlyContext {
+pub struct FilesOnlyMassImportContext {
     pub deps: MassImportDeps,
-    pub input: MassImportWithFilesOnlyInput,
-    pub state: MassImportWithFilesOnlyState,
-    pub ops: MassImportWithFilesOnlyOps,
+    pub input: FilesOnlyMassImportInput,
+    pub state: FilesOnlyMassImportState,
+    pub ops: FilesOnlyMassImportOps,
     pub progress_tx: Option<Sender<MassImportSyncEvent>>,
 }
 
-impl MassImportWithFilesOnlyContext {
+impl FilesOnlyMassImportContext {
     pub fn new(
         deps: MassImportDeps,
-        input: MassImportWithFilesOnlyInput,
-        ops: MassImportWithFilesOnlyOps,
+        input: FilesOnlyMassImportInput,
+        ops: FilesOnlyMassImportOps,
         progress_tx: Option<Sender<MassImportSyncEvent>>,
     ) -> Self {
         Self {
             deps,
             input,
-            state: MassImportWithFilesOnlyState::default(),
+            state: FilesOnlyMassImportState::default(),
             ops,
             progress_tx,
         }
     }
 }
 
-impl MassImportContextOps for MassImportWithFilesOnlyContext {
+impl MassImportContextOps for FilesOnlyMassImportContext {
     fn reader_factory_fn(&self) -> Arc<SendReaderFactoryFn> {
         self.ops.reader_factory_fn.clone()
     }
@@ -194,7 +183,7 @@ mod tests {
             repository_manager: setup_test_repository_manager().await,
         };
 
-        let ops = MassImportWithFilesOnlyOps {
+        let ops = FilesOnlyMassImportOps {
             fs_ops: Arc::new(MockFileSystemOps::new()),
             file_import_service_ops: Arc::new(MockFileImportServiceOps::new()),
             reader_factory_fn: create_mock_factory_with_test_data(vec![]),
@@ -209,7 +198,7 @@ mod tests {
 
         let file_path = PathBuf::from(format!("/test/path/{}", archive_file_name));
 
-        let input = MassImportWithFilesOnlyInput {
+        let input = FilesOnlyMassImportInput {
             source_path: file_path.clone(),
             file_type: FileType::TapeImage,
             item_type: None,
@@ -225,7 +214,7 @@ mod tests {
             sha1_checksum,
         }];
 
-        let state = MassImportWithFilesOnlyState {
+        let state = FilesOnlyMassImportState {
             read_ok_files: vec![],
             read_failed_files: vec![],
             dir_scan_errors: vec![],
@@ -234,7 +223,7 @@ mod tests {
             import_results: vec![],
         };
 
-        let context = MassImportWithFilesOnlyContext {
+        let context = FilesOnlyMassImportContext {
             deps,
             ops,
             input,

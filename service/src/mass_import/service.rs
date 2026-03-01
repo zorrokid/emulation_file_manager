@@ -13,13 +13,12 @@ use crate::{
     mass_import::{
         common_steps::context::MassImportDeps,
         models::{
-            MassImportInput, MassImportSyncEvent, MassImportWithDatFileResult,
-            MassImportWithFilesOnlyResult,
+            DatFileMassImportResult, FilesOnlyMassImportResult, MassImportInput,
+            MassImportSyncEvent,
         },
-        with_dat::context::{MassImportContext, MassImportOps},
+        with_dat::context::{DatFileMassImportContext, DatFileMassImportOps},
         with_files_only::context::{
-            MassImportWithFilesOnlyContext, MassImportWithFilesOnlyInput,
-            MassImportWithFilesOnlyOps,
+            FilesOnlyMassImportContext, FilesOnlyMassImportInput, FilesOnlyMassImportOps,
         },
     },
     pipeline::generic_pipeline::Pipeline,
@@ -101,12 +100,12 @@ impl MassImportService {
         &self,
         input: MassImportInput,
         progress_tx: Option<Sender<MassImportSyncEvent>>,
-    ) -> Result<MassImportWithDatFileResult, Error> {
+    ) -> Result<DatFileMassImportResult, Error> {
         tracing::info!(
             input = ?input,
             "Starting mass import process...");
 
-        let ops = MassImportOps {
+        let ops = DatFileMassImportOps {
             fs_ops: self.fs_ops.clone(),
             dat_file_parser_ops: self.dat_file_parser_ops.clone(),
             file_import_service_ops: self.file_import_service_ops.clone(),
@@ -117,24 +116,24 @@ impl MassImportService {
         let deps = MassImportDeps {
             repository_manager: self.repository_manager.clone(),
         };
-        let mut context = MassImportContext::new(deps, input, ops, progress_tx);
-        let pipeline = Pipeline::<MassImportContext>::new();
+        let mut context = DatFileMassImportContext::new(deps, input, ops, progress_tx);
+        let pipeline = Pipeline::<DatFileMassImportContext>::new();
         pipeline.execute(&mut context).await?;
         //dbg!(&context.state);
         tracing::info!("Mass import process completed.");
-        Ok(MassImportWithDatFileResult::from(context.state))
+        Ok(DatFileMassImportResult::from(context.state))
     }
 
     pub async fn import_with_files_only(
         &self,
-        input: MassImportWithFilesOnlyInput,
+        input: FilesOnlyMassImportInput,
         progress_tx: Option<Sender<MassImportSyncEvent>>,
-    ) -> Result<MassImportWithFilesOnlyResult, Error> {
+    ) -> Result<FilesOnlyMassImportResult, Error> {
         tracing::info!(
             input = ?input,
             "Starting mass import process...");
 
-        let ops = MassImportWithFilesOnlyOps {
+        let ops = FilesOnlyMassImportOps {
             fs_ops: self.fs_ops.clone(),
             file_import_service_ops: self.file_import_service_ops.clone(),
             reader_factory_fn: self.reader_factory_fn.clone(),
@@ -144,11 +143,11 @@ impl MassImportService {
             repository_manager: self.repository_manager.clone(),
         };
 
-        let mut context = MassImportWithFilesOnlyContext::new(deps, input, ops, progress_tx);
-        let pipeline = Pipeline::<MassImportWithFilesOnlyContext>::new();
+        let mut context = FilesOnlyMassImportContext::new(deps, input, ops, progress_tx);
+        let pipeline = Pipeline::<FilesOnlyMassImportContext>::new();
         pipeline.execute(&mut context).await?;
         tracing::info!("Mass import process completed.");
-        Ok(MassImportWithFilesOnlyResult::from(context.state))
+        Ok(FilesOnlyMassImportResult::from(context.state))
     }
 }
 
@@ -335,7 +334,7 @@ mod tests {
             repository_manager,
         );
 
-        let input = MassImportWithFilesOnlyInput {
+        let input = FilesOnlyMassImportInput {
             source_path: PathBuf::from("/mock"),
             file_type: FileType::Rom,
             item_type: None,

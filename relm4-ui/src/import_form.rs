@@ -18,7 +18,7 @@ use relm4::{
 use service::{
     error::Error,
     mass_import::models::{
-        FileSetImportStatus, MassImportInput, MassImportSyncEvent, MassImportWithDatFileResult,
+        DatFileMassImportResult, FileSetImportStatus, MassImportInput, MassImportSyncEvent,
     },
     view_models::SystemListModel,
 };
@@ -100,7 +100,7 @@ pub enum ImportFormMsg {
 
 #[derive(Debug)]
 pub enum CommandMsg {
-    ProcessImportResult(Result<MassImportWithDatFileResult, Error>),
+    ProcessImportResult(Result<DatFileMassImportResult, Error>),
 }
 
 pub struct ImportFormInit {
@@ -477,7 +477,7 @@ impl Component for ImportForm {
 impl ImportForm {
     fn show_import_summary_dialog(
         &self,
-        result: &MassImportWithDatFileResult,
+        result: &DatFileMassImportResult,
         root: &gtk::Window,
         sender: &ComponentSender<Self>,
     ) {

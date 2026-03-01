@@ -294,13 +294,13 @@ mod tests {
             common_steps::context::MassImportDeps,
             models::{FileSetImportResult, MassImportInput, MassImportSyncEvent},
             test_utils::create_mock_reader_factory,
-            with_dat::context::MassImportOps,
+            with_dat::context::DatFileMassImportOps,
         },
     };
 
     struct TestMassImportContext {
         state: TestMassImportState,
-        ops: MassImportOps,
+        ops: DatFileMassImportOps,
         deps: MassImportDeps,
         input: MassImportInput,
     }
@@ -319,7 +319,7 @@ mod tests {
         pub fn new(
             deps: MassImportDeps,
             input: MassImportInput,
-            ops: MassImportOps,
+            ops: DatFileMassImportOps,
             state: Option<TestMassImportState>,
         ) -> Self {
             TestMassImportContext {
@@ -342,7 +342,7 @@ mod tests {
         fs_ops: Option<Arc<dyn FileSystemOps>>,
         reader_factory_fn: Option<Arc<SendReaderFactoryFn>>,
         file_import_ops: Option<Arc<dyn FileImportServiceOps>>,
-    ) -> MassImportOps {
+    ) -> DatFileMassImportOps {
         let file_import_service_ops =
             file_import_ops.unwrap_or_else(|| Arc::new(MockFileImportServiceOps::new()));
         let parse_result: Result<dat_file_parser::DatFile, DatFileParserError> =
@@ -356,7 +356,7 @@ mod tests {
         let reader_factory_fn = reader_factory_fn
             .unwrap_or(Arc::new(create_mock_reader_factory(HashMap::new(), vec![])));
         let file_set_service_ops = Arc::new(MockFileSetService::new());
-        MassImportOps {
+        DatFileMassImportOps {
             fs_ops,
             file_import_service_ops,
             reader_factory_fn,

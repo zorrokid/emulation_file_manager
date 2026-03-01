@@ -6,8 +6,8 @@ use crate::{
     error::Error,
     file_import::model::FileSetImportModel,
     mass_import::{
-        with_dat::context::{DatImportItem, MassImportState},
-        with_files_only::context::MassImportWithFilesOnlyState,
+        with_dat::context::{DatFileMassImportState, DatImportItem},
+        with_files_only::context::FilesOnlyMassImportState,
     },
 };
 use domain::naming_conventions::no_intro::DatFile;
@@ -37,7 +37,7 @@ pub struct FileImportResult {
 }
 
 #[derive(Debug, Clone)]
-pub struct MassImportWithDatFileResult {
+pub struct DatFileMassImportResult {
     pub dat_import_items: Vec<DatImportItem>,
     pub dat_file: Option<DatFile>,
     pub result: FileImportResult,
@@ -56,9 +56,9 @@ pub struct FileSetImportResult {
     pub file_set_id: Option<i64>,
 }
 
-impl From<MassImportState> for MassImportWithDatFileResult {
-    fn from(state: MassImportState) -> Self {
-        MassImportWithDatFileResult {
+impl From<DatFileMassImportState> for DatFileMassImportResult {
+    fn from(state: DatFileMassImportState) -> Self {
+        DatFileMassImportResult {
             dat_import_items: state.import_items,
             dat_file: state.dat_file,
             result: FileImportResult {
@@ -73,14 +73,14 @@ impl From<MassImportState> for MassImportWithDatFileResult {
 }
 
 #[derive(Debug, Clone)]
-pub struct MassImportWithFilesOnlyResult {
+pub struct FilesOnlyMassImportResult {
     pub imported_file_sets: Vec<FileSetImportModel>,
     pub result: FileImportResult,
 }
 
-impl From<MassImportWithFilesOnlyState> for MassImportWithFilesOnlyResult {
-    fn from(state: MassImportWithFilesOnlyState) -> Self {
-        MassImportWithFilesOnlyResult {
+impl From<FilesOnlyMassImportState> for FilesOnlyMassImportResult {
+    fn from(state: FilesOnlyMassImportState) -> Self {
+        FilesOnlyMassImportResult {
             imported_file_sets: state.import_items,
             result: FileImportResult {
                 read_ok_files: state.read_ok_files,

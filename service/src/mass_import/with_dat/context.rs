@@ -17,7 +17,6 @@ use crate::{
 use async_std::channel::Sender;
 use core_types::{ReadFile, Sha1Checksum, sha1_from_hex_string};
 use dat_file_parser::DatFileParserOps;
-use database::repository_manager::RepositoryManager;
 use domain::naming_conventions::no_intro::{DatFile, DatGame, DatHeader, DatRom};
 use file_metadata::SendReaderFactoryFn;
 
@@ -27,7 +26,6 @@ use crate::{
         model::{FileImportSource, FileSetImportModel, ImportFileContent},
     },
     file_system_ops::FileSystemOps,
-    view_models::Settings,
 };
 
 #[derive(Debug, Clone)]
@@ -72,15 +70,15 @@ impl DatImportItem {
 }
 
 #[derive(Debug)]
-pub struct MassImportContext {
+pub struct DatFileMassImportContext {
     pub deps: MassImportDeps,
     pub input: MassImportInput,
-    pub state: MassImportState,
-    pub ops: MassImportOps,
+    pub state: DatFileMassImportState,
+    pub ops: DatFileMassImportOps,
     pub progress_tx: Option<Sender<MassImportSyncEvent>>,
 }
 
-pub struct MassImportOps {
+pub struct DatFileMassImportOps {
     pub fs_ops: Arc<dyn FileSystemOps>,
     pub dat_file_parser_ops: Arc<dyn DatFileParserOps>,
     pub file_import_service_ops: Arc<dyn FileImportServiceOps>,
@@ -88,14 +86,14 @@ pub struct MassImportOps {
     pub file_set_service_ops: Arc<dyn FileSetServiceOps>,
 }
 
-impl std::fmt::Debug for MassImportOps {
+impl std::fmt::Debug for DatFileMassImportOps {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MassImportOps").finish()
     }
 }
 
 #[derive(Default, Debug)]
-pub struct MassImportState {
+pub struct DatFileMassImportState {
     pub import_items: Vec<DatImportItem>,
     pub read_ok_files: Vec<PathBuf>,
     pub read_failed_files: Vec<PathBuf>,
@@ -108,12 +106,7 @@ pub struct MassImportState {
     pub statuses: Vec<DatGameFileSetStatus>,
 }
 
-pub struct MassImportDependencies {
-    pub repository_manager: Arc<RepositoryManager>,
-    pub settings: Arc<Settings>,
-}
-
-impl MassImportContextOps for MassImportContext {
+impl MassImportContextOps for DatFileMassImportContext {
     fn reader_factory_fn(&self) -> Arc<SendReaderFactoryFn> {
         self.ops.reader_factory_fn.clone()
     }
@@ -170,17 +163,17 @@ impl MassImportContextOps for MassImportContext {
     }
 }
 
-impl MassImportContext {
+impl DatFileMassImportContext {
     pub fn new(
         deps: MassImportDeps,
         input: MassImportInput,
-        ops: MassImportOps,
+        ops: DatFileMassImportOps,
         progress_tx: Option<Sender<MassImportSyncEvent>>,
     ) -> Self {
         Self {
             deps,
             input,
-            state: MassImportState::default(),
+            state: DatFileMassImportState::default(),
             ops,
             progress_tx,
         }
@@ -329,6 +322,7 @@ mod tests {
 
     use core_types::{FileType, item_type::ItemType};
     use dat_file_parser::MockDatParser;
+    use database::repository_manager::RepositoryManager;
     use file_metadata::create_mock_factory_with_test_data;
 
     use crate::{
@@ -342,7 +336,7 @@ mod tests {
     async fn create_test_context(
         dat_file: Option<DatFile>,
         input: Option<MassImportInput>,
-    ) -> MassImportContext {
+    ) -> DatFileMassImportContext {
         let dat_file = dat_file.unwrap_or_else(|| DatFile {
             header: DatHeader {
                 name: "Test DAT".to_string(),
@@ -360,7 +354,7 @@ mod tests {
         });
 
         let file_set_service_ops = Arc::new(MockFileSetService::new());
-        let ops = MassImportOps {
+        let ops = DatFileMassImportOps {
             fs_ops: Arc::new(MockFileSystemOps::new()),
             dat_file_parser_ops: Arc::new(MockDatParser::new(Ok(dat_file.clone().into()))),
             file_import_service_ops: Arc::new(MockFileImportServiceOps::new()),
@@ -370,7 +364,7 @@ mod tests {
         let pool = Arc::new(database::setup_test_db().await);
         let repository_manager = Arc::new(RepositoryManager::new(pool));
         let deps = MassImportDeps { repository_manager };
-        let mut context = MassImportContext::new(deps, input, ops, None);
+        let mut context = DatFileMassImportContext::new(deps, input, ops, None);
         context.state.dat_file = Some(dat_file);
         context
     }
@@ -537,7 +531,7 @@ mod tests {
     async fn test_get_non_failed_files() {
         let mut context = create_test_context(None, None).await;
 
-        let state = MassImportState {
+        let state = DatFileMassImportState {
             read_ok_files: vec![
                 PathBuf::from("/test/file1.zip"),
                 PathBuf::from("/test/file2.zip"),

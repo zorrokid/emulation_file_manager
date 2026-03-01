@@ -4,7 +4,7 @@ use crate::{
     error::Error,
     mass_import::{
         common_steps::context::MassImportContextOps,
-        with_files_only::context::MassImportWithFilesOnlyContext,
+        with_files_only::context::FilesOnlyMassImportContext,
     },
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
@@ -14,16 +14,16 @@ pub struct FilterExistingFileSetsStep;
 /// Filter out files from file_metadata that already have file sets in the system so that they
 /// won't be imported again.
 #[async_trait::async_trait]
-impl PipelineStep<MassImportWithFilesOnlyContext> for FilterExistingFileSetsStep {
+impl PipelineStep<FilesOnlyMassImportContext> for FilterExistingFileSetsStep {
     fn name(&self) -> &'static str {
         "filter_existing_file_sets"
     }
 
-    fn should_execute(&self, context: &MassImportWithFilesOnlyContext) -> bool {
+    fn should_execute(&self, context: &FilesOnlyMassImportContext) -> bool {
         !context.state.file_metadata.is_empty()
     }
 
-    async fn execute(&self, context: &mut MassImportWithFilesOnlyContext) -> StepAction {
+    async fn execute(&self, context: &mut FilesOnlyMassImportContext) -> StepAction {
         let file_set_import_models = context.get_import_file_sets();
         let repository_manager = context.deps.repository_manager.clone();
         let file_type = context.input.file_type;
@@ -99,7 +99,7 @@ mod tests {
         file_system_ops::mock::MockFileSystemOps,
         mass_import::{
             common_steps::context::MassImportDeps,
-            with_files_only::context::{MassImportWithFilesOnlyInput, MassImportWithFilesOnlyOps},
+            with_files_only::context::{FilesOnlyMassImportInput, FilesOnlyMassImportOps},
         },
     };
 
@@ -109,7 +109,7 @@ mod tests {
     async fn test_filter_existing_file_sets() {
         let repository_manager = database::setup_test_repository_manager().await;
         let system_id = add_system(repository_manager.clone()).await;
-        let input: MassImportWithFilesOnlyInput = MassImportWithFilesOnlyInput {
+        let input: FilesOnlyMassImportInput = FilesOnlyMassImportInput {
             source_path: PathBuf::from("/test/path"),
             file_type: FileType::Rom,
             item_type: None,
@@ -119,13 +119,13 @@ mod tests {
 
         let deps = MassImportDeps { repository_manager };
 
-        let ops = MassImportWithFilesOnlyOps {
+        let ops = FilesOnlyMassImportOps {
             fs_ops: Arc::new(MockFileSystemOps::new()),
             file_import_service_ops: Arc::new(MockFileImportServiceOps::new()),
             reader_factory_fn: create_mock_factory_with_test_data(vec![]),
         };
 
-        let mut context = MassImportWithFilesOnlyContext::new(deps, input, ops, None);
+        let mut context = FilesOnlyMassImportContext::new(deps, input, ops, None);
 
         // TODO: populate context with file metadata
         // and add some of the file sets to the database
@@ -215,7 +215,7 @@ mod tests {
     }
 
     async fn insert_file_set_to_db(
-        context: &MassImportWithFilesOnlyContext,
+        context: &FilesOnlyMassImportContext,
         file_path: &PathBuf,
         file_type: FileType,
     ) {
