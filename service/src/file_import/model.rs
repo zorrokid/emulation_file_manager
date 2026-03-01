@@ -155,6 +155,7 @@ pub struct CreateReleaseParams {
     pub software_title_name: String,
 }
 
+// This is used for creating a single file set from one or more import sources.
 #[derive(Debug, Clone)]
 pub struct FileSetImportModel {
     pub import_files: Vec<FileImportSource>,
