@@ -38,7 +38,7 @@ pub enum ImportItemStatus {
 }
 
 #[derive(Debug, Clone)]
-pub struct ImportItem {
+pub struct DatImportItem {
     pub dat_game: DatGame,
     pub dat_roms_available: Vec<DatRom>,
     pub dat_roms_missing: Vec<DatRom>,
@@ -50,7 +50,7 @@ pub struct ImportItem {
     pub status: ImportItemStatus,
 }
 
-impl ImportItem {
+impl DatImportItem {
     pub fn new(
         dat_game: DatGame,
         file_set: Option<FileSetImportModel>,
@@ -59,7 +59,7 @@ impl ImportItem {
     ) -> Self {
         let software_title_name = dat_game.name.clone();
         let release_name = dat_game.description.clone();
-        ImportItem {
+        DatImportItem {
             dat_game,
             dat_roms_available,
             dat_roms_missing,
@@ -96,7 +96,7 @@ impl std::fmt::Debug for MassImportOps {
 
 #[derive(Default, Debug)]
 pub struct MassImportState {
-    pub import_items: Vec<ImportItem>,
+    pub import_items: Vec<DatImportItem>,
     pub read_ok_files: Vec<PathBuf>,
     pub read_failed_files: Vec<PathBuf>,
     pub dir_scan_errors: Vec<Error>,
@@ -223,7 +223,7 @@ impl MassImportContext {
         game: &DatGame,
         header: &DatHeader,
         sha1_to_file_map: &HashMap<Sha1Checksum, PathBuf>,
-    ) -> ImportItem {
+    ) -> DatImportItem {
         tracing::info!(game = game.name.as_str(), "Processing DAT game");
 
         let mut import_files: HashMap<PathBuf, Vec<ImportFileContent>> = HashMap::new();
@@ -298,10 +298,10 @@ impl MassImportContext {
             create_release: Some(create_release_params),
             dat_file_id: self.state.dat_file_id,
         });
-        ImportItem::new(game.clone(), file_set, available_roms, missing_roms)
+        DatImportItem::new(game.clone(), file_set, available_roms, missing_roms)
     }
 
-    pub fn get_import_items(&self) -> Vec<ImportItem> {
+    pub fn get_import_items(&self) -> Vec<DatImportItem> {
         let non_existing_games = self
             .state
             .statuses
@@ -313,7 +313,7 @@ impl MassImportContext {
             });
 
         self.state.dat_file.as_ref().map_or(Vec::new(), |dat_file| {
-            let mut import_items: Vec<ImportItem> = Vec::new();
+            let mut import_items: Vec<DatImportItem> = Vec::new();
             tracing::info!("Mapping DAT entries to import items...");
             let sha1_to_file_map = self.build_sha1_to_file_map();
             non_existing_games.for_each(|game| {

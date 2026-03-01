@@ -6,7 +6,7 @@ use crate::{
     error::Error,
     file_import::model::FileSetImportModel,
     mass_import::{
-        with_dat::context::{ImportItem, MassImportState},
+        with_dat::context::{DatImportItem, MassImportState},
         with_files_only::context::MassImportWithFilesOnlyState,
     },
 };
@@ -28,14 +28,19 @@ pub struct MassImportSyncEvent {
 }
 
 #[derive(Debug, Clone)]
-pub struct MassImportResult {
-    pub import_items: Vec<ImportItem>,
+pub struct FileImportResult {
     pub read_ok_files: Vec<PathBuf>,
     pub read_failed_files: Vec<PathBuf>,
     pub dir_scan_errors: Vec<Error>,
     pub file_metadata: HashMap<PathBuf, Vec<ReadFile>>,
-    pub dat_file: Option<DatFile>,
     pub import_results: Vec<FileSetImportResult>,
+}
+
+#[derive(Debug, Clone)]
+pub struct MassImportWithDatFileResult {
+    pub dat_import_items: Vec<DatImportItem>,
+    pub dat_file: Option<DatFile>,
+    pub result: FileImportResult,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -51,16 +56,18 @@ pub struct FileSetImportResult {
     pub file_set_id: Option<i64>,
 }
 
-impl From<MassImportState> for MassImportResult {
+impl From<MassImportState> for MassImportWithDatFileResult {
     fn from(state: MassImportState) -> Self {
-        MassImportResult {
-            import_items: state.import_items,
-            read_ok_files: state.read_ok_files,
-            read_failed_files: state.read_failed_files,
-            dir_scan_errors: state.dir_scan_errors,
-            file_metadata: state.file_metadata,
+        MassImportWithDatFileResult {
+            dat_import_items: state.import_items,
             dat_file: state.dat_file,
-            import_results: state.import_results,
+            result: FileImportResult {
+                read_ok_files: state.read_ok_files,
+                read_failed_files: state.read_failed_files,
+                dir_scan_errors: state.dir_scan_errors,
+                file_metadata: state.file_metadata,
+                import_results: state.import_results,
+            },
         }
     }
 }
@@ -68,22 +75,20 @@ impl From<MassImportState> for MassImportResult {
 #[derive(Debug, Clone)]
 pub struct MassImportWithFilesOnlyResult {
     pub imported_file_sets: Vec<FileSetImportModel>,
-    pub read_ok_files: Vec<PathBuf>,
-    pub read_failed_files: Vec<PathBuf>,
-    pub dir_scan_errors: Vec<Error>,
-    pub file_metadata: HashMap<PathBuf, Vec<ReadFile>>,
-    pub import_results: Vec<FileSetImportResult>,
+    pub result: FileImportResult,
 }
 
 impl From<MassImportWithFilesOnlyState> for MassImportWithFilesOnlyResult {
     fn from(state: MassImportWithFilesOnlyState) -> Self {
         MassImportWithFilesOnlyResult {
             imported_file_sets: state.import_items,
-            read_ok_files: state.read_ok_files,
-            read_failed_files: state.read_failed_files,
-            dir_scan_errors: state.dir_scan_errors,
-            file_metadata: state.file_metadata,
-            import_results: state.import_results,
+            result: FileImportResult {
+                read_ok_files: state.read_ok_files,
+                read_failed_files: state.read_failed_files,
+                dir_scan_errors: state.dir_scan_errors,
+                file_metadata: state.file_metadata,
+                import_results: state.import_results,
+            },
         }
     }
 }

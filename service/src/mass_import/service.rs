@@ -13,7 +13,8 @@ use crate::{
     mass_import::{
         common_steps::context::MassImportDeps,
         models::{
-            MassImportInput, MassImportResult, MassImportSyncEvent, MassImportWithFilesOnlyResult,
+            MassImportInput, MassImportSyncEvent, MassImportWithDatFileResult,
+            MassImportWithFilesOnlyResult,
         },
         with_dat::context::{MassImportContext, MassImportOps},
         with_files_only::context::{
@@ -100,7 +101,7 @@ impl MassImportService {
         &self,
         input: MassImportInput,
         progress_tx: Option<Sender<MassImportSyncEvent>>,
-    ) -> Result<MassImportResult, Error> {
+    ) -> Result<MassImportWithDatFileResult, Error> {
         tracing::info!(
             input = ?input,
             "Starting mass import process...");
@@ -121,7 +122,7 @@ impl MassImportService {
         pipeline.execute(&mut context).await?;
         //dbg!(&context.state);
         tracing::info!("Mass import process completed.");
-        Ok(MassImportResult::from(context.state))
+        Ok(MassImportWithDatFileResult::from(context.state))
     }
 
     pub async fn import_with_files_only(
@@ -269,12 +270,12 @@ mod tests {
 
         let import_result = result.unwrap();
         assert!(
-            !import_result.import_results.is_empty(),
+            !import_result.result.import_results.is_empty(),
             "Import items should not be empty",
         );
 
         assert_eq!(
-            import_result.import_results[0].status,
+            import_result.result.import_results[0].status,
             crate::mass_import::models::FileSetImportStatus::Success,
             "First import result should be successful",
         );
@@ -369,12 +370,12 @@ mod tests {
 
         let import_result = result.unwrap();
         assert!(
-            !import_result.import_results.is_empty(),
+            !import_result.result.import_results.is_empty(),
             "Import items should not be empty",
         );
 
         assert_eq!(
-            import_result.import_results[0].status,
+            import_result.result.import_results[0].status,
             crate::mass_import::models::FileSetImportStatus::Success,
             "First import result should be successful",
         );
