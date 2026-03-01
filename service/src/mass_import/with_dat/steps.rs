@@ -215,7 +215,7 @@ impl PipelineStep<MassImportContext> for FilterExistingFileSetsStep {
     async fn execute(&self, context: &mut MassImportContext) -> StepAction {
         // TODO: add to context if needs injection for mocking in tests
         // now it's fine since we use in mem test db anyway in tests
-        let date_game_status_service =
+        let dat_game_status_service =
             DatGameStatusService::new(context.deps.repository_manager.clone());
         let dat_file = context
             .state
@@ -227,7 +227,7 @@ impl PipelineStep<MassImportContext> for FilterExistingFileSetsStep {
             .dat_file_id
             .expect("DAT file ID should be present in state");
         for game in &dat_file.games {
-            let status = date_game_status_service
+            let status = dat_game_status_service
                 .get_status(game, context.input.file_type, &dat_file.header, dat_file_id)
                 .await;
             match status {
