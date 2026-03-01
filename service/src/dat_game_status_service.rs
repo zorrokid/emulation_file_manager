@@ -94,23 +94,23 @@ impl DatGameStatusService {
                         // TODO: currently we just assume that when file set is linked to a dat
                         // file it's created properly by creating also a related release and
                         // software title. We should probably check that as well in the future.
-                        if dat_file_ids.iter().any(|dat_file| *dat_file == dat_file_id) {
+                        if dat_file_ids.contains(&dat_file_id) {
                             tracing::info!(
                                 file_set_name = %game.name,
                                 file_set_id = existing_file_set_id,
                                 "Existing file set is already linked to the DAT game",
                             );
-                            return Ok(DatGameFileSetStatus::ExistingWithReleaseAndLinkedToDat {
+                            Ok(DatGameFileSetStatus::ExistingWithReleaseAndLinkedToDat {
                                 file_set_id: existing_file_set_id,
                                 game: game.clone(),
-                            });
+                            })
                         } else {
-                            return Ok(
+                            Ok(
                                 DatGameFileSetStatus::ExistingWithoutReleaseAndWithoutLinkToDat {
                                     file_set_id: existing_file_set_id,
                                     game: game.clone(),
                                 },
-                            );
+                            )
                         }
                     }
                     Err(e) => {
@@ -120,10 +120,10 @@ impl DatGameStatusService {
                             file_set_id = existing_file_set_id,
                             "Failed to check if existing file set is linked to the DAT game",
                         );
-                        return Err(Error::DbError(format!(
+                        Err(Error::DbError(format!(
                             "Failed to check if existing file set with id {} is linked to the DAT game '{}': {}",
                             existing_file_set_id, game.name, e
-                        )));
+                        )))
                     }
                 }
             }
@@ -132,7 +132,7 @@ impl DatGameStatusService {
                     file_set_name = %game.name,
                     "No existing file set found matching the game in DAT file, it will be imported as new",
                 );
-                return Ok(DatGameFileSetStatus::NonExisting(game.clone()));
+                Ok(DatGameFileSetStatus::NonExisting(game.clone()))
             }
             Err(e) => {
                 tracing::error!(
@@ -140,10 +140,10 @@ impl DatGameStatusService {
                     file_set_name = %game.name,
                     "Failed to check for existing file set matching the game in DAT file",
                 );
-                return Err(Error::DbError(format!(
+                Err(Error::DbError(format!(
                     "Failed to check for existing file set matching the game '{}': {}",
                     game.name, e
-                )));
+                )))
             }
         }
     }
