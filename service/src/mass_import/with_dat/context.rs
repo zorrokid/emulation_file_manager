@@ -10,7 +10,7 @@ use crate::{
     file_import::model::CreateReleaseParams,
     file_set::FileSetServiceOps,
     mass_import::{
-        common_steps::context::{MassImportContextOps, MassImportDeps, SendReaderFactoryFn},
+        common_steps::context::{MassImportContextOps, MassImportDeps},
         models::{FileSetImportResult, MassImportInput, MassImportSyncEvent},
     },
 };
@@ -19,6 +19,7 @@ use core_types::{ReadFile, Sha1Checksum, sha1_from_hex_string};
 use dat_file_parser::DatFileParserOps;
 use database::repository_manager::RepositoryManager;
 use domain::naming_conventions::no_intro::{DatFile, DatGame, DatHeader, DatRom};
+use file_metadata::SendReaderFactoryFn;
 
 use crate::{
     file_import::{
@@ -325,11 +326,10 @@ impl MassImportContext {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
 
     use core_types::{FileType, item_type::ItemType};
     use dat_file_parser::MockDatParser;
-    use file_metadata::{FileMetadataError, FileMetadataReader, MockFileMetadataReader};
+    use file_metadata::create_mock_factory_with_test_data;
 
     use crate::{
         file_import::file_import_service_ops::MockFileImportServiceOps,
@@ -358,21 +358,13 @@ mod tests {
             item_type: Some(ItemType::Cartridge),
             system_id: 42,
         });
-        // Mock factory always returns the same mock reader
-        let mock_factory: Arc<SendReaderFactoryFn> = Arc::new(
-            |_path: &Path| -> Result<Box<dyn FileMetadataReader>, FileMetadataError> {
-                Ok(Box::new(MockFileMetadataReader {
-                    metadata: vec![/* test data */],
-                }))
-            },
-        );
 
         let file_set_service_ops = Arc::new(MockFileSetService::new());
         let ops = MassImportOps {
             fs_ops: Arc::new(MockFileSystemOps::new()),
             dat_file_parser_ops: Arc::new(MockDatParser::new(Ok(dat_file.clone().into()))),
             file_import_service_ops: Arc::new(MockFileImportServiceOps::new()),
-            reader_factory_fn: mock_factory,
+            reader_factory_fn: create_mock_factory_with_test_data(vec![/* test data */]),
             file_set_service_ops,
         };
         let pool = Arc::new(database::setup_test_db().await);

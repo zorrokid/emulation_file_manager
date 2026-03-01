@@ -3,7 +3,7 @@ use std::sync::Arc;
 use async_std::channel::Sender;
 use dat_file_parser::DatFileParserOps;
 use database::repository_manager::RepositoryManager;
-use file_metadata::reader_factory::create_metadata_reader;
+use file_metadata::{SendReaderFactoryFn, reader_factory::create_metadata_reader};
 
 use crate::{
     error::Error,
@@ -11,9 +11,15 @@ use crate::{
     file_set::{FileSetServiceOps, file_set_service::FileSetService},
     file_system_ops::{FileSystemOps, StdFileSystemOps},
     mass_import::{
-        common_steps::context::{MassImportDeps, SendReaderFactoryFn},
-        models::{MassImportInput, MassImportResult, MassImportSyncEvent},
+        common_steps::context::MassImportDeps,
+        models::{
+            MassImportInput, MassImportResult, MassImportSyncEvent, MassImportWithFilesOnlyResult,
+        },
         with_dat::context::{MassImportContext, MassImportOps},
+        with_files_only::context::{
+            MassImportWithFilesOnlyContext, MassImportWithFilesOnlyInput,
+            MassImportWithFilesOnlyOps,
+        },
     },
     pipeline::generic_pipeline::Pipeline,
     view_models::Settings,
@@ -90,7 +96,7 @@ impl MassImportService {
     /// There will be also an option to merge releases in the future:
     /// - when merging two releases, all linked file sets will be moved to the target release.
     ///
-    pub async fn import(
+    pub async fn import_with_dat(
         &self,
         input: MassImportInput,
         progress_tx: Option<Sender<MassImportSyncEvent>>,
@@ -116,6 +122,32 @@ impl MassImportService {
         //dbg!(&context.state);
         tracing::info!("Mass import process completed.");
         Ok(MassImportResult::from(context.state))
+    }
+
+    pub async fn import_with_files_only(
+        &self,
+        input: MassImportWithFilesOnlyInput,
+        progress_tx: Option<Sender<MassImportSyncEvent>>,
+    ) -> Result<MassImportWithFilesOnlyResult, Error> {
+        tracing::info!(
+            input = ?input,
+            "Starting mass import process...");
+
+        let ops = MassImportWithFilesOnlyOps {
+            fs_ops: self.fs_ops.clone(),
+            file_import_service_ops: self.file_import_service_ops.clone(),
+            reader_factory_fn: self.reader_factory_fn.clone(),
+        };
+
+        let deps = MassImportDeps {
+            repository_manager: self.repository_manager.clone(),
+        };
+
+        let mut context = MassImportWithFilesOnlyContext::new(deps, input, ops, progress_tx);
+        let pipeline = Pipeline::<MassImportWithFilesOnlyContext>::new();
+        pipeline.execute(&mut context).await?;
+        tracing::info!("Mass import process completed.");
+        Ok(MassImportWithFilesOnlyResult::from(context.state))
     }
 }
 
@@ -214,7 +246,7 @@ mod tests {
         let (tx, rx) = channel::unbounded();
 
         // Act
-        let result = service.import(input, Some(tx)).await;
+        let result = service.import_with_dat(input, Some(tx)).await;
 
         // Assert
         // There should be one progress event for the one file set imported

@@ -6,6 +6,7 @@ use std::{
     fs::File,
     io::Read,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use core_types::{ReadFile, Sha1Checksum};
@@ -207,6 +208,23 @@ pub fn create_mock_factory(
     reader: MockFileMetadataReader,
 ) -> impl Fn(&Path) -> Result<Box<dyn FileMetadataReader>, FileMetadataError> {
     move |_path: &Path| Ok(Box::new(reader.clone()))
+}
+
+/// Type alias for a Send-able (can be safely transferred between threads)
+/// metadata reader factory function.
+///
+/// Send-able:
+/// The + Send + Sync bounds ensure that the closure can be shared and used across threads.
+pub type SendReaderFactoryFn = dyn Fn(&std::path::Path) -> Result<Box<dyn FileMetadataReader>, FileMetadataError>
+    + Send
+    + Sync;
+
+pub fn create_mock_factory_with_test_data(test_data: Vec<ReadFile>) -> Arc<SendReaderFactoryFn> {
+    Arc::new(move |_path: &Path| {
+        Ok(Box::new(MockFileMetadataReader {
+            metadata: test_data.clone(),
+        }))
+    })
 }
 
 impl FileMetadataReader for MockFileMetadataReader {

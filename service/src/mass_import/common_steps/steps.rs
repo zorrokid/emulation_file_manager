@@ -276,9 +276,8 @@ mod tests {
 
     use async_std::channel::Sender;
     use core_types::{ReadFile, sha1_from_hex_string};
-    use dat_file_parser::{
-        DatFile, DatFileParserError, DatFileParserOps, DatHeader, MockDatParser,
-    };
+    use dat_file_parser::{DatFileParserError, DatFileParserOps, MockDatParser};
+    use file_metadata::SendReaderFactoryFn;
 
     use super::*;
     use crate::{
@@ -292,7 +291,7 @@ mod tests {
         file_set::mock_file_set_service::MockFileSetService,
         file_system_ops::{FileSystemOps, SimpleDirEntry, mock::MockFileSystemOps},
         mass_import::{
-            common_steps::context::{MassImportDeps, SendReaderFactoryFn},
+            common_steps::context::MassImportDeps,
             models::{FileSetImportResult, MassImportInput, MassImportSyncEvent},
             test_utils::create_mock_reader_factory,
             with_dat::context::MassImportOps,

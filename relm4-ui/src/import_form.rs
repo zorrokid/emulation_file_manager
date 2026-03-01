@@ -425,7 +425,9 @@ impl Component for ImportForm {
                     });
 
                     sender.oneshot_command(async move {
-                        let result = mass_import_service.import(input, Some(progress_tx)).await;
+                        let result = mass_import_service
+                            .import_with_dat(input, Some(progress_tx))
+                            .await;
                         CommandMsg::ProcessImportResult(result)
                     });
                 }

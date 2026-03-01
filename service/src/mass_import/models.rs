@@ -4,7 +4,11 @@ use core_types::{FileType, ReadFile, item_type::ItemType};
 
 use crate::{
     error::Error,
-    mass_import::with_dat::context::{ImportItem, MassImportState},
+    file_import::model::FileSetImportModel,
+    mass_import::{
+        with_dat::context::{ImportItem, MassImportState},
+        with_files_only::context::MassImportWithFilesOnlyState,
+    },
 };
 use domain::naming_conventions::no_intro::DatFile;
 
@@ -56,6 +60,29 @@ impl From<MassImportState> for MassImportResult {
             dir_scan_errors: state.dir_scan_errors,
             file_metadata: state.file_metadata,
             dat_file: state.dat_file,
+            import_results: state.import_results,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct MassImportWithFilesOnlyResult {
+    pub imported_file_sets: Vec<FileSetImportModel>,
+    pub read_ok_files: Vec<PathBuf>,
+    pub read_failed_files: Vec<PathBuf>,
+    pub dir_scan_errors: Vec<Error>,
+    pub file_metadata: HashMap<PathBuf, Vec<ReadFile>>,
+    pub import_results: Vec<FileSetImportResult>,
+}
+
+impl From<MassImportWithFilesOnlyState> for MassImportWithFilesOnlyResult {
+    fn from(state: MassImportWithFilesOnlyState) -> Self {
+        MassImportWithFilesOnlyResult {
+            imported_file_sets: state.import_items,
+            read_ok_files: state.read_ok_files,
+            read_failed_files: state.read_failed_files,
+            dir_scan_errors: state.dir_scan_errors,
+            file_metadata: state.file_metadata,
             import_results: state.import_results,
         }
     }

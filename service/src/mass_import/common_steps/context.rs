@@ -3,6 +3,7 @@ use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use async_std::channel::Sender;
 use core_types::ReadFile;
 use database::repository_manager::RepositoryManager;
+use file_metadata::SendReaderFactoryFn;
 
 use crate::{
     error::Error,
@@ -10,17 +11,6 @@ use crate::{
     file_system_ops::FileSystemOps,
     mass_import::models::{FileSetImportResult, MassImportSyncEvent},
 };
-
-/// Type alias for a Send-able (can be safely transferred between threads)
-/// metadata reader factory function.
-///
-/// Send-able:
-/// The + Send + Sync bounds ensure that the closure can be shared and used across threads.
-pub type SendReaderFactoryFn = dyn Fn(
-        &std::path::Path,
-    ) -> Result<Box<dyn file_metadata::FileMetadataReader>, file_metadata::FileMetadataError>
-    + Send
-    + Sync;
 
 #[derive(Debug)]
 pub struct MassImportDeps {
