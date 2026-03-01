@@ -166,8 +166,7 @@ impl MassImportContextOps for MassImportWithFilesOnlyContext {
     }
 
     fn import_results(&mut self) -> &mut Vec<FileSetImportResult> {
-        // TODO
-        unimplemented!()
+        self.state.import_results.as_mut()
     }
 
     fn progress_tx(&self) -> &Option<Sender<MassImportSyncEvent>> {
@@ -191,8 +190,6 @@ mod tests {
 
     #[async_std::test]
     async fn test_get_import_file_sets() {
-        // create context for test
-
         let deps = MassImportDeps {
             repository_manager: setup_test_repository_manager().await,
         };

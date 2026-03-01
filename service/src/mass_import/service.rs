@@ -164,7 +164,7 @@ mod tests {
     };
     use async_std::channel;
     use core_types::{FileType, ReadFile, Sha1Checksum, sha1_bytes_to_hex_string};
-    use dat_file_parser::{DatFile, DatGame, DatHeader, DatRom, MockDatParser};
+    use dat_file_parser::{DatFile, DatFileParserError, DatGame, DatHeader, DatRom, MockDatParser};
     use database::setup_test_db;
 
     #[async_std::test]
@@ -247,6 +247,106 @@ mod tests {
 
         // Act
         let result = service.import_with_dat(input, Some(tx)).await;
+
+        // Assert
+        // There should be one progress event for the one file set imported
+        let event = rx.recv().await;
+
+        assert!(
+            event.is_ok(),
+            "Should receive a progress event during import"
+        );
+        let event = event.unwrap();
+        assert_eq!(
+            event.file_set_name, "Test Game",
+            "Progress event should have correct file set name"
+        );
+
+        assert!(
+            result.is_ok(),
+            "Mass import service should complete without error"
+        );
+
+        let import_result = result.unwrap();
+        assert!(
+            !import_result.import_results.is_empty(),
+            "Import items should not be empty",
+        );
+
+        assert_eq!(
+            import_result.import_results[0].status,
+            crate::mass_import::models::FileSetImportStatus::Success,
+            "First import result should be successful",
+        );
+    }
+
+    #[async_std::test]
+    async fn test_mass_import_with_files_only() {
+        let mut fs_ops = MockFileSystemOps::new();
+        fs_ops.add_entry(Ok(SimpleDirEntry {
+            path: PathBuf::from("/mock/Test Game.zip"),
+        }));
+
+        let sha1_checksum: Sha1Checksum = [0xaa; 20];
+        let sha1_checksum_string = sha1_bytes_to_hex_string(&sha1_checksum);
+
+        let file_import_service_ops: Arc<dyn FileImportServiceOps> = Arc::new(
+            MockFileImportServiceOps::with_create_mock(CreateMockState {
+                file_set_id: 1,
+                release_id: Some(1),
+            }),
+        );
+
+        let mut metadata_by_path = HashMap::new();
+        metadata_by_path.insert(
+            PathBuf::from("/mock/Test Game.zip"),
+            vec![ReadFile {
+                file_name: "rom.bin".to_string(),
+                sha1_checksum,
+                file_size: 123,
+            }],
+        );
+        let reader_factory_fn = Arc::new(create_mock_reader_factory(metadata_by_path, vec![]));
+
+        let fs_ops = Arc::new(fs_ops);
+        let pool = Arc::new(setup_test_db().await);
+        let repository_manager = Arc::new(RepositoryManager::new(pool));
+        let system_id = repository_manager
+            .get_system_repository()
+            .add_system("Test System")
+            .await
+            .unwrap();
+
+        let file_set_service_ops = Arc::new(MockFileSetService::new());
+
+        // TODO: maybe this should be passed only with the dat case?
+        let dat_file_parser_ops: Arc<dyn DatFileParserOps> =
+            Arc::new(MockDatParser::new(Err(DatFileParserError::ParseError(
+                "Dat file parsing should not be called in files-only import".to_string(),
+            ))));
+
+        let service = MassImportService::new_with_ops(
+            fs_ops,
+            dat_file_parser_ops,
+            file_import_service_ops,
+            reader_factory_fn,
+            file_set_service_ops,
+            repository_manager,
+        );
+
+        let input = MassImportWithFilesOnlyInput {
+            source_path: PathBuf::from("/mock"),
+            file_type: FileType::Rom,
+            item_type: None,
+            system_id,
+            source: "test source".to_string(),
+        };
+
+        // Optional progress channel (not asserted here, just exercised)
+        let (tx, rx) = channel::unbounded();
+
+        // Act
+        let result = service.import_with_files_only(input, Some(tx)).await;
 
         // Assert
         // There should be one progress event for the one file set imported
