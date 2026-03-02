@@ -962,10 +962,14 @@ impl FileSetFormModel {
             sender,
             move |_target, value, _x, _y| {
                 if let Ok(file_list) = value.get::<gdk::FileList>() {
-                    for file in file_list.files() {
-                        if let Some(path) = file.path() {
-                            sender.input(FileSetFormMsg::FilesDropped(vec![path]));
-                        }
+                    let paths: Vec<_> = file_list
+                        .files()
+                        .iter()
+                        .filter_map(|file| file.path())
+                        .collect();
+                    if !paths.is_empty() {
+                        tracing::info!(num_files = paths.len(), "Files dropped: processing");
+                        sender.input(FileSetFormMsg::FilesDropped(paths));
                     }
                     true
                 } else {
