@@ -142,6 +142,8 @@ pub enum FileSetFormMsg {
     ItemTypeChanged(Option<ItemType>),
     Update(FileSetViewModel),
     FilesDropped(Vec<PathBuf>),
+    SetFileSetName(String),
+    SetFileSetFileName(String),
 }
 
 #[derive(Debug)]
@@ -745,8 +747,29 @@ impl Component for FileSetFormModel {
                     .set_text(&self.file_set_file_name);
             }
             FileSetFormMsg::FilesDropped(paths) => {
+                if self.selected_file_type.is_none() {
+                    tracing::warn!(
+                        "Files dropped but no file type selected, ignoring dropped files"
+                    );
+                    return;
+                }
                 tracing::info!(num_files = paths.len(), "Files dropped: processing");
                 self.drop_queue.extend(paths);
+                if !self.processing
+                    && let Some(first) = self.drop_queue.pop()
+                {
+                    sender.input(FileSetFormMsg::FileSelected(first));
+                }
+            }
+            FileSetFormMsg::SetFileSetName(name) => {
+                self.file_set_name = name;
+                widgets.file_set_name_entry.set_text(&self.file_set_name);
+            }
+            FileSetFormMsg::SetFileSetFileName(file_name) => {
+                self.file_set_file_name = file_name;
+                widgets
+                    .file_set_file_name_entry
+                    .set_text(&self.file_set_file_name);
             }
         }
         // This is essential:
@@ -761,7 +784,9 @@ impl Component for FileSetFormModel {
     ) {
         match message {
             CommandMsg::FileImportPrepared(Ok(prepare_result)) => {
-                self.processing = false;
+                tracing::info!(
+                    "File import prepared successfully, updating model with prepared data"
+                );
                 let import_model = prepare_result.import_model;
                 let import_metadata = prepare_result.import_metadata;
                 for file in import_model.content.values() {
@@ -775,12 +800,43 @@ impl Component for FileSetFormModel {
                 }
 
                 if self.file_set_name.is_empty() {
-                    self.file_set_name = import_metadata.file_set_name.clone();
+                    tracing::info!(
+                        "Setting file set name from import metadata: {}",
+                        import_metadata.file_set_name
+                    );
+                    sender.input(FileSetFormMsg::SetFileSetName(
+                        import_metadata.file_set_name.clone(),
+                    ));
                 }
                 if self.file_set_file_name.is_empty() {
-                    self.file_set_file_name = import_metadata.file_set_file_name.clone();
+                    tracing::info!(
+                        "Setting file set file name from import metadata: {}",
+                        import_metadata.file_set_file_name
+                    );
+                    sender.input(FileSetFormMsg::SetFileSetFileName(
+                        import_metadata.file_set_file_name.clone(),
+                    ));
                 }
                 self.picked_files.push(import_model);
+
+                if let Some(next_path) = self.drop_queue.pop() {
+                    tracing::info!("Processing next file in drop queue: {:?}", next_path);
+                    sender.input(FileSetFormMsg::FileSelected(next_path));
+                } else {
+                    tracing::info!("No files in drop queue, finished processing files");
+                    self.processing = false;
+                }
+            }
+            CommandMsg::FileImportPrepared(Err(e)) => {
+                tracing::error!(error = ?e, "Preparing file import failed");
+                show_error_dialog(format!("Preparing file import failed: {:?}", e), root);
+                if let Some(next_path) = self.drop_queue.pop() {
+                    tracing::info!("Processing next file in drop queue: {:?}", next_path);
+                    sender.input(FileSetFormMsg::FileSelected(next_path));
+                } else {
+                    tracing::info!("No files in drop queue, finished processing files");
+                    self.processing = false;
+                }
             }
             CommandMsg::ProcessCreateOrUpdateFileSetResult(Ok(import_result)) => {
                 self.processing = false;
@@ -812,11 +868,6 @@ impl Component for FileSetFormModel {
                 self.processing = false;
                 tracing::error!(error = ?e, "File set import failed");
                 show_error_dialog(format!("File set import failed: {:?}", e), root);
-            }
-            CommandMsg::FileImportPrepared(Err(e)) => {
-                self.processing = false;
-                tracing::error!(error = ?e, "Preparing file import failed");
-                show_error_dialog(format!("Preparing file import failed: {:?}", e), root);
             }
             CommandMsg::ProcessFileSetResponse(Ok(file_set_view_model)) => {
                 tracing::info!(
