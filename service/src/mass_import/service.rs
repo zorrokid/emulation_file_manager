@@ -3,7 +3,7 @@ use std::sync::Arc;
 use async_std::channel::Sender;
 use dat_file_parser::DatFileParserOps;
 use database::repository_manager::RepositoryManager;
-use file_metadata::reader_factory::create_metadata_reader;
+use file_metadata::{SendReaderFactoryFn, reader_factory::create_metadata_reader};
 
 use crate::{
     error::Error,
@@ -11,8 +11,15 @@ use crate::{
     file_set::{FileSetServiceOps, file_set_service::FileSetService},
     file_system_ops::{FileSystemOps, StdFileSystemOps},
     mass_import::{
-        context::{MassImportContext, MassImportDeps, MassImportOps, SendReaderFactoryFn},
-        models::{MassImportInput, MassImportResult, MassImportSyncEvent},
+        common_steps::context::MassImportDeps,
+        models::{
+            DatFileMassImportResult, FilesOnlyMassImportResult, MassImportInput,
+            MassImportSyncEvent,
+        },
+        with_dat::context::{DatFileMassImportContext, DatFileMassImportOps},
+        with_files_only::context::{
+            FilesOnlyMassImportContext, FilesOnlyMassImportInput, FilesOnlyMassImportOps,
+        },
     },
     pipeline::generic_pipeline::Pipeline,
     view_models::Settings,
@@ -83,21 +90,22 @@ impl MassImportService {
     ///
     /// For simplicity, let's start with creating new software titles and releases for each import.
     ///
-    /// User can remove duplicated from UI. Theere will be also a functionality to merge software
-    /// titles and releases in the future.
+    /// User can remove duplicated from UI. There is a functionality to merge software
+    /// titles releases in the future:
     /// - when merging two software titles, all linked releases will be moved to the target software title.
+    /// There will be also an option to merge releases in the future:
     /// - when merging two releases, all linked file sets will be moved to the target release.
     ///
-    pub async fn import(
+    pub async fn import_with_dat(
         &self,
         input: MassImportInput,
         progress_tx: Option<Sender<MassImportSyncEvent>>,
-    ) -> Result<MassImportResult, Error> {
+    ) -> Result<DatFileMassImportResult, Error> {
         tracing::info!(
             input = ?input,
             "Starting mass import process...");
 
-        let ops = MassImportOps {
+        let ops = DatFileMassImportOps {
             fs_ops: self.fs_ops.clone(),
             dat_file_parser_ops: self.dat_file_parser_ops.clone(),
             file_import_service_ops: self.file_import_service_ops.clone(),
@@ -108,12 +116,38 @@ impl MassImportService {
         let deps = MassImportDeps {
             repository_manager: self.repository_manager.clone(),
         };
-        let mut context = MassImportContext::new(deps, input, ops, progress_tx);
-        let pipeline = Pipeline::<MassImportContext>::new();
+        let mut context = DatFileMassImportContext::new(deps, input, ops, progress_tx);
+        let pipeline = Pipeline::<DatFileMassImportContext>::new();
         pipeline.execute(&mut context).await?;
         //dbg!(&context.state);
         tracing::info!("Mass import process completed.");
-        Ok(MassImportResult::from(context.state))
+        Ok(DatFileMassImportResult::from(context.state))
+    }
+
+    pub async fn import_with_files_only(
+        &self,
+        input: FilesOnlyMassImportInput,
+        progress_tx: Option<Sender<MassImportSyncEvent>>,
+    ) -> Result<FilesOnlyMassImportResult, Error> {
+        tracing::info!(
+            input = ?input,
+            "Starting mass import process...");
+
+        let ops = FilesOnlyMassImportOps {
+            fs_ops: self.fs_ops.clone(),
+            file_import_service_ops: self.file_import_service_ops.clone(),
+            reader_factory_fn: self.reader_factory_fn.clone(),
+        };
+
+        let deps = MassImportDeps {
+            repository_manager: self.repository_manager.clone(),
+        };
+
+        let mut context = FilesOnlyMassImportContext::new(deps, input, ops, progress_tx);
+        let pipeline = Pipeline::<FilesOnlyMassImportContext>::new();
+        pipeline.execute(&mut context).await?;
+        tracing::info!("Mass import process completed.");
+        Ok(FilesOnlyMassImportResult::from(context.state))
     }
 }
 
@@ -130,7 +164,7 @@ mod tests {
     };
     use async_std::channel;
     use core_types::{FileType, ReadFile, Sha1Checksum, sha1_bytes_to_hex_string};
-    use dat_file_parser::{DatFile, DatGame, DatHeader, DatRom, MockDatParser};
+    use dat_file_parser::{DatFile, DatFileParserError, DatGame, DatHeader, DatRom, MockDatParser};
     use database::setup_test_db;
 
     #[async_std::test]
@@ -212,7 +246,7 @@ mod tests {
         let (tx, rx) = channel::unbounded();
 
         // Act
-        let result = service.import(input, Some(tx)).await;
+        let result = service.import_with_dat(input, Some(tx)).await;
 
         // Assert
         // There should be one progress event for the one file set imported
@@ -235,12 +269,112 @@ mod tests {
 
         let import_result = result.unwrap();
         assert!(
-            !import_result.import_results.is_empty(),
+            !import_result.result.import_results.is_empty(),
             "Import items should not be empty",
         );
 
         assert_eq!(
-            import_result.import_results[0].status,
+            import_result.result.import_results[0].status,
+            crate::mass_import::models::FileSetImportStatus::Success,
+            "First import result should be successful",
+        );
+    }
+
+    #[async_std::test]
+    async fn test_mass_import_with_files_only() {
+        let mut fs_ops = MockFileSystemOps::new();
+        fs_ops.add_entry(Ok(SimpleDirEntry {
+            path: PathBuf::from("/mock/Test Game.zip"),
+        }));
+
+        let sha1_checksum: Sha1Checksum = [0xaa; 20];
+        let sha1_checksum_string = sha1_bytes_to_hex_string(&sha1_checksum);
+
+        let file_import_service_ops: Arc<dyn FileImportServiceOps> = Arc::new(
+            MockFileImportServiceOps::with_create_mock(CreateMockState {
+                file_set_id: 1,
+                release_id: Some(1),
+            }),
+        );
+
+        let mut metadata_by_path = HashMap::new();
+        metadata_by_path.insert(
+            PathBuf::from("/mock/Test Game.zip"),
+            vec![ReadFile {
+                file_name: "rom.bin".to_string(),
+                sha1_checksum,
+                file_size: 123,
+            }],
+        );
+        let reader_factory_fn = Arc::new(create_mock_reader_factory(metadata_by_path, vec![]));
+
+        let fs_ops = Arc::new(fs_ops);
+        let pool = Arc::new(setup_test_db().await);
+        let repository_manager = Arc::new(RepositoryManager::new(pool));
+        let system_id = repository_manager
+            .get_system_repository()
+            .add_system("Test System")
+            .await
+            .unwrap();
+
+        let file_set_service_ops = Arc::new(MockFileSetService::new());
+
+        // TODO: maybe this should be passed only with the dat case?
+        let dat_file_parser_ops: Arc<dyn DatFileParserOps> =
+            Arc::new(MockDatParser::new(Err(DatFileParserError::ParseError(
+                "Dat file parsing should not be called in files-only import".to_string(),
+            ))));
+
+        let service = MassImportService::new_with_ops(
+            fs_ops,
+            dat_file_parser_ops,
+            file_import_service_ops,
+            reader_factory_fn,
+            file_set_service_ops,
+            repository_manager,
+        );
+
+        let input = FilesOnlyMassImportInput {
+            source_path: PathBuf::from("/mock"),
+            file_type: FileType::Rom,
+            item_type: None,
+            system_id,
+            source: "test source".to_string(),
+        };
+
+        // Optional progress channel (not asserted here, just exercised)
+        let (tx, rx) = channel::unbounded();
+
+        // Act
+        let result = service.import_with_files_only(input, Some(tx)).await;
+
+        // Assert
+        // There should be one progress event for the one file set imported
+        let event = rx.recv().await;
+
+        assert!(
+            event.is_ok(),
+            "Should receive a progress event during import"
+        );
+        let event = event.unwrap();
+        assert_eq!(
+            event.file_set_name, "Test Game",
+            "Progress event should have correct file set name"
+        );
+
+        assert!(
+            result.is_ok(),
+            "Mass import service should complete without error"
+        );
+
+        let import_result = result.unwrap();
+        assert!(
+            !import_result.result.import_results.is_empty(),
+            "Import items should not be empty",
+        );
+
+        assert_eq!(
+            import_result.result.import_results[0].status,
             crate::mass_import::models::FileSetImportStatus::Success,
             "First import result should be successful",
         );

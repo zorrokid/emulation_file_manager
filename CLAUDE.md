@@ -115,6 +115,16 @@ let repo_manager = setup_test_repository_manager(&db).await;
 
 Integration tests live in `<crate>/tests/`. Unit tests are embedded in source files.
 
+## Development Practices
+
+### Temporary Files
+
+**Always clean up temporary files immediately after use.** Do not leave debug scripts, test files, or temporary artifacts in the repository:
+
+- After debugging or testing a hypothesis, delete the temporary file
+- Examples: test scripts, debug binaries, temporary .rs files, exploration attempts
+- If a temporary file is created and the approach is abandoned, clean it up before completing the task
+
 ## Spec-Driven Development
 
 Any change that introduces or modifies behavior requires a spec. **Do not start implementing without a spec in place.**

@@ -7,7 +7,7 @@ use crate::title_normalizer::{
     search_keys::{generate_search_keys, normalize_for_search},
 };
 
-pub struct SoftwareTitle {
+/*pub struct SoftwareTitle {
     pub release_name: String,
     pub software_title_name: String,
 }
@@ -19,7 +19,7 @@ pub fn get_software_title(release_name: &str) -> SoftwareTitle {
         release_name: normalized.original,
         software_title_name: normalized.canonical,
     }
-}
+}*/
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct NormalizedTitle {
@@ -37,7 +37,10 @@ impl TitleNormalizer {
         s = remove_parentheticals(&s);
         s = normalize_articles(&s);
         s = normalize_whitespace(&s);
+
         s = title_case(&s);
+
+        //s = capitalize_initials(&s);
 
         let normalized = normalize_for_search(&s);
         let search_keys = generate_search_keys(&normalized);
@@ -49,6 +52,7 @@ impl TitleNormalizer {
         }
     }
 }
+
 /*
 A.E. (USA) (Proto)
 Activision Decathlon, The (USA)
@@ -129,7 +133,7 @@ mod tests {
                 "BC's Quest for Tires (USA)",
                 NormalizedTitle {
                     original: "BC's Quest for Tires (USA)".to_string(),
-                    canonical: "BC's Quest For Tires".to_string(),
+                    canonical: "BC's Quest for Tires".to_string(),
                     search_keys: vec![
                         "bcs quest for tires".to_string(),
                         "bcsquestfortires".to_string(),
@@ -191,7 +195,7 @@ mod tests {
                 "Dr. Seuss - Fix-Up the Mix-Up Puzzler (USA)",
                 NormalizedTitle {
                     original: "Dr. Seuss - Fix-Up the Mix-Up Puzzler (USA)".to_string(),
-                    canonical: "Dr. Seuss - Fix-Up The Mix-Up Puzzler".to_string(),
+                    canonical: "Dr. Seuss - Fix-Up the Mix-Up Puzzler".to_string(),
                     search_keys: vec![
                         "dr seuss fixup the mixup puzzler".to_string(),
                         "drseussfixupthemixuppuzzler".to_string(),
