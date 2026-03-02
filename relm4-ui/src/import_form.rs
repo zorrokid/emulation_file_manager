@@ -18,7 +18,7 @@ use relm4::{
 use service::{
     error::Error,
     mass_import::models::{
-        FileSetImportStatus, MassImportInput, MassImportResult, MassImportSyncEvent,
+        DatFileMassImportResult, FileSetImportStatus, MassImportInput, MassImportSyncEvent,
     },
     view_models::SystemListModel,
 };
@@ -100,7 +100,7 @@ pub enum ImportFormMsg {
 
 #[derive(Debug)]
 pub enum CommandMsg {
-    ProcessImportResult(Result<MassImportResult, Error>),
+    ProcessImportResult(Result<DatFileMassImportResult, Error>),
 }
 
 pub struct ImportFormInit {
@@ -425,7 +425,9 @@ impl Component for ImportForm {
                     });
 
                     sender.oneshot_command(async move {
-                        let result = mass_import_service.import(input, Some(progress_tx)).await;
+                        let result = mass_import_service
+                            .import_with_dat(input, Some(progress_tx))
+                            .await;
                         CommandMsg::ProcessImportResult(result)
                     });
                 }
@@ -475,22 +477,25 @@ impl Component for ImportForm {
 impl ImportForm {
     fn show_import_summary_dialog(
         &self,
-        result: &MassImportResult,
+        result: &DatFileMassImportResult,
         root: &gtk::Window,
         sender: &ComponentSender<Self>,
     ) {
         // TODO: improve the summary details
         let successful_imports = result
+            .result
             .import_results
             .iter()
             .filter(|r| matches!(r.status, FileSetImportStatus::Success))
             .count();
         let failed_imports = result
+            .result
             .import_results
             .iter()
             .filter(|r| matches!(r.status, FileSetImportStatus::Failed(_)))
             .collect::<Vec<_>>();
         let successful_with_warnings = result
+            .result
             .import_results
             .iter()
             .filter(|r| matches!(r.status, FileSetImportStatus::SucessWithWarnings(_)))

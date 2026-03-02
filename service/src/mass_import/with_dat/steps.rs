@@ -3,26 +3,23 @@ use crate::{
     dat_game_status_service::{DatGameFileSetStatus, DatGameStatusService},
     error::Error,
     file_import::model::CreateReleaseParams,
-    mass_import::{
-        context::MassImportContext,
-        models::{FileSetImportResult, FileSetImportStatus},
-    },
+    mass_import::with_dat::context::DatFileMassImportContext,
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
 
 pub struct ImportDatFileStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<MassImportContext> for ImportDatFileStep {
+impl PipelineStep<DatFileMassImportContext> for ImportDatFileStep {
     fn name(&self) -> &'static str {
         "import_dat_file_step"
     }
 
-    fn should_execute(&self, context: &MassImportContext) -> bool {
+    fn should_execute(&self, context: &DatFileMassImportContext) -> bool {
         context.input.dat_file_path.is_some()
     }
 
-    async fn execute(&self, context: &mut MassImportContext) -> StepAction {
+    async fn execute(&self, context: &mut DatFileMassImportContext) -> StepAction {
         let dat_path = context
             .input
             .dat_file_path
@@ -51,15 +48,15 @@ impl PipelineStep<MassImportContext> for ImportDatFileStep {
 
 pub struct CheckExistingDatFileStep;
 #[async_trait::async_trait]
-impl PipelineStep<MassImportContext> for CheckExistingDatFileStep {
+impl PipelineStep<DatFileMassImportContext> for CheckExistingDatFileStep {
     fn name(&self) -> &'static str {
         "check_existing_dat_file_step"
     }
-    fn should_execute(&self, context: &MassImportContext) -> bool {
+    fn should_execute(&self, context: &DatFileMassImportContext) -> bool {
         context.state.dat_file.is_some()
     }
 
-    async fn execute(&self, context: &mut MassImportContext) -> StepAction {
+    async fn execute(&self, context: &mut DatFileMassImportContext) -> StepAction {
         let dat_file = context
             .state
             .dat_file
@@ -123,15 +120,15 @@ impl PipelineStep<MassImportContext> for CheckExistingDatFileStep {
 
 pub struct StoreDatFileStep;
 #[async_trait::async_trait]
-impl PipelineStep<MassImportContext> for StoreDatFileStep {
+impl PipelineStep<DatFileMassImportContext> for StoreDatFileStep {
     fn name(&self) -> &'static str {
         "store_dat_file_step"
     }
-    fn should_execute(&self, context: &MassImportContext) -> bool {
+    fn should_execute(&self, context: &DatFileMassImportContext) -> bool {
         context.state.dat_file.is_some() && context.state.dat_file_id.is_none()
     }
 
-    async fn execute(&self, context: &mut MassImportContext) -> StepAction {
+    async fn execute(&self, context: &mut DatFileMassImportContext) -> StepAction {
         let dat_file = context
             .state
             .dat_file
@@ -156,133 +153,6 @@ impl PipelineStep<MassImportContext> for StoreDatFileStep {
             }
         }
 
-        StepAction::Continue
-    }
-}
-
-pub struct ReadFilesStep;
-#[async_trait::async_trait]
-impl PipelineStep<MassImportContext> for ReadFilesStep {
-    fn name(&self) -> &'static str {
-        "read_files_step"
-    }
-    async fn execute(&self, context: &mut MassImportContext) -> StepAction {
-        let files_res = context
-            .ops
-            .fs_ops
-            .read_dir(context.input.source_path.as_path());
-        println!(
-            "Reading files from source path: {}",
-            context.input.source_path.display()
-        );
-
-        let files = match files_res {
-            Ok(files) => files,
-
-            Err(e) => {
-                println!(
-                    "Failed to read source path {}: {}",
-                    context.input.source_path.display(),
-                    e
-                );
-                return StepAction::Abort(Error::IoError(format!(
-                    "Failed to read source path {}: {}",
-                    context.input.source_path.display(),
-                    e
-                )));
-            }
-        };
-
-        for file_res in files {
-            println!(
-                "Processing file entry from source path: {}",
-                context.input.source_path.display()
-            );
-            match file_res {
-                Ok(file) => {
-                    println!("Successfully read file entry: {}", file.path.display());
-                    tracing::info!("Found file: {}", file.path.display());
-                    context.state.read_ok_files.push(file.path.clone());
-                }
-                Err(e) => {
-                    println!(
-                        "Failed to read file entry from source path {}: {}",
-                        context.input.source_path.display(),
-                        e
-                    );
-                    tracing::error!(
-                        error = ?e,
-                        path = %context.input.source_path.display(),
-                        "Failed to read a file entry"
-                    );
-                    context.state.dir_scan_errors.push(e);
-                }
-            }
-        }
-
-        // Implementation for reading files goes here
-        StepAction::Continue
-    }
-}
-
-pub struct ReadFileMetadataStep;
-
-#[async_trait::async_trait]
-impl PipelineStep<MassImportContext> for ReadFileMetadataStep {
-    fn name(&self) -> &'static str {
-        "read_file_metadata_step"
-    }
-
-    fn should_execute(&self, context: &MassImportContext) -> bool {
-        !context.get_non_failed_files().is_empty()
-    }
-
-    async fn execute(&self, context: &mut MassImportContext) -> StepAction {
-        tracing::info!(
-            len = %context.get_non_failed_files().len(),
-            "Reading metadata for files...",
-        );
-        for file in &mut context.get_non_failed_files() {
-            tracing::info!("Creating metadata reader for file: {}", file.display());
-            let reader_res = (context.ops.reader_factory_fn)(file);
-            match reader_res {
-                Ok(reader) => {
-                    tracing::info!(
-                        file = %file.display(),
-                        "Successfully created metadata reader",
-                    );
-                    let res = reader.read_metadata();
-                    tracing::info!(
-                        file = %file.display(),
-                        "Successfully read metadata",
-                    );
-                    match res {
-                        Ok(metadata_entries) => {
-                            context
-                                .state
-                                .file_metadata
-                                .insert(file.clone(), metadata_entries);
-                        }
-                        Err(e) => {
-                            tracing::error!(
-                                error = ?e,
-                                file = %file.display(),
-                                "Failed to read metadata",
-                            );
-                            context.state.read_failed_files.push(file.clone());
-                        }
-                    }
-                }
-                Err(e) => {
-                    tracing::error!(
-                        error = ?e,
-                        file = %file.display(),
-                        "Failed to create metadata reader",
-                    );
-                    context.state.read_failed_files.push(file.clone());
-                }
-            }
-        }
         StepAction::Continue
     }
 }
@@ -329,11 +199,11 @@ impl PipelineStep<MassImportContext> for ReadFileMetadataStep {
 pub struct FilterExistingFileSetsStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<MassImportContext> for FilterExistingFileSetsStep {
+impl PipelineStep<DatFileMassImportContext> for FilterExistingFileSetsStep {
     fn name(&self) -> &'static str {
         "filter_existing_file_sets_step"
     }
-    fn should_execute(&self, context: &MassImportContext) -> bool {
+    fn should_execute(&self, context: &DatFileMassImportContext) -> bool {
         // we need file metadata to check for existing file sets
         !context.state.file_metadata.is_empty()
             // dat file has to be parsed for this step
@@ -342,10 +212,10 @@ impl PipelineStep<MassImportContext> for FilterExistingFileSetsStep {
             && context.state.dat_file_id.is_some()
     }
 
-    async fn execute(&self, context: &mut MassImportContext) -> StepAction {
+    async fn execute(&self, context: &mut DatFileMassImportContext) -> StepAction {
         // TODO: add to context if needs injection for mocking in tests
         // now it's fine since we use in mem test db anyway in tests
-        let date_game_status_service =
+        let dat_game_status_service =
             DatGameStatusService::new(context.deps.repository_manager.clone());
         let dat_file = context
             .state
@@ -357,7 +227,7 @@ impl PipelineStep<MassImportContext> for FilterExistingFileSetsStep {
             .dat_file_id
             .expect("DAT file ID should be present in state");
         for game in &dat_file.games {
-            let status = date_game_status_service
+            let status = dat_game_status_service
                 .get_status(game, context.input.file_type, &dat_file.header, dat_file_id)
                 .await;
             match status {
@@ -388,120 +258,15 @@ impl PipelineStep<MassImportContext> for FilterExistingFileSetsStep {
     }
 }
 
-pub struct ImportFileSetsStep;
-
-#[async_trait::async_trait]
-impl PipelineStep<MassImportContext> for ImportFileSetsStep {
-    fn name(&self) -> &'static str {
-        "import_file_sets_step"
-    }
-
-    fn should_execute(&self, context: &MassImportContext) -> bool {
-        context
-            .state
-            .statuses
-            .iter()
-            .any(|status| matches!(status, DatGameFileSetStatus::NonExisting(_)))
-    }
-
-    async fn execute(&self, context: &mut MassImportContext) -> StepAction {
-        let import_items = context.get_import_items();
-        for item in import_items {
-            tracing::info!(
-                file_set_name = item.file_set.as_ref().map(|fs| &fs.file_set_name),
-                "Importing file set",
-            );
-            if let Some(file_set) = item.file_set {
-                tracing::info!(
-                     file_set_name = %file_set.file_set_name,
-                    "Creating file set for import",
-                );
-                let file_set_name = file_set.file_set_name.clone();
-                let import_res = context
-                    .ops
-                    .file_import_service_ops
-                    .create_file_set(file_set);
-                let (id, status) = match import_res.await {
-                    Ok(import_result) => {
-                        println!(
-                            "Successfully imported file set: {}",
-                            import_result.file_set_id
-                        );
-                        if import_result.failed_steps.is_empty() {
-                            tracing::info!(
-                                file_set_id = %import_result.file_set_id,
-                                "Successfully imported file set",
-                            );
-                            (
-                                Some(import_result.file_set_id),
-                                FileSetImportStatus::Success,
-                            )
-                        } else {
-                            tracing::warn!(
-                                file_set_id = %import_result.file_set_id,
-                                "File set imported with some failed steps",
-                            );
-                            let errors: Vec<String> = import_result
-                                .failed_steps
-                                .iter()
-                                .map(|(step, error)| format!("{}: {}", step, error))
-                                .collect();
-                            for (step, error) in import_result.failed_steps {
-                                tracing::warn!(
-                                    step = %step,
-                                    error = %error,
-                                    "Failed step in file set import",
-                                );
-                            }
-                            (
-                                Some(import_result.file_set_id),
-                                FileSetImportStatus::SucessWithWarnings(errors),
-                            )
-                        }
-                    }
-                    Err(e) => {
-                        tracing::error!(
-                            error = ?e,
-                            "Failed to import file set",
-                        );
-                        (None, FileSetImportStatus::Failed(format!("{}", e)))
-                    }
-                };
-                println!("Import result for file set {}: {:?}", file_set_name, status);
-
-                context.state.import_results.push(FileSetImportResult {
-                    file_set_id: id,
-                    status: status.clone(),
-                });
-
-                if let Some(sender_tx) = &context.progress_tx {
-                    let event = crate::mass_import::models::MassImportSyncEvent {
-                        file_set_name,
-                        status,
-                    };
-                    if let Err(e) = sender_tx.send(event).await {
-                        tracing::error!(
-                            error = ?e,
-                            "Failed to send progress event",
-                        );
-                    }
-                }
-            }
-        }
-
-        StepAction::Continue
-    }
-}
-
 pub struct LinkExistingFileSetsStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<MassImportContext> for LinkExistingFileSetsStep {
+impl PipelineStep<DatFileMassImportContext> for LinkExistingFileSetsStep {
     fn name(&self) -> &'static str {
         "link_existing_file_sets_step"
     }
 
-    fn should_execute(&self, context: &MassImportContext) -> bool {
+    fn should_execute(&self, context: &DatFileMassImportContext) -> bool {
         context.state.dat_file_id.is_some()
             && context.state.statuses.iter().any(|status| {
                 matches!(
@@ -511,7 +276,7 @@ impl PipelineStep<MassImportContext> for LinkExistingFileSetsStep {
             })
     }
 
-    async fn execute(&self, context: &mut MassImportContext) -> StepAction {
+    async fn execute(&self, context: &mut DatFileMassImportContext) -> StepAction {
         let dat_file_id = context
             .state
             .dat_file_id
@@ -586,21 +351,18 @@ impl PipelineStep<MassImportContext> for LinkExistingFileSetsStep {
 mod tests {
     use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
-    use core_types::{ReadFile, sha1_from_hex_string};
     use dat_file_parser::{DatFileParserError, DatFileParserOps, MockDatParser};
     use database::helper::AddDatFileParams;
     use domain::naming_conventions::no_intro::{DatFile, DatGame, DatHeader, DatRom};
+    use file_metadata::SendReaderFactoryFn;
 
     use crate::{
-        file_import::file_import_service_ops::{
-            CreateMockState, FileImportServiceOps, MockFileImportServiceOps,
-        },
+        file_import::file_import_service_ops::{FileImportServiceOps, MockFileImportServiceOps},
         file_set::mock_file_set_service::MockFileSetService,
-        file_system_ops::{FileSystemOps, SimpleDirEntry, mock::MockFileSystemOps},
+        file_system_ops::{FileSystemOps, mock::MockFileSystemOps},
         mass_import::{
-            context::{MassImportDeps, MassImportOps, SendReaderFactoryFn},
-            models::MassImportInput,
-            test_utils::create_mock_reader_factory,
+            common_steps::context::MassImportDeps, models::MassImportInput,
+            test_utils::create_mock_reader_factory, with_dat::context::DatFileMassImportOps,
         },
     };
 
@@ -611,7 +373,7 @@ mod tests {
         fs_ops: Option<Arc<dyn FileSystemOps>>,
         reader_factory_fn: Option<Arc<SendReaderFactoryFn>>,
         file_import_ops: Option<Arc<dyn FileImportServiceOps>>,
-    ) -> MassImportOps {
+    ) -> DatFileMassImportOps {
         let file_import_service_ops =
             file_import_ops.unwrap_or_else(|| Arc::new(MockFileImportServiceOps::new()));
         let parse_result: Result<dat_file_parser::DatFile, DatFileParserError> =
@@ -625,7 +387,7 @@ mod tests {
         let reader_factory_fn = reader_factory_fn
             .unwrap_or(Arc::new(create_mock_reader_factory(HashMap::new(), vec![])));
         let file_set_service_ops = Arc::new(MockFileSetService::new());
-        MassImportOps {
+        DatFileMassImportOps {
             fs_ops,
             file_import_service_ops,
             reader_factory_fn,
@@ -635,10 +397,9 @@ mod tests {
     }
 
     async fn get_deps() -> MassImportDeps {
-        let pool = Arc::new(database::setup_test_db().await);
-        let repository_manager =
-            Arc::new(database::repository_manager::RepositoryManager::new(pool));
-        MassImportDeps { repository_manager }
+        MassImportDeps {
+            repository_manager: database::setup_test_repository_manager().await,
+        }
     }
 
     #[async_std::test]
@@ -650,7 +411,7 @@ mod tests {
             });
         let dat_file_parser_ops = Arc::new(MockDatParser::new(parse_result));
 
-        let mut context = MassImportContext::new(
+        let mut context = DatFileMassImportContext::new(
             get_deps().await,
             MassImportInput {
                 source_path: PathBuf::from("/path/to/source"),
@@ -706,7 +467,7 @@ mod tests {
         let dat_id = dat_repo.add_dat_file(add_dat_file_params).await.unwrap();
 
         let dat_file_parser_ops = Arc::new(MockDatParser::new(Ok(dat_file.clone().into())));
-        let mut context = MassImportContext::new(
+        let mut context = DatFileMassImportContext::new(
             deps,
             MassImportInput {
                 source_path: PathBuf::from("/path/to/source"),
@@ -742,7 +503,7 @@ mod tests {
             games: vec![],
         };
         let dat_file_parser_ops = Arc::new(MockDatParser::new(Ok(dat_file.clone().into())));
-        let mut context = MassImportContext::new(
+        let mut context = DatFileMassImportContext::new(
             get_deps().await,
             MassImportInput {
                 source_path: PathBuf::from("/path/to/source"),
@@ -784,7 +545,7 @@ mod tests {
             .await
             .expect("Failed to add test system");
         let dat_file_parser_ops = Arc::new(MockDatParser::new(Ok(dat_file.clone().into())));
-        let mut context = MassImportContext::new(
+        let mut context = DatFileMassImportContext::new(
             deps,
             MassImportInput {
                 source_path: PathBuf::from("/path/to/source"),
@@ -824,7 +585,7 @@ mod tests {
             games: vec![],
         };
         let dat_file_parser_ops = Arc::new(MockDatParser::new(Ok(dat_file.clone().into())));
-        let mut context = MassImportContext::new(
+        let mut context = DatFileMassImportContext::new(
             get_deps().await,
             MassImportInput {
                 source_path: PathBuf::from("/path/to/source"),
@@ -844,229 +605,6 @@ mod tests {
         // Act
         let step = StoreDatFileStep;
         assert!(!step.should_execute(&context));
-    }
-
-    #[async_std::test]
-    async fn test_read_files_step() {
-        // Prepare mock file system ops to return two files
-        let mut mock_fs_ops = MockFileSystemOps::new();
-        let file1 = String::from("/mock/file1.bin");
-        let file2 = String::from("/mock/file2.bin");
-        //let file3 = String::from("/mock/file3.bin");
-        let entry1: Result<SimpleDirEntry, Error> = Ok(SimpleDirEntry {
-            path: PathBuf::from(&file1),
-        });
-        let entry2: Result<SimpleDirEntry, Error> = Ok(SimpleDirEntry {
-            path: PathBuf::from(&file2),
-        });
-        let entry3_error = Error::IoError("Simulated read failure".to_string());
-        let entry3: Result<SimpleDirEntry, Error> = Err(entry3_error.clone()); // Simulate failure for file3
-
-        mock_fs_ops.add_entry(entry1);
-        mock_fs_ops.add_entry(entry2);
-        mock_fs_ops.add_entry(entry3);
-
-        let ops = get_ops(None, Some(Arc::new(mock_fs_ops)), None, None);
-
-        let mut context = MassImportContext::new(
-            get_deps().await,
-            MassImportInput {
-                source_path: PathBuf::from("/mock"),
-                dat_file_path: None,
-                file_type: core_types::FileType::Rom,
-                item_type: None,
-                system_id: 1,
-            },
-            ops,
-            None,
-        );
-
-        let step = ReadFilesStep;
-        let result = step.execute(&mut context).await;
-        assert!(matches!(result, StepAction::Continue));
-        assert_eq!(context.state.read_ok_files.len(), 2);
-        assert_eq!(context.state.dir_scan_errors.len(), 1);
-        assert!(context.state.read_ok_files.contains(&PathBuf::from(&file1)));
-        assert!(context.state.read_ok_files.contains(&PathBuf::from(&file2)));
-        assert!(context.state.dir_scan_errors.contains(&entry3_error));
-    }
-
-    #[async_std::test]
-    async fn test_read_file_metadata_step() {
-        let mut metadata_by_path = HashMap::new();
-        metadata_by_path.insert(
-            PathBuf::from("/mock/file1.zip"),
-            vec![
-                ReadFile {
-                    file_name: "file1.bin".to_string(),
-                    sha1_checksum: [1u8; 20],
-                    file_size: 123,
-                },
-                ReadFile {
-                    file_name: "file2.bin".to_string(),
-                    sha1_checksum: [3u8; 20],
-                    file_size: 456,
-                },
-            ],
-        );
-        metadata_by_path.insert(
-            PathBuf::from("/mock/file2.zip"),
-            vec![ReadFile {
-                file_name: "file2.bin".to_string(),
-                sha1_checksum: [2u8; 20],
-                file_size: 456,
-            }],
-        );
-        metadata_by_path.insert(
-            PathBuf::from("/mock/file3.zip"),
-            vec![], // This file will simulate failure
-        );
-        let reader_factory =
-            create_mock_reader_factory(metadata_by_path, vec![PathBuf::from("/mock/file3.zip")]);
-        let ops = get_ops(None, None, Some(Arc::new(reader_factory)), None);
-        let mut context = MassImportContext::new(
-            get_deps().await,
-            MassImportInput {
-                source_path: PathBuf::from("/mock"),
-                dat_file_path: None,
-                file_type: core_types::FileType::Rom,
-                item_type: None,
-                system_id: 1,
-            },
-            ops,
-            None,
-        );
-
-        context
-            .state
-            .read_ok_files
-            .push(PathBuf::from("/mock/file1.zip"));
-        context
-            .state
-            .read_ok_files
-            .push(PathBuf::from("/mock/file2.zip"));
-
-        let step = ReadFileMetadataStep;
-        let res = step.execute(&mut context).await;
-        assert!(matches!(res, StepAction::Continue));
-        assert_eq!(context.state.file_metadata.len(), 2);
-        assert!(
-            context
-                .state
-                .file_metadata
-                .contains_key(&PathBuf::from("/mock/file1.zip"))
-        );
-        assert!(
-            context
-                .state
-                .file_metadata
-                .contains_key(&PathBuf::from("/mock/file2.zip"))
-        );
-        assert!(context.state.read_failed_files.is_empty());
-        let file_1_metadata = context
-            .state
-            .file_metadata
-            .get(&PathBuf::from("/mock/file1.zip"))
-            .unwrap();
-        assert_eq!(file_1_metadata.len(), 2);
-        assert_eq!(file_1_metadata[0].file_name, "file1.bin");
-        assert_eq!(file_1_metadata[0].file_size, 123);
-        assert_eq!(file_1_metadata[0].sha1_checksum, [1u8; 20]);
-        assert_eq!(file_1_metadata[1].file_name, "file2.bin");
-        assert_eq!(file_1_metadata[1].file_size, 456);
-        assert_eq!(file_1_metadata[1].sha1_checksum, [3u8; 20]);
-        let file_2_metadata = context
-            .state
-            .file_metadata
-            .get(&PathBuf::from("/mock/file2.zip"))
-            .unwrap();
-        assert_eq!(file_2_metadata.len(), 1);
-        assert_eq!(file_2_metadata[0].file_name, "file2.bin");
-        assert_eq!(file_2_metadata[0].file_size, 456);
-        assert_eq!(file_2_metadata[0].sha1_checksum, [2u8; 20]);
-        assert!(
-            !context
-                .state
-                .read_failed_files
-                .contains(&PathBuf::from("/mock/file1.zip"))
-        );
-    }
-
-    #[async_std::test]
-    async fn test_import_file_sets_step_success() {
-        // Arrange
-        // Minimal DAT with one game and one ROM
-        let dat_game = DatGame {
-            name: "Test Game".to_string(),
-            description: "Test Game".to_string(),
-            roms: vec![DatRom {
-                name: "rom1.bin".to_string(),
-                sha1: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
-                size: 123,
-                ..Default::default()
-            }],
-            ..Default::default()
-        };
-        let dat_file = DatFile {
-            header: DatHeader {
-                name: "Test DAT".to_string(),
-                version: "1.0".to_string(),
-                ..Default::default()
-            },
-            games: vec![dat_game.clone()],
-        };
-        // File metadata matching the ROM SHA1
-        let mut file_metadata = HashMap::new();
-        file_metadata.insert(
-            PathBuf::from("/mock/rom1.zip"),
-            vec![ReadFile {
-                file_name: "rom1.bin".to_string(),
-                sha1_checksum: sha1_from_hex_string("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
-                    .unwrap(),
-                file_size: 123,
-            }],
-        );
-        // Status with existing entry for game
-        let statuses = vec![DatGameFileSetStatus::NonExisting(dat_game)];
-
-        // Mock FileImportServiceOps with deterministic output
-        let mock_file_import_ops = MockFileImportServiceOps::with_create_mock(CreateMockState {
-            file_set_id: 42,
-            release_id: Some(7),
-        });
-        let ops = get_ops(None, None, None, Some(Arc::new(mock_file_import_ops)));
-        let mut context = MassImportContext::new(
-            get_deps().await,
-            MassImportInput {
-                source_path: PathBuf::from("/mock"),
-                dat_file_path: None,
-                file_type: core_types::FileType::Rom,
-                item_type: None,
-                system_id: 1,
-            },
-            ops,
-            None,
-        );
-        // Pre-populate state as if previous steps succeeded
-        context.state.dat_file = Some(dat_file);
-        context.state.file_metadata = file_metadata;
-        context.state.statuses = statuses;
-        context
-            .state
-            .read_ok_files
-            .push(PathBuf::from("/mock/rom1.zip"));
-        // Act
-        let step = ImportFileSetsStep;
-        let result = step.execute(&mut context).await;
-        // Assert
-        assert!(matches!(result, StepAction::Continue));
-        assert_eq!(context.state.import_results.len(), 1);
-        let import_result = &context.state.import_results[0];
-        assert_eq!(import_result.file_set_id, Some(42));
-        match &import_result.status {
-            FileSetImportStatus::Success => {}
-            other => panic!("Unexpected import status: {:?}", other),
-        }
     }
 
     #[async_std::test]
@@ -1138,7 +676,7 @@ mod tests {
         use crate::file_set::file_set_service::FileSetService;
         let file_set_service = Arc::new(FileSetService::new(deps.repository_manager.clone()));
 
-        let ops = MassImportOps {
+        let ops = DatFileMassImportOps {
             dat_file_parser_ops: Arc::new(MockDatParser::new(Ok(dat_file.clone().into()))),
             fs_ops: Arc::new(MockFileSystemOps::new()),
             reader_factory_fn: Arc::new(create_mock_reader_factory(HashMap::new(), vec![])),
@@ -1146,7 +684,7 @@ mod tests {
             file_import_service_ops: Arc::new(MockFileImportServiceOps::new()),
         };
 
-        let mut context = MassImportContext::new(
+        let mut context = DatFileMassImportContext::new(
             MassImportDeps {
                 repository_manager: deps.repository_manager.clone(),
             },
