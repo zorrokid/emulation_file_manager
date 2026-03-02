@@ -8,9 +8,9 @@ use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, FactorySender,
     RelmWidgetExt,
     gtk::{
-        self, FileChooserDialog,
+        self, FileChooserDialog, gdk,
         gio::prelude::FileExt,
-        glib::{self, clone},
+        glib::{self, clone, types::StaticType},
         prelude::{
             BoxExt, ButtonExt, CheckButtonExt, DialogExt, EditableExt, EntryBufferExtManual,
             EntryExt, FileChooserExt, GtkWindowExt, OrientableExt, WidgetExt,
@@ -141,6 +141,7 @@ pub enum FileSetFormMsg {
     CancelDownload,
     ItemTypeChanged(Option<ItemType>),
     Update(FileSetViewModel),
+    FilesDropped(Vec<PathBuf>),
 }
 
 #[derive(Debug)]
@@ -183,6 +184,7 @@ pub struct FileSetFormModel {
     download_cancel_tx: Option<async_std::channel::Sender<()>>,
     item_type_dropdown: Controller<ItemTypeDropdown>,
     selected_item_type: Option<ItemType>,
+    drop_queue: Vec<PathBuf>,
 }
 
 impl FileSetFormModel {
@@ -318,6 +320,7 @@ impl Component for FileSetFormModel {
                     .join(", ")),
                 },
 
+               #[name = "files_scrolled_window"]
                gtk::ScrolledWindow {
                     set_hscrollbar_policy: gtk::PolicyType::Never,
                     set_min_content_height: 360,
@@ -444,6 +447,7 @@ impl Component for FileSetFormModel {
             file_set_id: None,
             item_type_dropdown,
             selected_item_type: None,
+            drop_queue: Vec::new(),
         };
 
         let file_types_dropdown = model.dropdown.widget();
@@ -452,6 +456,9 @@ impl Component for FileSetFormModel {
         let item_type_dropdown = model.item_type_dropdown.widget();
 
         let widgets = view_output!();
+
+        files_list_box.add_controller(Self::create_drop_target(&sender));
+
         ComponentParts { model, widgets }
     }
 
@@ -737,6 +744,10 @@ impl Component for FileSetFormModel {
                     .file_set_file_name_entry
                     .set_text(&self.file_set_file_name);
             }
+            FileSetFormMsg::FilesDropped(paths) => {
+                tracing::info!(num_files = paths.len(), "Files dropped: processing");
+                self.drop_queue.extend(paths);
+            }
         }
         // This is essential:
         self.update_view(widgets, sender);
@@ -891,5 +902,26 @@ impl FileSetFormModel {
                 .await;
             CommandMsg::ProcessCreateOrUpdateFileSetResult(import_result)
         });
+    }
+
+    fn create_drop_target(sender: &ComponentSender<Self>) -> gtk::DropTarget {
+        let drop_target = gtk::DropTarget::new(gdk::FileList::static_type(), gdk::DragAction::COPY);
+        drop_target.connect_drop(clone!(
+            #[strong]
+            sender,
+            move |_target, value, _x, _y| {
+                if let Ok(file_list) = value.get::<gdk::FileList>() {
+                    for file in file_list.files() {
+                        if let Some(path) = file.path() {
+                            sender.input(FileSetFormMsg::FilesDropped(vec![path]));
+                        }
+                    }
+                    true
+                } else {
+                    false
+                }
+            }
+        ));
+        drop_target
     }
 }
