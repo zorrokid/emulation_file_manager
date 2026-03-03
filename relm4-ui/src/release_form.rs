@@ -3,12 +3,11 @@ use std::{path::PathBuf, sync::Arc};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
-        self, FileChooserDialog,
-        gio::prelude::FileExt,
-        glib::{self, clone},
+        self,
+        glib::{self},
         prelude::{
-            ButtonExt, DialogExt, EditableExt, EntryBufferExtManual, EntryExt, FileChooserExt,
-            FrameExt, GtkWindowExt, OrientableExt, WidgetExt,
+            ButtonExt, EditableExt, EntryBufferExtManual, EntryExt, FrameExt, GtkWindowExt,
+            OrientableExt, WidgetExt,
         },
     },
 };
@@ -29,7 +28,7 @@ use crate::{
         },
         system_list::{SystemList, SystemListInit, SystemListMsg, SystemListOutputMsg},
     },
-    utils::dialog_utils::{show_error_dialog, show_info_dialog},
+    utils::dialog_utils::{show_error_dialog, show_file_chooser_dialog, show_info_dialog},
 };
 
 #[derive(Debug)]
@@ -506,31 +505,15 @@ impl Component for ReleaseFormModel {
 
 impl ReleaseFormModel {
     fn choose_thumbnail(&self, sender: &ComponentSender<Self>, root: &gtk::Window) {
-        let dialog = FileChooserDialog::builder()
-            .title("Select Directory")
-            .action(gtk::FileChooserAction::Open)
-            .modal(true)
-            .transient_for(root)
-            .build();
-
-        dialog.add_button("Cancel", gtk::ResponseType::Cancel);
-        dialog.add_button("Select", gtk::ResponseType::Accept);
-
-        dialog.connect_response(clone!(
-            #[strong]
-            sender,
-            move |dialog, response| {
-                tracing::info!("Directory selection dialog response: {:?}", response);
-                if response == gtk::ResponseType::Accept
-                    && let Some(path) = dialog.file().and_then(|f| f.path())
-                {
-                    tracing::info!("Selected directory path: {:?}", path);
-                    sender.input(ReleaseFormMsg::ThumbnailSelected(path));
-                }
-                dialog.close();
-            }
-        ));
-
-        dialog.present();
+        let sender = sender.clone();
+        show_file_chooser_dialog(
+            root,
+            "Select Image for Thumbnail",
+            gtk::FileChooserAction::Open,
+            move |path| {
+                tracing::info!("Selected thumbnail path: {:?}", path);
+                sender.input(ReleaseFormMsg::ThumbnailSelected(path));
+            },
+        );
     }
 }
