@@ -297,6 +297,7 @@ impl Component for ReleaseFormModel {
                                         &software_title_ids,
                                         &file_set_ids,
                                         &system_ids,
+                                        None,
                                     )
                                     .await
                             }
@@ -309,6 +310,7 @@ impl Component for ReleaseFormModel {
                                         &software_title_ids,
                                         &file_set_ids,
                                         &system_ids,
+                                        None,
                                     )
                                     .await
                             }

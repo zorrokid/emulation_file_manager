@@ -194,6 +194,7 @@ mod tests {
                 &[software_title_id],
                 &[file_set_id],
                 &[system_id],
+                None,
             )
             .await
             .unwrap();

@@ -17,6 +17,7 @@ pub struct ReleaseRepository {
 struct ReleaseExtendedRaw {
     id: i64,
     name: String,
+    thumbnail_filename: Option<String>,
     system_names: Option<String>,
     software_title_names: Option<String>,
     file_types: Option<String>,
@@ -30,7 +31,7 @@ impl ReleaseRepository {
     pub async fn get_release(&self, id: i64) -> Result<Release, DatabaseError> {
         let release = sqlx::query_as!(
             Release,
-            "SELECT id, name 
+            "SELECT id, name, thumbnail_filename
              FROM release WHERE id = ?",
             id
         )
@@ -41,7 +42,7 @@ impl ReleaseRepository {
     }
 
     pub async fn get_all_releases(&self) -> Result<Vec<Release>, DatabaseError> {
-        let releases = sqlx::query_as!(Release, "SELECT id, name FROM release")
+        let releases = sqlx::query_as!(Release, "SELECT id, name, thumbnail_filename FROM release")
             .fetch_all(&*self.pool)
             .await?;
 
@@ -58,6 +59,7 @@ impl ReleaseRepository {
             SELECT
                 r.id as id,
                 r.name as name,
+                r.thumbnail_filename as thumbnail_filename,
                 GROUP_CONCAT(DISTINCT s.name) as system_names,
                 GROUP_CONCAT(DISTINCT st.name) as software_title_names,
                 GROUP_CONCAT(DISTINCT fs.file_type) as file_types
@@ -135,6 +137,7 @@ impl ReleaseRepository {
             releases.push(ReleaseExtended {
                 id: raw.id,
                 name: raw.name,
+                thumbnail_filename: raw.thumbnail_filename,
                 system_names,
                 software_title_names,
                 file_types,
@@ -151,7 +154,7 @@ impl ReleaseRepository {
     ) -> Result<Vec<Release>, DatabaseError> {
         let releases = sqlx::query_as!(
             Release,
-            "SELECT r.id as id, r.name as name 
+            "SELECT r.id as id, r.name as name, r.thumbnail_filename as thumbnail_filename
              FROM release r
              INNER JOIN release_software_title rst 
              ON r.id = rst.release_id
@@ -188,6 +191,7 @@ impl ReleaseRepository {
         software_title_ids: &[i64],
         file_set_ids: &[i64],
         system_ids: &[i64],
+        thumbnail_filename: Option<&str>,
     ) -> Result<i64, Error> {
         let mut transaction = self.pool.begin().await?;
         let res = self
@@ -197,6 +201,7 @@ impl ReleaseRepository {
                 software_title_ids,
                 file_set_ids,
                 system_ids,
+                thumbnail_filename,
             )
             .await;
         transaction.commit().await?;
@@ -210,10 +215,15 @@ impl ReleaseRepository {
         software_title_ids: &[i64],
         file_set_ids: &[i64],
         system_ids: &[i64],
+        thumbnail_filename: Option<&str>,
     ) -> Result<i64, Error> {
-        let result = sqlx::query!("INSERT INTO release (name) VALUES (?)", release_name)
-            .execute(&mut **transaction)
-            .await?;
+        let result = sqlx::query!(
+            "INSERT INTO release (name, thumbnail_filename) VALUES (?, ?)",
+            release_name,
+            thumbnail_filename
+        )
+        .execute(&mut **transaction)
+        .await?;
 
         let release_id = result.last_insert_rowid();
 
@@ -259,12 +269,14 @@ impl ReleaseRepository {
         software_title_ids: &[i64],
         file_set_ids: &[i64],
         system_ids: &[i64],
+        thumbnail_filename: Option<&str>,
     ) -> Result<i64, Error> {
         let mut transaction = self.pool.begin().await?;
 
         sqlx::query!(
-            "UPDATE release SET name = ? WHERE id = ?",
+            "UPDATE release SET name = ?, thumbnail_filename = ? WHERE id = ?",
             release_name,
+            thumbnail_filename,
             release_id
         )
         .execute(&mut *transaction)
@@ -413,8 +425,9 @@ impl ReleaseRepository {
 
     pub async fn update_release(&self, release: &Release) -> Result<u64, DatabaseError> {
         let result = sqlx::query!(
-            "UPDATE release SET name = ? WHERE id = ?",
+            "UPDATE release SET name = ?, thumbnail_filename = ? WHERE id = ?",
             release.name,
+            release.thumbnail_filename,
             release.id
         )
         .execute(&*self.pool)
@@ -549,6 +562,7 @@ mod tests {
         let updated_release = Release {
             id: release_id,
             name: "Updated Release".to_string(),
+            thumbnail_filename: None,
         };
         release_repository
             .update_release(&updated_release)
@@ -672,6 +686,7 @@ mod tests {
                 &[software_title_1_id],
                 &[file_set_1_id],
                 &[system_1_id],
+                None,
             )
             .await
             .unwrap();
@@ -719,6 +734,7 @@ mod tests {
                 &[software_title_2_id, software_title_3_id],
                 &[file_set_2_id, file_set_3_id],
                 &[system_2_id, system_3_id],
+                None,
             )
             .await
             .unwrap();
@@ -1010,6 +1026,7 @@ mod tests {
                 &[software_title_id],
                 &[file_set_id],
                 &[system_id],
+                None,
             )
             .await
             .unwrap();
@@ -1019,6 +1036,7 @@ mod tests {
                 &[software_title_id_2],
                 &[file_set_id],
                 &[system_id_2],
+                None,
             )
             .await
             .unwrap();
@@ -1029,6 +1047,7 @@ mod tests {
                 &[software_title_id_3],
                 &[],
                 &[system_id_2],
+                None,
             )
             .await
             .unwrap();
