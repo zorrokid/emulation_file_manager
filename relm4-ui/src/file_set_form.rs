@@ -8,9 +8,9 @@ use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, FactorySender,
     RelmWidgetExt,
     gtk::{
-        self, FileChooserDialog,
+        self, FileChooserDialog, gdk,
         gio::prelude::FileExt,
-        glib::{self, clone},
+        glib::{self, clone, types::StaticType},
         prelude::{
             BoxExt, ButtonExt, CheckButtonExt, DialogExt, EditableExt, EntryBufferExtManual,
             EntryExt, FileChooserExt, GtkWindowExt, OrientableExt, WidgetExt,
@@ -141,6 +141,9 @@ pub enum FileSetFormMsg {
     CancelDownload,
     ItemTypeChanged(Option<ItemType>),
     Update(FileSetViewModel),
+    FilesDropped(Vec<PathBuf>),
+    SetFileSetName(String),
+    SetFileSetFileName(String),
 }
 
 #[derive(Debug)]
@@ -183,6 +186,7 @@ pub struct FileSetFormModel {
     download_cancel_tx: Option<async_std::channel::Sender<()>>,
     item_type_dropdown: Controller<ItemTypeDropdown>,
     selected_item_type: Option<ItemType>,
+    drop_queue: Vec<PathBuf>,
 }
 
 impl FileSetFormModel {
@@ -318,6 +322,7 @@ impl Component for FileSetFormModel {
                     .join(", ")),
                 },
 
+               #[name = "files_scrolled_window"]
                gtk::ScrolledWindow {
                     set_hscrollbar_policy: gtk::PolicyType::Never,
                     set_min_content_height: 360,
@@ -444,6 +449,7 @@ impl Component for FileSetFormModel {
             file_set_id: None,
             item_type_dropdown,
             selected_item_type: None,
+            drop_queue: Vec::new(),
         };
 
         let file_types_dropdown = model.dropdown.widget();
@@ -452,6 +458,9 @@ impl Component for FileSetFormModel {
         let item_type_dropdown = model.item_type_dropdown.widget();
 
         let widgets = view_output!();
+
+        files_list_box.add_controller(Self::create_drop_target(&sender));
+
         ComponentParts { model, widgets }
     }
 
@@ -737,6 +746,31 @@ impl Component for FileSetFormModel {
                     .file_set_file_name_entry
                     .set_text(&self.file_set_file_name);
             }
+            FileSetFormMsg::FilesDropped(paths) => {
+                if self.selected_file_type.is_none() {
+                    tracing::warn!(
+                        "Files dropped but no file type selected, ignoring dropped files"
+                    );
+                    return;
+                }
+                tracing::info!(num_files = paths.len(), "Files dropped: processing");
+                self.drop_queue.extend(paths);
+                if !self.processing
+                    && let Some(first) = self.drop_queue.pop()
+                {
+                    sender.input(FileSetFormMsg::FileSelected(first));
+                }
+            }
+            FileSetFormMsg::SetFileSetName(name) => {
+                self.file_set_name = name;
+                widgets.file_set_name_entry.set_text(&self.file_set_name);
+            }
+            FileSetFormMsg::SetFileSetFileName(file_name) => {
+                self.file_set_file_name = file_name;
+                widgets
+                    .file_set_file_name_entry
+                    .set_text(&self.file_set_file_name);
+            }
         }
         // This is essential:
         self.update_view(widgets, sender);
@@ -750,7 +784,9 @@ impl Component for FileSetFormModel {
     ) {
         match message {
             CommandMsg::FileImportPrepared(Ok(prepare_result)) => {
-                self.processing = false;
+                tracing::info!(
+                    "File import prepared successfully, updating model with prepared data"
+                );
                 let import_model = prepare_result.import_model;
                 let import_metadata = prepare_result.import_metadata;
                 for file in import_model.content.values() {
@@ -764,12 +800,43 @@ impl Component for FileSetFormModel {
                 }
 
                 if self.file_set_name.is_empty() {
-                    self.file_set_name = import_metadata.file_set_name.clone();
+                    tracing::info!(
+                        "Setting file set name from import metadata: {}",
+                        import_metadata.file_set_name
+                    );
+                    sender.input(FileSetFormMsg::SetFileSetName(
+                        import_metadata.file_set_name.clone(),
+                    ));
                 }
                 if self.file_set_file_name.is_empty() {
-                    self.file_set_file_name = import_metadata.file_set_file_name.clone();
+                    tracing::info!(
+                        "Setting file set file name from import metadata: {}",
+                        import_metadata.file_set_file_name
+                    );
+                    sender.input(FileSetFormMsg::SetFileSetFileName(
+                        import_metadata.file_set_file_name.clone(),
+                    ));
                 }
                 self.picked_files.push(import_model);
+
+                if let Some(next_path) = self.drop_queue.pop() {
+                    tracing::info!("Processing next file in drop queue: {:?}", next_path);
+                    sender.input(FileSetFormMsg::FileSelected(next_path));
+                } else {
+                    tracing::info!("No files in drop queue, finished processing files");
+                    self.processing = false;
+                }
+            }
+            CommandMsg::FileImportPrepared(Err(e)) => {
+                tracing::error!(error = ?e, "Preparing file import failed");
+                show_error_dialog(format!("Preparing file import failed: {:?}", e), root);
+                if let Some(next_path) = self.drop_queue.pop() {
+                    tracing::info!("Processing next file in drop queue: {:?}", next_path);
+                    sender.input(FileSetFormMsg::FileSelected(next_path));
+                } else {
+                    tracing::info!("No files in drop queue, finished processing files");
+                    self.processing = false;
+                }
             }
             CommandMsg::ProcessCreateOrUpdateFileSetResult(Ok(import_result)) => {
                 self.processing = false;
@@ -801,11 +868,6 @@ impl Component for FileSetFormModel {
                 self.processing = false;
                 tracing::error!(error = ?e, "File set import failed");
                 show_error_dialog(format!("File set import failed: {:?}", e), root);
-            }
-            CommandMsg::FileImportPrepared(Err(e)) => {
-                self.processing = false;
-                tracing::error!(error = ?e, "Preparing file import failed");
-                show_error_dialog(format!("Preparing file import failed: {:?}", e), root);
             }
             CommandMsg::ProcessFileSetResponse(Ok(file_set_view_model)) => {
                 tracing::info!(
@@ -891,5 +953,30 @@ impl FileSetFormModel {
                 .await;
             CommandMsg::ProcessCreateOrUpdateFileSetResult(import_result)
         });
+    }
+
+    fn create_drop_target(sender: &ComponentSender<Self>) -> gtk::DropTarget {
+        let drop_target = gtk::DropTarget::new(gdk::FileList::static_type(), gdk::DragAction::COPY);
+        drop_target.connect_drop(clone!(
+            #[strong]
+            sender,
+            move |_target, value, _x, _y| {
+                if let Ok(file_list) = value.get::<gdk::FileList>() {
+                    let paths: Vec<_> = file_list
+                        .files()
+                        .iter()
+                        .filter_map(|file| file.path())
+                        .collect();
+                    if !paths.is_empty() {
+                        tracing::info!(num_files = paths.len(), "Files dropped: processing");
+                        sender.input(FileSetFormMsg::FilesDropped(paths));
+                    }
+                    true
+                } else {
+                    false
+                }
+            }
+        ));
+        drop_target
     }
 }
