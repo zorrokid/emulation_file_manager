@@ -1,12 +1,14 @@
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
-        self, glib,
+        self, FileChooserDialog,
+        gio::prelude::FileExt,
+        glib::{self, clone},
         prelude::{
-            ButtonExt, EditableExt, EntryBufferExtManual, EntryExt, FrameExt, GtkWindowExt,
-            OrientableExt, WidgetExt,
+            ButtonExt, DialogExt, EditableExt, EntryBufferExtManual, EntryExt, FileChooserExt,
+            FrameExt, GtkWindowExt, OrientableExt, WidgetExt,
         },
     },
 };
@@ -43,6 +45,8 @@ pub enum ReleaseFormMsg {
     SoftwareTitleCreated(SoftwareTitleListModel),
     SoftwareTitleUpdated(SoftwareTitleListModel),
     ItemsChanged { item_ids: Vec<i64> },
+    SelectThumbnail,
+    ThumbnailSelected(PathBuf),
 }
 
 #[derive(Debug)]
@@ -73,6 +77,7 @@ pub struct ReleaseFormModel {
     software_title_list: Controller<SoftwareTitleList>,
     selected_item_ids: Vec<i64>,
     item_list: Controller<ItemList>,
+    thumbnail_image: Option<PathBuf>,
 }
 
 pub struct ReleaseFormInit {
@@ -107,17 +112,31 @@ impl Component for ReleaseFormModel {
                 set_orientation: gtk::Orientation::Vertical,
                 add_css_class: "form-container",
 
-                gtk::Frame {
-                    set_label: Some("Release Name:"),
-                    #[name="release_name_entry"]
-                    gtk::Entry {
-                        set_text: &model.release_name,
-                        set_placeholder_text: Some("Release name"),
-                        connect_changed[sender] => move |entry| {
-                            let buffer = entry.buffer();
-                            sender.input(ReleaseFormMsg::NameChanged(buffer.text().into()));
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    gtk::Frame {
+                        set_label: Some("Release Name:"),
+                        #[name="release_name_entry"]
+                        gtk::Entry {
+                            set_text: &model.release_name,
+                            set_placeholder_text: Some("Release name"),
+                            connect_changed[sender] => move |entry| {
+                                let buffer = entry.buffer();
+                                sender.input(ReleaseFormMsg::NameChanged(buffer.text().into()));
+                            },
+                            set_hexpand: true,
                         },
-                        set_hexpand: true,
+                    },
+                    gtk::Frame {
+                        set_label: Some("Thumbnail:"),
+                        gtk::Button {
+                            #[name="thumbnail_image"]
+                            gtk::Image {
+                                #[watch]
+                                set_from_file: model.thumbnail_image.as_deref(),
+                            },
+                            connect_clicked => ReleaseFormMsg::SelectThumbnail
+                        }
                     },
                 },
 
@@ -204,6 +223,7 @@ impl Component for ReleaseFormModel {
             selected_software_title_ids: vec![],
             item_list,
             selected_item_ids: vec![],
+            thumbnail_image: None,
         };
 
         let file_set_list_view = model.file_set_list.widget();
@@ -436,7 +456,15 @@ impl Component for ReleaseFormModel {
             ReleaseFormMsg::NameChanged(name) => {
                 self.release_name = name;
             }
+            ReleaseFormMsg::SelectThumbnail => {
+                self.choose_thumbnail(&sender, root);
+            }
+            ReleaseFormMsg::ThumbnailSelected(path) => {
+                tracing::info!("Thumbnail selected: {:?}", path);
+                self.thumbnail_image = Some(path);
+            }
         }
+
         // This is essential with update_with_view:
         self.update_view(widgets, sender);
     }
@@ -473,5 +501,36 @@ impl Component for ReleaseFormModel {
                 show_error_dialog(format!("Failed to fetch release: {:?}", err), root);
             }
         }
+    }
+}
+
+impl ReleaseFormModel {
+    fn choose_thumbnail(&self, sender: &ComponentSender<Self>, root: &gtk::Window) {
+        let dialog = FileChooserDialog::builder()
+            .title("Select Directory")
+            .action(gtk::FileChooserAction::Open)
+            .modal(true)
+            .transient_for(root)
+            .build();
+
+        dialog.add_button("Cancel", gtk::ResponseType::Cancel);
+        dialog.add_button("Select", gtk::ResponseType::Accept);
+
+        dialog.connect_response(clone!(
+            #[strong]
+            sender,
+            move |dialog, response| {
+                tracing::info!("Directory selection dialog response: {:?}", response);
+                if response == gtk::ResponseType::Accept
+                    && let Some(path) = dialog.file().and_then(|f| f.path())
+                {
+                    tracing::info!("Selected directory path: {:?}", path);
+                    sender.input(ReleaseFormMsg::ThumbnailSelected(path));
+                }
+                dialog.close();
+            }
+        ));
+
+        dialog.present();
     }
 }
