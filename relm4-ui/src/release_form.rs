@@ -106,7 +106,6 @@ impl Component for ReleaseFormModel {
                 glib::Propagation::Proceed
             },
 
-
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
                 add_css_class: "form-container",
@@ -303,6 +302,14 @@ impl Component for ReleaseFormModel {
                 } else {
                     let release_id = self.release.as_ref().map(|r| r.id);
                     let release_name = self.release_name.clone();
+
+                    // TODO: probably need a release pipeline
+                    // - create pipeline
+                    //    - add thumbnail if selected
+                    //    - create release
+                    // - update pipeline
+                    //    - update thumbnail if changed
+                    //    - update release
 
                     sender.oneshot_command(async move {
                         let res = match release_id {

@@ -16,6 +16,7 @@ pub mod file_system_ops;
 pub mod file_type_migration;
 pub mod mass_import;
 pub mod pipeline;
+pub mod release;
 pub mod release_item_service;
 pub mod release_service;
 pub mod settings_service;
