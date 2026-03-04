@@ -69,6 +69,7 @@ impl FileSetServiceOps for FileSetService {
                         &[software_title_id],
                         &[file_set_id],
                         &file_set_params.system_ids,
+                        None,
                     )
                     .await
                     .map_err(|e| FileSetServiceError::DatabaseError(format!("{:?}", e)))?,
@@ -129,6 +130,7 @@ impl FileSetServiceOps for FileSetService {
                 &[software_title_id],
                 file_set_ids,
                 system_ids,
+                None,
             )
             .await
             .map_err(|e| FileSetServiceError::DatabaseError(format!("{:?}", e)))?;

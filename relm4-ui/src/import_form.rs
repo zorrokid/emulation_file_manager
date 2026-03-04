@@ -5,12 +5,11 @@ use core_types::{FileType, item_type::ItemType};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
-        self, FileChooserDialog,
-        gio::prelude::FileExt,
+        self,
         glib::{self, clone},
         prelude::{
             BoxExt, ButtonExt, DialogExt, EditableExt, EntryBufferExtManual, EntryExt,
-            FileChooserExt, GtkWindowExt, OrientableExt, WidgetExt,
+            GtkWindowExt, OrientableExt, WidgetExt,
         },
     },
     typed_view::list::{RelmListItem, TypedListView},
@@ -29,7 +28,7 @@ use crate::{
     system_selector::{
         SystemSelectInit, SystemSelectModel, SystemSelectMsg, SystemSelectOutputMsg,
     },
-    utils::dialog_utils::show_error_dialog,
+    utils::dialog_utils::{show_error_dialog, show_file_chooser_dialog},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -295,65 +294,37 @@ impl Component for ImportForm {
     ) {
         match msg {
             ImportFormMsg::OpenDirectorySelector => {
-                let dialog = FileChooserDialog::builder()
-                    .title("Select Directory")
-                    .action(gtk::FileChooserAction::SelectFolder)
-                    .modal(true)
-                    .transient_for(root)
-                    .build();
-
-                dialog.add_button("Cancel", gtk::ResponseType::Cancel);
-                dialog.add_button("Select", gtk::ResponseType::Accept);
-
-                dialog.connect_response(clone!(
-                    #[strong]
-                    sender,
-                    move |dialog, response| {
-                        tracing::info!("Directory selection dialog response: {:?}", response);
-                        if response == gtk::ResponseType::Accept
-                            && let Some(path) = dialog.file().and_then(|f| f.path())
-                        {
-                            tracing::info!("Selected directory path: {:?}", path);
-                            sender.input(ImportFormMsg::DirectorySelected(path));
-                        }
-                        dialog.close();
-                    }
-                ));
-
-                dialog.present();
+                let sender = sender.clone();
+                show_file_chooser_dialog(
+                    root,
+                    "Select Directory",
+                    gtk::FileChooserAction::SelectFolder,
+                    move |path| {
+                        tracing::info!("Selected directory path: {:?}", path);
+                        sender.input(ImportFormMsg::DirectorySelected(path));
+                    },
+                );
             }
             ImportFormMsg::OpenFileSelector => {
                 let filter = gtk::FileFilter::new();
                 filter.add_suffix("dat");
                 filter.set_name(Some("DAT files"));
-                let dialog = FileChooserDialog::builder()
-                    .title("Select File")
-                    .action(gtk::FileChooserAction::Open)
-                    .filter(&filter)
-                    .modal(true)
-                    .transient_for(root)
-                    .build();
 
-                dialog.add_button("Cancel", gtk::ResponseType::Cancel);
-                dialog.add_button("Select", gtk::ResponseType::Accept);
-
-                dialog.connect_response(clone!(
-                    #[strong]
-                    sender,
-                    move |dialog, response| {
-                        if response == gtk::ResponseType::Accept
-                            && let Some(path) = dialog.file().and_then(|f| f.path())
-                            // TODO: add more thorough file type checking and support for other
-                            // data file types
-                            && path.extension().and_then(|ext| ext.to_str()) == Some("dat")
-                        {
+                let sender = sender.clone();
+                show_file_chooser_dialog(
+                    root,
+                    "Select DAT File",
+                    gtk::FileChooserAction::Open,
+                    move |path| {
+                        tracing::info!("Selected path: {:?}", path);
+                        if path.extension().and_then(|ext| ext.to_str()) == Some("dat") {
+                            tracing::info!("Selected file has .dat extension, proceeding");
                             sender.input(ImportFormMsg::DatFileSelected(path));
+                        } else {
+                            tracing::warn!("Selected file does not have .dat extension, ignoring");
                         }
-                        dialog.close();
-                    }
-                ));
-
-                dialog.present();
+                    },
+                );
             }
             ImportFormMsg::DirectorySelected(path) => {
                 tracing::info!("Directory selected: {:?}", path);

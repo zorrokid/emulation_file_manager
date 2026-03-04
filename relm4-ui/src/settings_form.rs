@@ -3,18 +3,17 @@ use std::{path::PathBuf, sync::Arc};
 use relm4::{
     Component, ComponentParts, ComponentSender, RelmWidgetExt,
     gtk::{
-        self, FileChooserDialog,
-        gio::prelude::FileExt,
-        glib::{self, clone},
+        self,
+        glib::{self},
         prelude::{
-            BoxExt, ButtonExt, CheckButtonExt, DialogExt, EditableExt, EntryBufferExtManual,
-            EntryExt, FileChooserExt as _, GtkWindowExt, OrientableExt, WidgetExt,
+            BoxExt, ButtonExt, CheckButtonExt, EditableExt, EntryBufferExtManual, EntryExt,
+            GtkWindowExt, OrientableExt, WidgetExt,
         },
     },
 };
 use service::{error::Error, settings_service::SettingsSaveModel};
 
-use crate::utils::dialog_utils::show_error_dialog;
+use crate::utils::dialog_utils::{show_error_dialog, show_file_chooser_dialog};
 
 #[derive(Debug)]
 pub struct SettingsForm {
@@ -491,31 +490,15 @@ impl Component for SettingsForm {
 
 impl SettingsForm {
     fn select_collection_root_dir(&mut self, root: &gtk::Window, sender: &ComponentSender<Self>) {
-        let dialog = FileChooserDialog::builder()
-            .title("Select Collection Root Directory")
-            .action(gtk::FileChooserAction::SelectFolder)
-            .modal(true)
-            .transient_for(root)
-            .build();
-
-        dialog.add_button("Cancel", gtk::ResponseType::Cancel);
-        dialog.add_button("Select", gtk::ResponseType::Accept);
-
-        dialog.connect_response(clone!(
-            #[strong]
-            sender,
-            move |dialog, response| {
-                tracing::info!("Directory selection dialog response: {:?}", response);
-                if response == gtk::ResponseType::Accept
-                    && let Some(path) = dialog.file().and_then(|f| f.path())
-                {
-                    tracing::info!("Selected directory path: {:?}", path);
-                    sender.input(SettingsFormMsg::CollectionRootDirSelected(path));
-                }
-                dialog.close();
-            }
-        ));
-
-        dialog.present();
+        let sender = sender.clone();
+        show_file_chooser_dialog(
+            root,
+            "Select Collection Root Directory",
+            gtk::FileChooserAction::SelectFolder,
+            move |path| {
+                tracing::info!("Selected collection root directory: {:?}", path);
+                sender.input(SettingsFormMsg::CollectionRootDirSelected(path));
+            },
+        );
     }
 }

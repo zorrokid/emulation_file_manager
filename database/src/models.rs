@@ -77,12 +77,14 @@ impl Display for FileSetFileInfo {
 pub struct Release {
     pub id: i64,
     pub name: String,
+    pub thumbnail_filename: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ReleaseExtended {
     pub id: i64,
     pub name: String,
+    pub thumbnail_filename: Option<String>,
     pub system_names: Vec<String>,
     pub software_title_names: Vec<String>,
     pub file_types: Vec<FileType>,

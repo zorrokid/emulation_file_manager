@@ -20,10 +20,17 @@ impl ReleaseService {
         software_title_ids: &[i64],
         file_set_ids: &[i64],
         system_ids: &[i64],
+        thumbnail_filename: Option<&str>,
     ) -> Result<i64, Error> {
         self.repository_manager
             .get_release_repository()
-            .add_release_full(name, software_title_ids, file_set_ids, system_ids)
+            .add_release_full(
+                name,
+                software_title_ids,
+                file_set_ids,
+                system_ids,
+                thumbnail_filename,
+            )
             .await
             .map_err(|e| Error::DbError(e.to_string()))
     }
@@ -35,10 +42,18 @@ impl ReleaseService {
         software_title_ids: &[i64],
         file_set_ids: &[i64],
         system_ids: &[i64],
+        thumbnail_filename: Option<&str>,
     ) -> Result<i64, Error> {
         self.repository_manager
             .get_release_repository()
-            .update_release_full(id, name, software_title_ids, file_set_ids, system_ids)
+            .update_release_full(
+                id,
+                name,
+                software_title_ids,
+                file_set_ids,
+                system_ids,
+                thumbnail_filename,
+            )
             .await
             .map_err(|e| Error::DbError(e.to_string()))
     }
@@ -84,7 +99,14 @@ mod tests {
         };
         repo_manager
             .get_file_set_repository()
-            .add_file_set("Test Set", "Test Set", &FileType::Rom, "src", &[file], &[system_id])
+            .add_file_set(
+                "Test Set",
+                "Test Set",
+                &FileType::Rom,
+                "src",
+                &[file],
+                &[system_id],
+            )
             .await
             .unwrap()
     }
@@ -93,7 +115,10 @@ mod tests {
     async fn add_release_returns_positive_id() {
         let repo_manager = database::setup_test_repository_manager().await;
         let service = ReleaseService::new(repo_manager);
-        let id = service.add_release("Game", &[], &[], &[]).await.unwrap();
+        let id = service
+            .add_release("Game", &[], &[], &[], None)
+            .await
+            .unwrap();
         assert!(id > 0);
     }
 
@@ -106,7 +131,7 @@ mod tests {
         let file_set_id = add_file_set(&repo_manager, system_id).await;
 
         let id = service
-            .add_release("Game", &[title_id], &[file_set_id], &[system_id])
+            .add_release("Game", &[title_id], &[file_set_id], &[system_id], None)
             .await
             .unwrap();
 
@@ -131,9 +156,12 @@ mod tests {
     async fn update_release_changes_name() {
         let repo_manager = database::setup_test_repository_manager().await;
         let service = ReleaseService::new(Arc::clone(&repo_manager));
-        let id = service.add_release("Old Name", &[], &[], &[]).await.unwrap();
+        let id = service
+            .add_release("Old Name", &[], &[], &[], None)
+            .await
+            .unwrap();
         service
-            .update_release(id, "New Name", &[], &[], &[])
+            .update_release(id, "New Name", &[], &[], &[], None)
             .await
             .unwrap();
         let release = repo_manager
@@ -155,11 +183,11 @@ mod tests {
             .await
             .unwrap();
         let id = service
-            .add_release("Game", &[], &[], &[system_a])
+            .add_release("Game", &[], &[], &[system_a], None)
             .await
             .unwrap();
         service
-            .update_release(id, "Game", &[], &[], &[system_b])
+            .update_release(id, "Game", &[], &[], &[system_b], None)
             .await
             .unwrap();
         let systems = repo_manager
@@ -175,12 +203,12 @@ mod tests {
     async fn delete_release_removes_record() {
         let repo_manager = database::setup_test_repository_manager().await;
         let service = ReleaseService::new(Arc::clone(&repo_manager));
-        let id = service.add_release("Game", &[], &[], &[]).await.unwrap();
+        let id = service
+            .add_release("Game", &[], &[], &[], None)
+            .await
+            .unwrap();
         service.delete_release(id).await.unwrap();
-        let result = repo_manager
-            .get_release_repository()
-            .get_release(id)
-            .await;
+        let result = repo_manager.get_release_repository().get_release(id).await;
         assert!(result.is_err());
     }
 }

@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT r.id as id, r.name as name, r.thumbnail_filename as thumbnail_filename\n             FROM release r\n             INNER JOIN release_software_title rst \n             ON r.id = rst.release_id\n             WHERE rst.software_title_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "thumbnail_filename",
+        "ordinal": 2,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "2d9344f845e8ceaedb29667f3ea16f49f14a85c53834debbf35a09bd32d71ed7"
+}
