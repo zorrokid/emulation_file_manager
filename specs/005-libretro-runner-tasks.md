@@ -17,7 +17,20 @@ pub enum LibretroError {
 ```
 
 ### T1.3 — `src/ffi.rs`
-- `RETRO_ENVIRONMENT_*` constants (IDs 9, 10, 15, 27, 37)
+
+`RETRO_ENVIRONMENT_*` constants — sent by the core to the frontend via `environment_cb(cmd, data)`:
+
+| Constant | ID | Direction | What to do |
+|---|---|---|---|
+| `GET_SYSTEM_DIRECTORY` | 9 | core asks frontend | Write a path pointer into `data` (temp dir) |
+| `SET_PIXEL_FORMAT` | 10 | core tells frontend | Read pixel format from `data`, return `true` to accept XRGB8888 |
+| `GET_VARIABLE` | 15 | core asks frontend | Return `false` — no core options supported yet |
+| `GET_LOG_INTERFACE` | 27 | core asks frontend | Write a logging fn pointer into `data` |
+| `SET_GEOMETRY` | 37 | core tells frontend | Read new dimensions from `data`, update frame buffer |
+| Everything else | — | — | Return `false` — cores handle unsupported commands gracefully |
+
+Reference: `libretro.h` in the RetroArch repo has all constants and struct definitions with comments.
+
 - `RetroPixelFormat` repr(u32) enum
 - `RetroGameInfo`, `RetroSystemInfo`, `RetroSystemAvInfo`, `RetroGameGeometry`, `RetroSystemTiming` repr(C) structs
 - Callback function pointer typedefs
@@ -39,7 +52,14 @@ pub enum LibretroError {
 
 ### T1.7 — `src/core.rs`
 - `LibretroCore` struct with `_library: Library`, `retro_run`, `retro_unload_game`, `retro_deinit`, `frame_buffer`, `input_state`, `fps`
-- `load(core_path, rom_path, system_dir) -> Result<Self, LibretroError>` — full init sequence
+- `load(core_path, rom_path, system_dir) -> Result<Self, LibretroError>` — init sequence (order is critical):
+  1. `retro_set_environment(environment_cb)` — register callback before anything else
+  2. Install `CORE_STATE` into the global — **must happen before `retro_init`**, which triggers callbacks immediately
+  3. `retro_init()` — core wakes up and calls `environment_cb` to query system dir, pixel format, log interface
+  4. `retro_set_video_refresh / audio_sample / audio_sample_batch / input_poll / input_state` — register remaining callbacks
+  5. `retro_get_system_info()` — check `need_fullpath`; fceumm sets this `true` (pass file path, not ROM data)
+  6. `retro_load_game(&RetroGameInfo { path: rom_path, data: null, size: 0 })` — more `environment_cb` calls may occur here (e.g. `SET_GEOMETRY`)
+  7. `retro_get_system_av_info()` — read final output geometry and `fps` (NTSC NES ≈ 60.0988); size the frame buffer here
 - `run_frame(&self)`
 - `shutdown(self)`
 
