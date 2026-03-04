@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id, name \n             FROM release WHERE id = ?",
+  "query": "SELECT id, name, thumbnail_filename\n             FROM release WHERE id = ?",
   "describe": {
     "columns": [
       {
@@ -12,6 +12,11 @@
         "name": "name",
         "ordinal": 1,
         "type_info": "Text"
+      },
+      {
+        "name": "thumbnail_filename",
+        "ordinal": 2,
+        "type_info": "Text"
       }
     ],
     "parameters": {
@@ -19,8 +24,9 @@
     },
     "nullable": [
       false,
-      false
+      false,
+      true
     ]
   },
-  "hash": "be4e28fb2c9701ac416197946880ec0ef5ab56ce4e76b8d002b499231f3b7df8"
+  "hash": "fbd2d19346a258444dce5111891a2389f1e103e94e6c2ef093efcc0d3d2a86ec"
 }

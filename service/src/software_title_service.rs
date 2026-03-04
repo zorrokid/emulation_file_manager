@@ -213,6 +213,7 @@ mod tests {
                 &[software_title_id_to_merge1, software_title_id_to_merge2],
                 &[file_set_id],
                 &[system_id],
+                None,
             )
             .await
             .unwrap();
@@ -226,6 +227,7 @@ mod tests {
                 &[base_software_title_id, software_title_id_to_merge1],
                 &[file_set_id],
                 &[system_id],
+                None,
             )
             .await
             .unwrap();
@@ -273,7 +275,10 @@ mod tests {
     async fn add_software_title_returns_positive_id() {
         let repo_manager = database::setup_test_repository_manager().await;
         let service = SoftwareTitleService::new(repo_manager);
-        let id = service.add_software_title("Super Mario Bros").await.unwrap();
+        let id = service
+            .add_software_title("Super Mario Bros")
+            .await
+            .unwrap();
         assert!(id > 0);
     }
 
@@ -281,7 +286,10 @@ mod tests {
     async fn add_software_title_persists() {
         let repo_manager = database::setup_test_repository_manager().await;
         let service = SoftwareTitleService::new(Arc::clone(&repo_manager));
-        let id = service.add_software_title("Super Mario Bros").await.unwrap();
+        let id = service
+            .add_software_title("Super Mario Bros")
+            .await
+            .unwrap();
         let title = repo_manager
             .get_software_title_repository()
             .get_software_title(id)
@@ -324,7 +332,7 @@ mod tests {
         let title_id = service.add_software_title("In Use Title").await.unwrap();
         repo_manager
             .get_release_repository()
-            .add_release_full("Test Release", &[title_id], &[], &[])
+            .add_release_full("Test Release", &[title_id], &[], &[], None)
             .await
             .unwrap();
         let result = service.delete_software_title(title_id).await;

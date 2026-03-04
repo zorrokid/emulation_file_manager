@@ -69,7 +69,7 @@ mod tests {
     async fn create_test_release(repo_manager: &Arc<RepositoryManager>) -> i64 {
         repo_manager
             .get_release_repository()
-            .add_release_full("Test Release", &[], &[], &[])
+            .add_release_full("Test Release", &[], &[], &[], None)
             .await
             .unwrap()
     }

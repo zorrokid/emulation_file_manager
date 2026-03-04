@@ -84,10 +84,7 @@ mod tests {
         let service = SystemService::new(Arc::clone(&repo_manager));
         let id = service.add_system("Commodore 64").await.unwrap();
         service.delete_system(id).await.unwrap();
-        let result = repo_manager
-            .get_system_repository()
-            .get_system(id)
-            .await;
+        let result = repo_manager.get_system_repository().get_system(id).await;
         assert!(result.is_err());
     }
 
@@ -98,7 +95,7 @@ mod tests {
         let system_id = service.add_system("Commodore 64").await.unwrap();
         repo_manager
             .get_release_repository()
-            .add_release_full("Test Release", &[], &[], &[system_id])
+            .add_release_full("Test Release", &[], &[], &[system_id], None)
             .await
             .unwrap();
         let result = service.delete_system(system_id).await;

@@ -3,7 +3,7 @@ use core_types::events::SyncEvent;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
-        self, FileChooserDialog,
+        self,
         gio::{self, prelude::*},
         glib::{Propagation, clone},
         prelude::*,
@@ -31,7 +31,7 @@ use crate::{
     },
     status_bar::{StatusBarModel, StatusBarMsg},
     style,
-    utils::dialog_utils::{show_error_dialog, show_info_dialog},
+    utils::dialog_utils::{show_error_dialog, show_file_chooser_dialog, show_info_dialog},
 };
 
 #[derive(Debug)]
@@ -385,30 +385,16 @@ impl AppModel {
 
     fn start_export_all_files(&self, sender: &ComponentSender<Self>, root: &gtk::Window) {
         tracing::info!("Export all files requested");
-        let dialog = FileChooserDialog::builder()
-            .title("Select folder to export all files")
-            .action(gtk::FileChooserAction::SelectFolder)
-            .modal(true)
-            .transient_for(root)
-            .build();
-
-        dialog.add_button("Cancel", gtk::ResponseType::Cancel);
-        dialog.add_button("Open", gtk::ResponseType::Accept);
-
-        dialog.connect_response(clone!(
-            #[strong]
-            sender,
-            move |dialog, response| {
-                if response == gtk::ResponseType::Accept
-                    && let Some(path) = dialog.file().and_then(|f| f.path())
-                {
-                    sender.input(AppMsg::ExportFolderSelected(path));
-                }
-                dialog.close();
-            }
-        ));
-
-        dialog.present();
+        let sender = sender.clone();
+        show_file_chooser_dialog(
+            root,
+            "Select folder to export all files",
+            gtk::FileChooserAction::SelectFolder,
+            move |path| {
+                tracing::info!("Selected export folder : {:?}", path);
+                sender.input(AppMsg::ExportFolderSelected(path));
+            },
+        );
     }
 
     fn export_all_files(&self, sender: &ComponentSender<Self>, path: PathBuf) {

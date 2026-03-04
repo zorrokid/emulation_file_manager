@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO release (name, thumbnail_filename) VALUES (?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "fb4e59993e7ae5d38001cf4b2b3790ef05fd87fca2dc63ac8969fc3ac5e64628"
+}

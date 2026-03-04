@@ -1,9 +1,10 @@
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
-        self, glib,
+        self,
+        glib::{self},
         prelude::{
             ButtonExt, EditableExt, EntryBufferExtManual, EntryExt, FrameExt, GtkWindowExt,
             OrientableExt, WidgetExt,
@@ -27,7 +28,7 @@ use crate::{
         },
         system_list::{SystemList, SystemListInit, SystemListMsg, SystemListOutputMsg},
     },
-    utils::dialog_utils::{show_error_dialog, show_info_dialog},
+    utils::dialog_utils::{show_error_dialog, show_file_chooser_dialog, show_info_dialog},
 };
 
 #[derive(Debug)]
@@ -43,6 +44,8 @@ pub enum ReleaseFormMsg {
     SoftwareTitleCreated(SoftwareTitleListModel),
     SoftwareTitleUpdated(SoftwareTitleListModel),
     ItemsChanged { item_ids: Vec<i64> },
+    SelectThumbnail,
+    ThumbnailSelected(PathBuf),
 }
 
 #[derive(Debug)]
@@ -73,6 +76,7 @@ pub struct ReleaseFormModel {
     software_title_list: Controller<SoftwareTitleList>,
     selected_item_ids: Vec<i64>,
     item_list: Controller<ItemList>,
+    thumbnail_image: Option<PathBuf>,
 }
 
 pub struct ReleaseFormInit {
@@ -102,22 +106,35 @@ impl Component for ReleaseFormModel {
                 glib::Propagation::Proceed
             },
 
-
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
                 add_css_class: "form-container",
 
-                gtk::Frame {
-                    set_label: Some("Release Name:"),
-                    #[name="release_name_entry"]
-                    gtk::Entry {
-                        set_text: &model.release_name,
-                        set_placeholder_text: Some("Release name"),
-                        connect_changed[sender] => move |entry| {
-                            let buffer = entry.buffer();
-                            sender.input(ReleaseFormMsg::NameChanged(buffer.text().into()));
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    gtk::Frame {
+                        set_label: Some("Release Name:"),
+                        #[name="release_name_entry"]
+                        gtk::Entry {
+                            set_text: &model.release_name,
+                            set_placeholder_text: Some("Release name"),
+                            connect_changed[sender] => move |entry| {
+                                let buffer = entry.buffer();
+                                sender.input(ReleaseFormMsg::NameChanged(buffer.text().into()));
+                            },
+                            set_hexpand: true,
                         },
-                        set_hexpand: true,
+                    },
+                    gtk::Frame {
+                        set_label: Some("Thumbnail:"),
+                        gtk::Button {
+                            #[name="thumbnail_image"]
+                            gtk::Image {
+                                #[watch]
+                                set_from_file: model.thumbnail_image.as_deref(),
+                            },
+                            connect_clicked => ReleaseFormMsg::SelectThumbnail
+                        }
                     },
                 },
 
@@ -204,6 +221,7 @@ impl Component for ReleaseFormModel {
             selected_software_title_ids: vec![],
             item_list,
             selected_item_ids: vec![],
+            thumbnail_image: None,
         };
 
         let file_set_list_view = model.file_set_list.widget();
@@ -285,6 +303,14 @@ impl Component for ReleaseFormModel {
                     let release_id = self.release.as_ref().map(|r| r.id);
                     let release_name = self.release_name.clone();
 
+                    // TODO: probably need a release pipeline
+                    // - create pipeline
+                    //    - add thumbnail if selected
+                    //    - create release
+                    // - update pipeline
+                    //    - update thumbnail if changed
+                    //    - update release
+
                     sender.oneshot_command(async move {
                         let res = match release_id {
                             Some(id) => {
@@ -297,6 +323,7 @@ impl Component for ReleaseFormModel {
                                         &software_title_ids,
                                         &file_set_ids,
                                         &system_ids,
+                                        None,
                                     )
                                     .await
                             }
@@ -309,6 +336,7 @@ impl Component for ReleaseFormModel {
                                         &software_title_ids,
                                         &file_set_ids,
                                         &system_ids,
+                                        None,
                                     )
                                     .await
                             }
@@ -434,7 +462,15 @@ impl Component for ReleaseFormModel {
             ReleaseFormMsg::NameChanged(name) => {
                 self.release_name = name;
             }
+            ReleaseFormMsg::SelectThumbnail => {
+                self.choose_thumbnail(&sender, root);
+            }
+            ReleaseFormMsg::ThumbnailSelected(path) => {
+                tracing::info!("Thumbnail selected: {:?}", path);
+                self.thumbnail_image = Some(path);
+            }
         }
+
         // This is essential with update_with_view:
         self.update_view(widgets, sender);
     }
@@ -471,5 +507,20 @@ impl Component for ReleaseFormModel {
                 show_error_dialog(format!("Failed to fetch release: {:?}", err), root);
             }
         }
+    }
+}
+
+impl ReleaseFormModel {
+    fn choose_thumbnail(&self, sender: &ComponentSender<Self>, root: &gtk::Window) {
+        let sender = sender.clone();
+        show_file_chooser_dialog(
+            root,
+            "Select Image for Thumbnail",
+            gtk::FileChooserAction::Open,
+            move |path| {
+                tracing::info!("Selected thumbnail path: {:?}", path);
+                sender.input(ReleaseFormMsg::ThumbnailSelected(path));
+            },
+        );
     }
 }

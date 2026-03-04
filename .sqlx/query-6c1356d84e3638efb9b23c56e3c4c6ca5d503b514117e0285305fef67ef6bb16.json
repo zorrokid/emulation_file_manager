@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE release SET name = ?, thumbnail_filename = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "6c1356d84e3638efb9b23c56e3c4c6ca5d503b514117e0285305fef67ef6bb16"
+}

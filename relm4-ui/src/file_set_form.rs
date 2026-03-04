@@ -8,12 +8,12 @@ use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, FactorySender,
     RelmWidgetExt,
     gtk::{
-        self, FileChooserDialog, gdk,
+        self, gdk,
         gio::prelude::FileExt,
         glib::{self, clone, types::StaticType},
         prelude::{
             BoxExt, ButtonExt, CheckButtonExt, DialogExt, EditableExt, EntryBufferExtManual,
-            EntryExt, FileChooserExt, GtkWindowExt, OrientableExt, WidgetExt,
+            EntryExt, GtkWindowExt, OrientableExt, WidgetExt,
         },
     },
     prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque},
@@ -32,7 +32,10 @@ use crate::{
     components::item_type_dropdown::{
         ItemTypeDropDownMsg, ItemTypeDropDownOutputMsg, ItemTypeDropdown,
     },
-    utils::{dialog_utils::show_error_dialog, string_utils::format_bytes},
+    utils::{
+        dialog_utils::{show_error_dialog, show_file_chooser_dialog},
+        string_utils::format_bytes,
+    },
 };
 
 #[derive(Debug, Clone)]
@@ -473,30 +476,16 @@ impl Component for FileSetFormModel {
     ) {
         match msg {
             FileSetFormMsg::OpenFileSelector => {
-                let dialog = FileChooserDialog::builder()
-                    .title("Select Files")
-                    .action(gtk::FileChooserAction::Open)
-                    .modal(true)
-                    .transient_for(root)
-                    .build();
-
-                dialog.add_button("Cancel", gtk::ResponseType::Cancel);
-                dialog.add_button("Open", gtk::ResponseType::Accept);
-
-                dialog.connect_response(clone!(
-                    #[strong]
-                    sender,
-                    move |dialog, response| {
-                        if response == gtk::ResponseType::Accept
-                            && let Some(path) = dialog.file().and_then(|f| f.path())
-                        {
-                            sender.input(FileSetFormMsg::FileSelected(path));
-                        }
-                        dialog.close();
-                    }
-                ));
-
-                dialog.present();
+                let sender = sender.clone();
+                show_file_chooser_dialog(
+                    root,
+                    "Select Files",
+                    gtk::FileChooserAction::Open,
+                    move |path| {
+                        tracing::info!("Selected thumbnail path: {:?}", path);
+                        sender.input(FileSetFormMsg::FileSelected(path));
+                    },
+                );
             }
 
             FileSetFormMsg::FileSelected(path) => {
