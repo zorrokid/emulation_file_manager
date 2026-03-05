@@ -7,6 +7,7 @@ use crate::{
     download_service::DownloadService, emulator_service::EmulatorService,
     export_service::ExportService,
     external_executable_runner::service::ExternalExecutableRunnerService,
+    libretro_runner::service::LibretroRunnerService,
     file_import::service::FileImportService, file_set_deletion::service::FileSetDeletionService,
     file_set_download::service::DownloadService as FileSetDownloadService,
     mass_import::service::MassImportService, release_item_service::ReleaseItemService,
@@ -50,6 +51,7 @@ pub struct AppServices {
     file_set_deletion: OnceLock<Arc<FileSetDeletionService>>,
     file_set_download: OnceLock<Arc<FileSetDownloadService>>,
     runner: OnceLock<Arc<ExternalExecutableRunnerService>>,
+    libretro_runner: OnceLock<Arc<LibretroRunnerService>>,
     import: OnceLock<Arc<MassImportService>>,
     settings: OnceLock<Arc<SettingsService>>,
     repository_manager: Arc<RepositoryManager>,
@@ -73,6 +75,7 @@ impl AppServices {
             file_set_deletion: OnceLock::new(),
             file_set_download: OnceLock::new(),
             runner: OnceLock::new(),
+            libretro_runner: OnceLock::new(),
             import: OnceLock::new(),
             settings: OnceLock::new(),
             repository_manager,
@@ -189,6 +192,20 @@ impl AppServices {
                 Arc::new(ExternalExecutableRunnerService::new(
                     Arc::clone(&self.app_settings),
                     Arc::clone(&self.repository_manager),
+                ))
+            })
+            .clone()
+    }
+
+    pub fn libretro_runner(&self) -> Arc<LibretroRunnerService> {
+        self.libretro_runner
+            .get_or_init(|| {
+                Arc::new(LibretroRunnerService::new(
+                    Arc::clone(&self.app_settings),
+                    Arc::new(crate::file_set_download::service::DownloadService::new(
+                        Arc::clone(&self.repository_manager),
+                        Arc::clone(&self.app_settings),
+                    )),
                 ))
             })
             .clone()

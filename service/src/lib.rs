@@ -8,6 +8,7 @@ pub mod emulator_service;
 pub mod error;
 pub mod export_service;
 pub mod external_executable_runner;
+pub mod libretro_runner;
 pub mod file_import;
 pub mod file_set;
 pub mod file_set_deletion;
