@@ -1,3 +1,4 @@
+pub mod audio;
 pub mod callbacks;
 pub mod core;
 pub mod error;

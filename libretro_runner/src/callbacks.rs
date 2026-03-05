@@ -1,4 +1,5 @@
 use std::{
+    collections::VecDeque,
     ffi::{CString, c_void},
     sync::{Arc, Mutex, OnceLock},
 };
@@ -29,6 +30,15 @@ pub struct CoreCallbackState {
     /// the core in GET_SYSTEM_DIRECTORY stays valid for the lifetime of the core.
     /// If this were a local variable the pointer would dangle after the function returned.
     pub system_directory: CString,
+    /// Stereo interleaved f32 samples pushed by the audio callbacks and drained
+    /// by the cpal audio thread. Arc<Mutex<_>> because both sides run on
+    /// different threads. We store f32 (not i16) so the cpal callback doesn't
+    /// need to know the original format — conversion happens on push.
+    ///
+    /// We share only the buffer here (not the AudioOutput/cpal Stream) because
+    /// cpal::Stream contains raw pointers and is not Sync, so it cannot live
+    /// inside a static. LibretroCore owns the AudioOutput to keep the stream alive.
+    pub audio_buffer: Arc<Mutex<VecDeque<f32>>>,
 }
 
 /// Process-wide singleton holding the active core's callback state.
@@ -104,15 +114,10 @@ pub unsafe extern "C" fn environment_cb(cmd: u32, data: *mut c_void) -> bool {
                 2 => RetroPixelFormat::Rgb565,
                 _ => return false,
             };
-            // We reject anything other than XRGB8888 to keep the frame buffer
-            // conversion simple. fceumm will retry with XRGB8888 when we
-            // return false here. Note: if a core only supports RGB565/RGB1555
-            // and never offers XRGB8888, it will fall back to its default
-            // format — frame_buffer.rs handles all three, so you can remove
-            // this guard if you need to support such cores.
-            if format != RetroPixelFormat::Xrgb8888 {
-                return false;
-            }
+            // Accept whichever format the core prefers. frame_buffer.rs handles
+            // all three (XRGB8888, RGB565, RGB1555). Rejecting a format causes
+            // the core to keep using it anyway while our pixel_format field
+            // stays wrong, producing doubled / corrupt images.
             with_state(|s| s.pixel_format = format);
             true
         }
@@ -163,13 +168,35 @@ pub unsafe extern "C" fn video_refresh_cb(
     });
 }
 
-/// Called by the core to output a single stereo audio sample pair.
-/// Stubbed — we drop the samples silently for now.
-pub unsafe extern "C" fn audio_sample_cb(_left: i16, _right: i16) {}
+/// Push a slice of stereo interleaved i16 samples into the shared audio buffer.
+///
+/// i16 range is −32768..=32767; we normalise to −1.0..=1.0 for cpal.
+/// We cap the buffer to avoid unbounded growth if cpal falls behind.
+fn push_audio(samples: &[i16]) {
+    with_state(|s| {
+        let mut buf = s.audio_buffer.lock().expect("audio buffer lock");
+        const MAX_BUFFERED: usize = 16384;
+        for &s in samples {
+            if buf.len() < MAX_BUFFERED {
+                buf.push_back(s as f32 / 32768.0);
+            }
+        }
+    });
+}
 
-/// Called by the core to output a batch of stereo audio samples.
-/// We claim we consumed all frames so the core's audio buffer doesn't stall.
-pub unsafe extern "C" fn audio_sample_batch_cb(_data: *const i16, frames: usize) -> usize {
+/// Called by the core to output a single stereo sample pair.
+/// Some cores use this; others use the batch variant exclusively.
+pub unsafe extern "C" fn audio_sample_cb(left: i16, right: i16) {
+    push_audio(&[left, right]);
+}
+
+/// Called by the core to output a batch of stereo interleaved samples.
+/// `data` points to `frames * 2` i16 values: [L0, R0, L1, R1, …].
+/// Must return the number of frames consumed (we always consume all of them).
+pub unsafe extern "C" fn audio_sample_batch_cb(data: *const i16, frames: usize) -> usize {
+    // SAFETY: the core guarantees `data` points to `frames * 2` valid i16 values.
+    let samples = unsafe { std::slice::from_raw_parts(data, frames * 2) };
+    push_audio(samples);
     frames
 }
 

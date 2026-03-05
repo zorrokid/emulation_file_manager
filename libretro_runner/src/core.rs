@@ -7,6 +7,7 @@ use std::{
 use libloading::{Library, Symbol};
 
 use crate::{
+    audio::AudioOutput,
     callbacks::{self, CoreCallbackState},
     error::LibretroError,
     ffi::{
@@ -36,6 +37,12 @@ pub struct LibretroCore {
     // Arc<Mutex<_>> lets multiple owners each lock independently.
     pub frame_buffer: Arc<Mutex<FrameBuffer>>,
     pub input_state: Arc<Mutex<InputState>>,
+
+    /// Keeps the cpal audio stream alive. Dropping this stops audio output.
+    /// The stream's sample buffer is shared with the audio callbacks via
+    /// CoreCallbackState.audio_buffer — they are two Arcs pointing to the
+    /// same VecDeque. None if no audio device was available at load time.
+    _audio_output: Option<AudioOutput>,
 
     /// Frames per second reported by the core after retro_load_game().
     /// Used to set the glib::timeout_add_local interval (~16.6ms for NTSC NES).
@@ -110,6 +117,15 @@ impl LibretroCore {
         let frame_buffer = Arc::new(Mutex::new(FrameBuffer::new()));
         let input_state = Arc::new(Mutex::new(InputState::new()));
 
+        // Create the shared audio sample buffer. The libretro audio callbacks
+        // will push into this; cpal drains it on its audio thread.
+        // We create the buffer here (before retro_init) so it can be installed
+        // into CoreCallbackState immediately. The AudioOutput (which opens the
+        // sound device) is created later, after retro_get_system_av_info gives
+        // us the actual sample rate the core will output at.
+        let audio_buffer: Arc<Mutex<std::collections::VecDeque<f32>>> =
+            Arc::new(Mutex::new(std::collections::VecDeque::with_capacity(8192)));
+
         // CString converts a Rust &str to a null-terminated C string.
         // We store it in CoreCallbackState so the *const c_char pointer we
         // hand to the core in GET_SYSTEM_DIRECTORY stays valid.
@@ -132,6 +148,7 @@ impl LibretroCore {
             input_state: Arc::clone(&input_state),
             pixel_format: RetroPixelFormat::Xrgb8888,
             system_directory,
+            audio_buffer: Arc::clone(&audio_buffer),
         });
 
         // 3. Wake up the core — triggers environment_cb calls immediately.
@@ -228,6 +245,20 @@ impl LibretroCore {
             fb.rgba_data.resize(len, 0);
         }
 
+        // Now that we know the core's sample rate, open the audio output device.
+        // We pass the same audio_buffer Arc the callbacks are already using, so
+        // cpal will drain exactly the samples the core produces.
+        // On failure (e.g. no sound card) we log a warning and continue silently.
+        let sample_rate = av_info.timing.sample_rate as u32;
+        let audio_output = match AudioOutput::new(sample_rate, Arc::clone(&audio_buffer)) {
+            Ok(output) => Some(output),
+            Err(e) => {
+                // Non-fatal: the game runs silently if no sound device is available.
+                tracing::warn!("Audio output unavailable: {e}");
+                None
+            }
+        };
+
         Ok(Self {
             _library: lib,
             retro_run,
@@ -235,6 +266,7 @@ impl LibretroCore {
             retro_deinit,
             frame_buffer,
             input_state,
+            _audio_output: audio_output,
             fps: av_info.timing.fps,
         })
     }
