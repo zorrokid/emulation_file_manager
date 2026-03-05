@@ -267,6 +267,40 @@ GTK repaint
 
 ---
 
+## Architecture decisions
+
+### Why the Pipeline pattern is not used for the core lifecycle
+
+This codebase uses a Pipeline pattern for multi-step service operations (see `ExternalExecutableRunnerContext`). It might seem natural to model the libretro session as a pipeline:
+
+```
+PrepareRomStep → LoadCoreStep → RunLoopStep → CleanupStep
+```
+
+This does not work for two reasons.
+
+**1. Thread affinity.** The libretro spec requires that `retro_init()`, every `retro_run()` call, and `retro_deinit()` all execute on the **same thread**. The game loop uses `glib::timeout_add_local`, which only fires on the GTK main thread. Therefore `load()` must also happen on the GTK main thread. Pipeline steps run inside `oneshot_command` on the async thread pool — the wrong thread.
+
+| Phase | Thread required | Pipeline thread | Compatible? |
+|---|---|---|---|
+| `prepare_rom()` | any (async I/O) | thread pool | ✅ |
+| `LibretroCore::load()` | GTK main thread | thread pool | ❌ |
+| `retro_run()` loop | GTK main thread | — (ongoing timer) | ❌ |
+| `shutdown()` | GTK main thread | thread pool | ❌ |
+
+**2. The run phase is not a discrete step.** A pipeline step executes and returns a `StepAction`. The game loop fires 60 times per second for the entire session — there is no point at which `execute()` can return while the session is still running.
+
+Compare with `ExternalExecutableRunnerContext`: launching a subprocess is fire-and-forget (`Command::spawn()` returns immediately and the process runs independently). The libretro core runs in-process on a specific thread, which is a fundamentally different lifecycle.
+
+**The correct split is:**
+- `prepare_rom()` → `oneshot_command` (async, any thread) — the one step that fits the pipeline model
+- `load()` + game loop → GTK main thread via `update()` + glib timer
+- `cleanup_files()` → triggered by `LibretroWindowOutput::SessionEnded` back to the parent
+
+The long-term improvement (T5.2 in the spec) is a dedicated libretro thread that owns the entire `load → run loop → shutdown` lifecycle, with the frame buffer and audio buffer shared back to the GTK thread. Even then, the pipeline pattern would not apply — the run loop is inherently event-driven, not a sequence of discrete steps.
+
+---
+
 ## Adding a new core
 
 ### Step 1: Install the core
