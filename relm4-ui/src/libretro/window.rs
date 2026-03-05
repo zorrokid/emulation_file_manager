@@ -13,7 +13,7 @@ use relm4::{
     },
 };
 
-use libretro_runner::{core::LibretroCore, frame_buffer::FrameBuffer, input::InputState};
+use libretro_runner::{core::LibretroCore, frame_buffer::FrameBuffer};
 
 use super::input::map_key_event;
 
@@ -37,6 +37,10 @@ pub struct LibretroWindowModel {
     /// on Close before calling core.shutdown() — retro_run() must not be
     /// called after retro_deinit().
     timer_source_id: Option<glib::SourceId>,
+
+    /// Temp files to clean up after the session ends. Populated on Launch,
+    /// drained and returned to the parent via SessionEnded on Close.
+    temp_files: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -45,6 +49,9 @@ pub enum LibretroWindowMsg {
         core_path: PathBuf,
         rom_path: PathBuf,
         system_dir: PathBuf,
+        /// Temp files extracted during ROM preparation — passed back to the
+        /// parent via SessionEnded so it can call cleanup().
+        temp_files: Vec<String>,
     },
     Close,
 }
@@ -52,6 +59,9 @@ pub enum LibretroWindowMsg {
 #[derive(Debug)]
 pub enum LibretroWindowOutput {
     Error(String),
+    /// Emitted on Close. The parent should call LibretroRunnerService::cleanup_files()
+    /// with these file names to remove the extracted temp ROM files.
+    SessionEnded(Vec<String>),
 }
 
 #[relm4::component(pub)]
@@ -87,14 +97,44 @@ impl Component for LibretroWindowModel {
 
     fn init(
         _init: Self::Init,
-        _root: Self::Root,
+        root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let model = LibretroWindowModel {
             core: Arc::new(Mutex::new(None)),
             drawing_area: gtk::DrawingArea::new(),
             timer_source_id: None,
+            temp_files: Vec::new(),
         };
+
+        // Create the key controller once and attach it to the window here in
+        // init(). Previous code added a new controller on every Launch, causing
+        // controllers to accumulate across sessions (each one writing to the
+        // same InputState, producing duplicate inputs after the first session).
+        //
+        // The handler closes over the core Arc. When no core is loaded (between
+        // sessions) the lock returns None and the key event is silently ignored.
+        let key_controller = gtk::EventControllerKey::new();
+
+        let core_pressed = Arc::clone(&model.core);
+        key_controller.connect_key_pressed(move |_, keyval, _, _| {
+            let guard = core_pressed.lock().expect("core lock");
+            if let Some(core) = guard.as_ref() {
+                map_key_event(keyval, &core.input_state, true);
+            }
+            // Stop propagation so the key doesn't trigger other GTK actions.
+            glib::Propagation::Stop
+        });
+
+        let core_released = Arc::clone(&model.core);
+        key_controller.connect_key_released(move |_, keyval, _, _| {
+            let guard = core_released.lock().expect("core lock");
+            if let Some(core) = guard.as_ref() {
+                map_key_event(keyval, &core.input_state, false);
+            }
+        });
+
+        root.add_controller(key_controller);
 
         // Provide the local binding that the #[local_ref] in view! expects.
         let drawing_area = &model.drawing_area;
@@ -109,19 +149,20 @@ impl Component for LibretroWindowModel {
                 core_path,
                 rom_path,
                 system_dir,
+                temp_files,
             } => {
+                self.temp_files = temp_files;
+
                 match LibretroCore::load(&core_path, &rom_path, &system_dir) {
                     Ok(core) => {
                         let fps = core.fps;
-                        // Clone the Arcs before moving core into the Mutex,
-                        // so we can set up draw func and input without locking.
+                        // Clone the frame_buffer Arc before moving core into the
+                        // Mutex, so we can set up the draw func without locking.
                         let frame_buffer = Arc::clone(&core.frame_buffer);
-                        let input_state = Arc::clone(&core.input_state);
 
                         *self.core.lock().expect("core lock") = Some(core);
 
                         self.setup_draw_func(frame_buffer);
-                        self.setup_input(root, input_state);
                         self.start_game_loop(fps);
 
                         root.present();
@@ -143,6 +184,11 @@ impl Component for LibretroWindowModel {
                 if let Some(core) = core {
                     core.shutdown();
                 }
+
+                // Return temp file names to the parent for cleanup.
+                // std::mem::take() moves the Vec out, leaving an empty Vec in its place.
+                let files = std::mem::take(&mut self.temp_files);
+                sender.output(LibretroWindowOutput::SessionEnded(files)).ok();
 
                 root.hide();
             }
@@ -200,30 +246,6 @@ impl LibretroWindowModel {
                 cr.paint().expect("cairo paint");
             },
         );
-    }
-
-    /// Add an EventControllerKey to the root window that routes keyboard
-    /// events to the libretro input state.
-    ///
-    /// We add a new controller on each Launch. For the MVP this is harmless
-    /// since the window is only launched once per session. If reuse across
-    /// multiple sessions is needed, the controller should be stored and reused.
-    fn setup_input(&self, root: &gtk::Window, input_state: Arc<Mutex<InputState>>) {
-        let key_controller = gtk::EventControllerKey::new();
-
-        let input_pressed = Arc::clone(&input_state);
-        key_controller.connect_key_pressed(move |_, keyval, _, _| {
-            map_key_event(keyval, &input_pressed, true);
-            // Stop propagation so the key doesn't trigger other GTK actions.
-            glib::Propagation::Stop
-        });
-
-        let input_released = Arc::clone(&input_state);
-        key_controller.connect_key_released(move |_, keyval, _, _| {
-            map_key_event(keyval, &input_released, false);
-        });
-
-        root.add_controller(key_controller);
     }
 
     /// Start a glib main-loop timer that calls retro_run() at the core's

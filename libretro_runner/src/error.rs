@@ -4,6 +4,6 @@ pub enum LibretroError {
     LibraryLoad(#[from] libloading::Error),
     #[error("Failed to load game: {0}")]
     GameLoad(String),
-    #[error("Core not initialized")]
-    NotInitialized,
+    #[error("Audio initialisation failed: {0}")]
+    AudioInit(String),
 }

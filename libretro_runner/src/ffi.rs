@@ -66,7 +66,7 @@ pub struct RetroGameGeometry {
 #[repr(C)]
 pub struct RetroSystemTiming {
     pub fps: f64,         // ~60.0988 for NTSC NES
-    pub sample_rate: f64, // audio sample rate — unused for now
+    pub sample_rate: f64, // audio sample rate — used to configure the cpal output stream
 }
 
 /// Filled by retro_get_system_av_info(). We read fps and geometry from here

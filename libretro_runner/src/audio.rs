@@ -5,6 +5,8 @@ use std::{
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
+use crate::error::LibretroError;
+
 /// Owns the cpal audio output stream and the sample buffer shared with the
 /// libretro audio callbacks.
 ///
@@ -20,7 +22,7 @@ pub struct AudioOutput {
     /// Stereo interleaved samples (left, right, left, right, …) in f32
     /// normalised range −1.0..=1.0.  The audio thread pops from the front;
     /// the libretro callbacks push to the back.
-    pub sample_buffer: Arc<Mutex<VecDeque<f32>>>,
+    pub(crate) sample_buffer: Arc<Mutex<VecDeque<f32>>>,
 }
 
 impl AudioOutput {
@@ -36,13 +38,13 @@ impl AudioOutput {
     pub fn new(
         sample_rate: u32,
         sample_buffer: Arc<Mutex<VecDeque<f32>>>,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, LibretroError> {
         // cpal's Host is the platform audio API (ALSA / PulseAudio on Linux).
         let host = cpal::default_host();
 
         let device = host
             .default_output_device()
-            .ok_or_else(|| "No audio output device found".to_string())?;
+            .ok_or_else(|| LibretroError::AudioInit("No audio output device found".into()))?;
 
         // Request stereo f32 output at the core's native sample rate.
         // Most sound cards and PulseAudio support this directly; if not,
@@ -77,12 +79,12 @@ impl AudioOutput {
                 |err| tracing::warn!("cpal audio stream error: {err}"),
                 None, // no timeout
             )
-            .map_err(|e| format!("Failed to build audio stream: {e}"))?;
+            .map_err(|e| LibretroError::AudioInit(format!("Failed to build audio stream: {e}")))?;
 
         // Start playback. The cpal thread begins calling data_callback immediately.
         stream
             .play()
-            .map_err(|e| format!("Failed to start audio stream: {e}"))?;
+            .map_err(|e| LibretroError::AudioInit(format!("Failed to start audio stream: {e}")))?;
 
         Ok(Self {
             _stream: stream,

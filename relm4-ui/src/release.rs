@@ -64,6 +64,7 @@ pub enum ReleaseMsg {
     },
     StartEmulatorRunner,
     StartLibretroRunner,
+    LibretroSessionEnded(Vec<String>),
     StartImageFileSetViewer,
     StartDocumentFileSetViewer,
     UpdateRelease(ReleaseListModel),
@@ -225,6 +226,7 @@ impl Component for ReleaseModel {
             .launch(())
             .forward(sender.input_sender(), |msg| match msg {
                 LibretroWindowOutput::Error(e) => ReleaseMsg::ShowError(e),
+                LibretroWindowOutput::SessionEnded(files) => ReleaseMsg::LibretroSessionEnded(files),
             });
 
         let app_services = Arc::clone(&init_model.app_services);
@@ -393,6 +395,9 @@ impl Component for ReleaseModel {
                         tracing::error!(error = ?err, "Error sending SoftwareTitleCreated output");
                     });
             }
+            ReleaseMsg::LibretroSessionEnded(files) => {
+                self.app_services.libretro_runner().cleanup_files(&files);
+            }
             ReleaseMsg::ShowError(err_msg) => {
                 sender
                     .output(ReleaseOutputMsg::ShowError(err_msg))
@@ -423,6 +428,7 @@ impl Component for ReleaseModel {
                     core_path: paths.core_path,
                     rom_path: paths.rom_path,
                     system_dir: paths.system_dir,
+                    temp_files: paths.temp_files,
                 });
             }
             ReleaseCommandMsg::LibretroRomPrepared(Err(e)) => {

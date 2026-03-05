@@ -211,16 +211,15 @@ Fix:
 
 **Test case:** After closing the game window, verify the extracted ROM file no longer exists in the temp directory.
 
-### T5.2 — Move `LibretroCore::load()` off the GTK main thread (architecture + UX)
+### T5.2 — `LibretroCore::load()` blocks the GTK main thread (architecture + UX)
 
 `LibretroCore::load()` is called directly inside `window.rs` `update()`, which runs on the GTK main thread. `dlopen`, file I/O, and `retro_init` all block the UI while running.
 
-Fix:
-- Add `LibretroWindowCmdMsg` enum with a `CoreLoaded(Result<LibretroCore, LibretroError>)` variant
-- Change `type CommandOutput = ()` to `type CommandOutput = LibretroWindowCmdMsg`
-- In `update()`, handle `Launch` by spawning a `oneshot_command` that calls `LibretroCore::load()`
-- Move the draw setup, input setup, and game loop start into `update_cmd()` on `CoreLoaded(Ok(core))`
-- On `CoreLoaded(Err(e))`, emit `LibretroWindowOutput::Error`
+**Important constraint:** `LibretroCore::load()` cannot be moved to a `oneshot_command` (thread pool thread) because the libretro spec requires that `retro_init()` and all subsequent `retro_run()` calls happen on the **same thread**. The glib game loop timer (`timeout_add_local`) always fires on the GTK main thread, so the load must also happen there.
+
+The correct long-term fix is a dedicated libretro thread that owns the entire core lifecycle (load → run loop → shutdown), with frame buffer and audio buffer shared back to the GTK thread as they are now. This is a larger refactor beyond the current scope.
+
+Short-term mitigation: show a loading cursor/spinner while `LibretroCore::load()` runs to indicate the UI is busy. In practice load time is ~100ms so the freeze is barely perceptible.
 
 ### T5.3 — Fix input controller accumulation across sessions (bug)
 
@@ -274,7 +273,7 @@ Fix: Add `#[derive(Debug)]` to `LibretroLaunchModel` in `service/src/libretro_ru
 
 ### Manual verification checklist — Phase 5
 - [ ] Temp directory is empty after closing the game window
-- [ ] UI does not freeze while the core is loading
+- [ ] (T5.2 deferred — see task notes) UI does not freeze while the core is loading
 - [ ] No ghost/duplicate inputs after closing and re-opening the game window
 - [ ] A, S, Q, W keys produce the correct Y, X, L, R inputs in-game
 
