@@ -18,11 +18,6 @@ use crate::error::LibretroError;
 pub struct AudioOutput {
     // Keep-alive: cpal stops the stream when Stream is dropped.
     _stream: cpal::Stream,
-
-    /// Stereo interleaved samples (left, right, left, right, …) in f32
-    /// normalised range −1.0..=1.0.  The audio thread pops from the front;
-    /// the libretro callbacks push to the back.
-    pub(crate) sample_buffer: Arc<Mutex<VecDeque<f32>>>,
 }
 
 impl AudioOutput {
@@ -33,8 +28,8 @@ impl AudioOutput {
     /// that the buffer can be installed into `CoreCallbackState` before the core
     /// is initialised — we only know the real sample rate after `retro_load_game`.
     ///
-    /// Returns an error string if no output device is available or the device
-    /// refuses the requested configuration.
+    /// Returns `LibretroError::AudioInit` if no output device is available or
+    /// the device refuses the requested configuration.
     pub fn new(
         sample_rate: u32,
         sample_buffer: Arc<Mutex<VecDeque<f32>>>,
@@ -86,9 +81,6 @@ impl AudioOutput {
             .play()
             .map_err(|e| LibretroError::AudioInit(format!("Failed to start audio stream: {e}")))?;
 
-        Ok(Self {
-            _stream: stream,
-            sample_buffer,
-        })
+        Ok(Self { _stream: stream })
     }
 }

@@ -63,11 +63,6 @@ impl LibretroRunnerService {
         })
     }
 
-    /// Remove temp files after the session ends.
-    pub fn cleanup(&self, paths: &LibretroLaunchPaths) {
-        self.cleanup_files(&paths.temp_files);
-    }
-
     /// Remove a list of temp files by name from the temp output directory.
     /// Called by the GUI when it receives SessionEnded from LibretroWindowModel.
     pub fn cleanup_files(&self, files: &[String]) {

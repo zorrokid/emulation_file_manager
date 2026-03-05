@@ -279,10 +279,59 @@ Fix: Add `#[derive(Debug)]` to `LibretroLaunchModel` in `service/src/libretro_ru
 
 ---
 
+---
+
+## Phase 6 — Post-review fixes (Phase 5 review)
+
+Findings from architectural review of the Phase 5 fixes. Ordered by severity.
+
+### T6.1 — Fix temp file leak on load failure (bug)
+
+`self.temp_files` is assigned at the top of the `LibretroWindowMsg::Launch` branch, before `LibretroCore::load()` is called. The `Err` path emits `LibretroWindowOutput::Error` but never emits `LibretroWindowOutput::SessionEnded`, so the temp files are never returned to the parent and `cleanup_files` is never called.
+
+Fix: drain `self.temp_files` and emit `SessionEnded` in the `Err` branch of `LibretroWindowMsg::Launch` in `relm4-ui/src/libretro/window.rs`:
+
+```rust
+Err(e) => {
+    let files = std::mem::take(&mut self.temp_files);
+    sender.output(LibretroWindowOutput::SessionEnded(files)).ok();
+    sender.output(LibretroWindowOutput::Error(e.to_string())).ok();
+}
+```
+
+**Test case:** Attempt to launch with a non-existent core `.so` path. After the error toast appears, verify the extracted ROM file no longer exists in the temp directory.
+
+### T6.2 — Remove dead `cleanup()` method (minor)
+
+`LibretroRunnerService::cleanup()` in `service/src/libretro_runner/service.rs` delegates to `cleanup_files()` but is never called. Since T5.1, the GUI receives `SessionEnded(Vec<String>)` and calls `cleanup_files()` directly — `cleanup()` (which takes a `&LibretroLaunchPaths`) has no remaining callers.
+
+Fix: Remove the `cleanup()` method. `cleanup_files()` remains as the public API.
+
+### T6.3 — Remove redundant `sample_buffer` field from `AudioOutput` (minor)
+
+`AudioOutput::sample_buffer` in `libretro_runner/src/audio.rs` holds an `Arc` clone of the shared ring buffer. The caller already retains its own `Arc` clone before calling `AudioOutput::new()` and writes to it via that clone. The field on the struct is never read from outside `audio.rs` — it is a redundant second reference.
+
+Fix: Remove the `sample_buffer` field from `AudioOutput`. The `Arc` passed into `new()` is used directly inside the stream callback closure; no field storage is needed.
+
+### T6.4 — Update stale doc comment on `AudioOutput::new()` (minor)
+
+The doc comment on `AudioOutput::new()` still says "Returns an error string if no output device is available". This was accurate before T5.5, which changed the return type from `Result<Self, String>` to `Result<Self, LibretroError>`.
+
+Fix: Update the comment to "Returns `LibretroError::AudioInit` if no output device is available or if the stream cannot be opened."
+
+### Manual verification checklist — Phase 6
+
+- [ ] Attempting to launch with a missing core `.so` shows an error toast and leaves no temp files behind
+- [ ] `cargo clippy` reports no dead-code warnings for `LibretroRunnerService`
+
+---
+
 ## Implementation order
 
 1. T1.1 → T1.8 (crate builds with `cargo build -p libretro_runner`)
 2. T2.1 → T2.5 (Phase 1 tests pass; Phase 2 manual checks done)
 3. T3.1 → T3.4 (Phase 3 tests pass)
 4. T4.1 → T4.5 (full manual verification)
-5. `cargo build` clean, `cargo test` green
+5. T5.1 → T5.9 (Phase 5 fixes applied)
+6. T6.1 → T6.4 (Phase 6 fixes applied)
+7. `cargo build` clean, `cargo test` green

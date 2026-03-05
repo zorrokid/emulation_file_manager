@@ -168,6 +168,10 @@ impl Component for LibretroWindowModel {
                         root.present();
                     }
                     Err(e) => {
+                        // Emit SessionEnded even on load failure so the parent
+                        // calls cleanup_files() on the already-extracted temp files.
+                        let files = std::mem::take(&mut self.temp_files);
+                        sender.output(LibretroWindowOutput::SessionEnded(files)).ok();
                         sender.output(LibretroWindowOutput::Error(e.to_string())).ok();
                     }
                 }
