@@ -5,6 +5,7 @@ This document explains how the libretro emulation system works in this codebase 
 ## Table of Contents
 
 - [What is libretro?](#what-is-libretro)
+- [What is libloading?](#what-is-libloading)
 - [Architecture overview](#architecture-overview)
 - [The files](#the-files)
 - [How it works — detailed walkthrough](#how-it-works--detailed-walkthrough)
@@ -18,6 +19,52 @@ This document explains how the libretro emulation system works in this codebase 
 A libretro **core** is a `.so` shared library that emulates a system (NES, SNES, Game Boy, etc.). It implements a standardised C interface. Your application (the "frontend") loads the library at runtime and they communicate through **callbacks** — function pointers each side registers with the other.
 
 The core does not open windows, play audio, or read input on its own. It only emulates the hardware and hands the results back to the frontend via callbacks. The frontend is responsible for displaying video, playing audio, and feeding input.
+
+---
+
+## What is libloading?
+
+**libloading** is a Rust crate that wraps the OS's dynamic library loading API — `dlopen`/`dlsym` on Linux, `LoadLibrary`/`GetProcAddress` on Windows. It lets you load a `.so` at runtime (rather than linking against it at compile time) and look up function pointers by name.
+
+We use it because libretro cores are plugins — we don't know at compile time which core the user will have installed or where it will be. The app discovers the path at runtime and loads it on demand.
+
+#### Loading a library
+
+```rust
+let lib = unsafe { Library::new("/path/to/core_libretro.so") }?;
+```
+
+This calls `dlopen()`. It maps the shared library into the process's memory and runs any initialisation code in the `.so`. The call is `unsafe` because loading arbitrary native code is inherently unsafe — the OS will execute whatever is in the file.
+
+#### Resolving symbols
+
+```rust
+let sym: Symbol<unsafe extern "C" fn()> = unsafe { lib.get(b"retro_init\0") }?;
+```
+
+This calls `dlsym()` to find the address of `retro_init` in the loaded library. The result is a `Symbol<T>` — a smart pointer that borrows from `Library`. The type parameter `T` is the function signature, which you must get right — there is no runtime type checking here. The `\0` at the end is the C null terminator that `dlsym` expects.
+
+#### The lifetime problem — and how we solve it
+
+`Symbol<'lib, T>` borrows from `Library` with a lifetime. You cannot store a `Symbol` in a struct alongside its `Library` — Rust does not allow self-referential structs. The solution is to copy the raw function pointer out immediately:
+
+```rust
+let retro_init: unsafe extern "C" fn() = *sym;  // copies the fn pointer
+// sym is dropped here, releasing the borrow on lib
+```
+
+Raw function pointers have no lifetime — they are just addresses. This is safe as long as the library stays loaded. We guarantee that by keeping the `Library` alive in the struct:
+
+```rust
+pub struct LibretroCore {
+    _library: Library,                      // keeps dlclose() deferred
+    retro_run: unsafe extern "C" fn(),      // raw pointer into the .so
+    retro_deinit: unsafe extern "C" fn(),
+    ...
+}
+```
+
+The underscore prefix on `_library` is a Rust convention meaning "I hold this only for its `Drop` behaviour." `Library` implements `Drop` to call `dlclose()`, which unmaps the `.so`. By keeping `_library` in the struct, `dlclose()` is deferred until `LibretroCore` itself is dropped — at which point the function pointers are also gone, so there is no use-after-free.
 
 ---
 
