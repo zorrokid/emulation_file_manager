@@ -85,6 +85,10 @@ where
 /// The core calls this during retro_init() and retro_load_game() to query
 /// capabilities and hand us configuration. `cmd` selects the operation;
 /// `data` is a type-erased pointer whose meaning depends on `cmd`.
+///
+/// # Safety
+/// `data` must be a valid pointer whose concrete type matches the `cmd` being handled,
+/// as specified by the libretro API and guaranteed by the core.
 pub unsafe extern "C" fn environment_cb(cmd: u32, data: *mut c_void) -> bool {
     match cmd {
         // Core asks: "where are BIOS / system files?"
@@ -155,6 +159,10 @@ pub unsafe extern "C" fn environment_cb(cmd: u32, data: *mut c_void) -> bool {
 
 /// Called by the core once per frame with the rendered pixel data.
 /// `pitch` is bytes per row (may be > width * bytes_per_pixel due to alignment padding).
+///
+/// # Safety
+/// `data` must point to a valid pixel buffer of at least `height * pitch` bytes,
+/// as guaranteed by the libretro spec.
 pub unsafe extern "C" fn video_refresh_cb(
     data: *const c_void,
     width: u32,
@@ -186,6 +194,9 @@ fn push_audio(samples: &[i16]) {
 
 /// Called by the core to output a single stereo sample pair.
 /// Some cores use this; others use the batch variant exclusively.
+///
+/// # Safety
+/// Must be called by the core with valid i16 values, as guaranteed by the libretro spec.
 pub unsafe extern "C" fn audio_sample_cb(left: i16, right: i16) {
     push_audio(&[left, right]);
 }
@@ -193,6 +204,10 @@ pub unsafe extern "C" fn audio_sample_cb(left: i16, right: i16) {
 /// Called by the core to output a batch of stereo interleaved samples.
 /// `data` points to `frames * 2` i16 values: [L0, R0, L1, R1, …].
 /// Must return the number of frames consumed (we always consume all of them).
+///
+/// # Safety
+/// `data` must point to a valid array of at least `frames * 2` i16 values,
+/// as guaranteed by the libretro spec.
 pub unsafe extern "C" fn audio_sample_batch_cb(data: *const i16, frames: usize) -> usize {
     // SAFETY: the core guarantees `data` points to `frames * 2` valid i16 values.
     let samples = unsafe { std::slice::from_raw_parts(data, frames * 2) };
@@ -202,12 +217,19 @@ pub unsafe extern "C" fn audio_sample_batch_cb(data: *const i16, frames: usize) 
 
 /// Called once per frame before input_state_cb so the frontend can snapshot
 /// input devices. We push input from GTK events instead, so nothing to do here.
+///
+/// # Safety
+/// Must be called from the core's retro_run() context, as guaranteed by the libretro spec.
 pub unsafe extern "C" fn input_poll_cb() {}
 
 /// Called by the core to read the state of a single button/axis.
 /// Returns 1 (pressed) or 0 (released) for digital buttons.
 /// `port` = controller port (0 = player 1), `device` = device type,
 /// `index` = sub-device index, `id` = button ID (JOYPAD_* constants).
+///
+/// # Safety
+/// Must be called from the core's retro_run() context with valid argument values,
+/// as guaranteed by the libretro spec.
 pub unsafe extern "C" fn input_state_cb(
     port: u32,
     device: u32,
