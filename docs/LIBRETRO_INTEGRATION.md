@@ -24,7 +24,7 @@ The core does not open windows, play audio, or read input on its own. It only em
 ## Architecture overview
 
 ```
-Your App (Rust)                    Core (.so, C)
+This App (Rust)                    Core (.so, C)
 ──────────────────────────────────────────────────
 loads library via dlopen()
 calls retro_set_environment()  →   core stores your fn pointer
@@ -134,20 +134,32 @@ If you used `width × bytes_per_pixel` as the stride instead, padded rows would 
 
 ### 6. Audio (`audio.rs` + `callbacks.rs`)
 
+#### What is cpal?
+
+**cpal** (Cross-Platform Audio Library) is a Rust crate that provides a single API for audio output regardless of which audio system the OS uses. On Linux it talks to ALSA or PulseAudio (or PipeWire via its PulseAudio compatibility layer); on Windows it would use WASAPI; on macOS CoreAudio. You do not need to handle these differences — cpal abstracts them away.
+
+We use it to open the default output device and start a stream. When the OS audio driver needs more samples it fires our callback to fill a buffer. That callback drains the shared ring buffer that the libretro audio callbacks are pushing into.
+
+Audio samples are represented as `f32` values in the range `−1.0..=1.0` (standard for modern audio APIs). The libretro core provides `i16` samples (integer range −32768..32767), so we convert on push: `s as f32 / 32768.0`.
+
+#### The threading problem
+
 Audio has a threading mismatch:
 - The libretro callbacks run on the **GTK main thread** (inside `retro_run()`).
 - The cpal output callback runs on a **private audio thread** managed by the OS.
 
-The bridge is a `Arc<Mutex<VecDeque<f32>>>`:
+The bridge is an `Arc<Mutex<VecDeque<f32>>>`:
 
 ```
 GTK thread:   retro_run() → audio_sample_batch_cb() → pushes f32 samples → VecDeque
 Audio thread:                                 cpal callback ← pops f32 samples ← VecDeque
+                                                                     ↓
+                                                                  speakers
 ```
 
 `cpal::Stream` cannot live in the global static because it contains raw pointers that are not `Sync`. So only the buffer (plain data, fully thread-safe) lives in `CoreCallbackState`. The `AudioOutput` struct (which holds the stream) lives in `LibretroCore` — it only needs to stay alive, not be shared globally.
 
-The core provides audio as interleaved stereo `i16` samples. They are normalised to `f32` range `−1.0..=1.0` on push (`s as f32 / 32768.0`).
+The `AudioOutput` is created after `retro_get_system_av_info` so the stream is opened at the core's actual sample rate (typically 44100 Hz for NES cores). If no audio device is available, the failure is non-fatal — the game runs silently.
 
 ### 7. The game loop (`window.rs`)
 
