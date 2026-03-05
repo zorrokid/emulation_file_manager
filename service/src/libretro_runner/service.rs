@@ -12,6 +12,7 @@ pub struct LibretroLaunchModel {
     pub core_path: PathBuf,
 }
 
+#[derive(Debug)]
 pub struct LibretroLaunchPaths {
     pub rom_path: PathBuf,
     pub core_path: PathBuf,

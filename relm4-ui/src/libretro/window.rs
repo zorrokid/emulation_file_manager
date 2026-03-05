@@ -17,6 +17,12 @@ use libretro_runner::{core::LibretroCore, frame_buffer::FrameBuffer, input::Inpu
 
 use super::input::map_key_event;
 
+impl std::fmt::Debug for LibretroWindowModel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LibretroWindowModel").finish_non_exhaustive()
+    }
+}
+
 pub struct LibretroWindowModel {
     /// The active core, wrapped in Arc<Mutex<Option<_>>> so the game loop
     /// timer closure (which must be 'static) can share ownership.

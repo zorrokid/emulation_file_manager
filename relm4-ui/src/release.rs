@@ -15,10 +15,13 @@ use service::{
     view_models::{FileSetViewModel, ReleaseListModel, ReleaseViewModel, SoftwareTitleListModel},
 };
 
+use service::libretro_runner::service::{LibretroLaunchModel, LibretroLaunchPaths};
+
 use crate::{
     document_file_set_viewer::{DocumentViewer, DocumentViewerInit, DocumentViewerMsg},
     emulator_runner::{EmulatorRunnerInit, EmulatorRunnerModel, EmulatorRunnerMsg},
     image_fileset_viewer::{ImageFileSetViewerInit, ImageFilesetViewer, ImageFilesetViewerMsg},
+    libretro::{LibretroWindowModel, LibretroWindowMsg, LibretroWindowOutput},
     list_item::ListItem,
     tabbed_image_viewer::{
         TabbedImageViewer, TabbedImageViewerInit, TabbedImageViewerMsg, TabbedImageViewerOutputMsg,
@@ -40,6 +43,7 @@ pub struct ReleaseModel {
     selected_image_file_set: Option<FileSetViewModel>,
     selected_document_file_set: Option<FileSetViewModel>,
     emulator_runner: Controller<EmulatorRunnerModel>,
+    libretro_window: Controller<LibretroWindowModel>,
     image_file_set_viewer: Controller<ImageFilesetViewer>,
     document_file_set_viewer: Controller<DocumentViewer>,
     tabbed_image_viewer: Controller<TabbedImageViewer>,
@@ -59,6 +63,7 @@ pub enum ReleaseMsg {
         id: i64,
     },
     StartEmulatorRunner,
+    StartLibretroRunner,
     StartImageFileSetViewer,
     StartDocumentFileSetViewer,
     UpdateRelease(ReleaseListModel),
@@ -81,6 +86,7 @@ pub enum ReleaseMsg {
 #[derive(Debug)]
 pub enum ReleaseCommandMsg {
     FetchedRelease(Result<ReleaseViewModel, Error>),
+    LibretroRomPrepared(Result<LibretroLaunchPaths, Error>),
 }
 
 #[derive(Debug)]
@@ -137,6 +143,13 @@ impl Component for ReleaseModel {
                         #[watch]
                         set_sensitive: model.selected_file_set.is_some(),
                         connect_clicked => ReleaseMsg::StartEmulatorRunner,
+                    },
+
+                    gtk::Button {
+                        set_label: "Run with Libretro",
+                        #[watch]
+                        set_sensitive: model.selected_file_set.is_some(),
+                        connect_clicked => ReleaseMsg::StartLibretroRunner,
                     },
                 },
 
@@ -208,6 +221,12 @@ impl Component for ReleaseModel {
             .launch(emulator_runner_init_model)
             .detach();
 
+        let libretro_window = LibretroWindowModel::builder()
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                LibretroWindowOutput::Error(e) => ReleaseMsg::ShowError(e),
+            });
+
         let app_services = Arc::clone(&init_model.app_services);
         let image_file_set_viewer_init_model = ImageFileSetViewerInit { app_services };
         let image_file_set_viewer = ImageFilesetViewer::builder()
@@ -236,6 +255,7 @@ impl Component for ReleaseModel {
             selected_image_file_set: None,
             selected_document_file_set: None,
             emulator_runner,
+            libretro_window,
             image_file_set_viewer,
             tabbed_image_viewer,
             document_file_set_viewer,
@@ -287,6 +307,25 @@ impl Component for ReleaseModel {
                     let release = app_services.view_model().get_release_view_model(id).await;
                     ReleaseCommandMsg::FetchedRelease(release)
                 });
+            }
+            ReleaseMsg::StartLibretroRunner => {
+                if let Some(file_set) = &self.selected_file_set {
+                    let file_set_id = file_set.id;
+                    let app_services = Arc::clone(&self.app_services);
+                    sender.oneshot_command(async move {
+                        let result = app_services
+                            .libretro_runner()
+                            .prepare_rom(LibretroLaunchModel {
+                                file_set_id,
+                                initial_file: None,
+                                core_path: std::path::PathBuf::from(
+                                    "/usr/lib/libretro/fceumm_libretro.so",
+                                ),
+                            })
+                            .await;
+                        ReleaseCommandMsg::LibretroRomPrepared(result)
+                    });
+                }
             }
             ReleaseMsg::StartEmulatorRunner => {
                 if let (Some(file_set), Some(release)) =
@@ -378,6 +417,20 @@ impl Component for ReleaseModel {
         match message {
             ReleaseCommandMsg::FetchedRelease(Ok(release)) => {
                 self.process_release(release);
+            }
+            ReleaseCommandMsg::LibretroRomPrepared(Ok(paths)) => {
+                self.libretro_window.emit(LibretroWindowMsg::Launch {
+                    core_path: paths.core_path,
+                    rom_path: paths.rom_path,
+                    system_dir: paths.system_dir,
+                });
+            }
+            ReleaseCommandMsg::LibretroRomPrepared(Err(e)) => {
+                sender
+                    .output(ReleaseOutputMsg::ShowError(format!("Libretro error: {e}")))
+                    .unwrap_or_else(|err| {
+                        tracing::error!(error = ?err, "Failed to send ShowError");
+                    });
             }
             ReleaseCommandMsg::FetchedRelease(Err(err)) => {
                 tracing::error!(error = ?err, "Error fetching release");

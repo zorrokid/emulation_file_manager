@@ -1250,6 +1250,7 @@ dependencies = [
  "file_export",
  "file_import",
  "file_system",
+ "libretro_runner",
  "relm4",
  "relm4-components",
  "service",
