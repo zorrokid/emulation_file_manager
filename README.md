@@ -65,16 +65,6 @@ The core path is currently fixed to a single configured core. Planned improvemen
 - Support for all libretro-compatible cores (SNES, GBA, PlayStation, etc.)
 - In-app core downloading (similar to RetroArch's Online Updater)
 
-To use libretro support, install a core for your system. For example on Debian/Ubuntu:
-
-```bash
-sudo apt install libretro-nestopia   # NES
-sudo apt install libretro-mgba       # Game Boy Advance
-sudo apt install libretro-beetle-psx # PlayStation
-```
-
-Or download cores via RetroArch: **Online Updater → Core Downloader**.
-
 See [docs/LIBRETRO_INTEGRATION.md](docs/LIBRETRO_INTEGRATION.md) for a full technical overview and instructions for adding new cores.
 
 ## Cloud Sync
