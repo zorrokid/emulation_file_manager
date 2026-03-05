@@ -97,7 +97,7 @@ The crate responsible for all of this is `libretro_runner`. The GTK window that 
 | `libretro_runner/src/core.rs` | Loads the `.so`, runs the init sequence, exposes `run_frame()` / `shutdown()` |
 | `libretro_runner/src/callbacks.rs` | The six `extern "C"` callbacks the core calls back into, plus global state |
 | `libretro_runner/src/frame_buffer.rs` | Converts core pixel formats to Cairo ARgb32 |
-| `libretro_runner/src/audio.rs` | Opens the cpal audio device and owns the sample ring buffer |
+| `libretro_runner/src/audio.rs` | Opens the cpal audio device and keeps the `cpal::Stream` alive (ring buffer lives in `CoreCallbackState`) |
 | `libretro_runner/src/input.rs` | Joypad button constants and `InputState` bitfield |
 | `relm4-ui/src/libretro/window.rs` | GTK4 game window, glib game loop, Cairo rendering |
 | `relm4-ui/src/libretro/input.rs` | Maps GTK key events to libretro joypad button IDs |
@@ -213,7 +213,7 @@ The `AudioOutput` is created after `retro_get_system_av_info` so the stream is o
 `glib::timeout_add_local` fires a closure on the GTK main thread every N milliseconds. The interval is derived from the core's reported FPS:
 
 ```rust
-let interval = Duration::from_secs_f64(1.0 / core.fps);
+let interval = Duration::from_millis((1000.0 / fps).round() as u64);
 glib::timeout_add_local(interval, move || {
     core.run_frame();          // calls retro_run() → all callbacks fire
     drawing_area.queue_draw(); // schedules a repaint
