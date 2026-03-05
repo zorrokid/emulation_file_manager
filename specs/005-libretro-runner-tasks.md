@@ -194,6 +194,92 @@ gtk::Button {
 
 ---
 
+## Phase 5 — Post-review fixes
+
+Findings from architectural review after initial implementation. Ordered by severity.
+
+### T5.1 — Fix temp file leak (bug)
+
+`LibretroRunnerService::cleanup()` is never called. The `temp_files` field of `LibretroLaunchPaths` is silently dropped in `release.rs` when emitting `LibretroWindowMsg::Launch`.
+
+Fix:
+- Add `temp_files: Vec<String>` to `LibretroWindowMsg::Launch`
+- Pass `paths.temp_files` through when emitting the message in `release.rs`
+- In `window.rs`, store `temp_files` in `LibretroWindowModel`
+- On `LibretroWindowMsg::Close`, emit a new `LibretroWindowOutput::SessionEnded(temp_files)` to the parent
+- In `release.rs`, handle `SessionEnded` by calling `app_services.libretro_runner().cleanup(...)`
+
+**Test case:** After closing the game window, verify the extracted ROM file no longer exists in the temp directory.
+
+### T5.2 — Move `LibretroCore::load()` off the GTK main thread (architecture + UX)
+
+`LibretroCore::load()` is called directly inside `window.rs` `update()`, which runs on the GTK main thread. `dlopen`, file I/O, and `retro_init` all block the UI while running.
+
+Fix:
+- Add `LibretroWindowCmdMsg` enum with a `CoreLoaded(Result<LibretroCore, LibretroError>)` variant
+- Change `type CommandOutput = ()` to `type CommandOutput = LibretroWindowCmdMsg`
+- In `update()`, handle `Launch` by spawning a `oneshot_command` that calls `LibretroCore::load()`
+- Move the draw setup, input setup, and game loop start into `update_cmd()` on `CoreLoaded(Ok(core))`
+- On `CoreLoaded(Err(e))`, emit `LibretroWindowOutput::Error`
+
+### T5.3 — Fix input controller accumulation across sessions (bug)
+
+`setup_input()` calls `root.add_controller()` on every `Launch`. After closing and re-opening, the window accumulates multiple controllers all writing to the same `InputState`. This means duplicate key events and potential ghost inputs.
+
+Fix: Store the `EventControllerKey` in `LibretroWindowModel` and create it once in `init()` rather than on each `Launch`. Wire the key handler to update the `input_state` stored in the model, updating which `Arc<Mutex<InputState>>` it reads from on each launch.
+
+**Manual verification:** Open a game, close it, open a second game — confirm no duplicate/ghost inputs.
+
+### T5.4 — Implement missing key mappings (missing feature)
+
+The spec and documentation list A→Y, S→X, Q→L, W→R bindings, but `relm4-ui/src/libretro/input.rs` does not implement them. `JOYPAD_Y`, `JOYPAD_X`, `JOYPAD_L`, `JOYPAD_R` constants exist in `libretro_runner` but are not imported or mapped.
+
+Fix: Add the four missing arms to `keyval_to_button()` in `relm4-ui/src/libretro/input.rs`:
+```rust
+gtk::gdk::Key::a | gtk::gdk::Key::A => Some(JOYPAD_Y),
+gtk::gdk::Key::s | gtk::gdk::Key::S => Some(JOYPAD_X),
+gtk::gdk::Key::q | gtk::gdk::Key::Q => Some(JOYPAD_L),
+gtk::gdk::Key::w | gtk::gdk::Key::W => Some(JOYPAD_R),
+```
+
+### T5.5 — Use a typed error in `AudioOutput::new()` (minor)
+
+`AudioOutput::new()` returns `Result<Self, String>`. All other crates use typed `thiserror` enums. A bare `String` loses structure and cannot be matched on by callers.
+
+Fix: Add an `AudioError` variant to `LibretroError` (or a dedicated `AudioError` enum) and return `Result<Self, LibretroError>` from `AudioOutput::new()`.
+
+### T5.6 — Remove stale comment in `ffi.rs` (minor)
+
+`RetroSystemTiming.sample_rate` has the comment `// audio sample rate — unused for now`. Audio is now implemented and `sample_rate` is passed to `AudioOutput::new()`.
+
+Fix: Update the comment to `// audio sample rate — used to configure the cpal output stream`.
+
+### T5.7 — Remove unused `LibretroError::NotInitialized` variant (minor)
+
+`NotInitialized` is defined in `error.rs` but never constructed anywhere. The current ownership model (consuming `self` in `shutdown()`) prevents calling `run_frame()` after shutdown, so a runtime guard is not needed.
+
+Fix: Remove the `NotInitialized` variant from `LibretroError`.
+
+### T5.8 — Restrict visibility of `AudioOutput::sample_buffer` (minor)
+
+`AudioOutput::sample_buffer` is `pub` but is never accessed from outside `audio.rs`. The sharing pattern uses the `Arc` clone passed into `AudioOutput::new()`, not the field on the struct after construction.
+
+Fix: Change `pub sample_buffer` to `pub(crate) sample_buffer` or remove the field visibility entirely and only retain it as a keep-alive.
+
+### T5.9 — Add `#[derive(Debug)]` to `LibretroLaunchModel` (minor)
+
+`LibretroLaunchPaths` derives `Debug` but the sibling `LibretroLaunchModel` does not. Minor inconsistency in the service module.
+
+Fix: Add `#[derive(Debug)]` to `LibretroLaunchModel` in `service/src/libretro_runner/service.rs`.
+
+### Manual verification checklist — Phase 5
+- [ ] Temp directory is empty after closing the game window
+- [ ] UI does not freeze while the core is loading
+- [ ] No ghost/duplicate inputs after closing and re-opening the game window
+- [ ] A, S, Q, W keys produce the correct Y, X, L, R inputs in-game
+
+---
+
 ## Implementation order
 
 1. T1.1 → T1.8 (crate builds with `cargo build -p libretro_runner`)
