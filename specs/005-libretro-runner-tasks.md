@@ -4,7 +4,7 @@
 
 ### T1.1 — Create crate scaffold
 - Add `libretro_runner/` directory with `Cargo.toml`
-- Dependencies: `libloading = "0.8"`, `thiserror = "2"`, `tracing = "0.1"`
+- Dependencies: `libloading = "0.9"`, `thiserror = "2"`, `tracing = "0.1"`, `cpal = "0.15"`
 - Add to workspace `Cargo.toml` members
 
 ### T1.2 — `src/error.rs`
@@ -45,13 +45,15 @@ Reference: `libretro.h` in the RetroArch repo has all constants and struct defin
 - `set_button(id, pressed)`, `get_button(id) -> bool`
 
 ### T1.6 — `src/callbacks.rs`
-- `CoreCallbackState { frame_buffer, input_state, pixel_format, system_directory: CString }`
+- `CoreCallbackState { frame_buffer, input_state, pixel_format, system_directory: CString, audio_buffer: Arc<Mutex<VecDeque<f32>>> }`
 - `static CORE_STATE: OnceLock<Mutex<Option<CoreCallbackState>>>`
 - `install_state()`, `remove_state()`, `with_state()`
 - `extern "C"` implementations: `environment_cb`, `video_refresh_cb`, `audio_sample_cb`, `audio_sample_batch_cb`, `input_poll_cb`, `input_state_cb`
+- `audio_buffer` is the shared ring buffer between the libretro audio callbacks and the cpal audio thread; only the buffer (not the cpal `Stream`) lives here because `cpal::Stream` is not `Sync` and cannot be stored in a `static`
 
 ### T1.7 — `src/core.rs`
-- `LibretroCore` struct with `_library: Library`, `retro_run`, `retro_unload_game`, `retro_deinit`, `frame_buffer`, `input_state`, `fps`
+- `LibretroCore` struct with `_library: Library`, `retro_run`, `retro_unload_game`, `retro_deinit`, `frame_buffer`, `input_state`, `_audio_output: Option<AudioOutput>`, `fps`
+- `_audio_output` keeps the cpal stream alive for the duration of the session; `None` if no audio device was available at load time
 - `load(core_path, rom_path, system_dir) -> Result<Self, LibretroError>` — init sequence (order is critical):
   1. `retro_set_environment(environment_cb)` — register callback before anything else
   2. Install `CORE_STATE` into the global — **must happen before `retro_init`**, which triggers callbacks immediately
@@ -63,8 +65,12 @@ Reference: `libretro.h` in the RetroArch repo has all constants and struct defin
 - `run_frame(&self)`
 - `shutdown(self)`
 
-### T1.8 — `src/lib.rs`
-- Wire up all modules
+### T1.8 — `src/audio.rs` (added during implementation)
+- `AudioOutput` struct: opens the default cpal output device at the core's sample rate, owns the cpal `Stream` and shares the `Arc<Mutex<VecDeque<f32>>>` buffer with `CoreCallbackState`
+- Created after `retro_get_system_av_info` so the stream uses the correct sample rate
+
+### T1.9 — `src/lib.rs`
+- Wire up all modules including `pub mod audio`
 
 ### Test cases (automated, `libretro_runner/tests/`)
 
@@ -85,6 +91,10 @@ Reference: `libretro.h` in the RetroArch repo has all constants and struct defin
 | Up / Down / Left / Right | JOYPAD_UP/DOWN/LEFT/RIGHT |
 | Z | JOYPAD_B |
 | X | JOYPAD_A |
+| A | JOYPAD_Y |
+| S | JOYPAD_X |
+| Q | JOYPAD_L (left shoulder) |
+| W | JOYPAD_R (right shoulder) |
 | Return | JOYPAD_START |
 | BackSpace | JOYPAD_SELECT |
 
@@ -110,12 +120,12 @@ Reference: `libretro.h` in the RetroArch repo has all constants and struct defin
 - Add `libretro_runner = { path = "../libretro_runner" }`
 
 ### Manual verification checklist — Phase 2
-- [ ] Game window opens when `Launch` is emitted programmatically
-- [ ] Game renders at visible frame rate (not frozen)
-- [ ] Pressing arrow keys moves the character / navigates menus
-- [ ] Z and X buttons respond (A/B)
-- [ ] Closing the window hides it without crash
-- [ ] Opening a second time after closing works
+- [x] Game window opens when `Launch` is emitted programmatically
+- [x] Game renders at visible frame rate (not frozen)
+- [x] Pressing arrow keys moves the character / navigates menus
+- [x] Z and X buttons respond (A/B)
+- [x] Closing the window hides it without crash
+- [x] Opening a second time after closing works
 
 ---
 
@@ -174,13 +184,13 @@ gtk::Button {
 - On `Err(e)`: forward to existing error display
 
 ### Manual verification checklist — Phase 4
-- [ ] "Run with Libretro" button is visible on a release with a file set
-- [ ] Button is greyed out when no file set is selected
-- [ ] Clicking the button opens the game window
-- [ ] Game plays correctly (see Phase 2 checklist)
-- [ ] Closing game window then clicking the button again works
-- [ ] "Run with Emulator" still works normally
-- [ ] Error toast appears if core `.so` is not found
+- [x] "Run with Libretro" button is visible on a release with a file set
+- [x] Button is greyed out when no file set is selected
+- [x] Clicking the button opens the game window
+- [x] Game plays correctly (see Phase 2 checklist)
+- [x] Closing game window then clicking the button again works
+- [x] "Run with Emulator" still works normally
+- [x] Error toast appears if core `.so` is not found
 
 ---
 

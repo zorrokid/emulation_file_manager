@@ -6,7 +6,7 @@ The app currently launches emulators as external subprocesses. This feature adds
 
 ## Goal
 
-Run fceumm (NES libretro core) from within the app, displaying output in a separate GTK4 window, with keyboard input and no audio for the initial implementation.
+Run a NES libretro core from within the app, displaying output in a separate GTK4 window, with keyboard input and audio output.
 
 ## Requirements
 
@@ -27,14 +27,13 @@ Run fceumm (NES libretro core) from within the app, displaying output in a separ
 ### Non-functional
 
 - The existing external emulator launcher is unaffected.
-- No audio output is required for the initial implementation.
+- Audio output is provided via the system's default audio device (cpal). Failure to open the device is non-fatal — the game runs silently.
 - No database schema changes are required.
 - Only one libretro core may be active at a time.
-- The core path is hardcoded to `/usr/lib/libretro/fceumm_libretro.so` for the MVP.
+- The core path is hardcoded for the MVP (default: `/usr/lib/libretro/fceumm_libretro.so`).
 
 ## Out of Scope
 
-- Audio output
 - Hardware rendering (OpenGL/Vulkan cores)
 - Save states / rewind
 - Core options UI
@@ -42,6 +41,7 @@ Run fceumm (NES libretro core) from within the app, displaying output in a separ
 - Gamepad / controller input
 - Core path configuration in the database or settings UI
 - Multiple simultaneous cores
+- In-app core downloading
 
 ## Architecture
 
@@ -71,14 +71,14 @@ Minimum `environment_cb` commands implemented:
 
 | Command | ID | Behaviour |
 |---|---|---|
-| `SET_PIXEL_FORMAT` | 10 | Accept XRGB8888, store format |
-| `GET_SYSTEM_DIRECTORY` | 9 | Return temp dir path |
-| `GET_LOG_INTERFACE` | 27 | Forward to `tracing` |
+| `GET_SYSTEM_DIRECTORY` | 9 | Write temp dir path pointer into `data` |
+| `SET_PIXEL_FORMAT` | 10 | Accept all three formats (XRGB8888, RGB565, RGB1555), store choice |
+| `GET_VARIABLE` | 15 | Return `false` (no core options supported) |
+| `GET_LOG_INTERFACE` | 27 | Return `false` (variadic C fn requires Rust nightly) |
 | `SET_GEOMETRY` | 37 | Update frame buffer dimensions |
-| `GET_VARIABLE` | 15 | Return `false` (no options) |
 | Everything else | — | Return `false` |
 
-Pixel format note: fceumm outputs XRGB8888 (`[B,G,R,0x00]`). Cairo ARgb32 on little-endian stores `[B,G,R,A]`. Copy bytes directly and set alpha to `0xFF`.
+Pixel format note: all three libretro pixel formats are accepted and converted to Cairo ARgb32 (`[B,G,R,A]`) in `frame_buffer.rs`. Accepting only XRGB8888 caused a duplication bug with cores (e.g. nestopia) that exclusively output RGB565 — they ignore the rejection and keep using their format, while our `pixel_format` field stays wrong.
 
 ### `LibretroRunnerService` (service crate)
 
