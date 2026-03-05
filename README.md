@@ -45,6 +45,38 @@ In the future, I will add support for moving files to new collection root direct
 
 # Features
 
+## Launching with Emulators
+
+Files can be launched with externally configured emulators. Emulators are configured in the settings and associated with file types and systems.
+
+## Libretro Support (Experimental)
+
+The application has experimental support for launching games via **libretro cores** — emulator plugins loaded directly in-process as shared libraries (`.so` files). This means no separate emulator process is needed; the core runs inside the application itself.
+
+Currently supported:
+- Single core at a time (one game window open)
+- Video output in a dedicated GTK4 window
+- Keyboard input mapped to a joypad
+- Audio output via the system's default audio device
+
+The core path is currently fixed to a single configured core. Planned improvements include:
+
+- Per-system core selection (configure which core to use for each system)
+- Support for all libretro-compatible cores (SNES, GBA, PlayStation, etc.)
+- In-app core downloading (similar to RetroArch's Online Updater)
+
+To use libretro support, install a core for your system. For example on Debian/Ubuntu:
+
+```bash
+sudo apt install libretro-nestopia   # NES
+sudo apt install libretro-mgba       # Game Boy Advance
+sudo apt install libretro-beetle-psx # PlayStation
+```
+
+Or download cores via RetroArch: **Online Updater → Core Downloader**.
+
+See [docs/LIBRETRO_INTEGRATION.md](docs/LIBRETRO_INTEGRATION.md) for a full technical overview and instructions for adding new cores.
+
 ## Cloud Sync
 
 ![Cloud sync progress](docs/images/cloud-sync.png)
