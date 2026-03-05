@@ -222,12 +222,15 @@ impl Component for ReleaseModel {
             .launch(emulator_runner_init_model)
             .detach();
 
-        let libretro_window = LibretroWindowModel::builder()
-            .launch(())
-            .forward(sender.input_sender(), |msg| match msg {
+        let libretro_window = LibretroWindowModel::builder().launch(()).forward(
+            sender.input_sender(),
+            |msg| match msg {
                 LibretroWindowOutput::Error(e) => ReleaseMsg::ShowError(e),
-                LibretroWindowOutput::SessionEnded(files) => ReleaseMsg::LibretroSessionEnded(files),
-            });
+                LibretroWindowOutput::SessionEnded(files) => {
+                    ReleaseMsg::LibretroSessionEnded(files)
+                }
+            },
+        );
 
         let app_services = Arc::clone(&init_model.app_services);
         let image_file_set_viewer_init_model = ImageFileSetViewerInit { app_services };
@@ -319,9 +322,13 @@ impl Component for ReleaseModel {
                             .libretro_runner()
                             .prepare_rom(LibretroLaunchModel {
                                 file_set_id,
+                                // TODO: allow user to select initial file if
+                                // multiple files in set (similarly to emulator runner)
                                 initial_file: None,
+                                // TODO: add system-specific core mapping and configurable core
+                                // path
                                 core_path: std::path::PathBuf::from(
-                                    "/usr/lib/libretro/fceumm_libretro.so",
+                                    "/home/mikko/.config/retroarch/cores/fceumm_libretro.so",
                                 ),
                             })
                             .await;
