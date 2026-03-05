@@ -12,8 +12,8 @@ use crate::{
     error::LibretroError,
     ffi::{
         RetroAudioSampleBatchFn, RetroAudioSampleFn, RetroEnvironmentFn, RetroGameInfo,
-        RetroInputPollFn, RetroInputStateFn, RetroPixelFormat, RetroSystemAvInfo,
-        RetroSystemInfo, RetroVideoRefreshFn,
+        RetroInputPollFn, RetroInputStateFn, RetroPixelFormat, RetroSystemAvInfo, RetroSystemInfo,
+        RetroVideoRefreshFn,
     },
     frame_buffer::FrameBuffer,
     input::InputState,
@@ -86,32 +86,46 @@ impl LibretroCore {
         }
 
         // Resolve every symbol we need before touching the core.
-        let retro_set_environment =
-            load_fn!(b"retro_set_environment\0", unsafe extern "C" fn(RetroEnvironmentFn));
-        let retro_init =
-            load_fn!(b"retro_init\0", unsafe extern "C" fn());
-        let retro_deinit =
-            load_fn!(b"retro_deinit\0", unsafe extern "C" fn());
-        let retro_get_system_info =
-            load_fn!(b"retro_get_system_info\0", unsafe extern "C" fn(*mut RetroSystemInfo));
-        let retro_set_video_refresh =
-            load_fn!(b"retro_set_video_refresh\0", unsafe extern "C" fn(RetroVideoRefreshFn));
-        let retro_set_audio_sample =
-            load_fn!(b"retro_set_audio_sample\0", unsafe extern "C" fn(RetroAudioSampleFn));
-        let retro_set_audio_sample_batch =
-            load_fn!(b"retro_set_audio_sample_batch\0", unsafe extern "C" fn(RetroAudioSampleBatchFn));
-        let retro_set_input_poll =
-            load_fn!(b"retro_set_input_poll\0", unsafe extern "C" fn(RetroInputPollFn));
-        let retro_set_input_state =
-            load_fn!(b"retro_set_input_state\0", unsafe extern "C" fn(RetroInputStateFn));
-        let retro_load_game =
-            load_fn!(b"retro_load_game\0", unsafe extern "C" fn(*const RetroGameInfo) -> bool);
-        let retro_unload_game =
-            load_fn!(b"retro_unload_game\0", unsafe extern "C" fn());
-        let retro_run =
-            load_fn!(b"retro_run\0", unsafe extern "C" fn());
-        let retro_get_system_av_info =
-            load_fn!(b"retro_get_system_av_info\0", unsafe extern "C" fn(*mut RetroSystemAvInfo));
+        let retro_set_environment = load_fn!(
+            b"retro_set_environment\0",
+            unsafe extern "C" fn(RetroEnvironmentFn)
+        );
+        let retro_init = load_fn!(b"retro_init\0", unsafe extern "C" fn());
+        let retro_deinit = load_fn!(b"retro_deinit\0", unsafe extern "C" fn());
+        let retro_get_system_info = load_fn!(
+            b"retro_get_system_info\0",
+            unsafe extern "C" fn(*mut RetroSystemInfo)
+        );
+        let retro_set_video_refresh = load_fn!(
+            b"retro_set_video_refresh\0",
+            unsafe extern "C" fn(RetroVideoRefreshFn)
+        );
+        let retro_set_audio_sample = load_fn!(
+            b"retro_set_audio_sample\0",
+            unsafe extern "C" fn(RetroAudioSampleFn)
+        );
+        let retro_set_audio_sample_batch = load_fn!(
+            b"retro_set_audio_sample_batch\0",
+            unsafe extern "C" fn(RetroAudioSampleBatchFn)
+        );
+        let retro_set_input_poll = load_fn!(
+            b"retro_set_input_poll\0",
+            unsafe extern "C" fn(RetroInputPollFn)
+        );
+        let retro_set_input_state = load_fn!(
+            b"retro_set_input_state\0",
+            unsafe extern "C" fn(RetroInputStateFn)
+        );
+        let retro_load_game = load_fn!(
+            b"retro_load_game\0",
+            unsafe extern "C" fn(*const RetroGameInfo) -> bool
+        );
+        let retro_unload_game = load_fn!(b"retro_unload_game\0", unsafe extern "C" fn());
+        let retro_run = load_fn!(b"retro_run\0", unsafe extern "C" fn());
+        let retro_get_system_av_info = load_fn!(
+            b"retro_get_system_av_info\0",
+            unsafe extern "C" fn(*mut RetroSystemAvInfo)
+        );
 
         // Build the shared state the callbacks will read/write.
         let frame_buffer = Arc::new(Mutex::new(FrameBuffer::new()));
@@ -129,9 +143,8 @@ impl LibretroCore {
         // CString converts a Rust &str to a null-terminated C string.
         // We store it in CoreCallbackState so the *const c_char pointer we
         // hand to the core in GET_SYSTEM_DIRECTORY stays valid.
-        let system_directory =
-            CString::new(system_dir.to_string_lossy().as_ref())
-                .map_err(|_| LibretroError::GameLoad("Invalid system dir path".into()))?;
+        let system_directory = CString::new(system_dir.to_string_lossy().as_ref())
+            .map_err(|_| LibretroError::GameLoad("Invalid system dir path".into()))?;
 
         // ── Init sequence (order is critical) ────────────────────────────────
 
@@ -180,9 +193,8 @@ impl LibretroCore {
 
         // The ROM path as a null-terminated C string. Must stay alive until
         // after retro_load_game() returns.
-        let rom_cstring =
-            CString::new(rom_path.to_string_lossy().as_ref())
-                .map_err(|_| LibretroError::GameLoad("Invalid ROM path".into()))?;
+        let rom_cstring = CString::new(rom_path.to_string_lossy().as_ref())
+            .map_err(|_| LibretroError::GameLoad("Invalid ROM path".into()))?;
 
         // 6. Build RetroGameInfo and load the ROM.
         //    need_fullpath = true  → pass the path, leave data null (fceumm).
