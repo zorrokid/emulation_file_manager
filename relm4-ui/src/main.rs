@@ -28,6 +28,7 @@ mod style;
 mod system_form;
 mod system_selector;
 mod tabbed_image_viewer;
+mod libretro;
 mod utils;
 
 use crate::app::AppModel;
