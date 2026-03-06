@@ -1,5 +1,7 @@
 use std::{
+    cell::RefCell,
     path::PathBuf,
+    rc::Rc,
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -19,15 +21,22 @@ use super::input::map_key_event;
 
 impl std::fmt::Debug for LibretroWindowModel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("LibretroWindowModel").finish_non_exhaustive()
+        f.debug_struct("LibretroWindowModel")
+            .finish_non_exhaustive()
     }
 }
 
 pub struct LibretroWindowModel {
-    /// The active core, wrapped in Arc<Mutex<Option<_>>> so the game loop
-    /// timer closure (which must be 'static) can share ownership.
+    /// The active core, wrapped in Rc<RefCell<Option<_>>> so the game loop
+    /// timer closure and key controller closures (which must be 'static) can
+    /// share ownership without cloning.
+    ///
+    /// Rc rather than Arc: LibretroCore is !Send (cpal::Stream is not Send),
+    /// and all accesses happen on the GTK main thread — glib::timeout_add_local
+    /// and GTK signal handlers never leave the main thread.
+    ///
     /// None before the first Launch and after each Close.
-    core: Arc<Mutex<Option<LibretroCore>>>,
+    core: Rc<RefCell<Option<LibretroCore>>>,
 
     /// Stored so we can call queue_draw() from the timer closure and
     /// set_draw_func() when a new core is loaded.
@@ -73,11 +82,13 @@ impl Component for LibretroWindowModel {
 
     view! {
         gtk::Window {
+            // TODO: Show system and software title
             set_title: Some("Libretro"),
             set_default_size: (640, 480),
             set_resizable: true,
 
             connect_close_request[sender] => move |_| {
+                tracing::info!("Closing libretro window");
                 sender.input(LibretroWindowMsg::Close);
                 // Return Stop to prevent GTK from destroying the window.
                 // We hide it instead so it can be reused for a later launch.
@@ -100,36 +111,35 @@ impl Component for LibretroWindowModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        tracing::info!("Initializing libretro window component");
         let model = LibretroWindowModel {
-            core: Arc::new(Mutex::new(None)),
+            core: Rc::new(RefCell::new(None)),
             drawing_area: gtk::DrawingArea::new(),
             timer_source_id: None,
             temp_files: Vec::new(),
         };
 
         // Create the key controller once and attach it to the window here in
-        // init(). Previous code added a new controller on every Launch, causing
-        // controllers to accumulate across sessions (each one writing to the
-        // same InputState, producing duplicate inputs after the first session).
+        // init().
         //
-        // The handler closes over the core Arc. When no core is loaded (between
-        // sessions) the lock returns None and the key event is silently ignored.
+        // The handler closes over the core Rc. When no core is loaded (between
+        // sessions) the borrow returns None and the key event is silently ignored.
         let key_controller = gtk::EventControllerKey::new();
 
-        let core_pressed = Arc::clone(&model.core);
+        let core_pressed = Rc::clone(&model.core);
         key_controller.connect_key_pressed(move |_, keyval, _, _| {
-            let guard = core_pressed.lock().expect("core lock");
-            if let Some(core) = guard.as_ref() {
+            let core = core_pressed.borrow();
+            if let Some(core) = core.as_ref() {
                 map_key_event(keyval, &core.input_state, true);
             }
             // Stop propagation so the key doesn't trigger other GTK actions.
             glib::Propagation::Stop
         });
 
-        let core_released = Arc::clone(&model.core);
+        let core_released = Rc::clone(&model.core);
         key_controller.connect_key_released(move |_, keyval, _, _| {
-            let guard = core_released.lock().expect("core lock");
-            if let Some(core) = guard.as_ref() {
+            let core = core_released.borrow();
+            if let Some(core) = core.as_ref() {
                 map_key_event(keyval, &core.input_state, false);
             }
         });
@@ -151,16 +161,27 @@ impl Component for LibretroWindowModel {
                 system_dir,
                 temp_files,
             } => {
+                tracing::info!(
+                    core_path = ?core_path,
+                    rom_path = ?rom_path,
+                    system_dir = ?system_dir,
+                    temp_files = ?temp_files,
+                    "Launching libretro session",
+                );
                 self.temp_files = temp_files;
 
                 match LibretroCore::load(&core_path, &rom_path, &system_dir) {
                     Ok(core) => {
+                        tracing::info!("Libretro core loaded successfully");
                         let fps = core.fps;
+                        tracing::info!(fps, "Core reports FPS");
+
                         // Clone the frame_buffer Arc before moving core into the
-                        // Mutex, so we can set up the draw func without locking.
+                        // RefCell, so we can set up the draw func without locking.
                         let frame_buffer = Arc::clone(&core.frame_buffer);
 
-                        *self.core.lock().expect("core lock") = Some(core);
+                        *self.core.borrow_mut() = Some(core);
+                        tracing::info!("Libretro core stored in model");
 
                         self.setup_draw_func(frame_buffer);
                         self.start_game_loop(fps);
@@ -171,29 +192,38 @@ impl Component for LibretroWindowModel {
                         // Emit SessionEnded even on load failure so the parent
                         // calls cleanup_files() on the already-extracted temp files.
                         let files = std::mem::take(&mut self.temp_files);
-                        sender.output(LibretroWindowOutput::SessionEnded(files)).ok();
-                        sender.output(LibretroWindowOutput::Error(e.to_string())).ok();
+                        sender
+                            .output(LibretroWindowOutput::SessionEnded(files))
+                            .ok();
+                        sender
+                            .output(LibretroWindowOutput::Error(e.to_string()))
+                            .ok();
                     }
                 }
             }
 
             LibretroWindowMsg::Close => {
+                tracing::info!("Closing libretro session");
                 // Stop the timer first — retro_run() must not be called
                 // after retro_deinit() which shutdown() will call.
                 self.stop_game_loop();
 
-                // Take the core out of the Mutex before shutting down,
-                // so the lock is released before the potentially slow deinit.
-                let core = self.core.lock().expect("core lock").take();
+                // Take the core out of the RefCell before shutting down,
+                // so the borrow is released before the potentially slow deinit.
+                let core = self.core.borrow_mut().take();
                 if let Some(core) = core {
+                    tracing::info!("Shutting down libretro core");
                     core.shutdown();
                 }
 
                 // Return temp file names to the parent for cleanup.
                 // std::mem::take() moves the Vec out, leaving an empty Vec in its place.
                 let files = std::mem::take(&mut self.temp_files);
-                sender.output(LibretroWindowOutput::SessionEnded(files)).ok();
+                sender
+                    .output(LibretroWindowOutput::SessionEnded(files))
+                    .ok();
 
+                tracing::info!("Hiding libretro window");
                 root.hide();
             }
         }
@@ -205,11 +235,18 @@ impl LibretroWindowModel {
     /// frame buffer and paints it scaled to fit the drawing area.
     /// Called once after a successful core load.
     fn setup_draw_func(&self, frame_buffer: Arc<Mutex<FrameBuffer>>) {
-        self.drawing_area.set_draw_func(
-            move |_da, cr, widget_width, widget_height| {
+        tracing::info!("Setting up drawing function for libretro window");
+        self.drawing_area
+            .set_draw_func(move |_da, cr, widget_width, widget_height| {
                 let fb = frame_buffer.lock().expect("frame buffer lock");
 
                 if fb.rgba_data.is_empty() || fb.width == 0 || fb.height == 0 {
+                    return;
+                }
+
+                // Skip rendering if widget size is zero (e.g., during window resize to minimum).
+                // Otherwise cr.scale(0.0, 0.0) creates an invalid matrix and panics.
+                if widget_width == 0 || widget_height == 0 {
                     return;
                 }
 
@@ -242,14 +279,14 @@ impl LibretroWindowModel {
 
                 cr.translate(offset_x, offset_y);
                 cr.scale(scale, scale);
-                cr.set_source_surface(&surface, 0.0, 0.0).expect("set source surface");
+                cr.set_source_surface(&surface, 0.0, 0.0)
+                    .expect("set source surface");
 
                 // Source operator ignores alpha and draws the surface as-is,
                 // avoiding any blending with what's behind the widget.
                 cr.set_operator(gtk::cairo::Operator::Source);
                 cr.paint().expect("cairo paint");
-            },
-        );
+            });
     }
 
     /// Start a glib main-loop timer that calls retro_run() at the core's
@@ -259,14 +296,15 @@ impl LibretroWindowModel {
     /// — the same thread that called retro_init() — satisfying the libretro
     /// threading requirement.
     fn start_game_loop(&mut self, fps: f64) {
+        tracing::info!(fps = fps, "Starting game loop timer");
         let interval = Duration::from_millis((1000.0 / fps).round() as u64);
 
-        // Clone the Arc so the 'static closure can share ownership of the core.
-        let core_ref = Arc::clone(&self.core);
+        // Clone the Rc so the 'static closure can share ownership of the core.
+        let core_ref = Rc::clone(&self.core);
         let drawing_area = self.drawing_area.clone();
 
         let source_id = glib::timeout_add_local(interval, move || {
-            let guard = core_ref.lock().expect("core lock");
+            let guard = core_ref.borrow();
             match guard.as_ref() {
                 Some(core) => {
                     core.run_frame();
@@ -288,6 +326,7 @@ impl LibretroWindowModel {
     /// Remove the game loop timer. Must be called before core.shutdown().
     fn stop_game_loop(&mut self) {
         if let Some(id) = self.timer_source_id.take() {
+            tracing::info!("Stopping game loop timer");
             // remove() deregisters the source from the glib main loop.
             id.remove();
         }
