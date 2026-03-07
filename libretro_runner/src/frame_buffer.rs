@@ -14,6 +14,12 @@ pub struct FrameBuffer {
     pub dirty: bool,
 }
 
+impl Default for FrameBuffer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FrameBuffer {
     pub fn new() -> Self {
         Self {
@@ -67,10 +73,10 @@ impl FrameBuffer {
                             // pitch is used instead of width*4 in case the core
                             // adds padding bytes at the end of each row.
                             let s = row * pitch + col * 4;
-                            self.rgba_data[dst] = *src.add(s);         // B
+                            self.rgba_data[dst] = *src.add(s); // B
                             self.rgba_data[dst + 1] = *src.add(s + 1); // G
                             self.rgba_data[dst + 2] = *src.add(s + 2); // R
-                            self.rgba_data[dst + 3] = 0xFF;            // A — set opaque
+                            self.rgba_data[dst + 3] = 0xFF; // A — set opaque
                         }
                         RetroPixelFormat::Rgb565 => {
                             // Source layout: 2 bytes per pixel, packed as:

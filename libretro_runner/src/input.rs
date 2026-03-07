@@ -15,6 +15,12 @@ pub struct InputState {
     buttons: [bool; 16],
 }
 
+impl Default for InputState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl InputState {
     pub fn new() -> Self {
         Self {
