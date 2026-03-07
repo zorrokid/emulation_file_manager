@@ -63,7 +63,7 @@ pub struct Settings {
     pub temp_output_dir: PathBuf,
     pub s3_settings: Option<S3Settings>,
     pub s3_sync_enabled: bool,
-    pub libretro_cores_dir: Option<PathBuf>,
+    pub libretro_core_dir: Option<PathBuf>,
 }
 
 impl Settings {
@@ -114,7 +114,7 @@ impl From<HashMap<String, String>> for Settings {
             temp_output_dir: std::env::temp_dir(),
             s3_settings,
             s3_sync_enabled,
-            libretro_cores_dir,
+            libretro_core_dir: libretro_cores_dir,
         }
     }
 }
