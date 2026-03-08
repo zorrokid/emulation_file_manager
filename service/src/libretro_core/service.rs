@@ -8,6 +8,16 @@ pub struct LibretroCoreService {
     pub supported_cores: Vec<String>,
 }
 
+impl std::fmt::Debug for LibretroCoreService {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LibretroCoreService")
+            .field("settings", &"Settings { ... }")
+            .field("fs_ops", &"FileSystemOps { ... }")
+            .field("supported_cores", &self.supported_cores)
+            .finish()
+    }
+}
+
 impl LibretroCoreService {
     pub fn new(
         settings: Arc<Settings>,
@@ -21,6 +31,7 @@ impl LibretroCoreService {
         }
     }
 
+    // TODO: should be async
     pub fn list_cores(&self) -> Result<Vec<String>, Error> {
         if let Some(libretro_core_dir) = &self.settings.libretro_core_dir {
             let result = self.fs_ops.read_dir(libretro_core_dir);
@@ -32,6 +43,12 @@ impl LibretroCoreService {
                         .filter_map(|entry| {
                             if let Ok(entry) = entry
                                 && self.fs_ops.is_file(&entry.path)
+                                // TODO: when implementing cross platform support, we need to
+                                // check the library extension based on the platform (.dll for
+                                // Windows, .dylib for macOS, .so for Linux)
+                                // Probably would be good idea to have a helper function for that
+                                // in FileSystemOps
+                                && entry.path.extension().and_then(|ext| ext.to_str()) == Some("so")
                                 && let Some(file_name) = entry.path.file_stem()
                                 && let Some(file_name) = file_name.to_str()
                                 && self.supported_cores.contains(&file_name.to_string())

@@ -9,9 +9,12 @@ use relm4::{
 };
 use service::app_services::AppServices;
 
+use crate::utils::dialog_utils::show_error_dialog;
+
 #[derive(Debug)]
 pub struct LibretroCoresDialog {
     pub app_services: Arc<AppServices>,
+    pub available_cores: Vec<String>,
 }
 
 pub struct LibretroCoredDialogInit {
@@ -54,6 +57,7 @@ impl Component for LibretroCoresDialog {
     ) -> ComponentParts<Self> {
         let model = LibretroCoresDialog {
             app_services: init.app_services,
+            available_cores: Vec::new(),
         };
 
         let widgets = view_output!();
@@ -65,7 +69,18 @@ impl Component for LibretroCoresDialog {
         match msg {
             LibretroCoresDialogMsg::Show => {
                 root.show();
-                //sender.input(LibretroCoresDialogMsg::ReadCores);
+                // TODO: should be async
+                let available_cores_result = self.app_services.libretro_core().list_cores();
+                match available_cores_result {
+                    Ok(cores) => {
+                        tracing::info!(cores = ?cores, "Available libretro cores");
+                        self.available_cores = cores;
+                    }
+                    Err(e) => {
+                        tracing::error!(error = ?e, "Failed to list libretro cores");
+                        show_error_dialog("Failed to list libretro cores".into(), root);
+                    }
+                }
             }
             LibretroCoresDialogMsg::Hide => {
                 root.hide();
