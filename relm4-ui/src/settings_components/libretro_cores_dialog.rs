@@ -61,10 +61,11 @@ impl Component for LibretroCoresDialog {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>, root: &Self::Root) {
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         match msg {
             LibretroCoresDialogMsg::Show => {
                 root.show();
+                //sender.input(LibretroCoresDialogMsg::ReadCores);
             }
             LibretroCoresDialogMsg::Hide => {
                 root.hide();

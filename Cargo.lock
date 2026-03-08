@@ -4296,6 +4296,7 @@ dependencies = [
  "file_metadata",
  "file_system",
  "http_downloader",
+ "libretro_runner",
  "serde_json",
  "thumbnails",
  "tracing",

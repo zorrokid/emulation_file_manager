@@ -70,6 +70,8 @@ pub trait FileSystemOps: Send + Sync {
 
     /// Check if a directory is accessible (exists, is a directory, and can be read)
     fn is_accesssible_dir(&self, path: &Path) -> bool;
+
+    fn is_file(&self, path: &Path) -> bool;
 }
 
 /// Production implementation using std::fs
@@ -119,24 +121,39 @@ impl FileSystemOps for StdFileSystemOps {
             Err(_) => false,
         }
     }
+
+    fn is_file(&self, path: &Path) -> bool {
+        path.is_file()
+    }
 }
 
 #[cfg(test)]
 pub mod mock {
     use super::*;
-    use std::collections::HashSet;
     use std::sync::{Arc, Mutex};
+
+    /// A file entry in the mock file system.
+    ///
+    /// Each entry can be either a successful file/directory or an error result from read_dir.
+    /// This is the single source of truth for all file system operations.
+    #[derive(Clone)]
+    enum MockFileEntry {
+        /// A file or directory that exists
+        File { path: PathBuf, is_file: bool },
+        /// An error that occurs when reading this entry from a directory
+        ReadError(Error),
+    }
 
     /// Internal state for MockFileSystemOps.
     ///
-    /// Groups all mutable state into a single struct for simplified locking.
+    /// Single source of truth: `entries` vec contains all file system state.
+    /// Each entry is either a valid file/dir or represents a read error.
     #[derive(Default)]
     struct MockState {
-        existing_files: HashSet<String>,
+        /// Single source of truth: all file entries (files, dirs, and read errors)
+        entries: Vec<MockFileEntry>,
         deleted_files: Vec<String>,
         fail_on_delete: Option<String>,
-        // TODO: unify, maybe existing files could be in entries?
-        entries: Vec<Result<SimpleDirEntry, Error>>,
     }
 
     /// Mock implementation for testing
@@ -160,9 +177,50 @@ pub mod mock {
 
         /// Add a file to the mock file system
         pub fn add_file(&self, path: impl Into<String>) {
+            let path_str = path.into();
             let mut state = self.state.lock().unwrap();
-            state.existing_files.insert(path.into());
-            println!("Current existing files: {:?}", state.existing_files);
+            state.entries.push(MockFileEntry::File {
+                path: PathBuf::from(&path_str),
+                is_file: true,
+            });
+        }
+
+        /// Add a directory to the mock file system
+        pub fn add_dir(&self, path: impl Into<String>) {
+            let path_str = path.into();
+            let mut state = self.state.lock().unwrap();
+            state.entries.push(MockFileEntry::File {
+                path: PathBuf::from(&path_str),
+                is_file: false,
+            });
+        }
+
+        /// Add an entry result (file or error) to the mock file system
+        ///
+        /// This is the most flexible method:
+        /// - `Ok(SimpleDirEntry { path })` adds a file
+        /// - `Err(error)` adds a read error
+        ///
+        /// Useful for simulating complex read_dir scenarios with mixed success/failure.
+        pub fn add_entry(&self, entry: Result<SimpleDirEntry, Error>) {
+            let mut state = self.state.lock().unwrap();
+            match entry {
+                Ok(dir_entry) => {
+                    // Infer is_file from extension (heuristic)
+                    let is_file = dir_entry
+                        .path
+                        .extension()
+                        .and_then(|ext| ext.to_str())
+                        .is_some();
+                    state.entries.push(MockFileEntry::File {
+                        path: dir_entry.path,
+                        is_file,
+                    });
+                }
+                Err(error) => {
+                    state.entries.push(MockFileEntry::ReadError(error));
+                }
+            }
         }
 
         /// Make deletion fail with a specific error message
@@ -185,28 +243,19 @@ pub mod mock {
 
         /// Clear all state (useful between tests)
         pub fn clear(&self) {
-            println!("Clearing mock file system state");
             let mut state = self.state.lock().unwrap();
             *state = MockState::default();
-        }
-
-        pub fn add_entry(&mut self, entry: Result<SimpleDirEntry, Error>) {
-            let mut state = self.state.lock().unwrap();
-            state.entries.push(entry);
         }
     }
 
     impl FileSystemOps for MockFileSystemOps {
         fn exists(&self, path: &Path) -> bool {
             let state = self.state.lock().unwrap();
-            println!("Checking existence of path: {}", path.display());
-            println!(
-                "Existing files in mock file system: {:?}",
-                state.existing_files
-            );
-            state
-                .existing_files
-                .contains(path.to_string_lossy().as_ref())
+            let path_str = path.to_string_lossy();
+            state.entries.iter().any(|entry| match entry {
+                MockFileEntry::File { path: p, .. } => p.to_string_lossy() == path_str,
+                MockFileEntry::ReadError(_) => false,
+            })
         }
 
         fn remove_file(&self, path: &Path) -> io::Result<()> {
@@ -217,22 +266,29 @@ pub mod mock {
             }
 
             let path_str = path.to_string_lossy().to_string();
-            state.deleted_files.push(path_str.clone());
-            state.existing_files.remove(&path_str);
-            Ok(())
+
+            // Find and remove the entry
+            if let Some(pos) = state.entries.iter().position(|entry| {
+                matches!(entry, MockFileEntry::File { path: p, .. } if p.to_string_lossy() == path_str)
+            }) {
+                state.entries.remove(pos);
+                state.deleted_files.push(path_str);
+                Ok(())
+            } else {
+                Err(io::Error::other(format!("File does not exist: {}", path_str)))
+            }
         }
 
         fn is_zip_archive(&self, path: &Path) -> Result<bool, Error> {
             let state = self.state.lock().unwrap();
-            println!("Checking if path is zip archive: {}", path.display());
             let path_str = path.to_string_lossy();
-            println!("Path string: {}", path_str);
 
-            if !state.existing_files.contains(path_str.as_ref()) {
-                println!("File does not exist in mock file system: {}", path_str,);
-                Err(Error::IoError(format!("File does not exist: {}", path_str)))
-            } else {
+            if state.entries.iter().any(|entry| {
+                matches!(entry, MockFileEntry::File { path: p, .. } if p.to_string_lossy() == path_str)
+            }) {
                 Ok(path_str.ends_with(".zip"))
+            } else {
+                Err(Error::IoError(format!("File does not exist: {}", path_str)))
             }
         }
 
@@ -241,29 +297,70 @@ pub mod mock {
             let from_str = from.to_string_lossy().to_string();
             let to_str = to.to_string_lossy().to_string();
 
-            if !state.existing_files.contains(&from_str) {
-                return Err(io::Error::other(format!(
+            // Find the entry to move
+            if let Some(pos) = state.entries.iter().position(|entry| {
+                matches!(entry, MockFileEntry::File { path: p, .. } if p.to_string_lossy() == from_str)
+            }) {
+                if let MockFileEntry::File { is_file, .. } = &state.entries[pos] {
+                    let is_file = *is_file;
+                    state.entries[pos] = MockFileEntry::File {
+                        path: PathBuf::from(&to_str),
+                        is_file,
+                    };
+                    Ok(())
+                } else {
+                    Err(io::Error::other("Invalid entry type"))
+                }
+            } else {
+                Err(io::Error::other(format!(
                     "Source file does not exist: {}",
                     from_str
-                )));
+                )))
             }
-
-            state.existing_files.remove(&from_str);
-            state.existing_files.insert(to_str);
-            Ok(())
         }
 
         fn read_dir(
             &self,
-            _path: &Path, // if needed could be mapped to entries
+            path: &Path,
         ) -> io::Result<Box<dyn Iterator<Item = Result<SimpleDirEntry, Error>>>> {
             let state = self.state.lock().unwrap();
-            Ok(Box::new(state.entries.clone().into_iter()))
+            let path_str = path.to_string_lossy().to_string();
+
+            // Return all entries in or under this path
+            let entries: Vec<_> = state
+                .entries
+                .iter()
+                .filter(|entry| {
+                    if let MockFileEntry::File { path: p, .. } = entry {
+                        let file_path_str = p.to_string_lossy();
+                        file_path_str.starts_with(&path_str)
+                    } else {
+                        // Include read errors in the results
+                        true
+                    }
+                })
+                .map(|entry| match entry {
+                    MockFileEntry::File { path: p, .. } => {
+                        Ok(SimpleDirEntry { path: p.clone() })
+                    }
+                    MockFileEntry::ReadError(err) => Err(err.clone()),
+                })
+                .collect();
+
+            Ok(Box::new(entries.into_iter()))
         }
 
         fn is_accesssible_dir(&self, _: &Path) -> bool {
             // For testing purposes, we can assume all directories are accessible.
             true
+        }
+
+        fn is_file(&self, path: &Path) -> bool {
+            let state = self.state.lock().unwrap();
+            let path_str = path.to_string_lossy();
+            state.entries.iter().any(|entry| {
+                matches!(entry, MockFileEntry::File { path: p, is_file: true } if p.to_string_lossy() == path_str)
+            })
         }
     }
 }
@@ -277,18 +374,24 @@ mod tests {
     #[test]
     fn test_mock_file_system_ops() {
         let mock_fs = MockFileSystemOps::new();
+
+        // Add and check file existence
         mock_fs.add_file("/test/file1.txt");
         assert!(mock_fs.exists(Path::new("/test/file1.txt")));
         assert!(!mock_fs.exists(Path::new("/test/file2.txt")));
+
+        // Remove file
         mock_fs.remove_file(Path::new("/test/file1.txt")).unwrap();
         assert!(!mock_fs.exists(Path::new("/test/file1.txt")));
 
+        // Test zip detection
         mock_fs.add_file("/test/archive.zip");
         let is_zip = mock_fs
             .is_zip_archive(Path::new("/test/archive.zip"))
             .unwrap();
         assert!(is_zip);
 
+        // Test move file
         mock_fs.add_file("/test/move_source.txt");
         mock_fs
             .move_file(
@@ -299,6 +402,7 @@ mod tests {
         assert!(!mock_fs.exists(Path::new("/test/move_source.txt")));
         assert!(mock_fs.exists(Path::new("/test/move_dest.txt")));
 
+        // Test delete failure
         mock_fs.fail_delete_with("Simulated delete failure");
         let result = mock_fs.remove_file(Path::new("/test/move_dest.txt"));
         assert!(result.is_err());
@@ -306,23 +410,47 @@ mod tests {
 
     #[test]
     fn test_read_dir_mock() {
-        let mut mock_fs = MockFileSystemOps::new();
+        let mock_fs = MockFileSystemOps::new();
+
+        // Add files to the mock file system using single API
+        mock_fs.add_file("/test/file1.txt");
+        mock_fs.add_file("/test/file2.txt");
+
+        // read_dir should return files in the directory
+        let entries: Vec<_> = mock_fs.read_dir(Path::new("/test")).unwrap().collect();
+        assert_eq!(entries.len(), 2);
+    }
+
+    #[test]
+    fn test_is_file_mock() {
+        let mock_fs = MockFileSystemOps::new();
+
+        mock_fs.add_file("/test/myfile.txt");
+        mock_fs.add_dir("/test/mydir");
+
+        // Check file and directory detection
+        assert!(mock_fs.is_file(Path::new("/test/myfile.txt")));
+        assert!(!mock_fs.is_file(Path::new("/test/mydir")));
+        assert!(!mock_fs.is_file(Path::new("/test/nonexistent")));
+    }
+
+    #[test]
+    fn test_read_dir_with_errors() {
+        let mock_fs = MockFileSystemOps::new();
+
+        // Add mixed success and error entries
         mock_fs.add_entry(Ok(SimpleDirEntry {
             path: PathBuf::from("/test/file1.txt"),
         }));
+        mock_fs.add_entry(Err(Error::IoError("Simulated read failure".to_string())));
         mock_fs.add_entry(Ok(SimpleDirEntry {
             path: PathBuf::from("/test/file2.txt"),
         }));
 
         let entries: Vec<_> = mock_fs.read_dir(Path::new("/test")).unwrap().collect();
-        assert_eq!(entries.len(), 2);
-        assert_eq!(
-            entries[0].as_ref().unwrap().path,
-            PathBuf::from("/test/file1.txt")
-        );
-        assert_eq!(
-            entries[1].as_ref().unwrap().path,
-            PathBuf::from("/test/file2.txt")
-        );
+        assert_eq!(entries.len(), 3);
+        assert!(entries[0].is_ok());
+        assert!(entries[1].is_err());
+        assert!(entries[2].is_ok());
     }
 }
