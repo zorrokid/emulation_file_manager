@@ -1,7 +1,7 @@
 use std::{path::PathBuf, sync::Arc};
 
 use relm4::{
-    Component, ComponentParts, ComponentSender, RelmWidgetExt,
+    Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
         self,
         glib::{self},
@@ -11,9 +11,14 @@ use relm4::{
         },
     },
 };
-use service::{error::Error, settings_service::SettingsSaveModel};
+use service::{app_services::AppServices, error::Error, settings_service::SettingsSaveModel};
 
-use crate::utils::dialog_utils::{show_error_dialog, show_file_chooser_dialog};
+use crate::{
+    settings_components::libretro_cores_dialog::{
+        LibretroCoredDialogInit, LibretroCoresDialog, LibretroCoresDialogMsg,
+    },
+    utils::dialog_utils::{show_error_dialog, show_file_chooser_dialog},
+};
 
 #[derive(Debug)]
 pub struct SettingsForm {
@@ -33,7 +38,8 @@ pub struct SettingsForm {
     pub credentials_stored: bool,
     pub stored_access_key_preview: Option<String>,
 
-    pub app_services: Arc<service::app_services::AppServices>,
+    pub app_services: Arc<AppServices>,
+    pub libretro_cores_dialog: Controller<LibretroCoresDialog>,
 }
 
 impl SettingsForm {
@@ -354,6 +360,14 @@ impl Component for SettingsForm {
     ) -> ComponentParts<Self> {
         let settings = init.app_services.app_settings();
         let s3_settings = settings.s3_settings.clone().unwrap_or_default();
+        let libretro_cores_dialog_init = LibretroCoredDialogInit {
+            app_services: Arc::clone(&init.app_services),
+        };
+        let libretro_cores_dialog = LibretroCoresDialog::builder()
+            .transient_for(&root)
+            .launch(libretro_cores_dialog_init)
+            .detach();
+
         let model = Self {
             s3_bucket_name: s3_settings.bucket.clone(),
             s3_endpoint: s3_settings.endpoint.clone(),
@@ -366,6 +380,7 @@ impl Component for SettingsForm {
             collection_root_dir: Some(settings.collection_root_dir.clone()),
             libretro_core_dir: settings.libretro_core_dir.clone(),
             app_services: init.app_services,
+            libretro_cores_dialog,
         };
         let widgets = view_output!();
 
@@ -497,6 +512,8 @@ impl Component for SettingsForm {
             }
             SettingsFormMsg::MapLibretroCoresClicked => {
                 tracing::info!("MapLibretroCoresClicked");
+                self.libretro_cores_dialog
+                    .emit(LibretroCoresDialogMsg::Show);
             }
         }
 
