@@ -175,6 +175,8 @@ impl Component for SettingsForm {
                         },
                         gtk::Button {
                             set_label: "Map Libretro Cores",
+                            #[watch]
+                            set_sensitive: model.libretro_core_dir.is_some(),
                             connect_clicked => SettingsFormMsg::MapLibretroCoresClicked,
                         },
                     },

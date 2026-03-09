@@ -114,13 +114,13 @@ Modal dialog shown at launch when multiple cores are mapped to a system.
 
 ### Database & Repository Layer
 - [x] Migration creates `system_libretro_core` table with correct schema
-- [ ] `SystemLibretroCoreRepository` implements all required methods
-- [ ] All 8 repository tests pass (add, get, remove, duplicate validation, empty name validation, unsupported core validation, cascade delete, remove all)
-- [ ] Unique constraint prevents duplicate core mappings for a system
-- [ ] CASCADE delete removes cores when system is deleted
+- [x] `SystemLibretroCoreRepository` implements all required methods
+- [x] Repository tests pass: add+get, get_for_core, remove, duplicate validation, empty name validation, cascade delete, remove all (7 tests)
+- [x] Unique constraint prevents duplicate core mappings for a system
+- [x] CASCADE delete removes cores when system is deleted
 
 ### Service Layer
-- [ ] `SUPPORTED_CORES` constant defined with list of supported cores
+- [x] `SUPPORTED_CORES` constant defined with list of supported cores (`libretro_runner/src/supported_cores.rs`)
 - [x] `LibretroCoreService::list_cores()` scans configured dir, filters to **only supported cores**, returns filenames without extension
 - [x] `LibretroCoreService::list_cores()` returns `Err(SettingsError)` if `libretro_core_dir` is `None`
 - [x] `LibretroCoreService::get_systems_for_core(core_name)` returns `Vec<SystemCoreMappingModel>`
@@ -132,16 +132,16 @@ Modal dialog shown at launch when multiple cores are mapped to a system.
 - [x] `LibretroRunnerService::resolve_core_path()` returns error if `libretro_core_dir` not configured
 
 ### UI: Settings Dialog
-- [ ] "Manage Core Mappings" button appears below libretro_core_dir field
+- [x] "Manage Core Mappings" button appears below libretro_core_dir field
 - [ ] Button is **disabled** when `libretro_core_dir` is not set
-- [x] Opening dialog scans cores directory and populates "Available Cores" list (currently sync, TODO async)
-- [ ] Selecting a core in "Available Cores" loads and shows systems mapped to that core
-- [ ] "Add System" button opens `SystemSelector` dialog; already-mapped systems are excluded from selection
-- [ ] Choosing a system in `SystemSelector` creates the mapping and reloads "Mapped Systems" list
-- [ ] "Remove System" button removes selected system mapping and reloads list
-- [ ] Lists update immediately after add/remove (no dialog close/reopen needed)
-- [ ] Error toast shown if add/remove fails
-- [ ] Closing and reopening dialog shows persisted mappings
+- [x] Opening dialog scans cores directory and populates "Available Cores" list (async)
+- [x] Selecting a core in "Available Cores" loads and shows systems mapped to that core
+- [x] "Add System" button opens `SystemSelector` dialog; already-mapped systems are excluded from selection
+- [x] Choosing a system in `SystemSelector` creates the mapping and reloads "Mapped Systems" list
+- [x] "Remove System" button removes selected system mapping and reloads list
+- [x] Lists update immediately after add/remove (no dialog close/reopen needed)
+- [x] Error toast shown if add/remove fails
+- [ ] Closing and reopening dialog shows persisted mappings (manual verification needed)
 
 ### UI: Launch Flow
 - [ ] 0 cores → error toast shown, no picker shown, no launch occurs
