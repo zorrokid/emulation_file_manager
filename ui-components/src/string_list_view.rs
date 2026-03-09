@@ -9,15 +9,15 @@ use relm4::{
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct StringListItem {
-    pub name: String,
+pub struct StringListItem<T: std::fmt::Display> {
+    pub name: T,
 }
 
 pub struct StringListItemWidgets {
     label: gtk::Label,
 }
 
-impl RelmListItem for StringListItem {
+impl<T: std::fmt::Display + Clone + 'static> RelmListItem for StringListItem<T> {
     type Root = gtk::Box;
     type Widgets = StringListItemWidgets;
 
@@ -35,13 +35,13 @@ impl RelmListItem for StringListItem {
     }
 
     fn bind(&mut self, widgets: &mut Self::Widgets, _root: &mut Self::Root) {
-        widgets.label.set_label(&self.name);
+        widgets.label.set_label(&self.name.to_string());
     }
 }
 
 #[derive(Debug)]
-pub struct StringListView {
-    list_view_wrapper: TypedListView<StringListItem, gtk::SingleSelection>,
+pub struct StringListView<T: std::fmt::Display> {
+    list_view_wrapper: TypedListView<StringListItem<T>, gtk::SingleSelection>,
     title: String,
 }
 
@@ -50,21 +50,21 @@ pub struct StringListViewInit {
 }
 
 #[derive(Debug)]
-pub enum StringListViewMsg {
-    SetItems(Vec<String>),
+pub enum StringListViewMsg<T: std::fmt::Display> {
+    SetItems(Vec<T>),
     SelectionChanged,
 }
 
 #[derive(Debug)]
-pub enum StringListViewOutput {
-    SelectionChanged(Option<String>),
+pub enum StringListViewOutput<T: std::fmt::Display> {
+    SelectionChanged(Option<T>),
 }
 
 #[relm4::component(pub)]
-impl Component for StringListView {
+impl<T: std::fmt::Display + Clone + std::fmt::Debug + 'static> Component for StringListView<T> {
     type Init = StringListViewInit;
-    type Input = StringListViewMsg;
-    type Output = StringListViewOutput;
+    type Input = StringListViewMsg<T>;
+    type Output = StringListViewOutput<T>;
     type CommandOutput = ();
 
     view! {
@@ -92,7 +92,7 @@ impl Component for StringListView {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let list_view_wrapper: TypedListView<StringListItem, gtk::SingleSelection> =
+        let list_view_wrapper: TypedListView<StringListItem<T>, gtk::SingleSelection> =
             TypedListView::new();
 
         list_view_wrapper
@@ -131,8 +131,8 @@ impl Component for StringListView {
     }
 }
 
-impl StringListView {
-    pub fn get_selected(&self) -> Option<String> {
+impl<T: std::fmt::Display + Clone + 'static> StringListView<T> {
+    pub fn get_selected(&self) -> Option<T> {
         let idx = self.list_view_wrapper.selection_model.selected();
         self.list_view_wrapper
             .get_visible(idx)
