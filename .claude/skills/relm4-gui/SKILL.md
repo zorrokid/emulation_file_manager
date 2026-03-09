@@ -179,7 +179,7 @@ gtk::ScrolledWindow {
 2. Choose component type: `SimpleComponent` / `Component` / `FactoryComponent`
 3. For lists: use `TypedListView` (static items) or `FactoryVecDeque` (interactive rows)
 4. Entry fields: use `update_with_view`, never `#[watch]` + `connect_changed` together
-5. Async DB calls: use `sender.oneshot_command`, never `.await` in `update()`
+5. Async DB calls: use `sender.oneshot_command`, never `.await` in `update()`. Results go in a dedicated `CommandOutput` enum and are handled in `update_cmd` — never reuse `Input` as `CommandOutput` and never route `update_cmd` through `update()`
 6. Dialogs: `root.hide()` / `root.present()`, never `root.close()`
 7. UI stays thin — business logic belongs in `service` crate
 8. GUI never imports from `database` crate directly
