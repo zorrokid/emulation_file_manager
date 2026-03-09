@@ -33,11 +33,13 @@ Any file in the cores directory that is **not** a supported core (with the platf
 
 ### Core Scanning
 
-When a user opens the "Manage Core Mappings" dialog or clicks on a system:
+Implemented in `LibretroCoreService::list_cores()` (`service/src/libretro_core/service.rs`).
+
+When a user opens the "Manage Core Mappings" dialog:
 - Scan the configured `Settings.libretro_core_dir` for files matching supported cores with platform extension (e.g., `fceumm_libretro.so` on Linux)
 - Filter to only supported cores (from `SUPPORTED_CORES` list)
-- Return sorted list of supported **core names without extension** (e.g., `fceumm_libretro`, `snes9x_libretro`)
-- If `libretro_core_dir` is not configured, return empty list; button to open dialog is disabled in settings
+- Return list of supported **core names without extension** (e.g., `fceumm_libretro`, `snes9x_libretro`)
+- If `libretro_core_dir` is not configured, return `Err(SettingsError)`; button to open dialog is disabled in settings so this path is not reached from the UI
 
 ### Mapping Storage
 
@@ -53,30 +55,29 @@ When a user opens the "Manage Core Mappings" dialog or clicks on a system:
 Opened from the Settings form (below the libretro_core_dir field).
 
 **Layout:**
-- System selector dropdown (loads on dialog show)
 - Two columns:
-  - Left: "Mapped Cores" — listview of cores currently mapped to the selected system
-  - Right: "Available Cores" — listview of all `.so` files in the cores directory
-- "Add Mapping" button (moves selected available core to mapped list)
-- "Remove Mapping" button (removes selected mapped core from list)
+  - Left: "Available Cores" — listview of all supported cores found in the cores directory
+  - Right: "Mapped Systems" — listview of systems currently mapped to the selected core
+- "Add System" button (opens the `SystemSelector` dialog to pick a system to map to the selected core)
+- "Remove System" button (removes selected system from the mapped list)
 - "Close" button
 
 **Behavior:**
 - When dialog opens:
-  - Load all systems from database
-  - Scan cores directory
-  - If no system selected, select first system (if any exist)
-- When system selected:
-  - Load mapped cores for that system
-  - Update both lists
-- When "Add Mapping" button clicked:
-  - Take selected available core
-  - Add mapping in database
-  - Reload both lists for current system
-  - Show error toast if mapping fails (e.g., validation error)
-- When "Remove Mapping" button clicked:
-  - Delete mapping from database
-  - Reload both lists
+  - Scan cores directory; populate "Available Cores" list (async)
+  - Clear "Mapped Systems" list until a core is selected
+- When a core is selected in "Available Cores":
+  - Load systems mapped to that core from the database
+  - Populate "Mapped Systems" list
+- When "Add System" button clicked:
+  - Open the existing `SystemSelector` dialog (reuse `relm4-ui/src/system_selector.rs`)
+  - Pass already-mapped system IDs so the selector can exclude or mark them
+  - When a system is chosen from `SystemSelector`, add the mapping `(system_id, selected_core_name)` in the database
+  - Reload "Mapped Systems" list for the current core
+  - Show error toast if mapping fails (e.g., duplicate mapping)
+- When "Remove System" button clicked:
+  - Delete the selected mapping from the database
+  - Reload "Mapped Systems" list
   - Show error toast if deletion fails
 - Lists update immediately after add/remove operations
 - Dialog remains open until user clicks "Close"
@@ -112,7 +113,7 @@ Modal dialog shown at launch when multiple cores are mapped to a system.
 ## Acceptance Criteria
 
 ### Database & Repository Layer
-- [ ] Migration creates `system_libretro_core` table with correct schema
+- [x] Migration creates `system_libretro_core` table with correct schema
 - [ ] `SystemLibretroCoreRepository` implements all required methods
 - [ ] All 8 repository tests pass (add, get, remove, duplicate validation, empty name validation, unsupported core validation, cascade delete, remove all)
 - [ ] Unique constraint prevents duplicate core mappings for a system
@@ -120,24 +121,24 @@ Modal dialog shown at launch when multiple cores are mapped to a system.
 
 ### Service Layer
 - [ ] `SUPPORTED_CORES` constant defined with list of supported cores
-- [ ] `LibretroCoreService::scan_available_cores()` scans configured dir, filters to **only supported cores**, returns sorted filenames
-- [ ] `LibretroCoreService::scan_available_cores()` returns `Ok(vec![])` if `libretro_core_dir` is `None` or no supported cores exist
-- [ ] `LibretroCoreService::get_cores_for_system(system_id)` returns `(id, core_name)` pairs
-- [ ] `LibretroCoreService::add_core_mapping()` validates: non-empty `core_name` **and** `core_name` is in `SUPPORTED_CORES`; returns mapping ID on success
+- [x] `LibretroCoreService::list_cores()` scans configured dir, filters to **only supported cores**, returns filenames without extension
+- [x] `LibretroCoreService::list_cores()` returns `Err(SettingsError)` if `libretro_core_dir` is `None`
+- [ ] `LibretroCoreService::get_systems_for_core(core_name)` returns `(mapping_id, system_id, system_name)` triples
+- [ ] `LibretroCoreService::add_core_mapping(system_id, core_name)` validates: non-empty `core_name` **and** `core_name` is in `SUPPORTED_CORES`; returns mapping ID on success
 - [ ] `LibretroCoreService::add_core_mapping()` returns `ValidationError` if core is not supported
-- [ ] `LibretroCoreService::remove_core_mapping()` deletes by ID, returns `Ok(())` on success
+- [ ] `LibretroCoreService::get_cores_for_system(system_id)` returns `(mapping_id, core_name)` pairs (used at launch time)
+- [ ] `LibretroCoreService::remove_core_mapping(mapping_id)` deletes by ID, returns `Ok(())` on success
 - [ ] `LibretroRunnerService::resolve_core_path(core_name)` returns full path `<libretro_core_dir>/<core_name>`
 - [ ] `LibretroRunnerService::resolve_core_path()` returns error if `libretro_core_dir` not configured
 
 ### UI: Settings Dialog
 - [ ] "Manage Core Mappings" button appears below libretro_core_dir field
 - [ ] Button is **disabled** when `libretro_core_dir` is not set
-- [ ] Opening dialog loads systems and scans cores directory (async)
-- [ ] System dropdown shows all systems
-- [ ] Mapped cores list shows only cores for selected system
-- [ ] Available cores list shows all `.so` files from cores directory
-- [ ] "Add Mapping" button adds selected available core to mapped list (persists)
-- [ ] "Remove Mapping" button removes selected mapped core (persists)
+- [x] Opening dialog scans cores directory and populates "Available Cores" list (currently sync, TODO async)
+- [ ] Selecting a core in "Available Cores" loads and shows systems mapped to that core
+- [ ] "Add System" button opens `SystemSelector` dialog; already-mapped systems are excluded from selection
+- [ ] Choosing a system in `SystemSelector` creates the mapping and reloads "Mapped Systems" list
+- [ ] "Remove System" button removes selected system mapping and reloads list
 - [ ] Lists update immediately after add/remove (no dialog close/reopen needed)
 - [ ] Error toast shown if add/remove fails
 - [ ] Closing and reopening dialog shows persisted mappings

@@ -8,7 +8,9 @@ use crate::repository::{
     file_set_repository::FileSetRepository, file_sync_log_repository::FileSyncLogRepository,
     franchise_repository::FranchiseRepository, release_item_repository::ReleaseItemRepository,
     release_repository::ReleaseRepository, setting_repository::SettingRepository,
-    software_title_repository::SoftwareTitleRepository, system_repository::SystemRepository,
+    software_title_repository::SoftwareTitleRepository,
+    system_libretro_core_repository::SystemLibretroCoreRepository,
+    system_repository::SystemRepository,
 };
 
 #[derive(Debug)]
@@ -26,6 +28,7 @@ pub struct RepositoryManager {
     file_sync_log_repository: FileSyncLogRepository,
     release_item_repository: ReleaseItemRepository,
     dat_repository: DatRepository,
+    system_libretro_core_repository: SystemLibretroCoreRepository,
 }
 
 impl RepositoryManager {
@@ -42,6 +45,7 @@ impl RepositoryManager {
         let file_sync_log_repository = FileSyncLogRepository::new(pool.clone());
         let release_item_repository = ReleaseItemRepository::new(pool.clone());
         let dat_repository = DatRepository::new(pool.clone());
+        let system_libretro_core_repository = SystemLibretroCoreRepository::new(pool.clone());
 
         Self {
             file_info_repository,
@@ -56,6 +60,7 @@ impl RepositoryManager {
             file_sync_log_repository,
             release_item_repository,
             dat_repository,
+            system_libretro_core_repository,
             pool,
         }
     }
@@ -110,5 +115,9 @@ impl RepositoryManager {
 
     pub fn get_dat_repository(&self) -> &DatRepository {
         &self.dat_repository
+    }
+
+    pub fn get_system_libretro_core_repository(&self) -> &SystemLibretroCoreRepository {
+        &self.system_libretro_core_repository
     }
 }
