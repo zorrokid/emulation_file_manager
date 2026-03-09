@@ -83,16 +83,9 @@ pub struct RepositoryManager {
 - **Many-to-many**: Junction tables with composite keys
 - **Timestamps**: Use `TEXT` with ISO 8601 format via `chrono`
 
-### Current Schema Highlights
-- `file_info`: Stores individual files (sha1, size, archive name, file_type)
-- `file_set`: Collections of files with single FileType
-- `file_set_file_info`: Many-to-many files ↔ file sets
-- `release`: Software releases
-- `release_file_set`: Release ↔ file sets (primary relationship)
-- `release_item`: Physical items tracking (Disk 1, Manual, etc.)
-- `release_item_file_set`: Categorize file sets by item (metadata)
-- `system`: Platforms (C64, NES)
-- `file_info_system`: Many-to-many files ↔ systems
+### Current Schema
+
+See `docs/patterns/architect.md` for the domain model. Key tables: `file_info`, `file_set`, `file_set_file_info`, `release`, `release_file_set`, `release_item`, `release_item_file_set`, `system`, `file_info_system`. ER diagrams are in `database/docs/schema/`.
 
 ## Migration Workflow
 

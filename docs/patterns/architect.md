@@ -26,13 +26,6 @@ Reference guide for architectural decisions in the **Emulation File Manager** â€
 - **Service layer contains business logic**: Not in database or GUI
 - **Database crate owns data access**: SQLx queries, schema migrations
 
-### Technologies
-- **Rust**: Primary language with async/await
-- **relm4**: GTK4 reactive UI framework
-- **SQLx**: Async SQLite with compile-time query checking
-- **rust-s3**: S3-compatible cloud storage
-- **zstd**: File compression
-
 ### File Management Design
 - Files stored with unique names, zstd compressed
 - Files can belong to multiple file sets (many-to-many)

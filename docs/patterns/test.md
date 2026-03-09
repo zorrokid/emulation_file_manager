@@ -252,26 +252,15 @@ configured_results: Arc<Mutex<HashMap<Vec<Item>, Result>>>,
 
 ### Arc<Mutex<>> Pattern
 
-**Always use for shared mutable state:**
+Use a single `Arc<Mutex<State>>` for all mock state — not one per field:
+
 ```rust
-// Good: Thread-safe, Clone-able
-state: Arc<Mutex<HashMap<K, V>>>
-
-// Bad: Can't clone, not thread-safe
-state: HashMap<K, V>
-```
-
-**Rationale:**
-### Arc<Mutex<>> Pattern
-
-**Use single `Arc<Mutex<State>>` instead of multiple per-field:**
-```rust
-// Good: Single lock point
+// Good: Single lock point, Clone-able, thread-safe
 pub struct MockSomething {
     state: Arc<Mutex<MockState>>,
 }
 
-// Bad: Multiple lock points (90% more boilerplate)
+// Bad: Multiple lock points, 90% more boilerplate
 pub struct MockSomething {
     field1: Arc<Mutex<Type1>>,
     field2: Arc<Mutex<Type2>>,
@@ -280,12 +269,10 @@ pub struct MockSomething {
 ```
 
 **Rationale:**
-- Single lock acquisition per operation (more efficient)
-- Less contention between operations
-- Much less boilerplate (one Arc instead of N)
-- `Arc` allows `Clone` trait (mock can be cloned)
-- `Mutex` allows interior mutability
-- Enables `Send + Sync` (required for async traits)
+- Single lock acquisition per operation (more efficient, less contention)
+- Much less boilerplate
+- `Arc` enables `Clone`; `Mutex` enables interior mutability
+- `Arc<Mutex<T>>` is `Send + Sync` (required for async traits)
 
 ### Derive Traits
 
@@ -321,24 +308,6 @@ Document the mock's capabilities:
 /// - Pre-configure file set lookups by checksums
 /// - Verify what operations were performed
 ```
-
-## Test Database Setup
-
-For integration tests needing a database:
-
-```rust
-use database::{setup_test_db, setup_test_repository_manager};
-
-#[async_std::test]
-async fn test_something() {
-    let db = setup_test_db().await;
-    let repo_manager = setup_test_repository_manager(&db).await;
-
-    // Test using real database
-}
-```
-
-**Note:** `setup_test_db()` creates a fresh in-memory SQLite database with all migrations applied.
 
 ## Testing Patterns
 
