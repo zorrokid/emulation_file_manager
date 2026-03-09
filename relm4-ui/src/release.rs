@@ -12,6 +12,7 @@ use relm4::{
 };
 use service::{
     error::Error,
+    libretro_core::service::CoreMappingModel,
     view_models::{FileSetViewModel, ReleaseListModel, ReleaseViewModel, SoftwareTitleListModel},
 };
 
@@ -21,7 +22,10 @@ use crate::{
     document_file_set_viewer::{DocumentViewer, DocumentViewerInit, DocumentViewerMsg},
     emulator_runner::{EmulatorRunnerInit, EmulatorRunnerModel, EmulatorRunnerMsg},
     image_fileset_viewer::{ImageFileSetViewerInit, ImageFilesetViewer, ImageFilesetViewerMsg},
-    libretro::{LibretroWindowModel, LibretroWindowMsg, LibretroWindowOutput},
+    libretro::{
+        CorePickerDialog, CorePickerInit, CorePickerMsg, CorePickerOutput, LibretroWindowModel,
+        LibretroWindowMsg, LibretroWindowOutput,
+    },
     list_item::ListItem,
     tabbed_image_viewer::{
         TabbedImageViewer, TabbedImageViewerInit, TabbedImageViewerMsg, TabbedImageViewerOutputMsg,
@@ -44,6 +48,7 @@ pub struct ReleaseModel {
     selected_document_file_set: Option<FileSetViewModel>,
     emulator_runner: Controller<EmulatorRunnerModel>,
     libretro_window: Controller<LibretroWindowModel>,
+    core_picker: Controller<CorePickerDialog>,
     image_file_set_viewer: Controller<ImageFilesetViewer>,
     document_file_set_viewer: Controller<DocumentViewer>,
     tabbed_image_viewer: Controller<TabbedImageViewer>,
@@ -81,6 +86,8 @@ pub enum ReleaseMsg {
     SoftwareTitleUpdated {
         software_title_list_model: SoftwareTitleListModel,
     },
+    CorePickerChosen { core_name: String, file_set_id: i64 },
+    CorePickerCancelled,
     ShowError(String),
 }
 
@@ -88,6 +95,7 @@ pub enum ReleaseMsg {
 pub enum ReleaseCommandMsg {
     FetchedRelease(Result<ReleaseViewModel, Error>),
     LibretroRomPrepared(Result<LibretroLaunchPaths, Error>),
+    CoresFetchedForLaunch { file_set_id: i64, cores: Result<Vec<CoreMappingModel>, Error> },
 }
 
 #[derive(Debug)]
@@ -232,6 +240,16 @@ impl Component for ReleaseModel {
             },
         );
 
+        let core_picker = CorePickerDialog::builder()
+            .transient_for(&root)
+            .launch(CorePickerInit)
+            .forward(sender.input_sender(), |msg| match msg {
+                CorePickerOutput::CoreChosen { core_name, file_set_id } => {
+                    ReleaseMsg::CorePickerChosen { core_name, file_set_id }
+                }
+                CorePickerOutput::Cancelled => ReleaseMsg::CorePickerCancelled,
+            });
+
         let app_services = Arc::clone(&init_model.app_services);
         let image_file_set_viewer_init_model = ImageFileSetViewerInit { app_services };
         let image_file_set_viewer = ImageFilesetViewer::builder()
@@ -261,6 +279,7 @@ impl Component for ReleaseModel {
             selected_document_file_set: None,
             emulator_runner,
             libretro_window,
+            core_picker,
             image_file_set_viewer,
             tabbed_image_viewer,
             document_file_set_viewer,
@@ -314,28 +333,52 @@ impl Component for ReleaseModel {
                 });
             }
             ReleaseMsg::StartLibretroRunner => {
-                if let Some(file_set) = &self.selected_file_set {
-                    let file_set_id = file_set.id;
-                    let app_services = Arc::clone(&self.app_services);
-                    sender.oneshot_command(async move {
-                        let result = app_services
-                            .libretro_runner()
-                            .prepare_rom(LibretroLaunchModel {
-                                file_set_id,
-                                // TODO: allow user to select initial file if
-                                // multiple files in set (similarly to emulator runner)
-                                initial_file: None,
-                                // TODO: add system-specific core mapping and configurable core
-                                // path
-                                core_path: std::path::PathBuf::from(
-                                    "/home/mikko/.config/retroarch/cores/fceumm_libretro.so",
-                                ),
-                            })
-                            .await;
-                        ReleaseCommandMsg::LibretroRomPrepared(result)
-                    });
+                if let (Some(file_set), Some(release)) =
+                    (&self.selected_file_set, &self.selected_release)
+                {
+                    if let Some(system) = release.systems.first() {
+                        let file_set_id = file_set.id;
+                        let system_id = system.id;
+                        let app_services = Arc::clone(&self.app_services);
+                        sender.oneshot_command(async move {
+                            let cores = app_services
+                                .libretro_core()
+                                .get_cores_for_system(system_id)
+                                .await;
+                            ReleaseCommandMsg::CoresFetchedForLaunch { file_set_id, cores }
+                        });
+                    }
                 }
             }
+            ReleaseMsg::CorePickerChosen { core_name, file_set_id } => {
+                let app_services = Arc::clone(&self.app_services);
+                match app_services.libretro_runner().resolve_core_path(&core_name) {
+                    Ok(core_path) => {
+                        sender.oneshot_command(async move {
+                            ReleaseCommandMsg::LibretroRomPrepared(
+                                app_services
+                                    .libretro_runner()
+                                    .prepare_rom(LibretroLaunchModel {
+                                        file_set_id,
+                                        initial_file: None,
+                                        core_path,
+                                    })
+                                    .await,
+                            )
+                        });
+                    }
+                    Err(e) => {
+                        sender
+                            .output(ReleaseOutputMsg::ShowError(format!(
+                                "Failed to resolve core path: {e}"
+                            )))
+                            .unwrap_or_else(|err| {
+                                tracing::error!(error = ?err, "Failed to send ShowError");
+                            });
+                    }
+                }
+            }
+            ReleaseMsg::CorePickerCancelled => {}
             ReleaseMsg::StartEmulatorRunner => {
                 if let (Some(file_set), Some(release)) =
                     (&self.selected_file_set, &self.selected_release)
@@ -455,6 +498,40 @@ impl Component for ReleaseModel {
                     .unwrap_or_else(|e| {
                         tracing::error!(error = ?e, "Failed to send ShowError output message");
                     });
+            }
+            ReleaseCommandMsg::CoresFetchedForLaunch { file_set_id, cores } => {
+                match cores {
+                    Err(e) => {
+                        sender
+                            .output(ReleaseOutputMsg::ShowError(format!(
+                                "Failed to load cores: {e}"
+                            )))
+                            .unwrap_or_else(|err| {
+                                tracing::error!(error = ?err, "Failed to send ShowError");
+                            });
+                    }
+                    Ok(cores) if cores.is_empty() => {
+                        sender
+                            .output(ReleaseOutputMsg::ShowError(
+                                "No libretro cores mapped for this system. Configure in Settings → Manage Core Mappings.".into(),
+                            ))
+                            .unwrap_or_else(|err| {
+                                tracing::error!(error = ?err, "Failed to send ShowError");
+                            });
+                    }
+                    Ok(cores) if cores.len() == 1 => {
+                        sender.input(ReleaseMsg::CorePickerChosen {
+                            core_name: cores[0].core_name.clone(),
+                            file_set_id,
+                        });
+                    }
+                    Ok(cores) => {
+                        self.core_picker.emit(CorePickerMsg::Show {
+                            cores: cores.into_iter().map(|c| c.core_name).collect(),
+                            file_set_id,
+                        });
+                    }
+                }
             }
         }
     }

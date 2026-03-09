@@ -64,11 +64,13 @@ impl LibretroRunnerService {
     }
 
     /// Resolve the full path for a core by name.
+    /// `core_name` must be provided WITHOUT extension (e.g. `fceumm_libretro`).
+    /// The `.so` extension is appended automatically.
     pub fn resolve_core_path(&self, core_name: &str) -> Result<PathBuf, Error> {
         let core_dir = self.settings.libretro_core_dir.as_ref().ok_or_else(|| {
             Error::SettingsError("Libretro core directory is not set".to_string())
         })?;
-        Ok(core_dir.join(core_name))
+        Ok(core_dir.join(format!("{core_name}.so")))
     }
 
     /// Remove a list of temp files by name from the temp output directory.

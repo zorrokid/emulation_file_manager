@@ -133,7 +133,7 @@ Modal dialog shown at launch when multiple cores are mapped to a system.
 
 ### UI: Settings Dialog
 - [x] "Manage Core Mappings" button appears below libretro_core_dir field
-- [ ] Button is **disabled** when `libretro_core_dir` is not set
+- [x] Button is **disabled** when `libretro_core_dir` is not set
 - [x] Opening dialog scans cores directory and populates "Available Cores" list (async)
 - [x] Selecting a core in "Available Cores" loads and shows systems mapped to that core
 - [x] "Add System" button opens `SystemSelector` dialog; already-mapped systems are excluded from selection

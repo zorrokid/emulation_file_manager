@@ -329,122 +329,21 @@ impl LibretroRunnerService {
 
 ### Task 3.1: Create Core Mapping Dialog
 
-**File:** `relm4-ui/src/libretro/core_mapping.rs` (new file)
+**File:** `relm4-ui/src/settings_components/libretro_cores_dialog.rs` (implemented)
 
-**Relm4 Component:**
-
-```rust
-pub struct CoreMappingModel {
-    app_services: Arc<AppServices>,
-    systems: Vec<SystemListModel>,
-    selected_system_index: u32,
-    mapped_cores: Vec<(i64, String)>,
-    available_cores: Vec<String>,
-    selected_mapped_index: Option<u32>,
-    selected_available_index: Option<u32>,
-}
-
-pub struct CoreMappingInit {
-    pub app_services: Arc<AppServices>,
-}
-
-#[derive(Debug)]
-pub enum CoreMappingMsg {
-    Show,
-    Hide,
-    SystemSelected { index: u32 },
-    MappedCoreSelected { index: u32 },
-    AvailableCoreSelected { index: u32 },
-    AddMapping,
-    RemoveMapping,
-}
-
-#[derive(Debug)]
-pub enum CoreMappingCommandMsg {
-    SystemsLoaded(Result<Vec<SystemListModel>, Error>),
-    CoresScanned(Result<Vec<String>, Error>),
-    MappingsLoaded(Result<Vec<(i64, String)>, Error>),
-    MappingAdded(Result<i64, Error>),
-    MappingRemoved(Result<(), Error>),
-}
-
-impl Component for CoreMappingModel {
-    type Init = CoreMappingInit;
-    type Input = CoreMappingMsg;
-    type Output = ();
-    type CommandOutput = CoreMappingCommandMsg;
-    // ... impl methods
-}
-```
-
-**View Layout:**
-```
-gtk::Window "Manage Libretro Core Mappings"
-  gtk::Box [vertical, spacing=10, margin=10]
-    gtk::Box [horizontal]
-      Label "System:"
-      gtk::DropDown (systems)
-
-    gtk::Box [horizontal, spacing=10]
-      gtk::Box [vertical]
-        Label "Mapped Cores" [bold]
-        gtk::ScrolledWindow
-          gtk::ListView (mapped_cores)
-        Button "Remove Mapping" [sensitive only if mapped selected]
-
-      gtk::Box [vertical]
-        Label "Available Cores" [bold]
-        gtk::ScrolledWindow
-          gtk::ListView (available_cores)
-        Button "Add Mapping" [sensitive only if available selected]
-
-    gtk::Button "Close"
-```
-
-**Message Handlers:**
-
-- `Show`:
-  - Spawn two commands: `load_systems()` and `scan_cores()`
-  - Show window when both complete
-  - If no system loaded yet, select first system (if any)
-
-- `SystemSelected { index }`:
-  - Update selected_system_index
-  - Spawn command: `load_mappings_for_system(systems[index].id)`
-  - Clear available core selection
-
-- `MappedCoreSelected { index }`:
-  - Update selected_mapped_index
-  - Disable "Add Mapping" button if no available selected
-
-- `AvailableCoreSelected { index }`:
-  - Update selected_available_index
-  - Disable "Remove Mapping" button if no mapped selected
-
-- `AddMapping`:
-  - Get selected available core and current system ID
-  - Spawn command: `add_core_mapping(system_id, core_name)`
-
-- `RemoveMapping`:
-  - Get selected mapped core ID
-  - Spawn command: `remove_core_mapping(mapping_id)`
-
-**Command Handlers (in `update_cmd`):**
-
-- `SystemsLoaded(Ok(systems))`: Store systems, select first
-- `CoresScanned(Ok(cores))`: Store available_cores
-- `MappingsLoaded(Ok(cores))`: Store mapped_cores, clear selections
-- `MappingAdded(Ok(_))`: Reload mappings for current system, clear selections
-- `MappingAdded(Err(e))`: Show error toast
-- `MappingRemoved(Ok(_))`: Reload mappings for current system
-- `MappingRemoved(Err(e))`: Show error toast
+**Actual design** (core-centric, not system-centric):
+- Left column: `StringListView<String>` for available cores (cores are the primary selection)
+- Right column: `TypedListView<ListItem, gtk::SingleSelection>` for systems mapped to the selected core
+- "Add System" opens `SystemSelector` to pick a system to map to the selected core
+- "Remove System" removes the selected system mapping
+- "Close" hides the dialog
 
 **Acceptance:**
-- [ ] Component compiles
-- [ ] Dialog launches without panic
-- [ ] Systems dropdown populates
-- [ ] Available cores list populates with .so files from cores dir
-- [ ] Mapped cores list populates for selected system
+- [x] Component compiles
+- [x] Dialog launches without panic
+- [x] Available cores list populates with supported cores found in cores dir (without extension)
+- [x] Selecting a core loads systems mapped to that core
+- [x] Mapped systems list populates for selected core
 
 ### Task 3.2: Create Core Picker Dialog
 
@@ -453,39 +352,38 @@ gtk::Window "Manage Libretro Core Mappings"
 **Relm4 Component:**
 
 ```rust
-pub struct CorePickerModel {
-    app_services: Arc<AppServices>,
+pub struct CorePickerDialog {
     file_set_id: i64,
-    cores: Vec<(i64, String)>,  // (mapping_id, core_name)
-    selected_index: Option<u32>,
+    cores_wrapper: TypedListView<StringListItem<String>, gtk::SingleSelection>,
+    selected_core: Option<String>,
 }
 
-pub struct CorePickerInit {
-    pub app_services: Arc<AppServices>,
-}
+pub struct CorePickerInit;  // no app_services needed — cores passed via Show
 
 #[derive(Debug)]
 pub enum CorePickerMsg {
-    Show { file_set_id: i64, cores: Vec<(i64, String)> },
-    CoreSelected { index: u32 },
-    Confirm,
-    Cancel,
-}
-
-#[derive(Debug)]
-pub enum CorePickerOutputMsg {
-    CoreChosen { file_set_id: i64, core_name: String },
+    Show { cores: Vec<String>, file_set_id: i64 },
+    SelectionChanged,
+    LaunchClicked,
     Cancelled,
 }
 
-impl Component for CorePickerModel {
+#[derive(Debug)]
+pub enum CorePickerOutput {
+    CoreChosen { core_name: String, file_set_id: i64 },
+    Cancelled,
+}
+
+impl Component for CorePickerDialog {
     type Init = CorePickerInit;
     type Input = CorePickerMsg;
-    type Output = CorePickerOutputMsg;
+    type Output = CorePickerOutput;
     type CommandOutput = ();
     // ... impl methods
 }
 ```
+
+Uses `TypedListView<StringListItem<String>, gtk::SingleSelection>` from `ui-components`.
 
 **View Layout:**
 ```
@@ -501,21 +399,20 @@ gtk::Window [modal, transient_for=main_window]
 
 **Message Handlers:**
 
-- `Show { file_set_id, cores }`:
-  - Store file_set_id and cores
-  - Clear selected_index
-  - Show window
+- `Show { cores, file_set_id }`:
+  - Store file_set_id, clear list, populate with cores
+  - Clear selected_core
+  - Present window
 
-- `CoreSelected { index }`:
-  - Update selected_index
+- `SelectionChanged`:
+  - Update selected_core from list selection
 
-- `Confirm`:
-  - Get selected core name
-  - Emit `CorePickerOutputMsg::CoreChosen { file_set_id, core_name }`
+- `LaunchClicked`:
+  - Emit `CorePickerOutput::CoreChosen { core_name, file_set_id }`
   - Hide window
 
-- `Cancel`:
-  - Emit `CorePickerOutputMsg::Cancelled`
+- `Cancelled`:
+  - Emit `CorePickerOutput::Cancelled`
   - Hide window
 
 **Acceptance:**
@@ -531,12 +428,12 @@ gtk::Window [modal, transient_for=main_window]
 
 **Changes:**
 ```rust
-pub mod core_mapping;
 pub mod core_picker;
 
-pub use core_mapping::{CoreMappingModel, CoreMappingInit, CoreMappingMsg};
-pub use core_picker::{CorePickerModel, CorePickerInit, CorePickerMsg, CorePickerOutputMsg};
+pub use core_picker::{CorePickerDialog, CorePickerInit, CorePickerMsg, CorePickerOutput};
 ```
+
+Note: Core mapping dialog lives in `settings_components/libretro_cores_dialog.rs`, not in `libretro/`.
 
 **Acceptance:**
 - [ ] `cargo build` succeeds
@@ -583,10 +480,10 @@ pub use core_picker::{CorePickerModel, CorePickerInit, CorePickerMsg, CorePicker
   ```
 
 **Acceptance:**
-- [ ] Button appears in settings form
-- [ ] Button is disabled when libretro_core_dir not set
-- [ ] Button is enabled when libretro_core_dir is set
-- [ ] Clicking button opens Core Mapping dialog
+- [x] Button appears in settings form
+- [x] Button is disabled when libretro_core_dir not set
+- [x] Button is enabled when libretro_core_dir is set
+- [x] Clicking button opens Core Mapping dialog (dialog lives at `settings_components/libretro_cores_dialog.rs`)
 
 ### Task 3.5: Update Release Model — Add Core Picker
 
@@ -613,90 +510,84 @@ pub use core_picker::{CorePickerModel, CorePickerInit, CorePickerMsg, CorePicker
 
 3. Add variants to `ReleaseMsg`:
    ```rust
-   StartLibretroRunner,
-   CorePickerConfirmed { file_set_id: i64, core_name: String },
+   CorePickerChosen { core_name: String, file_set_id: i64 },
    CorePickerCancelled,
    ```
+   (`StartLibretroRunner` already exists)
 
 4. Add variant to `ReleaseCommandMsg`:
    ```rust
-   CoresFetched { file_set_id: i64, result: Result<Vec<(i64, String)>, Error> },
+   CoresFetchedForLaunch { file_set_id: i64, cores: Result<Vec<CoreMappingModel>, Error> },
+   // CoreMappingModel is from service::libretro_core::service; has .core_name: String field
    ```
 
 5. Replace `StartLibretroRunner` handler:
    ```rust
    ReleaseMsg::StartLibretroRunner => {
-       let system_id = self.selected_release.as_ref()
-           .and_then(|r| r.systems.first())
-           .map(|s| s.id);
-       let file_set_id = self.selected_file_set.as_ref().map(|f| f.id);
-
-       if let (Some(sid), Some(fid)) = (system_id, file_set_id) {
-           sender.oneshot_command(async move {
-               let cores = app_services
-                   .libretro_core()
-                   .get_cores_for_system(sid)
-                   .await;
-               ReleaseCommandMsg::CoresFetched {
-                   file_set_id: fid,
-                   result: cores,
-               }
-           });
+       if let (Some(file_set), Some(release)) = (&self.selected_file_set, &self.selected_release) {
+           if let Some(system) = release.systems.first() {
+               let file_set_id = file_set.id;
+               let system_id = system.id;
+               let app_services = Arc::clone(&self.app_services);
+               sender.oneshot_command(async move {
+                   let cores = app_services
+                       .libretro_core()
+                       .get_cores_for_system(system_id)
+                       .await;
+                   ReleaseCommandMsg::CoresFetchedForLaunch { file_set_id, cores }
+               });
+           }
        }
    }
    ```
 
-6. Add handler in `update_cmd` for `CoresFetched`:
+6. Add handler in `update_cmd` for `CoresFetchedForLaunch`:
    ```rust
-   ReleaseCommandMsg::CoresFetched { file_set_id, result } => {
-       match result {
+   ReleaseCommandMsg::CoresFetchedForLaunch { file_set_id, cores } => {
+       match cores {
+           Err(e) => { /* send ShowError output */ },
            Ok(cores) if cores.is_empty() => {
-               // 0 cores: show error
-               sender.input(ReleaseMsg::ShowErrorToast(
+               // 0 cores: show error output
+               sender.output(ReleaseOutputMsg::ShowError(
                    "No libretro cores mapped for this system. Configure in Settings → Manage Core Mappings.".into()
-               ));
+               )).unwrap_or_default();
            },
            Ok(cores) if cores.len() == 1 => {
                // 1 core: proceed directly
-               let (_, core_name) = cores[0].clone();
-               sender.input(ReleaseMsg::CorePickerConfirmed { file_set_id, core_name });
+               sender.input(ReleaseMsg::CorePickerChosen {
+                   core_name: cores[0].core_name.clone(),
+                   file_set_id,
+               });
            },
            Ok(cores) => {
                // 2+ cores: show picker
                self.core_picker.emit(CorePickerMsg::Show {
+                   cores: cores.into_iter().map(|c| c.core_name).collect(),
                    file_set_id,
-                   cores,
                });
-           },
-           Err(e) => {
-               sender.input(ReleaseMsg::ShowErrorToast(
-                   format!("Failed to load cores: {}", e)
-               ));
            },
        }
    }
    ```
 
-7. Add handler for `CorePickerConfirmed`:
+7. Add handler for `CorePickerChosen` (in `update`):
    ```rust
-   ReleaseMsg::CorePickerConfirmed { file_set_id, core_name } => {
-       sender.oneshot_command(async move {
-           match app_services.libretro_runner().resolve_core_path(&core_name) {
-               Ok(core_path) => {
-                   match app_services.libretro_runner().prepare_rom(
-                       LibretroLaunchModel {
+   ReleaseMsg::CorePickerChosen { core_name, file_set_id } => {
+       let app_services = Arc::clone(&self.app_services);
+       match app_services.libretro_runner().resolve_core_path(&core_name) {
+           Ok(core_path) => {
+               sender.oneshot_command(async move {
+                   ReleaseCommandMsg::LibretroRomPrepared(
+                       app_services.libretro_runner().prepare_rom(LibretroLaunchModel {
                            file_set_id,
                            initial_file: None,
                            core_path,
-                       }
-                   ).await {
-                       Ok(_) => ReleaseCommandMsg::LibretroRomPrepared(file_set_id),
-                       Err(e) => ReleaseCommandMsg::LibretroPrepareFailed(e),
-                   }
-               },
-               Err(e) => ReleaseCommandMsg::LibretroPrepareFailed(e),
-           }
-       });
+                       }).await
+                   )
+               });
+           },
+           Err(e) => { /* send ShowError output */ },
+       }
    }
    ```
 
