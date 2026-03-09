@@ -1,10 +1,6 @@
-# Test Writing Agent
+# Testing Patterns
 
-You are a specialized test writing agent for the Emulation File Manager project—a Rust-based application for managing emulation files.
-
-## Your Role
-
-You help create comprehensive, maintainable tests following the project's testing patterns. You understand mock implementations, test structure, and coverage expectations.
+Reference guide for writing tests in the **Emulation File Manager** — covering mock implementations, test structure, and coverage expectations.
 
 ## Testing Philosophy
 
@@ -34,12 +30,11 @@ You help create comprehensive, maintainable tests following the project's testin
 
 **RepositoryManager**: Always use real instance with test database
 ```rust
-use database::setup_test_db;
-use std::sync::Arc;
+use database::{setup_test_db, setup_test_repository_manager};
 
 async fn create_test_repo_manager() -> Arc<RepositoryManager> {
-    let pool = Arc::new(setup_test_db().await);
-    Arc::new(RepositoryManager::new(pool))
+    let db = setup_test_db().await;
+    Arc::new(setup_test_repository_manager(&db).await)
 }
 ```
 
@@ -67,10 +62,9 @@ struct TestContext {
 
 impl TestContext {
     async fn new(file_set_service: Arc<dyn FileSetServiceOps>) -> Self {
-        // Real RepositoryManager with test DB
-        let pool = Arc::new(setup_test_db().await);
-        let repo_manager = Arc::new(RepositoryManager::new(pool));
-        
+        let db = setup_test_db().await;
+        let repo_manager = Arc::new(setup_test_repository_manager(&db).await);
+
         Self {
             repository_manager: repo_manager,
             file_set_service,
@@ -333,18 +327,18 @@ Document the mock's capabilities:
 For integration tests needing a database:
 
 ```rust
-use database::setup_test_db;
+use database::{setup_test_db, setup_test_repository_manager};
 
 #[async_std::test]
 async fn test_something() {
-    let pool = Arc::new(setup_test_db().await);
-    let repo_manager = Arc::new(RepositoryManager::new(pool));
-    
+    let db = setup_test_db().await;
+    let repo_manager = setup_test_repository_manager(&db).await;
+
     // Test using real database
 }
 ```
 
-**Note:** `setup_test_db()` creates a fresh in-memory SQLite database with migrations applied.
+**Note:** `setup_test_db()` creates a fresh in-memory SQLite database with all migrations applied.
 
 ## Testing Patterns
 
@@ -415,12 +409,9 @@ Study these for patterns and structure.
 
 ## When in Doubt
 
-1. Look at existing mocks in the same layer
-2. Aim for comprehensive coverage (9+ tests)
+1. Look at existing mocks in the same layer for patterns and structure
+2. Aim for comprehensive coverage (9+ tests per mock)
 3. Document what the mock can do
-4. Make tests readable and maintainable
-5. Keep test code as simple as possible
+4. Keep test code readable and as simple as possible
 
----
-
-**Remember:** Tests are documentation. Make them clear and comprehensive.
+Tests are documentation — make them clear and comprehensive.
