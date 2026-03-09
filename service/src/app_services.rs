@@ -1,6 +1,7 @@
 use std::sync::{Arc, OnceLock};
 
 use database::{get_db_pool, repository_manager::RepositoryManager};
+use libretro_runner::supported_cores::SUPPORTED_CORES;
 
 use crate::{
     cloud_sync::service::CloudStorageSyncService, document_viewer_service::DocumentViewerService,
@@ -9,6 +10,7 @@ use crate::{
     external_executable_runner::service::ExternalExecutableRunnerService,
     file_import::service::FileImportService, file_set_deletion::service::FileSetDeletionService,
     file_set_download::service::DownloadService as FileSetDownloadService,
+    libretro_core::service::LibretroCoreService, libretro_runner::service::LibretroRunnerService,
     mass_import::service::MassImportService, release_item_service::ReleaseItemService,
     release_service::ReleaseService, settings_service::SettingsService,
     software_title_service::SoftwareTitleService, system_service::SystemService,
@@ -50,11 +52,13 @@ pub struct AppServices {
     file_set_deletion: OnceLock<Arc<FileSetDeletionService>>,
     file_set_download: OnceLock<Arc<FileSetDownloadService>>,
     runner: OnceLock<Arc<ExternalExecutableRunnerService>>,
+    libretro_runner: OnceLock<Arc<LibretroRunnerService>>,
     import: OnceLock<Arc<MassImportService>>,
     settings: OnceLock<Arc<SettingsService>>,
     repository_manager: Arc<RepositoryManager>,
     app_settings: Arc<Settings>,
     cloud_storage: OnceLock<Arc<CloudStorageSyncService>>,
+    libretro_core: OnceLock<Arc<LibretroCoreService>>,
 }
 
 impl AppServices {
@@ -73,11 +77,13 @@ impl AppServices {
             file_set_deletion: OnceLock::new(),
             file_set_download: OnceLock::new(),
             runner: OnceLock::new(),
+            libretro_runner: OnceLock::new(),
             import: OnceLock::new(),
             settings: OnceLock::new(),
             repository_manager,
             app_settings: settings,
             cloud_storage: OnceLock::new(),
+            libretro_core: OnceLock::new(),
         }
     }
 
@@ -194,6 +200,20 @@ impl AppServices {
             .clone()
     }
 
+    pub fn libretro_runner(&self) -> Arc<LibretroRunnerService> {
+        self.libretro_runner
+            .get_or_init(|| {
+                Arc::new(LibretroRunnerService::new(
+                    Arc::clone(&self.app_settings),
+                    Arc::new(crate::file_set_download::service::DownloadService::new(
+                        Arc::clone(&self.repository_manager),
+                        Arc::clone(&self.app_settings),
+                    )),
+                ))
+            })
+            .clone()
+    }
+
     pub fn import(&self) -> Arc<MassImportService> {
         self.import
             .get_or_init(|| {
@@ -224,5 +244,19 @@ impl AppServices {
 
     pub fn app_settings(&self) -> Arc<Settings> {
         Arc::clone(&self.app_settings)
+    }
+
+    pub fn libretro_core(&self) -> Arc<LibretroCoreService> {
+        let supported_cores: Vec<String> = SUPPORTED_CORES.iter().map(|s| s.to_string()).collect();
+        self.libretro_core
+            .get_or_init(|| {
+                Arc::new(LibretroCoreService::new(
+                    Arc::clone(&self.app_settings),
+                    Arc::new(crate::file_system_ops::StdFileSystemOps),
+                    supported_cores,
+                    Arc::clone(&self.repository_manager),
+                ))
+            })
+            .clone()
     }
 }

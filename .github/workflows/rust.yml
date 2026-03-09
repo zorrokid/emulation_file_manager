@@ -30,7 +30,8 @@ jobs:
           libpango1.0-dev \
           libgdk-pixbuf-2.0-dev \
           libgraphene-1.0-dev \
-          libdbus-1-dev
+          libdbus-1-dev \
+          libasound2-dev
 
     - name: Build
       run: cargo build --verbose

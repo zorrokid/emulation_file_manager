@@ -159,7 +159,7 @@ mod tests {
     use crate::{
         file_import::file_import_service_ops::{CreateMockState, MockFileImportServiceOps},
         file_set::mock_file_set_service::MockFileSetService,
-        file_system_ops::{SimpleDirEntry, mock::MockFileSystemOps},
+        file_system_ops::mock::MockFileSystemOps,
         mass_import::{models::MassImportInput, test_utils::create_mock_reader_factory},
     };
     use async_std::channel;
@@ -169,10 +169,8 @@ mod tests {
 
     #[async_std::test]
     async fn test_mass_import_service_runs_pipeline_and_returns_result() {
-        let mut fs_ops = MockFileSystemOps::new();
-        fs_ops.add_entry(Ok(SimpleDirEntry {
-            path: PathBuf::from("/mock/Test Game.zip"),
-        }));
+        let fs_ops = MockFileSystemOps::new();
+        fs_ops.add_file("/mock/Test Game.zip");
 
         let sha1_checksum: Sha1Checksum = [0xaa; 20];
         let sha1_checksum_string = sha1_bytes_to_hex_string(&sha1_checksum);
@@ -282,10 +280,8 @@ mod tests {
 
     #[async_std::test]
     async fn test_mass_import_with_files_only() {
-        let mut fs_ops = MockFileSystemOps::new();
-        fs_ops.add_entry(Ok(SimpleDirEntry {
-            path: PathBuf::from("/mock/Test Game.zip"),
-        }));
+        let fs_ops = MockFileSystemOps::new();
+        fs_ops.add_file("/mock/Test Game.zip");
 
         let sha1_checksum: Sha1Checksum = [0xaa; 20];
         let sha1_checksum_string = sha1_bytes_to_hex_string(&sha1_checksum);

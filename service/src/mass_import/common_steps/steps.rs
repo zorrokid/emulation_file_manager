@@ -422,7 +422,7 @@ mod tests {
     #[async_std::test]
     async fn test_read_files_step() {
         // Prepare mock file system ops to return two files
-        let mut mock_fs_ops = MockFileSystemOps::new();
+        let mock_fs_ops = MockFileSystemOps::new();
         let file1 = String::from("/mock/file1.bin");
         let file2 = String::from("/mock/file2.bin");
         //let file3 = String::from("/mock/file3.bin");

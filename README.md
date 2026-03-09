@@ -6,7 +6,7 @@ I had lots of emulation related files (disk images, manuals, cover art, etc) sto
 
 Emulation File Manager can be used to manage your emulation related files and launch them with emulators and document viewers. Files are stored under collection root folder and can be synced to S3 compatible cloud storage. File meta data is stored to local SQLite database. Files can be added from local file system or providing a download URL (for example to Internet Archive). 
 
-Emulators and document viewers can be configured for laumching files with. Bitmap-file types can be viewed directly in application.
+Emulators and document viewers can be configured for launching files with. Bitmap-file types can be viewed directly in application.
 
 # Concepts (Domain Language) 
 
@@ -45,6 +45,27 @@ In the future, I will add support for moving files to new collection root direct
 
 # Features
 
+## Launching with Emulators
+
+Files can be launched with externally configured emulators. Emulators are configured in the settings and associated with file types and systems.
+
+## Libretro Support (Experimental)
+
+The application has experimental support for launching games via **libretro cores** — emulator plugins loaded directly in-process as shared libraries (`.so` files). This means no separate emulator process is needed; the core runs inside the application itself.
+
+Currently supported:
+- Single core at a time (one game window open)
+- Video output in a dedicated GTK4 window
+- Keyboard input mapped to a joypad
+- Audio output via the system's default audio device
+
+Per-system core selection (configuring which core to use for each system) is currently in development. Other planned improvements include:
+
+- Support for all libretro-compatible cores (SNES, GBA, PlayStation, etc.)
+- In-app core downloading (similar to RetroArch's Online Updater)
+
+See [docs/LIBRETRO_INTEGRATION.md](docs/LIBRETRO_INTEGRATION.md) for a full technical overview and instructions for adding new cores.
+
 ## Cloud Sync
 
 ![Cloud sync progress](docs/images/cloud-sync.png)
@@ -59,10 +80,10 @@ In the future, I will add support for moving files to new collection root direct
 # Architecture
 
 The application is split in four main layers consisting of:
-- the core creates - these shouldn't have dependencies on other crates, they are used by the other layers
-- the database crate - this may have dependencies on the core crates, but not on the GUI crate
-- the service crate - this may have dependencies on the core crates and the database crate, but not on the GUI crate
-- the GUI crate - this may have dependencies to the layers below, the core crates and the database crate (but not the cli crate which will be removed)
+- the core crates - these have no dependencies on other project crates
+- the database crate - may depend on core crates only
+- the service crate - may depend on core and database crates
+- the GUI crate - may depend on all layers below; never accesses the database directly (always through the service layer)
 
 # Emulation files
 
@@ -83,23 +104,24 @@ When files are added for a software release, files are imported as file set in b
 
 One file in file set can belong to multiple file sets. Because of this, each file in file set is stored separately and different kind of file sets can be composed from files. 
 
-When storing files, each file gets a unique file name to avoid conflicts in file names. Original file name is stored in database as part of oringal imported file set. Files are also compressed using zstd compression. 
+When storing files, each file gets a unique file name to avoid conflicts in file names. Original file name is stored in database as part of original imported file set. Files are also compressed using zstd compression. 
 
 File info and file set meta data is stored in database with this structure:
 
 ```plaintext
 
    +-----------+ 1   * +----------------------+
-   | file_info |-------|  file_set_file_info  | 
+   | file_info |-------|  file_set_file_info  |
    +-----------+       +----------------------+
          | 1                     | *
-         |                       | 
-         | *                     |  
+         |                       |
+         | *                     |
    +------------------+          |                +----------+ 1
-   | file_info_system |          |                |  release |----------+ +------------------+          |                +----------+          |
+   | file_info_system |          |                |  release |----------+
+   +------------------+          |                +----------+          |
           | *                    |                     1|               |
           |                      |                      |               |
-          | 1                    | 1                  * |               |*
+          | 1                    | 1                  * |               | *
     +-------------+      +------------+ 1 * +-------------------+  +--------------+
     |   system    |      |  file_set  |-----| release_file_set  |  | release_item | <-- items can be with or without file sets
     +-------------+      +------------+     +-------------------+  +--------------+
@@ -108,7 +130,7 @@ File info and file set meta data is stored in database with this structure:
                       +-----------------------+ *                      |
                       | release_item_file_set |------------------------+
                       +-----------------------+
-                                        
+
                                        ^
                                        +----- release file sets can be with or without item
 ```
@@ -122,9 +144,9 @@ File info and file set meta data is stored in database with this structure:
 - `file_set_file_info`: links file set to files. One file set can have multiple files and one file can belong to multiple file sets. This contains also a file set specific file name for the file which is used when exporting file from application. 
 - `release_file_set`: links release to file sets. This is the primary relationship defining what file sets belong to a release. File sets can be reused across multiple releases (e.g., same manual in different versions).
 - `release_item`: represents physical items that should be part of a release (e.g., "this release should have 2 Disks, 1 Manual, and 1 Box"). Each item has an `item_type` and optional `notes`. This enables tracking both what physical items exist and assessing completeness of digital files.
-- `file_set_item`: categorizes and organizes file sets by linking them to release items. This is optional metadata that helps track which file sets represent which physical items (e.g., "these disk image file sets are for Disk 1" or "this PDF file set is the Manual"). A file set can exist in `release_file_set` without being linked to an item.
+- `release_item_file_set`: categorizes and organizes file sets by linking them to release items. This is optional metadata that helps track which file sets represent which physical items (e.g., "these disk image file sets are for Disk 1" or "this PDF file set is the Manual"). A file set can exist in `release_file_set` without being linked to an item.
 
-The two-level linking approach (`release_file_set` + `file_set_item`) enables:
+The two-level linking approach (`release_file_set` + `release_item_file_set`) enables:
 - Tracking what file sets are in a release (primary relationship via `release_file_set`)
 - Organizing those file sets by physical item type (metadata via `file_set_item`)
 - Assessing completeness: "This release should have a Manual (release_item), but we haven't linked any file sets to it yet"

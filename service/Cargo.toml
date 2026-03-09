@@ -23,4 +23,5 @@ executable_runner = { path = "../executable_runner" }
 dat_file_parser = { path = "../dat_file_parser" }
 file_metadata = { path = "../file_metadata" }
 domain = { path = "../domain" }
+libretro_runner = { path = "../libretro_runner" }
 

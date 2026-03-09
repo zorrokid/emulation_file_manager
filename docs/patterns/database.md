@@ -1,10 +1,6 @@
-# Database Layer Agent
+# Database Patterns
 
-You are a specialized database expert agent for the Emulation File Manager project's database layer. You handle SQLx patterns, migrations, repositories, and schema design for this Rust SQLite application.
-
-## Your Role
-
-You help design and implement database operations following the project's established patterns. You ensure queries are efficient, migrations are safe, and the repository pattern is consistently applied.
+Reference guide for implementing database layer changes in the **Emulation File Manager** using SQLx 0.8.6 + SQLite.
 
 ## Database Architecture
 
@@ -87,16 +83,9 @@ pub struct RepositoryManager {
 - **Many-to-many**: Junction tables with composite keys
 - **Timestamps**: Use `TEXT` with ISO 8601 format via `chrono`
 
-### Current Schema Highlights
-- `file_info`: Stores individual files (sha1, size, archive name, file_type)
-- `file_set`: Collections of files with single FileType
-- `file_set_file_info`: Many-to-many files ↔ file sets
-- `release`: Software releases
-- `release_file_set`: Release ↔ file sets (primary relationship)
-- `release_item`: Physical items tracking (Disk 1, Manual, etc.)
-- `release_item_file_set`: Categorize file sets by item (metadata)
-- `system`: Platforms (C64, NES)
-- `file_info_system`: Many-to-many files ↔ systems
+### Current Schema
+
+See `docs/patterns/architect.md` for the domain model. Key tables: `file_info`, `file_set`, `file_set_file_info`, `release`, `release_file_set`, `release_item`, `release_item_file_set`, `system`, `file_info_system`. ER diagrams are in `database/docs/schema/`.
 
 ## Migration Workflow
 
@@ -111,16 +100,18 @@ sqlx migrate add <descriptive_name>
 
 ### Migration Best Practices
 - **One logical change per migration**: Don't mix schema + data changes
-- **Always test rollback**: Consider down migrations
 - **Foreign keys**: Add constraints carefully, consider existing data
 - **Indexes**: Add for frequently queried columns
+- **NOT NULL**: Use `NOT NULL` for required fields; omit (nullable) only when the absence of a value is genuinely meaningful
 - **Document schema changes**: Update `docs/schema/` with `tbls doc`
 
-### After Migration
-1. Run migration: `sqlx migrate run`
+### After Creating a Migration
+
+Migrations run automatically on app start and in tests — no manual `sqlx migrate run` needed. After writing the SQL file:
+
+1. Regenerate offline data: `cargo sqlx prepare --workspace -- --all-targets` (from workspace root)
 2. Update schema docs: `tbls doc` (from workspace root)
-3. Regenerate offline data: `cargo sqlx prepare --workspace -- --all-targets`
-4. **Commit all three**: migration file, docs, `.sqlx/` metadata
+3. **Commit all three together**: migration file, `.sqlx/` metadata, `docs/schema/`
 
 ## SQLx Offline Mode (Critical for CI)
 
@@ -186,18 +177,21 @@ let query = query_builder.build_query_as::<FileInfo>();
 ## Testing
 
 ### Test Database Setup
+
+Use `setup_test_repository_manager` — do not construct repositories directly in tests:
+
 ```rust
 #[async_std::test]
 async fn test_example() {
-    let pool = database::setup_test_db().await;
-    let repo = FileInfoRepository::new(Arc::new(pool));
-    // ... test logic
+    let db = database::setup_test_db().await;
+    let repo_manager = database::setup_test_repository_manager(&db).await;
+    // use repo_manager.file_info_repository(), etc.
 }
 ```
 
 - Uses in-memory SQLite: `sqlite::memory:`
 - Runs all migrations automatically
-- Each test gets fresh database
+- Each test gets a fresh database
 
 ## Decision Checklist for Database Changes
 

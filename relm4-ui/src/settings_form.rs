@@ -1,19 +1,24 @@
 use std::{path::PathBuf, sync::Arc};
 
 use relm4::{
-    Component, ComponentParts, ComponentSender, RelmWidgetExt,
+    Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     gtk::{
         self,
         glib::{self},
         prelude::{
             BoxExt, ButtonExt, CheckButtonExt, EditableExt, EntryBufferExtManual, EntryExt,
-            GtkWindowExt, OrientableExt, WidgetExt,
+            FrameExt, GtkWindowExt, OrientableExt, WidgetExt,
         },
     },
 };
-use service::{error::Error, settings_service::SettingsSaveModel};
+use service::{app_services::AppServices, error::Error, settings_service::SettingsSaveModel};
 
-use crate::utils::dialog_utils::{show_error_dialog, show_file_chooser_dialog};
+use crate::{
+    settings_components::libretro_cores_dialog::{
+        LibretroCoredDialogInit, LibretroCoresDialog, LibretroCoresDialogMsg,
+    },
+    utils::dialog_utils::{show_error_dialog, show_file_chooser_dialog},
+};
 
 #[derive(Debug)]
 pub struct SettingsForm {
@@ -27,12 +32,14 @@ pub struct SettingsForm {
     pub s3_sync_enabled: bool,
     pub s3_access_key_id: String,
     pub s3_secret_access_key: String,
+    pub libretro_core_dir: Option<PathBuf>,
 
     // Credential status indicator
     pub credentials_stored: bool,
     pub stored_access_key_preview: Option<String>,
 
-    pub app_services: Arc<service::app_services::AppServices>,
+    pub app_services: Arc<AppServices>,
+    pub libretro_cores_dialog: Controller<LibretroCoresDialog>,
 }
 
 impl SettingsForm {
@@ -73,7 +80,10 @@ pub enum SettingsFormMsg {
     S3SecretKeyChanged(String),
     LoadCredentialStatus,
     BrowseCollectionRootDir,
+    BrowseLibretroCoreDir,
     CollectionRootDirSelected(std::path::PathBuf),
+    LibretroCoreDirSelected(std::path::PathBuf),
+    MapLibretroCoresClicked,
 }
 
 #[derive(Debug)]
@@ -109,171 +119,219 @@ impl Component for SettingsForm {
                 set_spacing: 10,
                 set_margin_all: 10,
 
-                gtk::Label {
-                    set_label: "Core settings",
-                    set_xalign: 0.0,
-                    set_margin_bottom: 10,
-                },
+                gtk::Frame {
+                    set_label: Some("Core settings"),
 
-                #[name = "collection_root_dir_entry"]
-                gtk::Box {
-                    set_orientation: gtk::Orientation::Horizontal,
-                    set_spacing: 5,
-                    set_margin_bottom: 10,
-                    gtk::Label {
-                        set_label: "Collection Root Directory",
-                    },
-                    gtk::Label {
-                        #[watch]
-                        set_label: &model.collection_root_dir.as_ref().map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|| "Not set".to_string()),
-                    },
-                    gtk::Button {
-                        set_label: "Browse",
-                        connect_clicked => SettingsFormMsg::BrowseCollectionRootDir,
-                    },
-                },
+                    gtk::Box {
+                        set_orientation: gtk::Orientation::Vertical,
+                        set_spacing: 10,
+                        set_margin_all: 10,
 
 
-                gtk::Label {
-                    set_label: "Cloud Storage Settings",
-                    set_xalign: 0.0,
-                    set_margin_bottom: 10,
-                },
-
-                gtk::CheckButton {
-                    set_label: Some("Enable S3 File Sync"),
-                    #[watch]
-                    #[block_signal(extract_files_toggled)]
-                    set_active: model.s3_sync_enabled,
-                    connect_toggled[sender] => move |_| {
-                        sender.input(SettingsFormMsg::S3FileSyncToggled);
-                    } @extract_files_toggled,
-                },
-
-                gtk::Label {
-                    set_label: "Credentials are stored securely in your system keyring.\nLeave fields empty to use AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables.",
-                    set_xalign: 0.0,
-                    set_margin_bottom: 10,
-                    add_css_class: "dim-label",
-                },
-
-                #[name = "credentials_status_box"]
-                gtk::Box {
-                    set_orientation: gtk::Orientation::Horizontal,
-                    set_spacing: 5,
-                    set_margin_bottom: 10,
-
-                    #[name = "credentials_status_icon"]
-                    gtk::Label {
-                        #[watch]
-                        set_label: if model.credentials_stored { "✓" } else { "⚠" },
-                        #[watch]
-                        add_css_class: if model.credentials_stored { "success" } else { "warning" },
-                    },
-
-                    #[name = "credentials_status_label"]
-                    gtk::Label {
-                        #[watch]
-                        set_label: &if model.credentials_stored {
-                            if let Some(ref preview) = model.stored_access_key_preview {
-                                format!("Credentials stored ({})", preview)
-                            } else {
-                                "Credentials stored".to_string()
-                            }
-                        } else {
-                            "No credentials stored".to_string()
-                        },
-                        set_xalign: 0.0,
-                    },
-                },
-
-                gtk::Box {
-                    set_orientation: gtk::Orientation::Horizontal,
-                    set_spacing: 5,
-
-                    gtk::Label {
-                        set_label: "S3 Bucket name",
-                    },
-
-                    gtk::Entry {
-                        set_placeholder_text: Some("S3 Bucket Name"),
-                        set_text: &model.s3_bucket_name,
-                        connect_changed[sender] => move |entry| {
-                            let buffer = entry.buffer();
-                            sender.input(SettingsFormMsg::S3BucketNameChanged(buffer.text().into()));
-                        },
-                    },
-
-                 },
-
-
-                gtk::Box {
-                    set_orientation: gtk::Orientation::Horizontal,
-                    set_spacing: 5,
-
-                    gtk::Label {
-                        set_label: "S3 endpoint URL",
-                    },
-
-                    gtk::Entry {
-                        set_placeholder_text: Some("S3 Endpoint"),
-                        set_text: &model.s3_endpoint,
-                        connect_changed[sender] => move |entry| {
-                            let buffer = entry.buffer();
-                            sender.input(SettingsFormMsg::S3EndpointChanged(buffer.text().into()));
+                        #[name = "collection_root_dir_entry"]
+                        gtk::Box {
+                            set_orientation: gtk::Orientation::Horizontal,
+                            set_spacing: 5,
+                            set_margin_all: 5,
+                            gtk::Label {
+                                set_label: "Collection Root Directory",
+                            },
+                            gtk::Label {
+                                #[watch]
+                                set_label: &model.collection_root_dir.as_ref().map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|| "Not set".to_string()),
+                            },
+                            gtk::Button {
+                                set_label: "Browse",
+                                connect_clicked => SettingsFormMsg::BrowseCollectionRootDir,
+                            },
                         },
                     },
                 },
+                gtk::Frame {
+                    set_label: Some("Libretro settings"),
 
-                gtk::Box {
-                    set_orientation: gtk::Orientation::Horizontal,
-                    set_spacing: 5,
-                    gtk::Label {
-                        set_label: "S3 region",
-                    },
+                    gtk::Box {
+                        set_orientation: gtk::Orientation::Vertical,
+                        set_spacing: 10,
+                        set_margin_all: 10,
 
-                    gtk::Entry {
-                        set_placeholder_text: Some("S3 Region"),
-                        set_text: &model.s3_region,
-                        connect_changed[sender] => move |entry| {
-                            let buffer = entry.buffer();
-                            sender.input(SettingsFormMsg::S3RegionChanged(buffer.text().into()));
+
+                        #[name = "libretro_core_dir_entry"]
+                        gtk::Box {
+                            set_orientation: gtk::Orientation::Horizontal,
+                            set_spacing: 5,
+                            set_margin_bottom: 10,
+                            gtk::Label {
+                                set_label: "Libretro Core Directory",
+                            },
+                            gtk::Label {
+                                #[watch]
+                                set_label: &model.libretro_core_dir.as_ref().map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|| "Not set".to_string()),
+                            },
+                            gtk::Button {
+                                set_label: "Browse",
+                                connect_clicked => SettingsFormMsg::BrowseLibretroCoreDir,
+                            },
+                        },
+                        gtk::Button {
+                            set_label: "Map Libretro Cores",
+                            #[watch]
+                            set_sensitive: model.libretro_core_dir.is_some(),
+                            connect_clicked => SettingsFormMsg::MapLibretroCoresClicked,
                         },
                     },
                 },
+                gtk::Frame {
+                    set_label: Some("Cloud Storage Settings"),
+                    gtk::Box {
+                        set_orientation: gtk::Orientation::Vertical,
+                        set_spacing: 10,
+                        set_margin_all: 10,
 
-                gtk::Box {
-                    set_orientation: gtk::Orientation::Horizontal,
-                    set_spacing: 5,
-                    gtk::Label {
-                        set_label: "S3 Access Key ID",
-                    },
-
-                    #[name = "s3_access_key_entry"]
-                    gtk::PasswordEntry {
-                        set_placeholder_text: Some("S3 Access Key ID"),
-                        set_text: &model.s3_access_key_id,
-                        set_show_peek_icon: true,  // Allow user to peek at the value if needed
-                        connect_changed[sender] => move |entry| {
-                            sender.input(SettingsFormMsg::S3AccessKeyChanged(entry.text().into()));
+                        gtk::CheckButton {
+                            set_label: Some("Enable S3 File Sync"),
+                            #[watch]
+                            #[block_signal(extract_files_toggled)]
+                            set_active: model.s3_sync_enabled,
+                            connect_toggled[sender] => move |_| {
+                                sender.input(SettingsFormMsg::S3FileSyncToggled);
+                            } @extract_files_toggled,
                         },
-                    },
-                },
 
-                gtk::Box {
-                    set_orientation: gtk::Orientation::Horizontal,
-                    set_spacing: 5,
-                    gtk::Label {
-                        set_label: "S3 Secret Access Key",
-                    },
+                        gtk::Label {
+                            set_label: "Credentials are stored securely in your system keyring.\nLeave fields empty to use AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables.",
+                            set_xalign: 0.0,
+                            set_margin_bottom: 10,
+                            add_css_class: "dim-label",
+                        },
 
-                    #[name = "s3_secret_key_entry"]
-                    gtk::PasswordEntry {
-                        set_placeholder_text: Some("S3 Secret Access Key"),
-                        set_text: &model.s3_secret_access_key,
-                        set_show_peek_icon: true,  // Allow user to peek at the value if needed
-                        connect_changed[sender] => move |entry| {
-                            sender.input(SettingsFormMsg::S3SecretKeyChanged(entry.text().into()));
+                        #[name = "credentials_status_box"]
+                        gtk::Box {
+                            set_orientation: gtk::Orientation::Horizontal,
+                            set_spacing: 5,
+                            set_margin_bottom: 10,
+
+                            #[name = "credentials_status_icon"]
+                            gtk::Label {
+                                #[watch]
+                                set_label: if model.credentials_stored { "✓" } else { "⚠" },
+                                #[watch]
+                                add_css_class: if model.credentials_stored { "success" } else { "warning" },
+                            },
+
+                            #[name = "credentials_status_label"]
+                            gtk::Label {
+                                #[watch]
+                                set_label: &if model.credentials_stored {
+                                    if let Some(ref preview) = model.stored_access_key_preview {
+                                        format!("Credentials stored ({})", preview)
+                                    } else {
+                                        "Credentials stored".to_string()
+                                    }
+                                } else {
+                                    "No credentials stored".to_string()
+                                },
+                                set_xalign: 0.0,
+                            },
+                        },
+
+                        gtk::Box {
+                            set_orientation: gtk::Orientation::Horizontal,
+                            set_spacing: 5,
+
+                            gtk::Label {
+                                set_label: "S3 Bucket name",
+                                set_width_chars: 15,
+                            },
+
+                            gtk::Entry {
+                                set_placeholder_text: Some("S3 Bucket Name"),
+                                set_text: &model.s3_bucket_name,
+                                connect_changed[sender] => move |entry| {
+                                    let buffer = entry.buffer();
+                                    sender.input(SettingsFormMsg::S3BucketNameChanged(buffer.text().into()));
+                                },
+                            },
+
+                         },
+
+
+                        gtk::Box {
+                            set_orientation: gtk::Orientation::Horizontal,
+                            set_spacing: 5,
+
+                            gtk::Label {
+                                set_label: "S3 endpoint URL",
+                                set_width_chars: 15,
+                            },
+
+                            gtk::Entry {
+                                set_placeholder_text: Some("S3 Endpoint"),
+                                set_text: &model.s3_endpoint,
+                                connect_changed[sender] => move |entry| {
+                                    let buffer = entry.buffer();
+                                    sender.input(SettingsFormMsg::S3EndpointChanged(buffer.text().into()));
+                                },
+                            },
+                        },
+
+                        gtk::Box {
+                            set_orientation: gtk::Orientation::Horizontal,
+                            set_spacing: 5,
+
+                            gtk::Label {
+                                set_label: "S3 region",
+                                set_width_chars: 15,
+                            },
+
+                            gtk::Entry {
+                                set_placeholder_text: Some("S3 Region"),
+                                set_text: &model.s3_region,
+                                connect_changed[sender] => move |entry| {
+                                    let buffer = entry.buffer();
+                                    sender.input(SettingsFormMsg::S3RegionChanged(buffer.text().into()));
+                                },
+                            },
+                        },
+
+                        gtk::Box {
+                            set_orientation: gtk::Orientation::Horizontal,
+                            set_spacing: 5,
+
+                            gtk::Label {
+                                set_label: "S3 Access Key ID",
+                                set_width_chars: 15,
+                            },
+
+                            #[name = "s3_access_key_entry"]
+                            gtk::PasswordEntry {
+                                set_placeholder_text: Some("S3 Access Key ID"),
+                                set_text: &model.s3_access_key_id,
+                                set_show_peek_icon: true,  // Allow user to peek at the value if needed
+                                connect_changed[sender] => move |entry| {
+                                    sender.input(SettingsFormMsg::S3AccessKeyChanged(entry.text().into()));
+                                },
+                            },
+                        },
+
+                        gtk::Box {
+                            set_orientation: gtk::Orientation::Horizontal,
+                            set_spacing: 5,
+
+                            gtk::Label {
+                                set_label: "S3 Secret Access Key",
+                                set_width_chars: 15,
+                            },
+
+                            #[name = "s3_secret_key_entry"]
+                            gtk::PasswordEntry {
+                                set_placeholder_text: Some("S3 Secret Access Key"),
+                                set_text: &model.s3_secret_access_key,
+                                set_show_peek_icon: true,  // Allow user to peek at the value if needed
+                                connect_changed[sender] => move |entry| {
+                                    sender.input(SettingsFormMsg::S3SecretKeyChanged(entry.text().into()));
+                                },
+                            },
                         },
                     },
                 },
@@ -304,6 +362,14 @@ impl Component for SettingsForm {
     ) -> ComponentParts<Self> {
         let settings = init.app_services.app_settings();
         let s3_settings = settings.s3_settings.clone().unwrap_or_default();
+        let libretro_cores_dialog_init = LibretroCoredDialogInit {
+            app_services: Arc::clone(&init.app_services),
+        };
+        let libretro_cores_dialog = LibretroCoresDialog::builder()
+            .transient_for(&root)
+            .launch(libretro_cores_dialog_init)
+            .detach();
+
         let model = Self {
             s3_bucket_name: s3_settings.bucket.clone(),
             s3_endpoint: s3_settings.endpoint.clone(),
@@ -314,7 +380,9 @@ impl Component for SettingsForm {
             credentials_stored: false,
             stored_access_key_preview: None,
             collection_root_dir: Some(settings.collection_root_dir.clone()),
+            libretro_core_dir: settings.libretro_core_dir.clone(),
             app_services: init.app_services,
+            libretro_cores_dialog,
         };
         let widgets = view_output!();
 
@@ -335,8 +403,14 @@ impl Component for SettingsForm {
             SettingsFormMsg::BrowseCollectionRootDir => {
                 self.select_collection_root_dir(root, &sender);
             }
+            SettingsFormMsg::BrowseLibretroCoreDir => {
+                self.select_libretro_core_dir(root, &sender);
+            }
             SettingsFormMsg::CollectionRootDirSelected(path) => {
                 self.collection_root_dir = Some(path);
+            }
+            SettingsFormMsg::LibretroCoreDirSelected(path) => {
+                self.libretro_core_dir = Some(path);
             }
             SettingsFormMsg::S3FileSyncToggled => {
                 self.s3_sync_enabled = !self.s3_sync_enabled;
@@ -391,6 +465,7 @@ impl Component for SettingsForm {
                     access_key_id: self.s3_access_key_id.clone(),
                     secret_access_key: self.s3_secret_access_key.clone(),
                     collection_root_dir: self.collection_root_dir.clone(),
+                    libretro_core_dir: self.libretro_core_dir.clone(),
                 };
 
                 sender.oneshot_command(async move {
@@ -436,6 +511,11 @@ impl Component for SettingsForm {
             }
             SettingsFormMsg::Hide => {
                 root.hide();
+            }
+            SettingsFormMsg::MapLibretroCoresClicked => {
+                tracing::info!("MapLibretroCoresClicked");
+                self.libretro_cores_dialog
+                    .emit(LibretroCoresDialogMsg::Show);
             }
         }
 
@@ -498,6 +578,18 @@ impl SettingsForm {
             move |path| {
                 tracing::info!("Selected collection root directory: {:?}", path);
                 sender.input(SettingsFormMsg::CollectionRootDirSelected(path));
+            },
+        );
+    }
+    fn select_libretro_core_dir(&mut self, root: &gtk::Window, sender: &ComponentSender<Self>) {
+        let sender = sender.clone();
+        show_file_chooser_dialog(
+            root,
+            "Select Libretro Core Directory",
+            gtk::FileChooserAction::SelectFolder,
+            move |path| {
+                tracing::info!("Selected Libretro Core directory: {:?}", path);
+                sender.input(SettingsFormMsg::LibretroCoreDirSelected(path));
             },
         );
     }

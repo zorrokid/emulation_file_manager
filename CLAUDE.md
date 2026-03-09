@@ -67,7 +67,7 @@ Core Crates   →   Database   →   Service   →   GUI (relm4-ui)
 | `domain` | Naming conventions, title normalization |
 | `file_system` | Path resolution (directories-next) |
 | `database` | SQLx repositories, migrations, `RepositoryManager` |
-| `service` | Orchestration, `ViewModelService`, sync, import/export pipelines |
+| `service` | Orchestration, `AppServices`, sync, import/export pipelines |
 | `relm4-ui` | GTK4 UI, relm4 Components, `AppModel` |
 | `file_import` | File compression/import logic |
 | `file_export` | File export logic |
@@ -80,19 +80,6 @@ Core Crates   →   Database   →   Service   →   GUI (relm4-ui)
 
 ## Key Patterns
 
-### State and Data Flow
-
-1. User interaction → relm4 `AppMsg` message
-2. `AppModel` routes message → calls `service` layer
-3. Service calls `ViewModelService` or domain services
-4. `ViewModelService` queries via `RepositoryManager`
-5. `RepositoryManager` executes SQLx queries (SQLite)
-6. Results transformed to `ViewModel` types → sent back to UI
-
-### Repository Pattern
-
-`RepositoryManager` is the single access point for all database repositories. Never construct repositories directly in service or GUI code.
-
 ### Pipeline Pattern
 
 Complex multi-step operations in the service layer use a pipeline pattern with `should_execute` / `execute` steps. Pipeline steps may use `.expect()` (not `.unwrap()`) because the `should_execute` guard is tested first — this is the one exception to the no-panic rule.
@@ -103,17 +90,16 @@ Complex multi-step operations in the service layer use a pipeline pattern with `
 - Use `?` operator for propagation
 - `unwrap()` is only acceptable in tests
 
-### Testing
+## Pattern References
 
-Tests use an in-memory SQLite database:
+Detailed implementation patterns live in `docs/patterns/`:
 
-```rust
-// In database crate tests
-let db = setup_test_db().await;
-let repo_manager = setup_test_repository_manager(&db).await;
-```
-
-Integration tests live in `<crate>/tests/`. Unit tests are embedded in source files.
+| Doc | Covers |
+|---|---|
+| `docs/patterns/architect.md` | Domain model, layer boundaries, crate placement decisions |
+| `docs/patterns/database.md` | Migrations, repositories, SQLx queries, offline mode |
+| `docs/patterns/gui.md` | relm4 components, `AppServices`, async commands, GTK4 patterns |
+| `docs/patterns/test.md` | Mock pattern, test DB setup, coverage expectations |
 
 ## Development Practices
 
@@ -168,13 +154,6 @@ Verify the implementation is complete by checking all three:
 
 - Backend behavior (repositories, pipelines, domain logic) → automated tests in `<crate>/tests/` or inline `#[cfg(test)]`
 - GUI behavior (dialogs, layout, widget state) → manual verification checklist in the task file
-
-## Database Migrations
-
-Migrations are in `database/migrations/`. Each migration is a numbered SQL file. When adding a migration:
-1. Create a new numbered `.sql` file
-2. Run `cargo sqlx prepare --workspace -- --all-targets`
-3. Run `tbls doc` to update schema documentation
 
 ## Build Dependencies (for local setup)
 
