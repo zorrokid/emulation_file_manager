@@ -254,6 +254,7 @@ impl AppServices {
                     Arc::clone(&self.app_settings),
                     Arc::new(crate::file_system_ops::StdFileSystemOps),
                     supported_cores,
+                    Arc::clone(&self.repository_manager),
                 ))
             })
             .clone()

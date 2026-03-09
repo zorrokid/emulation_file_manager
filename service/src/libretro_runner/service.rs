@@ -63,6 +63,14 @@ impl LibretroRunnerService {
         })
     }
 
+    /// Resolve the full path for a core by name.
+    pub fn resolve_core_path(&self, core_name: &str) -> Result<PathBuf, Error> {
+        let core_dir = self.settings.libretro_core_dir.as_ref().ok_or_else(|| {
+            Error::SettingsError("Libretro core directory is not set".to_string())
+        })?;
+        Ok(core_dir.join(core_name))
+    }
+
     /// Remove a list of temp files by name from the temp output directory.
     /// Called by the GUI when it receives SessionEnded from LibretroWindowModel.
     pub fn cleanup_files(&self, files: &[String]) {

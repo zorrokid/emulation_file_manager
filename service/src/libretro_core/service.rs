@@ -1,11 +1,25 @@
 use std::sync::Arc;
 
+use database::repository_manager::RepositoryManager;
+
 use crate::{error::Error, file_system_ops::FileSystemOps, view_models::Settings};
+
+pub struct CoreMappingModel {
+    pub id: i64,
+    pub core_name: String,
+}
+
+pub struct SystemCoreMappingModel {
+    pub id: i64,
+    pub system_id: i64,
+    pub system_name: String,
+}
 
 pub struct LibretroCoreService {
     pub settings: Arc<Settings>,
     pub fs_ops: Arc<dyn FileSystemOps>,
     pub supported_cores: Vec<String>,
+    pub repository_manager: Arc<RepositoryManager>,
 }
 
 impl std::fmt::Debug for LibretroCoreService {
@@ -23,11 +37,13 @@ impl LibretroCoreService {
         settings: Arc<Settings>,
         fs_ops: Arc<dyn FileSystemOps>,
         supported_cores: Vec<String>,
+        repository_manager: Arc<RepositoryManager>,
     ) -> Self {
         Self {
             settings,
             fs_ops,
             supported_cores,
+            repository_manager,
         }
     }
 
@@ -72,35 +88,101 @@ impl LibretroCoreService {
             ))
         }
     }
+
+    pub async fn get_cores_for_system(&self, system_id: i64) -> Result<Vec<CoreMappingModel>, Error> {
+        let mappings = self
+            .repository_manager
+            .get_system_libretro_core_repository()
+            .get_mappings_for_system(system_id)
+            .await?;
+        Ok(mappings
+            .into_iter()
+            .map(|m| CoreMappingModel { id: m.id, core_name: m.core_name })
+            .collect())
+    }
+
+    pub async fn get_systems_for_core(&self, core_name: &str) -> Result<Vec<SystemCoreMappingModel>, Error> {
+        let mappings = self
+            .repository_manager
+            .get_system_libretro_core_repository()
+            .get_mappings_for_core(core_name)
+            .await?;
+        Ok(mappings
+            .into_iter()
+            .map(|m| SystemCoreMappingModel {
+                id: m.id,
+                system_id: m.system_id,
+                system_name: m.system_name,
+            })
+            .collect())
+    }
+
+    pub async fn add_core_mapping(&self, system_id: i64, core_name: &str) -> Result<i64, Error> {
+        if !self.supported_cores.contains(&core_name.to_string()) {
+            return Err(Error::InvalidInput(format!(
+                "'{}' is not a supported libretro core",
+                core_name
+            )));
+        }
+        let id = self
+            .repository_manager
+            .get_system_libretro_core_repository()
+            .add_mapping(system_id, core_name)
+            .await?;
+        Ok(id)
+    }
+
+    pub async fn remove_core_mapping(&self, mapping_id: i64) -> Result<(), Error> {
+        self.repository_manager
+            .get_system_libretro_core_repository()
+            .remove_mapping(mapping_id)
+            .await?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
-
-    use std::path::PathBuf;
-
-    use crate::file_system_ops::{SimpleDirEntry, mock::MockFileSystemOps};
+    use crate::file_system_ops::mock::MockFileSystemOps;
 
     use super::*;
 
-    #[test]
-    fn test_list_cores() {
+    async fn make_service(
+        settings: Arc<Settings>,
+        mock_fs: MockFileSystemOps,
+        supported_cores: Vec<String>,
+    ) -> LibretroCoreService {
+        let pool = Arc::new(database::setup_test_db().await);
+        let repo_manager = Arc::new(RepositoryManager::new(pool));
+        LibretroCoreService::new(settings, Arc::new(mock_fs), supported_cores, repo_manager)
+    }
+
+    #[async_std::test]
+    async fn test_list_cores() {
         let settings = Arc::new(Settings {
             libretro_core_dir: Some("/fake/cores".into()),
             ..Default::default()
         });
         let mock_fs_ops = MockFileSystemOps::new();
+        mock_fs_ops.add_file("/fake/cores/lib_supported.so");
+        mock_fs_ops.add_file("/fake/cores/lib_unsupported.so");
 
-        let supported_core_path = "/fake/cores/lib_supported.so";
-        let non_supported_core_path = "/fake/cores/lib_unsupported.so";
-        let supported_cores = vec!["lib_supported".to_string()];
-
-        // Add files to mock (both supported and unsupported cores)
-        mock_fs_ops.add_file(supported_core_path);
-        mock_fs_ops.add_file(non_supported_core_path);
-
-        let service = LibretroCoreService::new(settings, Arc::new(mock_fs_ops), supported_cores);
+        let service = make_service(settings, mock_fs_ops, vec!["lib_supported".to_string()]).await;
         let cores = service.list_cores().unwrap();
         assert_eq!(cores, vec!["lib_supported".to_string()]);
+    }
+
+    #[async_std::test]
+    async fn test_add_core_mapping_unsupported_core_rejected() {
+        let settings = Arc::new(Settings::default());
+        let service = make_service(
+            settings,
+            MockFileSystemOps::new(),
+            vec!["fceumm_libretro".to_string()],
+        )
+        .await;
+
+        let result = service.add_core_mapping(1, "unsupported_core").await;
+        assert!(matches!(result, Err(Error::InvalidInput(_))));
     }
 }

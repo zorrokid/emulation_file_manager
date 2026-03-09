@@ -123,13 +123,13 @@ Modal dialog shown at launch when multiple cores are mapped to a system.
 - [ ] `SUPPORTED_CORES` constant defined with list of supported cores
 - [x] `LibretroCoreService::list_cores()` scans configured dir, filters to **only supported cores**, returns filenames without extension
 - [x] `LibretroCoreService::list_cores()` returns `Err(SettingsError)` if `libretro_core_dir` is `None`
-- [ ] `LibretroCoreService::get_systems_for_core(core_name)` returns `(mapping_id, system_id, system_name)` triples
-- [ ] `LibretroCoreService::add_core_mapping(system_id, core_name)` validates: non-empty `core_name` **and** `core_name` is in `SUPPORTED_CORES`; returns mapping ID on success
-- [ ] `LibretroCoreService::add_core_mapping()` returns `ValidationError` if core is not supported
-- [ ] `LibretroCoreService::get_cores_for_system(system_id)` returns `(mapping_id, core_name)` pairs (used at launch time)
-- [ ] `LibretroCoreService::remove_core_mapping(mapping_id)` deletes by ID, returns `Ok(())` on success
-- [ ] `LibretroRunnerService::resolve_core_path(core_name)` returns full path `<libretro_core_dir>/<core_name>`
-- [ ] `LibretroRunnerService::resolve_core_path()` returns error if `libretro_core_dir` not configured
+- [x] `LibretroCoreService::get_systems_for_core(core_name)` returns `Vec<SystemCoreMappingModel>`
+- [x] `LibretroCoreService::add_core_mapping(system_id, core_name)` validates `core_name` is in `SUPPORTED_CORES`; returns mapping ID on success
+- [x] `LibretroCoreService::add_core_mapping()` returns `InvalidInput` error if core is not supported
+- [x] `LibretroCoreService::get_cores_for_system(system_id)` returns `Vec<CoreMappingModel>` (used at launch time)
+- [x] `LibretroCoreService::remove_core_mapping(mapping_id)` deletes by ID, returns `Ok(())`
+- [x] `LibretroRunnerService::resolve_core_path(core_name)` returns full path `<libretro_core_dir>/<core_name>`
+- [x] `LibretroRunnerService::resolve_core_path()` returns error if `libretro_core_dir` not configured
 
 ### UI: Settings Dialog
 - [ ] "Manage Core Mappings" button appears below libretro_core_dir field
