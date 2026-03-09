@@ -305,7 +305,7 @@ Msg::Show { data } => {
     self.load_data(data);
     widgets.name_entry.set_text(&self.name);
     widgets.name_entry.grab_focus();
-    root.present();
+    root.show();
 }
 
 Msg::Hide => {
@@ -337,56 +337,7 @@ show_info_dialog("Item saved successfully", root);
 
 ### List with Selection
 
-```rust
-gtk::ListView {
-    set_single_click_activate: true,
-    #[wrap(Some)]
-    set_model = &gtk::SingleSelection::new(Some(model.list_model.clone())),
-    
-    connect_activate[sender] => move |list_view, position| {
-        if let Some(item) = get_item_at(list_view, position) {
-            sender.input(Msg::ItemSelected { id: item.id });
-        }
-    },
-}
-```
-
-## Architecture Integration
-
-### Layer Boundaries
-
-**GUI Layer Can:**
-- Depend on `service`, `database`, `core_types`, `file_system`, etc.
-- Create `Arc<RepositoryManager>` from `database::get_db_pool()`
-- Call service layer methods
-- Use view models from `service::view_models`
-
-**GUI Layer MUST NOT:**
-- Implement business logic (belongs in `service` layer)
-- Write SQLx queries directly (use repositories via `RepositoryManager`)
-- Handle file storage directly (use `file_system` crate)
-
-### Typical Data Flow
-
-```
-User Action
-    ↓
-Input Message (Msg::Submit)
-    ↓
-Update Handler
-    ↓
-Async Command (database query via repository)
-    ↓
-Command Message (CommandMsg::Completed)
-    ↓
-update_cmd Handler
-    ↓
-Output Message (OutputMsg::ItemCreated)
-    ↓
-Parent Component
-    ↓
-UI Update (via #[watch] or manual)
-```
+Use `TypedListView` — not raw `gtk::ListView`. See the `relm4-gui` skill for the full pattern. `TypedListView` supports filtering, sorting, and typed access and is the project standard.
 
 ## View Macro Syntax
 
@@ -394,9 +345,9 @@ UI Update (via #[watch] or manual)
 
 - `#[watch]`: Re-evaluate on model change (use sparingly!)
 - `#[name = "widget_name"]`: Named widget access in `update_with_view`
-- `#[track]`: Use with `tracker` crate for fine-grained updates
 - `#[wrap(Some)]`: Wrap expression in Option
 - `#[block_signal(handler_name)]`: Prevent signal during update
+- `#[local_ref]`: Embed a pre-built widget (e.g. from `TypedListView` or `FactoryVecDeque`) into the view tree
 
 ### Widget Setup
 
@@ -444,13 +395,6 @@ gtk::Button {
     set_label: "Delete",
 }
 ```
-
-## Testing Considerations
-
-- Use `OnceCell` for lazy component initialization
-- Components should be testable in isolation with mock `Init` data
-- Async commands can be tested by mocking repository responses
-- UI tests typically require GTK main loop (harder to unit test)
 
 ## Common Mistakes to Avoid
 
