@@ -15,14 +15,19 @@ use ui_components::string_list_view::{
     StringListView, StringListViewInit, StringListViewMsg, StringListViewOutput,
 };
 
-use crate::utils::dialog_utils::show_error_dialog;
+use crate::{
+    system_selector::{SystemSelectInit, SystemSelectModel, SystemSelectMsg, SystemSelectOutputMsg},
+    utils::dialog_utils::show_error_dialog,
+};
 
 #[derive(Debug)]
 pub struct LibretroCoresDialog {
-    pub app_services: Arc<AppServices>,
+    app_services: Arc<AppServices>,
     available_cores_list: Controller<StringListView>,
     mapped_systems_list: Controller<StringListView>,
+    system_selector: Controller<SystemSelectModel>,
     mapped_systems: Vec<SystemCoreMappingModel>,
+    selected_core: Option<String>,
 }
 
 pub struct LibretroCoredDialogInit {
@@ -35,12 +40,15 @@ pub enum LibretroCoresDialogMsg {
     Hide,
     AvailableCoreSelected(Option<String>),
     MappedSystemSelected(Option<String>),
+    AddSystemClicked,
+    SystemChosen(service::view_models::SystemListModel),
 }
 
 #[derive(Debug)]
 pub enum LibretroCoresDialogCmd {
     CoresFetched(Result<Vec<String>, service::error::Error>),
     MappedSystemsFetched(Result<Vec<SystemCoreMappingModel>, service::error::Error>),
+    MappingAdded(Result<i64, service::error::Error>),
 }
 
 #[relm4::component(pub)]
@@ -75,10 +83,21 @@ impl Component for LibretroCoresDialog {
                     model.mapped_systems_list.widget(),
                 },
 
-                gtk::Button {
-                    set_label: "Close",
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    set_spacing: 6,
                     set_halign: gtk::Align::End,
-                    connect_clicked => LibretroCoresDialogMsg::Hide,
+
+                    gtk::Button {
+                        set_label: "Add System",
+                        #[watch]
+                        set_sensitive: model.selected_core.is_some(),
+                        connect_clicked => LibretroCoresDialogMsg::AddSystemClicked,
+                    },
+                    gtk::Button {
+                        set_label: "Close",
+                        connect_clicked => LibretroCoresDialogMsg::Hide,
+                    },
                 },
             }
         }
@@ -109,11 +128,24 @@ impl Component for LibretroCoresDialog {
                 }
             });
 
+        let system_selector = SystemSelectModel::builder()
+            .transient_for(&root)
+            .launch(SystemSelectInit {
+                app_services: Arc::clone(&init.app_services),
+            })
+            .forward(sender.input_sender(), |msg| match msg {
+                SystemSelectOutputMsg::SystemSelected(system) => {
+                    LibretroCoresDialogMsg::SystemChosen(system)
+                }
+            });
+
         let model = LibretroCoresDialog {
             app_services: init.app_services,
             available_cores_list,
             mapped_systems_list,
+            system_selector,
             mapped_systems: Vec::new(),
+            selected_core: None,
         };
 
         let widgets = view_output!();
@@ -140,24 +172,49 @@ impl Component for LibretroCoresDialog {
             LibretroCoresDialogMsg::Hide => {
                 root.hide();
             }
-            LibretroCoresDialogMsg::AvailableCoreSelected(Some(core_name)) => {
-                let app_services = Arc::clone(&self.app_services);
-                sender.oneshot_command(async move {
-                    LibretroCoresDialogCmd::MappedSystemsFetched(
-                        app_services
-                            .libretro_core()
-                            .get_systems_for_core(&core_name)
-                            .await,
-                    )
-                });
-            }
-            LibretroCoresDialogMsg::AvailableCoreSelected(None) => {
-                self.mapped_systems_list
-                    .emit(StringListViewMsg::SetItems(vec![]));
-                self.mapped_systems.clear();
+            LibretroCoresDialogMsg::AvailableCoreSelected(core_name) => {
+                self.selected_core = core_name.clone();
+                match core_name {
+                    Some(core_name) => {
+                        let app_services = Arc::clone(&self.app_services);
+                        sender.oneshot_command(async move {
+                            LibretroCoresDialogCmd::MappedSystemsFetched(
+                                app_services
+                                    .libretro_core()
+                                    .get_systems_for_core(&core_name)
+                                    .await,
+                            )
+                        });
+                    }
+                    None => {
+                        self.mapped_systems_list
+                            .emit(StringListViewMsg::SetItems(vec![]));
+                        self.mapped_systems.clear();
+                    }
+                }
             }
             LibretroCoresDialogMsg::MappedSystemSelected(_name) => {
-                // TODO: used to enable/disable Remove button
+                // TODO: track selected mapping ID for Remove button
+            }
+            LibretroCoresDialogMsg::AddSystemClicked => {
+                let already_mapped: Vec<i64> =
+                    self.mapped_systems.iter().map(|s| s.system_id).collect();
+                self.system_selector.emit(SystemSelectMsg::Show {
+                    selected_system_ids: already_mapped,
+                });
+            }
+            LibretroCoresDialogMsg::SystemChosen(system) => {
+                if let Some(core_name) = self.selected_core.clone() {
+                    let app_services = Arc::clone(&self.app_services);
+                    sender.oneshot_command(async move {
+                        LibretroCoresDialogCmd::MappingAdded(
+                            app_services
+                                .libretro_core()
+                                .add_core_mapping(system.id, &core_name)
+                                .await,
+                        )
+                    });
+                }
             }
         }
     }
@@ -165,7 +222,7 @@ impl Component for LibretroCoresDialog {
     fn update_cmd(
         &mut self,
         msg: Self::CommandOutput,
-        _sender: ComponentSender<Self>,
+        sender: ComponentSender<Self>,
         root: &Self::Root,
     ) {
         match msg {
@@ -175,6 +232,7 @@ impl Component for LibretroCoresDialog {
                 self.mapped_systems_list
                     .emit(StringListViewMsg::SetItems(vec![]));
                 self.mapped_systems.clear();
+                self.selected_core = None;
             }
             LibretroCoresDialogCmd::CoresFetched(Err(e)) => {
                 tracing::error!(error = ?e, "Failed to list libretro cores");
@@ -189,6 +247,23 @@ impl Component for LibretroCoresDialog {
             LibretroCoresDialogCmd::MappedSystemsFetched(Err(e)) => {
                 tracing::error!(error = ?e, "Failed to fetch mapped systems");
                 show_error_dialog("Failed to fetch mapped systems".into(), root);
+            }
+            LibretroCoresDialogCmd::MappingAdded(Ok(_)) => {
+                if let Some(core_name) = self.selected_core.clone() {
+                    let app_services = Arc::clone(&self.app_services);
+                    sender.oneshot_command(async move {
+                        LibretroCoresDialogCmd::MappedSystemsFetched(
+                            app_services
+                                .libretro_core()
+                                .get_systems_for_core(&core_name)
+                                .await,
+                        )
+                    });
+                }
+            }
+            LibretroCoresDialogCmd::MappingAdded(Err(e)) => {
+                tracing::error!(error = ?e, "Failed to add core mapping");
+                show_error_dialog(format!("Failed to add mapping: {e}"), root);
             }
         }
     }
