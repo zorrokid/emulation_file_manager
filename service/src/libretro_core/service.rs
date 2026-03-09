@@ -4,11 +4,13 @@ use database::repository_manager::RepositoryManager;
 
 use crate::{error::Error, file_system_ops::FileSystemOps, view_models::Settings};
 
+#[derive(Debug)]
 pub struct CoreMappingModel {
     pub id: i64,
     pub core_name: String,
 }
 
+#[derive(Debug)]
 pub struct SystemCoreMappingModel {
     pub id: i64,
     pub system_id: i64,

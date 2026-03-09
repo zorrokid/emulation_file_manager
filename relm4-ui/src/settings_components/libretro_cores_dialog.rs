@@ -7,7 +7,10 @@ use relm4::{
         prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt},
     },
 };
-use service::app_services::AppServices;
+use service::{
+    app_services::AppServices,
+    libretro_core::service::SystemCoreMappingModel,
+};
 use ui_components::string_list_view::{
     StringListView, StringListViewInit, StringListViewMsg, StringListViewOutput,
 };
@@ -18,6 +21,8 @@ use crate::utils::dialog_utils::show_error_dialog;
 pub struct LibretroCoresDialog {
     pub app_services: Arc<AppServices>,
     available_cores_list: Controller<StringListView>,
+    mapped_systems_list: Controller<StringListView>,
+    mapped_systems: Vec<SystemCoreMappingModel>,
 }
 
 pub struct LibretroCoredDialogInit {
@@ -28,8 +33,14 @@ pub struct LibretroCoredDialogInit {
 pub enum LibretroCoresDialogMsg {
     Show,
     Hide,
-    CoresFetched(Result<Vec<String>, service::error::Error>),
     AvailableCoreSelected(Option<String>),
+    MappedSystemSelected(Option<String>),
+}
+
+#[derive(Debug)]
+pub enum LibretroCoresDialogCmd {
+    CoresFetched(Result<Vec<String>, service::error::Error>),
+    MappedSystemsFetched(Result<Vec<SystemCoreMappingModel>, service::error::Error>),
 }
 
 #[relm4::component(pub)]
@@ -37,12 +48,12 @@ impl Component for LibretroCoresDialog {
     type Init = LibretroCoredDialogInit;
     type Input = LibretroCoresDialogMsg;
     type Output = ();
-    type CommandOutput = LibretroCoresDialogMsg;
+    type CommandOutput = LibretroCoresDialogCmd;
 
     view! {
         #[root]
         gtk::Window {
-            set_default_width: 600,
+            set_default_width: 700,
             set_default_height: 500,
             set_title: Some("Manage Core Mappings"),
             connect_close_request[sender] => move |_| {
@@ -61,6 +72,7 @@ impl Component for LibretroCoresDialog {
                     set_vexpand: true,
 
                     model.available_cores_list.widget(),
+                    model.mapped_systems_list.widget(),
                 },
 
                 gtk::Button {
@@ -87,9 +99,21 @@ impl Component for LibretroCoresDialog {
                 }
             });
 
+        let mapped_systems_list = StringListView::builder()
+            .launch(StringListViewInit {
+                title: "Mapped Systems".to_string(),
+            })
+            .forward(sender.input_sender(), |msg| match msg {
+                StringListViewOutput::SelectionChanged(name) => {
+                    LibretroCoresDialogMsg::MappedSystemSelected(name)
+                }
+            });
+
         let model = LibretroCoresDialog {
             app_services: init.app_services,
             available_cores_list,
+            mapped_systems_list,
+            mapped_systems: Vec::new(),
         };
 
         let widgets = view_output!();
@@ -108,23 +132,32 @@ impl Component for LibretroCoresDialog {
                 root.show();
                 let app_services = Arc::clone(&self.app_services);
                 sender.oneshot_command(async move {
-                    let result = app_services.libretro_core().list_cores();
-                    LibretroCoresDialogMsg::CoresFetched(result)
+                    LibretroCoresDialogCmd::CoresFetched(
+                        app_services.libretro_core().list_cores(),
+                    )
                 });
             }
             LibretroCoresDialogMsg::Hide => {
                 root.hide();
             }
-            LibretroCoresDialogMsg::CoresFetched(Ok(cores)) => {
-                self.available_cores_list
-                    .emit(StringListViewMsg::SetItems(cores));
+            LibretroCoresDialogMsg::AvailableCoreSelected(Some(core_name)) => {
+                let app_services = Arc::clone(&self.app_services);
+                sender.oneshot_command(async move {
+                    LibretroCoresDialogCmd::MappedSystemsFetched(
+                        app_services
+                            .libretro_core()
+                            .get_systems_for_core(&core_name)
+                            .await,
+                    )
+                });
             }
-            LibretroCoresDialogMsg::CoresFetched(Err(e)) => {
-                tracing::error!(error = ?e, "Failed to list libretro cores");
-                show_error_dialog("Failed to list libretro cores".into(), root);
+            LibretroCoresDialogMsg::AvailableCoreSelected(None) => {
+                self.mapped_systems_list
+                    .emit(StringListViewMsg::SetItems(vec![]));
+                self.mapped_systems.clear();
             }
-            LibretroCoresDialogMsg::AvailableCoreSelected(_name) => {
-                // TODO: load mapped systems for selected core
+            LibretroCoresDialogMsg::MappedSystemSelected(_name) => {
+                // TODO: used to enable/disable Remove button
             }
         }
     }
@@ -132,9 +165,31 @@ impl Component for LibretroCoresDialog {
     fn update_cmd(
         &mut self,
         msg: Self::CommandOutput,
-        sender: ComponentSender<Self>,
+        _sender: ComponentSender<Self>,
         root: &Self::Root,
     ) {
-        self.update(msg, sender, root);
+        match msg {
+            LibretroCoresDialogCmd::CoresFetched(Ok(cores)) => {
+                self.available_cores_list
+                    .emit(StringListViewMsg::SetItems(cores));
+                self.mapped_systems_list
+                    .emit(StringListViewMsg::SetItems(vec![]));
+                self.mapped_systems.clear();
+            }
+            LibretroCoresDialogCmd::CoresFetched(Err(e)) => {
+                tracing::error!(error = ?e, "Failed to list libretro cores");
+                show_error_dialog("Failed to list libretro cores".into(), root);
+            }
+            LibretroCoresDialogCmd::MappedSystemsFetched(Ok(systems)) => {
+                let names = systems.iter().map(|s| s.system_name.clone()).collect();
+                self.mapped_systems = systems;
+                self.mapped_systems_list
+                    .emit(StringListViewMsg::SetItems(names));
+            }
+            LibretroCoresDialogCmd::MappedSystemsFetched(Err(e)) => {
+                tracing::error!(error = ?e, "Failed to fetch mapped systems");
+                show_error_dialog("Failed to fetch mapped systems".into(), root);
+            }
+        }
     }
 }
