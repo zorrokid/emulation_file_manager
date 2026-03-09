@@ -1,10 +1,6 @@
-# GUI Layer Agent
+# GUI Patterns
 
-You are a specialized GUI expert agent for the Emulation File Manager's relm4-ui layer. You help implement GTK4 components using the relm4 framework following the project's established patterns.
-
-## Your Role
-
-You design and implement reactive GTK4 UI components using relm4's component system. You ensure proper message passing, async operations, state management, and adherence to project UI patterns.
+Reference guide for implementing GTK4 UI in the **Emulation File Manager** using relm4 0.9.1.
 
 ## Technology Stack
 
@@ -31,6 +27,16 @@ relm4-ui/src/
 
 ## Relm4 Component Pattern
 
+### Data Flow
+
+UI components never touch the database directly. Always go through the service layer:
+
+```
+User interaction → AppMsg → AppModel → AppServices → RepositoryManager → SQLite
+```
+
+Components hold a `Arc<AppServices>` (or a domain-specific service), not `Arc<RepositoryManager>`.
+
 ### Basic Component Structure
 
 ```rust
@@ -39,8 +45,8 @@ pub struct MyComponentModel {
     // Model state
     pub field1: String,
     pub field2: i64,
-    // Dependencies
-    pub repository_manager: Arc<RepositoryManager>,
+    // Dependencies — service layer, not repositories
+    pub service: Arc<AppServices>,
 }
 
 #[derive(Debug)]
@@ -68,7 +74,7 @@ pub enum MyComponentCommandMsg {
 #[derive(Debug)]
 pub struct MyComponentInit {
     // Initialization parameters
-    pub repository_manager: Arc<RepositoryManager>,
+    pub service: Arc<AppServices>,
 }
 
 #[relm4::component(pub)]
@@ -124,7 +130,7 @@ gtk::Entry {
     },
 }
 
-// Implement update_with_view:
+// Implement update_with_view instead of update:
 fn update_with_view(
     &mut self,
     msg: Self::Input,
@@ -137,10 +143,16 @@ fn update_with_view(
         }
         Msg::Show { data } => {
             self.name = data.name;
-            widgets.name_entry.set_text(&self.name);  // Manual update
+            widgets.name_entry.set_text(&self.name);  // Manual widget update
+        }
+        Msg::Hide => {
+            root.hide();
+        }
+        Msg::ShowError(msg) => {
+            show_error_dialog(&msg, root);
         }
     }
-    self.update_view(widgets, sender);  // MUST call to update #[watch] attrs
+    self.update_view(widgets, sender);  // REQUIRED — updates all #[watch] attrs; omitting causes stale UI
 }
 ```
 
@@ -177,19 +189,17 @@ Msg::Hide => {
 
 ### 3. Async Operations (Commands)
 
-For database queries or long-running operations:
+For service calls or long-running operations:
 
 ```rust
 fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
     match msg {
         Msg::Submit => {
-            let repo = self.repository_manager.clone();
+            let service = self.services.clone();
             let data = self.data.clone();
-            
+
             sender.oneshot_command(async move {
-                let result = repo.system_repository()
-                    .add_system(&data.name)
-                    .await;
+                let result = service.create_system(&data.name).await;
                 CommandMsg::SubmitCompleted(result)
             });
         }
@@ -198,23 +208,25 @@ fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
 
 fn update_cmd(&mut self, msg: Self::CommandOutput, sender: ComponentSender<Self>) {
     match msg {
-        CommandMsg::SubmitCompleted(Ok(id)) => {
-            // Success - send output to parent
-            sender.output(OutputMsg::ItemCreated(model)).ok();
-            self.root().hide();
+        CommandMsg::SubmitCompleted(Ok(item)) => {
+            // Success - notify parent, then hide via a message (root not available here)
+            sender.output(OutputMsg::ItemCreated(item)).ok();
+            sender.input(Msg::Hide);
         }
         CommandMsg::SubmitCompleted(Err(e)) => {
-            show_error_dialog(&format!("Error: {}", e), self.root());
+            // Errors also require a message round-trip to access widgets
+            sender.input(Msg::ShowError(e.to_string()));
         }
     }
 }
 ```
 
 **Key Points:**
-- Clone Arc'd data before moving into async block
+- Always call services, never repositories directly from GUI
+- Clone `Arc`'d data before moving into async block
 - Use `oneshot_command` for single async operations
-- Handle errors with `show_error_dialog` (from `utils::dialog_utils`)
-- Send output messages to parent on success
+- `update_cmd` has no access to `root` or `widgets` — send a message back to self and handle UI changes in `update_with_view`
+- Use `show_error_dialog` (from `utils::dialog_utils`) in the `update_with_view` handler
 
 ### 4. Component Controllers
 
@@ -228,8 +240,8 @@ struct AppModel {
 // Initialize child:
 let settings_form = SettingsForm::builder()
     .transient_for(&root)
-    .launch(SettingsFormInit { 
-        repository_manager: repo_mgr.clone() 
+    .launch(SettingsFormInit {
+        services: app_services.clone()
     })
     .forward(sender.input_sender(), |msg| match msg {
         SettingsFormOutputMsg::Updated => AppMsg::UpdateSettings,
@@ -294,7 +306,7 @@ Msg::CloseRequested => {
 }
 ```
 
-See `APPLICATION_SHUTDOWN_DESIGN.md` for comprehensive shutdown patterns.
+See `relm4-ui/APPLICATION_SHUTDOWN_DESIGN.md` for comprehensive shutdown patterns.
 
 ## Common UI Patterns
 
@@ -330,7 +342,7 @@ gtk::Button {
 ```rust
 use crate::utils::dialog_utils::{show_error_dialog, show_info_dialog};
 
-// In update or update_cmd:
+// In update_with_view (root and widgets are available there):
 show_error_dialog(&format!("Failed to save: {}", error), root);
 show_info_dialog("Item saved successfully", root);
 ```
@@ -413,7 +425,7 @@ When implementing UI features:
 
 1. **Component type**: New component or extend existing?
 2. **Message flow**: What Input/Output/Command messages are needed?
-3. **Dependencies**: What services/repositories does it need?
+3. **Dependencies**: What `AppServices` methods does it need?
 4. **Async operations**: Do I need `oneshot_command`?
 5. **Parent communication**: How does it notify parent? (Output messages)
 6. **Entry fields**: Am I avoiding the update loop? (Use `update_with_view`)
