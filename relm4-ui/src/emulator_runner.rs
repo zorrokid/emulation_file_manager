@@ -16,6 +16,7 @@ use relm4::{
     typed_view::list::TypedListView,
 };
 use service::{
+    app_services::AppServices,
     error::Error as ServiceError,
     external_executable_runner::service::ExecutableRunnerModel,
     view_models::{
@@ -76,7 +77,7 @@ pub struct EmulatorRunnerInit {
 #[derive(Debug)]
 pub struct EmulatorRunnerModel {
     // services
-    app_services: Arc<service::app_services::AppServices>,
+    app_services: Arc<AppServices>,
 
     // list views
     file_list_view_wrapper: TypedListView<ListItem, gtk::SingleSelection>,

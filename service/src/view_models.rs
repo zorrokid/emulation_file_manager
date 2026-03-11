@@ -244,11 +244,7 @@ impl From<&FileSetFileInfo> for FileSetFileInfoViewModel {
             file_set_id: file_set_file_info.file_set_id,
             file_info_id: file_set_file_info.file_info_id,
             file_name: file_set_file_info.file_name.clone(),
-            sha1_checksum: file_set_file_info
-                .sha1_checksum
-                .clone()
-                .try_into()
-                .expect("Invalid SHA1 checksum length"),
+            sha1_checksum: file_set_file_info.sha1_checksum,
             file_size: file_set_file_info.file_size as u64,
             archive_file_name: file_set_file_info.archive_file_name.clone(),
             file_type: file_set_file_info.file_type,
