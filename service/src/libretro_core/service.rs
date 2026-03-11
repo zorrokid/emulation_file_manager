@@ -91,7 +91,10 @@ impl LibretroCoreService {
         }
     }
 
-    pub async fn get_cores_for_system(&self, system_id: i64) -> Result<Vec<CoreMappingModel>, Error> {
+    pub async fn get_cores_for_system(
+        &self,
+        system_id: i64,
+    ) -> Result<Vec<CoreMappingModel>, Error> {
         let mappings = self
             .repository_manager
             .get_system_libretro_core_repository()
@@ -99,11 +102,17 @@ impl LibretroCoreService {
             .await?;
         Ok(mappings
             .into_iter()
-            .map(|m| CoreMappingModel { id: m.id, core_name: m.core_name })
+            .map(|m| CoreMappingModel {
+                id: m.id,
+                core_name: m.core_name,
+            })
             .collect())
     }
 
-    pub async fn get_systems_for_core(&self, core_name: &str) -> Result<Vec<SystemCoreMappingModel>, Error> {
+    pub async fn get_systems_for_core(
+        &self,
+        core_name: &str,
+    ) -> Result<Vec<SystemCoreMappingModel>, Error> {
         let mappings = self
             .repository_manager
             .get_system_libretro_core_repository()
