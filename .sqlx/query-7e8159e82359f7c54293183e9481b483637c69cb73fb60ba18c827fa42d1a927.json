@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM system_libretro_core WHERE system_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "7e8159e82359f7c54293183e9481b483637c69cb73fb60ba18c827fa42d1a927"
+}

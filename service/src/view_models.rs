@@ -63,6 +63,7 @@ pub struct Settings {
     pub temp_output_dir: PathBuf,
     pub s3_settings: Option<S3Settings>,
     pub s3_sync_enabled: bool,
+    pub libretro_core_dir: Option<PathBuf>,
 }
 
 impl Settings {
@@ -105,11 +106,15 @@ impl From<HashMap<String, String>> for Settings {
             .get(SettingName::S3FileSyncEnabled.as_str())
             .map(|v| v == "true")
             .unwrap_or(false);
+        let libretro_cores_dir = map
+            .get(SettingName::LibretroCoresDir.as_str())
+            .map(PathBuf::from);
         Self {
             collection_root_dir,
             temp_output_dir: std::env::temp_dir(),
             s3_settings,
             s3_sync_enabled,
+            libretro_core_dir: libretro_cores_dir,
         }
     }
 }

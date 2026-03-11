@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO system_libretro_core (system_id, core_name) VALUES (?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "4f11736f11244ba4e46b61b79eaad54dc121f6eed7f2206785118cd7ba8bc235"
+}

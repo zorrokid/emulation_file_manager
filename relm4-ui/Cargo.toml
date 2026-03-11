@@ -27,6 +27,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "time"] }
 tracing-appender = "0.2"
 domain = { path = "../domain" }
+libretro_runner = { path = "../libretro_runner" }
 
 
 [package.metadata.deb]

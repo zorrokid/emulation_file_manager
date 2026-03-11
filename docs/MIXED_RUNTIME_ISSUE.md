@@ -86,14 +86,14 @@ Despite these configurations, tokio still gets pulled in as a transitive depende
 **Pros**: surf/deadpool might eventually drop tokio dependency
 **Cons**: No guarantee this will happen, could take years
 
-## Recommendation
+## Decision
 
-**Keep the current setup** unless:
-1. The resource overhead becomes measurable performance issue
-2. Runtime mixing causes actual bugs (none observed so far)
-3. Team decides to standardize on tokio for other reasons
+**Migrate to tokio.** async-std has been discontinued, making the status quo untenable. See the full migration guide at [`docs/ASYNC_STD_TO_TOKIO_MIGRATION.md`](ASYNC_STD_TO_TOKIO_MIGRATION.md).
 
-The mixed runtime is a minor inefficiency but not a critical issue. Focus on application logic bugs instead.
+Key factors:
+- async-std is discontinued — the "wait and see" option is off the table
+- relm4 0.9.1 already provides a tokio runtime via `RelmApp::run()`
+- `flume` (already in the dep tree) provides a runtime-agnostic channel replacement with minimal API diff
 
 ## Detection
 
@@ -109,4 +109,4 @@ cargo tree -p service 2>&1 | grep -B 10 "tokio"
 
 ## Last Updated
 
-2025-12-29
+2026-03-09

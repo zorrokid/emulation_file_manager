@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT slc.id, slc.system_id, s.name as system_name, slc.core_name\n             FROM system_libretro_core slc\n             JOIN system s ON s.id = slc.system_id\n             WHERE slc.core_name = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "system_id",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "system_name",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "core_name",
+        "ordinal": 3,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "07ecb1d8659e910d8e239b8a61979c7734d2bb6fe8ecbe01257515c96ae252d0"
+}

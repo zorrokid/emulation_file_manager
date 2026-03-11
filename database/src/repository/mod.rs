@@ -9,4 +9,5 @@ pub mod release_item_repository;
 pub mod release_repository;
 pub mod setting_repository;
 pub mod software_title_repository;
+pub mod system_libretro_core_repository;
 pub mod system_repository;
