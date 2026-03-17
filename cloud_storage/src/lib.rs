@@ -1,10 +1,10 @@
 use std::path::Path;
 
-use async_std::channel::Sender;
 use async_std::io::WriteExt;
 use async_std::stream::StreamExt;
 use async_trait::async_trait;
 use core_types::events::{DownloadEvent, SyncEvent};
+use flume::Sender;
 pub use s3::bucket::Bucket;
 use s3::creds::Credentials;
 use s3::error::S3Error;
@@ -99,7 +99,6 @@ async fn download_file(
                 key: key.to_string(),
                 bytes_downloaded: chunk.len() as u64,
             })
-            .await
             .ok();
         }
     }
@@ -151,7 +150,6 @@ pub async fn multipart_upload(
                         key: key.to_string(),
                         part: part_number,
                     })
-                    .await
                     .ok();
                 }
                 parts.push(part);
@@ -164,7 +162,6 @@ pub async fn multipart_upload(
                         key: key.to_string(),
                         error: format!("{}", e),
                     })
-                    .await
                     .ok();
                 }
                 bucket.abort_upload(key, &response.upload_id).await.ok();

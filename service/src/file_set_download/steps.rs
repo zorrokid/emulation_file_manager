@@ -145,7 +145,6 @@ impl PipelineStep<DownloadContext> for DownloadFilesStep {
                 tx.send(DownloadEvent::FileDownloadStarted {
                     key: cloud_key.clone(),
                 })
-                .await
                 .ok(); // TODO: Handle send error?
             }
 
@@ -178,7 +177,6 @@ impl PipelineStep<DownloadContext> for DownloadFilesStep {
                         tx.send(DownloadEvent::FileDownloadCompleted {
                             key: cloud_key.clone(),
                         })
-                        .await
                         .ok(); // TODO: Handle send error?
                     }
 
@@ -203,7 +201,6 @@ impl PipelineStep<DownloadContext> for DownloadFilesStep {
                             key: cloud_key.clone(),
                             error: format!("{}", e),
                         })
-                        .await
                         .ok(); // TODO: Handle send error?
                     }
 

@@ -1,5 +1,5 @@
-use async_std::{channel::unbounded, task};
 use core_types::events::SyncEvent;
+use flume::{Sender, unbounded};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller,
     gtk::{
@@ -20,6 +20,7 @@ use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
 };
+use tokio::task;
 
 use crate::{
     import_form::{ImportForm, ImportFormInit, ImportFormMsg},
@@ -84,7 +85,7 @@ pub struct AppModel {
     import_form: OnceCell<Controller<ImportForm>>,
     status_bar: Controller<StatusBarModel>,
     flags: Arc<Mutex<Flags>>,
-    cloud_sync_cancel_tx: Option<async_std::channel::Sender<()>>,
+    cloud_sync_cancel_tx: Option<Sender<()>>,
 }
 
 pub struct AppWidgets {
@@ -420,6 +421,7 @@ impl AppModel {
                 tracing::warn!("Sync already in progress, ignoring new request");
                 false
             } else {
+                tracing::info!("Starting cloud sync operation");
                 flags.cloud_sync_in_progress = true;
                 true
             }
@@ -440,12 +442,15 @@ impl AppModel {
 
         // Spawn task to forward progress messages to UI
         task::spawn(async move {
-            while let Ok(event) = progress_rx.recv().await {
+            while let Ok(event) = progress_rx.recv() {
+                tracing::info!("Received sync event: {:?}", event);
                 ui_sender.input(AppMsg::ProcessFileSyncEvent(event));
             }
         });
 
+        tracing::info!("Initiating cloud sync command");
         sender.oneshot_command(async move {
+            tracing::info!("Executing cloud sync command");
             let res = sync_service.sync_to_cloud(progress_tx, cancel_rx).await;
             CommandMsg::SyncToCloudCompleted(res)
         });

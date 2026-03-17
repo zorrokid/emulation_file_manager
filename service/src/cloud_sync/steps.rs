@@ -1,5 +1,5 @@
 
-use async_std::channel::Sender;
+use flume::Sender;
 use core_types::{events::SyncEvent, FileSyncStatus};
 
 use crate::{
@@ -10,8 +10,7 @@ use crate::{
 // TODO move to utils module?
 async fn send_progress_event(event: SyncEvent, progress_tx: &Sender<SyncEvent>) {
     let res = progress_tx
-        .send(event)
-        .await;
+        .send(event);
 
     if let Err(e) = res {
         tracing::error!("Sending sync event failed {}", e);
