@@ -170,8 +170,11 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                 .get_file_sync_log_repository()
                 .get_logs_and_file_info_by_sync_status(
                     &[FileSyncStatus::UploadPending, FileSyncStatus::UploadFailed],
-                    10,
-                    offset,
+                    10, // Let's fetch next 10 pending / failed files to upload
+
+                    0, // No need to update the offset since we update the records from this round
+                       // with new status, so they won't be fetched again in the next loop
+                       // iteration
                 )
                 .await;
 
@@ -400,6 +403,8 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
         let mut offset = 0;
 
         loop {
+            // TODO: why did count step get 287 files for upload (Pending or Failed) and this step
+            // only 147 (difference is 140)
             let pending_files_res = context
                 .repository_manager
                 .get_file_sync_log_repository()
@@ -408,8 +413,8 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
                         FileSyncStatus::DeletionPending,
                         FileSyncStatus::DeletionFailed,
                     ],
-                    10,
-                    offset,
+                    10, // let's fetch next 10 pending / failed
+                    0, // No need to update the offset since we update the records from this round 
                 )
                 .await;
 
@@ -809,6 +814,76 @@ mod tests {
     }
 
     #[async_std::test]
+    async fn test_upload_pending_files_step_more_than_one_batch() {
+        let mut context = initialize_sync_context().await;
+        let pending_statuses = &[FileSyncStatus::UploadPending, FileSyncStatus::UploadFailed];
+
+        let test_files = [
+            ("file1.zst", [0; 20]),
+            ("file2.zst", [1; 20]),
+            ("file3.zst", [2; 20]),
+            ("file4.zst", [3; 20]),
+            ("file5.zst", [4; 20]),
+            ("file6.zst", [5; 20]),
+            ("file7.zst", [6; 20]),
+            ("file8.zst", [7; 20]),
+            ("file9.zst", [8; 20]),
+            ("file10.zst", [9; 20]),
+            ("file11.zst", [10; 20]),
+        ];
+
+        for (file_name, checksum) in test_files.iter() {
+             let file_info_id = context
+             .repository_manager
+             .get_file_info_repository()
+             .add_file_info(
+                 &Sha1Checksum::from(*checksum),
+                 1234,
+                 file_name,
+                 FileType::Rom,
+             )
+             .await
+             .unwrap();
+
+            context.repository_manager
+                .get_file_sync_log_repository()
+                .add_log_entry(
+                    file_info_id,
+                    FileSyncStatus::UploadPending,
+                    "",
+                    &format!("rom/{}", file_name),
+                )
+                .await
+                .unwrap();
+        }
+
+        context.files_prepared_for_upload = 11;
+
+        let log_count = context.repository_manager
+            .get_file_sync_log_repository()
+            .count_logs_by_latest_statuses(pending_statuses).await.unwrap();
+
+        assert_eq!(log_count, 11);
+
+        let step = crate::cloud_sync::steps::UploadPendingFilesStep;
+        let action = step.execute(&mut context).await;
+
+        assert_eq!(action, StepAction::Continue);
+
+        let upload_result = context.upload_results.get("rom/file1.zst").unwrap();
+
+        assert!(upload_result.cloud_operation_success);
+        assert!(upload_result.db_update_success);
+
+        let log_count = context.repository_manager
+            .get_file_sync_log_repository()
+            .count_logs_by_latest_statuses(pending_statuses).await.unwrap();
+
+        assert_eq!(log_count, 0);
+
+    }
+
+    #[async_std::test]
     async fn test_delete_marked_files_step() {
         let mut context = initialize_sync_context().await;
         let file_info_id = context
@@ -853,6 +928,69 @@ mod tests {
         );
     }
 
+    #[async_std::test]
+    async fn test_delete_marked_files_step_more_than_one_batch() {
+        let mut context = initialize_sync_context().await;
+        let test_files = [
+            ("file1.zst", [0; 20]),
+            ("file2.zst", [1; 20]),
+            ("file3.zst", [2; 20]),
+            ("file4.zst", [3; 20]),
+            ("file5.zst", [4; 20]),
+            ("file6.zst", [5; 20]),
+            ("file7.zst", [6; 20]),
+            ("file8.zst", [7; 20]),
+            ("file9.zst", [8; 20]),
+            ("file10.zst", [9; 20]),
+            ("file11.zst", [10; 20]),
+        ];
+        for(file_name, checksum) in test_files.iter() {
+             let file_info_id = context
+             .repository_manager
+             .get_file_info_repository()
+             .add_file_info(
+                 &Sha1Checksum::from(*checksum),
+                 1234,
+                 file_name,
+                 FileType::Rom,
+             )
+             .await
+             .unwrap();
+
+            context.repository_manager
+                .get_file_sync_log_repository()
+                .add_log_entry(
+                    file_info_id,
+                    FileSyncStatus::DeletionPending,
+                    "",
+                    &format!("rom/{}", file_name),
+                )
+                .await
+                .unwrap();
+        }
+
+         let log_count = context.repository_manager
+            .get_file_sync_log_repository()
+            .count_logs_by_latest_statuses(&[FileSyncStatus::DeletionPending]).await.unwrap();
+
+        assert_eq!(log_count, 11);
+        
+        context.files_prepared_for_deletion = 11;
+        let step = crate::cloud_sync::steps::DeleteMarkedFilesStep;
+        let action = step.execute(&mut context).await;
+        assert_eq!(action, StepAction::Continue);
+        let deletion_result = context.deletion_results.get("rom/file1.zst").unwrap();
+        assert!(deletion_result.cloud_operation_success);
+        assert!(deletion_result.db_update_success);
+
+         let log_count = context.repository_manager
+            .get_file_sync_log_repository()
+            .count_logs_by_latest_statuses(&[FileSyncStatus::DeletionPending]).await.unwrap();
+
+        assert_eq!(log_count, 0);
+ 
+    }
+
     async fn initialize_sync_context() -> SyncContext {
         let pool = Arc::new(setup_test_db().await);
         let repo_manager = Arc::new(RepositoryManager::new(pool));
@@ -887,6 +1025,7 @@ mod tests {
          let repo_manager = Arc::new(RepositoryManager::new(pool));
          let settings = Arc::new(Settings {
              collection_root_dir: PathBuf::from("/"),
+
              ..Default::default()
          });
          let cloud_ops = Arc::new(MockCloudStorage::new());
