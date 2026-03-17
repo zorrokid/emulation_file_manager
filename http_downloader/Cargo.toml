@@ -10,3 +10,4 @@ async-std = { version = "1.13.2", features = ["attributes"] }
 thiserror = "1.0"
 futures = "0.3"
 core_types = { path = "../core_types" }
+flume = "0.12.0"
