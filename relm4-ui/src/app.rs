@@ -442,7 +442,7 @@ impl AppModel {
 
         // Spawn task to forward progress messages to UI
         task::spawn(async move {
-            while let Ok(event) = progress_rx.recv() {
+            while let Ok(event) = progress_rx.recv_async().await {
                 tracing::info!("Received sync event: {:?}", event);
                 ui_sender.input(AppMsg::ProcessFileSyncEvent(event));
             }
