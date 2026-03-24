@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use async_std::channel::Sender;
 use core_types::events::DownloadEvent;
 use database::repository_manager::RepositoryManager;
 use file_export::file_export_ops::DefaultFileExportOps;
+use flume::Sender;
 use thumbnails::{ThumbnailGenerator, ThumbnailPathMap};
 
 use crate::{

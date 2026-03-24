@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use async_std::channel::{Receiver, Sender};
 use core_types::events::SyncEvent;
 use database::repository_manager::RepositoryManager;
+use flume::{Receiver, Sender};
 
 use crate::{
     cloud_sync::context::SyncContext, error::Error, pipeline::generic_pipeline::Pipeline,

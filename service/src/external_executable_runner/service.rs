@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use async_std::channel::Sender;
 use core_types::{ArgumentType, events::DownloadEvent};
 use database::repository_manager::RepositoryManager;
 use executable_runner::ops::{DefaultExecutableRunnerOps, ExecutableRunnerOps};
+use flume::Sender;
 
 use crate::{
     error::Error,

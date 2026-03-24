@@ -7,6 +7,7 @@ This document contains guidelines and best practices for developing the Software
 - [Logging and Tracing](#logging-and-tracing)
 - [Project Structure](#project-structure)
 - [Building and Testing](#building-and-testing)
+- [Tokio Async Runtime](#tokio-async-runtime)
 
 ## Logging and Tracing
 
@@ -314,3 +315,80 @@ async fn test_connection(&self) -> Result<(), CloudStorageError> {
 ### Related Files
 - `cloud_storage/src/lib.rs` - S3 operations implementation
 - `ZSTD_COMPRESSION_BUG.md` - Bug #1 documents how download errors save XML responses as files
+
+## Tokio Async Runtime
+
+This project uses tokio as its async runtime. relm4 provides the runtime automatically via `RelmApp::run()` — **do not add `#[tokio::main]` to `main.rs`**, as that would start a second runtime and panic.
+
+### How tokio schedules work
+
+Tokio is a **cooperative** scheduler. Threads are shared between all running tasks, and a task holds its thread until it reaches an `.await` point, at which point it yields control back to the scheduler. This lets thousands of tasks share a small thread pool efficiently.
+
+The consequence: **any blocking call inside an async task starves other tasks** on the same thread. If a task never yields, no other task on that thread can run.
+
+relm4 runs tokio with a single-threaded runtime. There is exactly one thread for all async work:
+
+```
+Thread 1 (the only thread):
+  → Task A runs until .await → yields
+  → Task B runs until .await → yields
+  → Task A resumes, etc.
+```
+
+If any task blocks that one thread, everything else freezes.
+
+### The flume channel trap
+
+This project uses `flume` for channels. Flume provides both a synchronous and an async API:
+
+| Call | Behaviour |
+|---|---|
+| `receiver.recv()` | **Blocks the thread** until a message arrives |
+| `receiver.recv_async().await` | Yields to the scheduler until a message arrives |
+
+Inside `tokio::task::spawn`, always use **`recv_async().await`**. Using `recv()` compiles fine but blocks the tokio thread, starving every other task — including the one that would produce the messages you are waiting for. This is a classic deadlock:
+
+```rust
+// ❌ WRONG — blocks the only tokio thread
+task::spawn(async move {
+    while let Ok(event) = progress_rx.recv() { // ← never yields
+        handle(event);
+    }
+});
+// The task above holds the thread, so sync_to_cloud below never gets polled:
+sender.oneshot_command(async move {
+    sync_service.sync_to_cloud(progress_tx, cancel_rx).await
+});
+```
+
+```rust
+// ✅ CORRECT — yields between messages
+task::spawn(async move {
+    while let Ok(event) = progress_rx.recv_async().await {
+        handle(event);
+    }
+});
+```
+
+The same rule applies to sends on **bounded** channels (a full bounded channel blocks on `send()`). All channels in this project are unbounded, so `sender.send(val)` is synchronous and non-blocking — use it without `.await`.
+
+### Spawning blocking work
+
+If you genuinely need to call a blocking API (e.g., a synchronous file operation, a CPU-heavy computation), move it off the async thread pool with `tokio::task::spawn_blocking`:
+
+```rust
+let result = tokio::task::spawn_blocking(|| {
+    some_blocking_operation()
+}).await?;
+```
+
+This runs the closure on a dedicated blocking thread pool that tokio keeps separate from the async worker threads, so the async scheduler is never stalled.
+
+### Test attributes
+
+Use `#[tokio::test]` for all async tests:
+
+```rust
+#[tokio::test]
+async fn test_something() { ... }
+```
