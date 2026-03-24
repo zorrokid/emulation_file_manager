@@ -24,4 +24,5 @@ dat_file_parser = { path = "../dat_file_parser" }
 file_metadata = { path = "../file_metadata" }
 domain = { path = "../domain" }
 libretro_runner = { path = "../libretro_runner" }
+flume = "0.12.0"
 

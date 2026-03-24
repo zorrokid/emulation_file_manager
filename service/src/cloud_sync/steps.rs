@@ -1,5 +1,5 @@
 
-use async_std::channel::Sender;
+use flume::Sender;
 use core_types::{events::SyncEvent, FileSyncStatus};
 
 use crate::{
@@ -10,8 +10,7 @@ use crate::{
 // TODO move to utils module?
 async fn send_progress_event(event: SyncEvent, progress_tx: &Sender<SyncEvent>) {
     let res = progress_tx
-        .send(event)
-        .await;
+        .send(event);
 
     if let Err(e) = res {
         tracing::error!("Sending sync event failed {}", e);
@@ -1002,8 +1001,8 @@ mod tests {
         let settings_service = Arc::new(SettingsService::new(repo_manager.clone())); 
         let cloud_ops = Arc::new(MockCloudStorage::new());
 
-        let (tx, _rx) = async_std::channel::unbounded();
-        let (_cancel_tx, cancel_rx) = async_std::channel::unbounded::<()>();
+        let (tx, _rx) = flume::unbounded();
+        let (_cancel_tx, cancel_rx) = flume::unbounded::<()>();
 
         SyncContext {
             settings,
@@ -1030,9 +1029,9 @@ mod tests {
          });
          let cloud_ops = Arc::new(MockCloudStorage::new());
          
-         let (tx, rx) = async_std::channel::unbounded();
+         let (tx, rx) = flume::unbounded();
          let settings_service = Arc::new(SettingsService::new(repo_manager.clone())); 
-         let (_cancel_tx, cancel_rx) = async_std::channel::unbounded::<()>();
+         let (_cancel_tx, cancel_rx) = flume::unbounded::<()>();
          
          let mut context = SyncContext {
              settings,

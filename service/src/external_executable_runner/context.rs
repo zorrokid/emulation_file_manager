@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use async_std::channel::Sender;
 use core_types::{ArgumentType, events::DownloadEvent};
 use database::repository_manager::RepositoryManager;
 use executable_runner::ops::ExecutableRunnerOps;
+use flume::Sender;
 
 use crate::{
     file_set_download::download_service_ops::DownloadServiceOps, file_system_ops::FileSystemOps,

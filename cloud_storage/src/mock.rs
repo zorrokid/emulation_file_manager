@@ -2,9 +2,9 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use async_std::channel::Sender;
 use async_trait::async_trait;
 use core_types::events::{DownloadEvent, SyncEvent};
+use flume::Sender;
 
 use crate::{CloudStorageError, ops::CloudStorageOps};
 
@@ -159,7 +159,6 @@ impl CloudStorageOps for MockCloudStorage {
                     key: cloud_key.to_string(),
                     error: "Mock upload failure".to_string(),
                 })
-                .await
                 .ok();
             }
 
@@ -181,7 +180,6 @@ impl CloudStorageOps for MockCloudStorage {
                     key: cloud_key.to_string(),
                     part,
                 })
-                .await
                 .ok();
             }
         }
@@ -253,7 +251,9 @@ impl CloudStorageOps for MockCloudStorage {
     ) -> Result<(), CloudStorageError> {
         let mut state = self.state.lock().unwrap();
         if let Some(content) = state.uploaded_files.remove(source_cloud_key) {
-            state.uploaded_files.insert(destination_cloud_key.to_string(), content);
+            state
+                .uploaded_files
+                .insert(destination_cloud_key.to_string(), content);
             Ok(())
         } else {
             Err(CloudStorageError::Other(format!(
@@ -338,7 +338,7 @@ mod tests {
         let mock = MockCloudStorage::new();
         mock.set_part_count(5);
 
-        let (tx, rx) = async_std::channel::unbounded();
+        let (tx, rx) = flume::unbounded();
 
         mock.upload_file(Path::new("/test/file.zst"), "rom/game.zst", Some(&tx))
             .await

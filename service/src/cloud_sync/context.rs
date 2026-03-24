@@ -1,13 +1,12 @@
 use std::{collections::HashMap, sync::Arc};
 
-use async_std::channel::{Receiver, Sender};
 use cloud_storage::CloudStorageOps;
 use core_types::events::SyncEvent;
 use database::repository_manager::RepositoryManager;
+use flume::{Receiver, Sender};
 
 use crate::{
-    pipeline::cloud_connection::CloudConnectionContext,
-    settings_service::SettingsService,
+    pipeline::cloud_connection::CloudConnectionContext, settings_service::SettingsService,
     view_models::Settings,
 };
 

@@ -1,6 +1,5 @@
 use std::{collections::HashMap, sync::Arc};
 
-use async_std::channel::Sender;
 use cloud_storage::CloudStorageOps;
 use core_types::events::DownloadEvent;
 use database::{
@@ -8,6 +7,7 @@ use database::{
     repository_manager::RepositoryManager,
 };
 use file_export::{OutputFile, file_export_ops::FileExportOps};
+use flume::Sender;
 use thumbnails::{ThumbnailOps, ThumbnailPathMap};
 
 use crate::{

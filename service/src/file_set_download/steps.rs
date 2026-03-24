@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use core_types::{IMAGE_FILE_TYPES, Sha1Checksum, events::DownloadEvent};
+use core_types::{IMAGE_FILE_TYPES, events::DownloadEvent};
 use file_export::{FileSetExportModel, OutputFile};
 
 use crate::{
@@ -145,7 +145,6 @@ impl PipelineStep<DownloadContext> for DownloadFilesStep {
                 tx.send(DownloadEvent::FileDownloadStarted {
                     key: cloud_key.clone(),
                 })
-                .await
                 .ok(); // TODO: Handle send error?
             }
 
@@ -178,7 +177,6 @@ impl PipelineStep<DownloadContext> for DownloadFilesStep {
                         tx.send(DownloadEvent::FileDownloadCompleted {
                             key: cloud_key.clone(),
                         })
-                        .await
                         .ok(); // TODO: Handle send error?
                     }
 
@@ -203,7 +201,6 @@ impl PipelineStep<DownloadContext> for DownloadFilesStep {
                             key: cloud_key.clone(),
                             error: format!("{}", e),
                         })
-                        .await
                         .ok(); // TODO: Handle send error?
                     }
 
@@ -840,7 +837,7 @@ mod tests {
         let settings_service = Arc::new(SettingsService::new(repository_manager.clone()));
         let cloud_ops = Arc::new(MockCloudStorage::new());
 
-        let (tx, _rx) = async_std::channel::unbounded();
+        let (tx, _rx) = flume::unbounded();
         let fs_ops = Arc::new(MockFileSystemOps::new());
 
         let export_ops = Arc::new(MockFileExportOps::new());

@@ -1,7 +1,7 @@
 use crate::error::Error;
 use crate::file_set_download::service::{DownloadResult, DownloadService};
-use async_std::channel::Sender;
 use core_types::events::DownloadEvent;
+use flume::Sender;
 use std::sync::{Arc, Mutex};
 use thumbnails::ThumbnailPathMap;
 
@@ -197,7 +197,10 @@ impl DownloadServiceOps for MockDownloadServiceOps {
             extract_files,
         };
         state.download_calls.push(call);
-        println!("Total download calls so far: {}", state.download_calls.len());
+        println!(
+            "Total download calls so far: {}",
+            state.download_calls.len()
+        );
 
         if state.should_fail {
             println!("Mock download is set to fail");
