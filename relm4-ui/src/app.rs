@@ -23,7 +23,7 @@ use std::{
 use tokio::task;
 
 use crate::{
-    import_form::{ImportForm, ImportFormInit, ImportFormMsg},
+    import::import_form::{ImportForm, ImportFormInit, ImportFormMsg},
     release::{ReleaseInitModel, ReleaseModel, ReleaseMsg, ReleaseOutputMsg},
     releases::{ReleasesInit, ReleasesModel, ReleasesMsg, ReleasesOutputMsg},
     settings_form::{SettingsForm, SettingsFormInit, SettingsFormMsg, SettingsFormOutputMsg},

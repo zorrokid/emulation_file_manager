@@ -4,6 +4,7 @@ use gtk::{Box as GtkBox, Label, Orientation, ProgressBar};
 use relm4::prelude::*;
 use relm4::typed_view::list::{RelmListItem, TypedListView};
 
+// >>
 #[derive(Debug)]
 pub enum StatusBarMsg {
     SetStatus(String),
@@ -59,7 +60,7 @@ impl RelmListItem for MessageListItem {
         label.set_label(format!("{} {}", status_icon, self.message).as_str());
     }
 }
-
+//<<
 #[tracker::track]
 pub struct StatusBarModel {
     status_text: String,

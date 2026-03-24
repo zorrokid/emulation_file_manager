@@ -1,9 +1,9 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
-use async_std::channel::Sender;
 use core_types::ReadFile;
 use database::repository_manager::RepositoryManager;
 use file_metadata::SendReaderFactoryFn;
+use flume::Sender;
 
 use crate::{
     error::Error,

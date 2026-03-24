@@ -54,6 +54,7 @@ pub enum FileSetImportStatus {
 pub struct FileSetImportResult {
     pub status: FileSetImportStatus,
     pub file_set_id: Option<i64>,
+    pub file_set_name: String,
 }
 
 impl From<DatFileMassImportState> for DatFileMassImportResult {

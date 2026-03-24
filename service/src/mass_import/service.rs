@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use async_std::channel::Sender;
 use dat_file_parser::DatFileParserOps;
 use database::repository_manager::RepositoryManager;
 use file_metadata::{SendReaderFactoryFn, reader_factory::create_metadata_reader};
+use flume::Sender;
 
 use crate::{
     error::Error,
@@ -87,13 +87,12 @@ impl MassImportService {
     /// release with software title linked to the file sets.
     ///
     /// TODO: should we try to use existing software titles and releases if they already exist?
-    ///
-    /// For simplicity, let's start with creating new software titles and releases for each import.
+    /// => For simplicity, let's start with creating new software titles and releases for each import.
     ///
     /// User can remove duplicated from UI. There is a functionality to merge software
     /// titles releases in the future:
     /// - when merging two software titles, all linked releases will be moved to the target software title.
-    /// There will be also an option to merge releases in the future:
+    ///   There will be also an option to merge releases in the future:
     /// - when merging two releases, all linked file sets will be moved to the target release.
     ///
     pub async fn import_with_dat(
@@ -119,7 +118,6 @@ impl MassImportService {
         let mut context = DatFileMassImportContext::new(deps, input, ops, progress_tx);
         let pipeline = Pipeline::<DatFileMassImportContext>::new();
         pipeline.execute(&mut context).await?;
-        //dbg!(&context.state);
         tracing::info!("Mass import process completed.");
         Ok(DatFileMassImportResult::from(context.state))
     }

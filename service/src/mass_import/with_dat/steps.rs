@@ -1,9 +1,13 @@
+use core_types::Sha1Checksum;
+
 use crate::{
     dat_file_service::DatFileService,
     dat_game_status_service::{DatGameFileSetStatus, DatGameStatusService},
     error::Error,
     file_import::model::CreateReleaseParams,
-    mass_import::with_dat::context::DatFileMassImportContext,
+    mass_import::{
+        common_steps::context::MassImportContextOps, with_dat::context::DatFileMassImportContext,
+    },
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
 
@@ -213,6 +217,9 @@ impl PipelineStep<DatFileMassImportContext> for FilterExistingFileSetsStep {
     }
 
     async fn execute(&self, context: &mut DatFileMassImportContext) -> StepAction {
+        let file_sha1s: Vec<Sha1Checksum> =
+            context.build_sha1_to_file_map().keys().cloned().collect();
+
         // TODO: add to context if needs injection for mocking in tests
         // now it's fine since we use in mem test db anyway in tests
         let dat_game_status_service =
@@ -228,14 +235,20 @@ impl PipelineStep<DatFileMassImportContext> for FilterExistingFileSetsStep {
             .expect("DAT file ID should be present in state");
         for game in &dat_file.games {
             let status = dat_game_status_service
-                .get_status(game, context.input.file_type, &dat_file.header, dat_file_id)
+                .get_status(
+                    game,
+                    context.input.file_type,
+                    &dat_file.header,
+                    dat_file_id,
+                    &file_sha1s,
+                )
                 .await;
             match status {
                 Ok(status) => {
                     tracing::info!(
                         game = %game.name,
                         dat_file_id = dat_file_id,
-                        "Got existing file set status for game",
+                        "Got file set status for game",
                     );
                     context.state.statuses.push(status);
                 }
@@ -244,11 +257,11 @@ impl PipelineStep<DatFileMassImportContext> for FilterExistingFileSetsStep {
                         error = ?e,
                         game = %game.name,
                         dat_file_id = dat_file_id,
-                        "Failed to get existing file set status for game",
+                        "Failed to get file set status for game",
                     );
                     // Let's still abort at this phase
                     return StepAction::Abort(Error::DbError(format!(
-                        "Failed to get existing file set status for game '{}': {}",
+                        "Failed to get file set status for game '{}': {}",
                         game.name, e
                     )));
                 }

@@ -201,10 +201,6 @@ impl<T: MassImportContextOps + Send + Sync> PipelineStep<T> for ImportFileSetsSt
             let import_res = service.create_file_set(file_set);
             let (id, status) = match import_res.await {
                 Ok(import_result) => {
-                    println!(
-                        "Successfully imported file set: {}",
-                        import_result.file_set_id
-                    );
                     if import_result.failed_steps.is_empty() {
                         tracing::info!(
                             file_set_id = %import_result.file_set_id,
@@ -250,6 +246,7 @@ impl<T: MassImportContextOps + Send + Sync> PipelineStep<T> for ImportFileSetsSt
             context.import_results().push(FileSetImportResult {
                 file_set_id: id,
                 status: status.clone(),
+                file_set_name: file_set_name.clone(),
             });
 
             if let Some(sender_tx) = &context.progress_tx() {
@@ -257,7 +254,7 @@ impl<T: MassImportContextOps + Send + Sync> PipelineStep<T> for ImportFileSetsSt
                     file_set_name,
                     status,
                 };
-                if let Err(e) = sender_tx.send(event).await {
+                if let Err(e) = sender_tx.send(event) {
                     tracing::error!(
                         error = ?e,
                         "Failed to send progress event",
@@ -301,7 +298,7 @@ mod tests {
     struct TestMassImportContext {
         state: TestMassImportState,
         ops: DatFileMassImportOps,
-        deps: MassImportDeps,
+        //deps: MassImportDeps,
         input: MassImportInput,
     }
 
@@ -317,7 +314,7 @@ mod tests {
 
     impl TestMassImportContext {
         pub fn new(
-            deps: MassImportDeps,
+            //deps: MassImportDeps,
             input: MassImportInput,
             ops: DatFileMassImportOps,
             state: Option<TestMassImportState>,
@@ -325,17 +322,17 @@ mod tests {
             TestMassImportContext {
                 state: state.unwrap_or_default(),
                 ops,
-                deps,
+                //deps,
                 input,
             }
         }
     }
 
-    async fn get_deps() -> MassImportDeps {
+    /*async fn get_deps() -> MassImportDeps {
         MassImportDeps {
             repository_manager: database::setup_test_repository_manager().await,
         }
-    }
+    }*/
 
     fn get_ops(
         dat_file_parser_ops: Option<Arc<dyn DatFileParserOps>>,
@@ -442,7 +439,7 @@ mod tests {
         let ops = get_ops(None, Some(Arc::new(mock_fs_ops)), None, None);
 
         let mut context = TestMassImportContext::new(
-            get_deps().await,
+            //get_deps().await,
             MassImportInput {
                 source_path: PathBuf::from("/mock"),
                 dat_file_path: None,
@@ -498,7 +495,7 @@ mod tests {
             create_mock_reader_factory(metadata_by_path, vec![PathBuf::from("/mock/file3.zip")]);
         let ops = get_ops(None, None, Some(Arc::new(reader_factory)), None);
         let mut context = TestMassImportContext::new(
-            get_deps().await,
+            //get_deps().await,
             MassImportInput {
                 source_path: PathBuf::from("/mock"),
                 dat_file_path: None,
@@ -591,7 +588,7 @@ mod tests {
 
         let ops = get_ops(None, None, None, Some(Arc::new(mock_file_import_ops)));
         let mut context = TestMassImportContext::new(
-            get_deps().await,
+            //get_deps().await,
             MassImportInput {
                 source_path: PathBuf::from("/mock"),
                 dat_file_path: None,

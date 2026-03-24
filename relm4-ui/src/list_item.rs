@@ -66,3 +66,31 @@ macro_rules! impl_list_item_traits {
 impl_list_item_traits!(ListItem);
 impl_list_item_traits!(DeletableListItem);
 impl_list_item_traits!(FileSetListItem);
+
+/// Most simple list item, just a string. Useful for lists of strings that don't have an associated
+/// ID or other data.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct StringListItem {
+    pub name: String,
+}
+
+impl RelmListItem for StringListItem {
+    type Root = gtk::Box;
+    type Widgets = ListItemWidgets;
+
+    fn setup(_item: &gtk::ListItem) -> (gtk::Box, ListItemWidgets) {
+        relm4::view! {
+            my_box = gtk::Box {
+                #[name = "label"]
+                gtk::Label,
+            }
+        }
+        let widgets = ListItemWidgets { label };
+        (my_box, widgets)
+    }
+
+    fn bind(&mut self, widgets: &mut Self::Widgets, _root: &mut Self::Root) {
+        let ListItemWidgets { label } = widgets;
+        label.set_label(&self.name);
+    }
+}

@@ -11,7 +11,7 @@ mod file_set_form;
 mod file_set_selector;
 mod image_fileset_viewer;
 mod image_viewer;
-mod import_form;
+mod import;
 mod libretro;
 mod list_item;
 mod logging;

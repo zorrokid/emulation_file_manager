@@ -1,9 +1,9 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
-use async_std::channel::Sender;
 use core_types::{FileType, ReadFile, item_type::ItemType};
 use domain::title_normalizer::file_name_to_canonical_software_title;
 use file_metadata::SendReaderFactoryFn;
+use flume::Sender;
 
 use crate::{
     file_import::{

@@ -14,11 +14,11 @@ use crate::{
         models::{FileSetImportResult, MassImportInput, MassImportSyncEvent},
     },
 };
-use async_std::channel::Sender;
 use core_types::{ReadFile, Sha1Checksum, sha1_from_hex_string};
 use dat_file_parser::DatFileParserOps;
 use domain::naming_conventions::no_intro::{DatFile, DatGame, DatHeader, DatRom};
 use file_metadata::SendReaderFactoryFn;
+use flume::Sender;
 
 use crate::{
     file_import::{
