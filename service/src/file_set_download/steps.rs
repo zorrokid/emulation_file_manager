@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use core_types::{IMAGE_FILE_TYPES, Sha1Checksum, events::DownloadEvent};
+use core_types::{IMAGE_FILE_TYPES, events::DownloadEvent};
 use file_export::{FileSetExportModel, OutputFile};
 
 use crate::{
@@ -837,7 +837,7 @@ mod tests {
         let settings_service = Arc::new(SettingsService::new(repository_manager.clone()));
         let cloud_ops = Arc::new(MockCloudStorage::new());
 
-        let (tx, _rx) = async_std::channel::unbounded();
+        let (tx, _rx) = flume::unbounded();
         let fs_ops = Arc::new(MockFileSystemOps::new());
 
         let export_ops = Arc::new(MockFileExportOps::new());
