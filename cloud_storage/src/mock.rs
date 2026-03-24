@@ -338,7 +338,7 @@ mod tests {
         let mock = MockCloudStorage::new();
         mock.set_part_count(5);
 
-        let (tx, rx) = async_std::channel::unbounded();
+        let (tx, rx) = flume::unbounded();
 
         mock.upload_file(Path::new("/test/file.zst"), "rom/game.zst", Some(&tx))
             .await
