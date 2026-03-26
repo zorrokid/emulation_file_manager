@@ -5,9 +5,7 @@ use crate::{
     dat_game_status_service::{DatGameFileSetStatus, DatGameStatusService},
     error::Error,
     file_import::model::CreateReleaseParams,
-    mass_import::{
-        common_steps::context::MassImportContextOps, with_dat::context::DatFileMassImportContext,
-    },
+    mass_import::with_dat::context::DatFileMassImportContext,
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
 

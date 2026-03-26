@@ -48,6 +48,7 @@ pub enum FileSetImportStatus {
     Success,
     SucessWithWarnings(Vec<String>), // Warning message
     Failed(String),                  // Error message
+    AlreadyExists,
 }
 
 #[derive(Debug, Clone)]

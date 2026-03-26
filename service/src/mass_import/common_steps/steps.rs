@@ -271,10 +271,10 @@ impl<T: MassImportContextOps + Send + Sync> PipelineStep<T> for ImportFileSetsSt
 mod tests {
     use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
-    use async_std::channel::Sender;
     use core_types::{ReadFile, sha1_from_hex_string};
     use dat_file_parser::{DatFileParserError, DatFileParserOps, MockDatParser};
     use file_metadata::SendReaderFactoryFn;
+    use flume::Sender;
 
     use super::*;
     use crate::{
@@ -288,7 +288,6 @@ mod tests {
         file_set::mock_file_set_service::MockFileSetService,
         file_system_ops::{FileSystemOps, SimpleDirEntry, mock::MockFileSystemOps},
         mass_import::{
-            common_steps::context::MassImportDeps,
             models::{FileSetImportResult, MassImportInput, MassImportSyncEvent},
             test_utils::create_mock_reader_factory,
             with_dat::context::DatFileMassImportOps,
@@ -298,7 +297,6 @@ mod tests {
     struct TestMassImportContext {
         state: TestMassImportState,
         ops: DatFileMassImportOps,
-        //deps: MassImportDeps,
         input: MassImportInput,
     }
 
@@ -314,7 +312,6 @@ mod tests {
 
     impl TestMassImportContext {
         pub fn new(
-            //deps: MassImportDeps,
             input: MassImportInput,
             ops: DatFileMassImportOps,
             state: Option<TestMassImportState>,
@@ -322,17 +319,10 @@ mod tests {
             TestMassImportContext {
                 state: state.unwrap_or_default(),
                 ops,
-                //deps,
                 input,
             }
         }
     }
-
-    /*async fn get_deps() -> MassImportDeps {
-        MassImportDeps {
-            repository_manager: database::setup_test_repository_manager().await,
-        }
-    }*/
 
     fn get_ops(
         dat_file_parser_ops: Option<Arc<dyn DatFileParserOps>>,
@@ -439,7 +429,6 @@ mod tests {
         let ops = get_ops(None, Some(Arc::new(mock_fs_ops)), None, None);
 
         let mut context = TestMassImportContext::new(
-            //get_deps().await,
             MassImportInput {
                 source_path: PathBuf::from("/mock"),
                 dat_file_path: None,
@@ -495,7 +484,6 @@ mod tests {
             create_mock_reader_factory(metadata_by_path, vec![PathBuf::from("/mock/file3.zip")]);
         let ops = get_ops(None, None, Some(Arc::new(reader_factory)), None);
         let mut context = TestMassImportContext::new(
-            //get_deps().await,
             MassImportInput {
                 source_path: PathBuf::from("/mock"),
                 dat_file_path: None,
@@ -588,7 +576,6 @@ mod tests {
 
         let ops = get_ops(None, None, None, Some(Arc::new(mock_file_import_ops)));
         let mut context = TestMassImportContext::new(
-            //get_deps().await,
             MassImportInput {
                 source_path: PathBuf::from("/mock"),
                 dat_file_path: None,

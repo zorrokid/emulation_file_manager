@@ -16,10 +16,7 @@ use relm4::{
 };
 use service::{
     error::Error,
-    mass_import::models::{
-        DatFileMassImportResult, FileImportResult, FileSetImportResult, FileSetImportStatus,
-        MassImportInput, MassImportSyncEvent,
-    },
+    mass_import::models::{DatFileMassImportResult, MassImportInput, MassImportSyncEvent},
     view_models::SystemListModel,
 };
 use tokio::task;
@@ -99,7 +96,6 @@ pub enum ImportFormMsg {
     ItemTypeChanged(Option<ItemType>),
     ProcessSyncEvent(MassImportSyncEvent),
     ImportSummaryDialogClosed,
-    TestImportResults,
 }
 
 #[derive(Debug)]
@@ -226,10 +222,6 @@ impl Component for ImportForm {
                     set_sensitive: model.directory_path.is_some()
                         && model.selected_system.is_some()
                         && model.selected_file_type.is_some()
-                },
-                gtk::Button {
-                    set_label: "Test Import Results",
-                    connect_clicked => ImportFormMsg::TestImportResults,
                 },
                 gtk::ScrolledWindow {
                     set_vexpand: true,
@@ -432,39 +424,6 @@ impl Component for ImportForm {
                 self.imported_sets_list_view_wrapper.clear();
                 root.hide();
             }
-            ImportFormMsg::TestImportResults => {
-                let result = FileImportResult {
-                    read_ok_files: vec![
-                        PathBuf::from("/path/to/successful/file1.txt"),
-                        PathBuf::from("/path/to/successful/file2.txt"),
-                    ],
-                    read_failed_files: vec![PathBuf::from("/path/to/failed/file1.txt")],
-                    dir_scan_errors: vec![Error::IoError("Failed to read directory".to_string())],
-                    file_metadata: std::collections::HashMap::new(),
-                    import_results: vec![
-                        FileSetImportResult {
-                            status: FileSetImportStatus::Success,
-                            file_set_id: Some(1),
-                            file_set_name: "Successful File Set".to_string(),
-                        },
-                        FileSetImportResult {
-                            status: FileSetImportStatus::SucessWithWarnings(vec![
-                                "Warning: some files were skipped".to_string(),
-                            ]),
-                            file_set_id: Some(2),
-                            file_set_name: "File Set with Warnings".to_string(),
-                        },
-                        FileSetImportResult {
-                            status: FileSetImportStatus::Failed(
-                                "Error: failed to read files".to_string(),
-                            ),
-                            file_set_id: None,
-                            file_set_name: "Failed File Set".to_string(),
-                        },
-                    ],
-                };
-                self.show_import_summary_dialog(&result);
-            }
         }
         // This is essential:
         self.update_view(widgets, sender);
@@ -479,7 +438,8 @@ impl Component for ImportForm {
         match message {
             CommandMsg::ProcessImportResult(result) => match result {
                 Ok(mass_import_result) => {
-                    self.show_import_summary_dialog(&mass_import_result.result);
+                    self.import_results
+                        .emit(ImportResultsMsg::Show(mass_import_result.result.clone()));
                 }
                 Err(e) => {
                     tracing::error!("Import failed: {:?}", e);
@@ -487,91 +447,5 @@ impl Component for ImportForm {
                 }
             },
         }
-    }
-}
-
-impl ImportForm {
-    fn show_import_summary_dialog(&self, result: &FileImportResult) {
-        // TODO: improve the summary details
-        let successful_imports = result
-            .import_results
-            .iter()
-            .filter(|r| matches!(r.status, FileSetImportStatus::Success))
-            .count();
-        let failed_imports = result
-            .import_results
-            .iter()
-            .filter(|r| matches!(r.status, FileSetImportStatus::Failed(_)))
-            .collect::<Vec<_>>();
-        let successful_with_warnings = result
-            .import_results
-            .iter()
-            .filter(|r| matches!(r.status, FileSetImportStatus::SucessWithWarnings(_)))
-            .collect::<Vec<_>>();
-        let error_messages = failed_imports
-            .iter()
-            .map(|r| {
-                if let FileSetImportStatus::Failed(err_msg) = &r.status {
-                    err_msg.clone()
-                } else {
-                    String::new()
-                }
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-        let warning_messages = successful_with_warnings
-            .iter()
-            .flat_map(|r| {
-                if let FileSetImportStatus::SucessWithWarnings(warnings) = &r.status {
-                    warnings.clone()
-                } else {
-                    vec![]
-                }
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-        let message = format!(
-            "Import Summary:\n\
-            Successful imports: {}\n\
-            Imports with warnings: {}\n\
-            Failed imports: {}\n\n\
-            {}\
-            {}",
-            successful_imports,
-            successful_with_warnings.len(),
-            failed_imports.len(),
-            if !warning_messages.is_empty() {
-                format!("Warnings:\n{}\n\n", warning_messages)
-            } else {
-                String::new()
-            },
-            if !error_messages.is_empty() {
-                format!("Errors:\n{}", error_messages)
-            } else {
-                String::new()
-            },
-        );
-
-        println!("Show import results");
-
-        self.import_results
-            .emit(ImportResultsMsg::Show(result.clone()));
-
-        /*let dialog = gtk::MessageDialog::new(
-            Some(root),
-            gtk::DialogFlags::MODAL,
-            gtk::MessageType::Info,
-            gtk::ButtonsType::Ok,
-            &message,
-        );
-        dialog.connect_response(clone!(
-            #[strong]
-            sender,
-            move |dialog, _| {
-                dialog.close();
-                sender.input(ImportFormMsg::ImportSummaryDialogClosed);
-            }
-        ));
-        dialog.show();*/
     }
 }
