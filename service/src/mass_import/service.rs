@@ -160,7 +160,6 @@ mod tests {
         file_system_ops::mock::MockFileSystemOps,
         mass_import::{models::MassImportInput, test_utils::create_mock_reader_factory},
     };
-    use async_std::channel;
     use core_types::{FileType, ReadFile, Sha1Checksum, sha1_bytes_to_hex_string};
     use dat_file_parser::{DatFile, DatFileParserError, DatGame, DatHeader, DatRom, MockDatParser};
     use database::setup_test_db;
@@ -239,14 +238,14 @@ mod tests {
         };
 
         // Optional progress channel (not asserted here, just exercised)
-        let (tx, rx) = channel::unbounded();
+        let (tx, rx) = flume::unbounded();
 
         // Act
         let result = service.import_with_dat(input, Some(tx)).await;
 
         // Assert
         // There should be one progress event for the one file set imported
-        let event = rx.recv().await;
+        let event = rx.recv();
 
         assert!(
             event.is_ok(),
@@ -282,7 +281,6 @@ mod tests {
         fs_ops.add_file("/mock/Test Game.zip");
 
         let sha1_checksum: Sha1Checksum = [0xaa; 20];
-        let sha1_checksum_string = sha1_bytes_to_hex_string(&sha1_checksum);
 
         let file_import_service_ops: Arc<dyn FileImportServiceOps> = Arc::new(
             MockFileImportServiceOps::with_create_mock(CreateMockState {
@@ -337,14 +335,14 @@ mod tests {
         };
 
         // Optional progress channel (not asserted here, just exercised)
-        let (tx, rx) = channel::unbounded();
+        let (tx, rx) = flume::unbounded();
 
         // Act
         let result = service.import_with_files_only(input, Some(tx)).await;
 
         // Assert
         // There should be one progress event for the one file set imported
-        let event = rx.recv().await;
+        let event = rx.recv();
 
         assert!(
             event.is_ok(),
