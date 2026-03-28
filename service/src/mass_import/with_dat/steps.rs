@@ -6,7 +6,8 @@ use crate::{
     error::Error,
     file_import::model::CreateReleaseParams,
     mass_import::{
-        common_steps::context::MassImportContextOps, with_dat::context::DatFileMassImportContext,
+        models::{FileSetImportResult, FileSetImportStatus},
+        with_dat::context::DatFileMassImportContext,
     },
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
@@ -271,10 +272,10 @@ impl PipelineStep<DatFileMassImportContext> for FilterExistingFileSetsStep {
     }
 }
 
-pub struct LinkExistingFileSetsStep;
+pub struct HandleExistingFileSetsStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<DatFileMassImportContext> for LinkExistingFileSetsStep {
+impl PipelineStep<DatFileMassImportContext> for HandleExistingFileSetsStep {
     fn name(&self) -> &'static str {
         "link_existing_file_sets_step"
     }
@@ -285,6 +286,9 @@ impl PipelineStep<DatFileMassImportContext> for LinkExistingFileSetsStep {
                 matches!(
                     status,
                     DatGameFileSetStatus::ExistingWithoutReleaseAndWithoutLinkToDat { .. }
+                ) || matches!(
+                    status,
+                    DatGameFileSetStatus::ExistingWithReleaseAndLinkedToDat { .. }
                 )
             })
     }
@@ -295,65 +299,78 @@ impl PipelineStep<DatFileMassImportContext> for LinkExistingFileSetsStep {
             .dat_file_id
             .expect("DAT file ID should be present in state");
 
-        let statuses = context
-            .state
-            .statuses
-            .iter()
-            .filter(|status| {
-                matches!(
-                    status,
-                    DatGameFileSetStatus::ExistingWithoutReleaseAndWithoutLinkToDat { .. }
-                )
-            })
-            .collect::<Vec<_>>();
+        for status in context.state.statuses.iter() {
+            match status {
+                DatGameFileSetStatus::ExistingWithoutReleaseAndWithoutLinkToDat {
+                    game,
+                    file_set_id,
+                } => {
+                    tracing::info!(
+                        game = %game.name,
+                        file_set_id = file_set_id,
+                        "Linking existing file set to dat file",
+                    );
+                    let file_set_id = *file_set_id;
+                    let res = context
+                        .ops
+                        .file_set_service_ops
+                        .create_release_for_file_set(
+                            &[file_set_id],
+                            CreateReleaseParams {
+                                release_name: game.get_release_name(),
+                                software_title_name: game.get_software_title_name(),
+                            },
+                            &[context.input.system_id],
+                            Some(dat_file_id),
+                        )
+                        .await;
+                    let status = match res {
+                        Ok(id) => {
+                            tracing::info!(
+                                game = %game.name,
+                                file_set_id = file_set_id,
+                                release_id = id,
+                                dat_file_id = dat_file_id,
+                                "Successfully linked existing file set to dat file and created a release",
+                            );
+                            FileSetImportStatus::Success
+                        }
+                        Err(e) => {
+                            tracing::error!(
+                                error = ?e,
+                                game = %game.name,
+                                file_set_id = file_set_id,
+                                dat_file_id = dat_file_id,
+                                "Failed to link existing file set to dat file and create a release",
+                            );
 
-        for status in statuses {
-            if let DatGameFileSetStatus::ExistingWithoutReleaseAndWithoutLinkToDat {
-                game,
-                file_set_id,
-            } = status
-            {
-                tracing::info!(
-                    game = %game.name,
-                    file_set_id = file_set_id,
-                    "Linking existing file set to dat file",
-                );
-                let file_set_id = *file_set_id;
-                let res = context
-                    .ops
-                    .file_set_service_ops
-                    .create_release_for_file_set(
-                        &[file_set_id],
-                        CreateReleaseParams {
-                            release_name: game.get_release_name(),
-                            software_title_name: game.get_software_title_name(),
-                        },
-                        &[context.input.system_id],
-                        Some(dat_file_id),
-                    )
-                    .await;
-                match res {
-                    Ok(id) => {
-                        tracing::info!(
-                            game = %game.name,
-                            file_set_id = file_set_id,
-                            release_id = id,
-                            dat_file_id = dat_file_id,
-                            "Successfully linked existing file set to dat file and created a release",
-                        );
-                    }
-                    Err(e) => {
-                        tracing::error!(
-                            error = ?e,
-                            game = %game.name,
-                            file_set_id = file_set_id,
-                            dat_file_id = dat_file_id,
-                            "Failed to link existing file set to dat file and create a release",
-                        );
-                        // Not aborting any more
-                        // TODO: collect failed links and show them in the end of import process
-                    }
+                            // Not aborting any more
+                            // TODO: collect failed links and show them in the end of import process
+                            FileSetImportStatus::Failed(format!(
+                                "Failed to link existing file set to dat file and create a release: {}",
+                                e
+                            ))
+                        }
+                    };
+                    context.state.import_results.push(FileSetImportResult {
+                        file_set_id: Some(file_set_id),
+                        status,
+                        file_set_name: game.name.clone(),
+                    });
                 }
+                DatGameFileSetStatus::ExistingWithReleaseAndLinkedToDat { file_set_id, game } => {
+                    tracing::info!(
+                        game = %game.name,
+                        file_set_id = file_set_id,
+                        "File set already exists with release and linked to dat file, skipping import",
+                    );
+                    context.state.import_results.push(FileSetImportResult {
+                        file_set_id: Some(*file_set_id),
+                        status: FileSetImportStatus::AlreadyExists,
+                        file_set_name: game.name.clone(),
+                    });
+                }
+                _ => {}
             }
         }
         StepAction::Continue
@@ -369,6 +386,7 @@ mod tests {
     use domain::naming_conventions::no_intro::{DatFile, DatGame, DatHeader, DatRom};
     use file_metadata::SendReaderFactoryFn;
 
+    use crate::file_set::file_set_service::FileSetService;
     use crate::{
         file_import::file_import_service_ops::{FileImportServiceOps, MockFileImportServiceOps},
         file_set::mock_file_set_service::MockFileSetService,
@@ -621,7 +639,7 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn test_link_existing_file_sets_step() {
+    async fn test_link_existing_file_sets() {
         // Arrange
         let deps = get_deps().await;
 
@@ -685,18 +703,6 @@ mod tests {
             .await
             .expect("Failed to create existing file set");
 
-        // Use real FileSetService
-        use crate::file_set::file_set_service::FileSetService;
-        let file_set_service = Arc::new(FileSetService::new(deps.repository_manager.clone()));
-
-        let ops = DatFileMassImportOps {
-            dat_file_parser_ops: Arc::new(MockDatParser::new(Ok(dat_file.clone().into()))),
-            fs_ops: Arc::new(MockFileSystemOps::new()),
-            reader_factory_fn: Arc::new(create_mock_reader_factory(HashMap::new(), vec![])),
-            file_set_service_ops: file_set_service,
-            file_import_service_ops: Arc::new(MockFileImportServiceOps::new()),
-        };
-
         let mut context = DatFileMassImportContext::new(
             MassImportDeps {
                 repository_manager: deps.repository_manager.clone(),
@@ -708,7 +714,15 @@ mod tests {
                 item_type: None,
                 system_id,
             },
-            ops,
+            DatFileMassImportOps {
+                dat_file_parser_ops: Arc::new(MockDatParser::new(Ok(dat_file.clone().into()))),
+                fs_ops: Arc::new(MockFileSystemOps::new()),
+                reader_factory_fn: Arc::new(create_mock_reader_factory(HashMap::new(), vec![])),
+                file_set_service_ops: Arc::new(FileSetService::new(
+                    deps.repository_manager.clone(),
+                )),
+                file_import_service_ops: Arc::new(MockFileImportServiceOps::new()),
+            },
             None,
         );
 
@@ -722,7 +736,7 @@ mod tests {
         ];
 
         // Act
-        let step = LinkExistingFileSetsStep;
+        let step = HandleExistingFileSetsStep;
         let result = step.execute(&mut context).await;
 
         // Assert
@@ -778,6 +792,80 @@ mod tests {
             dat_file.games[0].get_software_title_name(),
             "Software title name should match the expected format"
         );
+        let results = context.state.import_results;
+        assert_eq!(results.len(), 1);
+        let result = &results[0];
+        assert_eq!(result.status, FileSetImportStatus::Success);
+        assert_eq!(result.file_set_id, Some(1));
+        assert_eq!(result.file_set_name, dat_file.games[0].name);
+    }
+
+    #[async_std::test]
+    async fn test_link_existing_file_sets_exists_and_linked() {
+        // Arrange
+        let deps = get_deps().await;
+
+        let dat_file = DatFile {
+            header: DatHeader {
+                name: "Test DAT".to_string(),
+                version: "1.0".to_string(),
+                ..Default::default()
+            },
+            games: vec![DatGame {
+                name: "Test Game".to_string(),
+                description: "Test Description".to_string(),
+                roms: vec![DatRom {
+                    name: "test.bin".to_string(),
+                    size: 1024,
+                    sha1: "0000000000000000000000000000000000000001".to_string(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+        };
+
+        let mut context = DatFileMassImportContext::new(
+            MassImportDeps {
+                repository_manager: deps.repository_manager.clone(),
+            },
+            MassImportInput {
+                source_path: PathBuf::from("/path/to/source"),
+                dat_file_path: Some(PathBuf::from("/path/to/datfile.dat")),
+                file_type: core_types::FileType::Rom,
+                item_type: None,
+                system_id: 1,
+            },
+            DatFileMassImportOps {
+                dat_file_parser_ops: Arc::new(MockDatParser::new(Ok(dat_file.clone().into()))),
+                fs_ops: Arc::new(MockFileSystemOps::new()),
+                reader_factory_fn: Arc::new(create_mock_reader_factory(HashMap::new(), vec![])),
+                file_set_service_ops: Arc::new(FileSetService::new(
+                    deps.repository_manager.clone(),
+                )),
+                file_import_service_ops: Arc::new(MockFileImportServiceOps::new()),
+            },
+            None,
+        );
+
+        // Pre-populate state as if previous steps found an existing file set without release
+        context.state.dat_file_id = Some(1);
+        context.state.statuses = vec![DatGameFileSetStatus::ExistingWithReleaseAndLinkedToDat {
+            game: dat_file.games[0].clone(),
+            file_set_id: 1,
+        }];
+
+        // Act
+        let step = HandleExistingFileSetsStep;
+        let result = step.execute(&mut context).await;
+
+        // Assert
+        assert!(matches!(result, StepAction::Continue));
+        let results = context.state.import_results;
+        assert_eq!(results.len(), 1);
+        let result = &results[0];
+        assert_eq!(result.status, FileSetImportStatus::AlreadyExists);
+        assert_eq!(result.file_set_id, Some(1));
+        assert_eq!(result.file_set_name, dat_file.games[0].name);
     }
 
     // TODO: create a test case where re-importing the same dat file

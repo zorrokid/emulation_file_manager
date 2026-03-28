@@ -4,8 +4,8 @@ use crate::{
         with_dat::{
             context::DatFileMassImportContext,
             steps::{
-                CheckExistingDatFileStep, FilterExistingFileSetsStep, ImportDatFileStep,
-                LinkExistingFileSetsStep, StoreDatFileStep,
+                CheckExistingDatFileStep, FilterExistingFileSetsStep, HandleExistingFileSetsStep,
+                ImportDatFileStep, StoreDatFileStep,
             },
         },
     },
@@ -26,8 +26,9 @@ impl Pipeline<DatFileMassImportContext> {
             Box::new(ReadFileMetadataStep::<DatFileMassImportContext>::new()),
             // Filter out file sets that already exist in the database
             Box::new(FilterExistingFileSetsStep),
+            // This step handles only those which are new file sets
             Box::new(ImportFileSetsStep::<DatFileMassImportContext>::new()),
-            Box::new(LinkExistingFileSetsStep),
+            Box::new(HandleExistingFileSetsStep),
         ])
     }
 }
