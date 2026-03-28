@@ -2,6 +2,8 @@
 
 ## Description
 
+Configuration for external document viewers
+
 <details>
 <summary><strong>Table Definition</strong></summary>
 

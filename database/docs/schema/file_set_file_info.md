@@ -9,11 +9,12 @@
 CREATE TABLE file_set_file_info (
     file_set_id INTEGER NOT NULL,
     file_info_id INTEGER NOT NULL,
-    -- same file can have different names in different file sets 
-    file_name TEXT NOT NULL, sort_order INTEGER NOT NULL DEFAULT 0,
+    -- same file can have different names in different file sets
+    file_name TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (file_set_id, file_info_id),
-    FOREIGN KEY (file_set_id) REFERENCES file_set(id),
-    FOREIGN KEY (file_info_id) REFERENCES file_info(id)
+    FOREIGN KEY (file_set_id) REFERENCES file_set(id) ON DELETE CASCADE,
+    FOREIGN KEY (file_info_id) REFERENCES file_info(id) ON DELETE CASCADE
 )
 ```
 
@@ -34,8 +35,8 @@ CREATE TABLE file_set_file_info (
 | ---- | ---- | ---------- |
 | file_set_id | PRIMARY KEY | PRIMARY KEY (file_set_id) |
 | file_info_id | PRIMARY KEY | PRIMARY KEY (file_info_id) |
-| - (Foreign key ID: 0) | FOREIGN KEY | FOREIGN KEY (file_info_id) REFERENCES file_info (id) ON UPDATE NO ACTION ON DELETE NO ACTION MATCH NONE |
-| - (Foreign key ID: 1) | FOREIGN KEY | FOREIGN KEY (file_set_id) REFERENCES file_set (id) ON UPDATE NO ACTION ON DELETE NO ACTION MATCH NONE |
+| - (Foreign key ID: 0) | FOREIGN KEY | FOREIGN KEY (file_info_id) REFERENCES file_info (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE |
+| - (Foreign key ID: 1) | FOREIGN KEY | FOREIGN KEY (file_set_id) REFERENCES file_set (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE |
 | sqlite_autoindex_file_set_file_info_1 | PRIMARY KEY | PRIMARY KEY (file_set_id, file_info_id) |
 
 ## Indexes

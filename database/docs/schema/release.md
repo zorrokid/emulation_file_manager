@@ -2,6 +2,8 @@
 
 ## Description
 
+Specific releases of software (versions, editions, regions, compilations, different media)
+
 <details>
 <summary><strong>Table Definition</strong></summary>
 
@@ -9,7 +11,7 @@
 CREATE TABLE release (
     id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
     name TEXT NOT NULL
-)
+, thumbnail_filename TEXT)
 ```
 
 </details>
@@ -20,6 +22,7 @@ CREATE TABLE release (
 | ---- | ---- | ------- | -------- | -------- | ------- | ------- |
 | id | INTEGER |  | false | [release_file_set](release_file_set.md) [release_system](release_system.md) [release_software_title](release_software_title.md) [release_item](release_item.md) |  |  |
 | name | TEXT |  | false |  |  |  |
+| thumbnail_filename | TEXT |  | true |  |  |  |
 
 ## Constraints
 

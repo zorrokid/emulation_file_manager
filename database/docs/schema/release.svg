@@ -12,18 +12,21 @@
 <!-- release -->
 <g id="node1" class="node">
 <title>release</title>
-<polygon fill="#efefef" stroke="none" points="1056.05,-151 1056.05,-186.6 1189.26,-186.6 1189.26,-151 1056.05,-151"/>
-<polygon fill="none" stroke="black" points="1056.05,-151 1056.05,-186.6 1189.26,-186.6 1189.26,-151 1056.05,-151"/>
-<text text-anchor="start" x="1063.05" y="-164.4" font-family="Arial Bold" font-size="18.00">release</text>
-<text text-anchor="start" x="1113.01" y="-164.4" font-family="Arial" font-size="14.00">    </text>
-<text text-anchor="start" x="1144.12" y="-164.4" font-family="Arial" font-size="14.00" fill="#666666">[table]</text>
-<polygon fill="none" stroke="black" points="1056.05,-120.2 1056.05,-151 1189.26,-151 1189.26,-120.2 1056.05,-120.2"/>
-<text text-anchor="start" x="1063.05" y="-132.4" font-family="Arial" font-size="14.00">id </text>
-<text text-anchor="start" x="1077.83" y="-132.4" font-family="Arial" font-size="14.00" fill="#666666">[INTEGER]</text>
-<polygon fill="none" stroke="black" points="1056.05,-89.4 1056.05,-120.2 1189.26,-120.2 1189.26,-89.4 1056.05,-89.4"/>
-<text text-anchor="start" x="1063.05" y="-101.6" font-family="Arial" font-size="14.00">name </text>
-<text text-anchor="start" x="1101.96" y="-101.6" font-family="Arial" font-size="14.00" fill="#666666">[TEXT]</text>
-<polygon fill="none" stroke="black" stroke-width="3" points="1054.55,-87.9 1054.55,-188.1 1190.76,-188.1 1190.76,-87.9 1054.55,-87.9"/>
+<polygon fill="#efefef" stroke="none" points="1043.23,-166.4 1043.23,-202 1226.08,-202 1226.08,-166.4 1043.23,-166.4"/>
+<polygon fill="none" stroke="black" points="1043.23,-166.4 1043.23,-202 1226.08,-202 1226.08,-166.4 1043.23,-166.4"/>
+<text text-anchor="start" x="1075.05" y="-179.8" font-family="Arial Bold" font-size="18.00">release</text>
+<text text-anchor="start" x="1125.01" y="-179.8" font-family="Arial" font-size="14.00">    </text>
+<text text-anchor="start" x="1156.12" y="-179.8" font-family="Arial" font-size="14.00" fill="#666666">[table]</text>
+<polygon fill="none" stroke="black" points="1043.23,-135.6 1043.23,-166.4 1226.08,-166.4 1226.08,-135.6 1043.23,-135.6"/>
+<text text-anchor="start" x="1050.23" y="-147.8" font-family="Arial" font-size="14.00">id </text>
+<text text-anchor="start" x="1065.01" y="-147.8" font-family="Arial" font-size="14.00" fill="#666666">[INTEGER]</text>
+<polygon fill="none" stroke="black" points="1043.23,-104.8 1043.23,-135.6 1226.08,-135.6 1226.08,-104.8 1043.23,-104.8"/>
+<text text-anchor="start" x="1050.23" y="-117" font-family="Arial" font-size="14.00">name </text>
+<text text-anchor="start" x="1089.14" y="-117" font-family="Arial" font-size="14.00" fill="#666666">[TEXT]</text>
+<polygon fill="none" stroke="black" points="1043.23,-74 1043.23,-104.8 1226.08,-104.8 1226.08,-74 1043.23,-74"/>
+<text text-anchor="start" x="1050.23" y="-86.2" font-family="Arial" font-size="14.00">thumbnail_filename </text>
+<text text-anchor="start" x="1175.52" y="-86.2" font-family="Arial" font-size="14.00" fill="#666666">[TEXT]</text>
+<polygon fill="none" stroke="black" stroke-width="3" points="1041.73,-72.5 1041.73,-203.5 1227.58,-203.5 1227.58,-72.5 1041.73,-72.5"/>
 </g>
 <!-- release_file_set -->
 <g id="node2" class="node">
@@ -43,7 +46,7 @@
 <!-- release_file_set&#45;&gt;release -->
 <g id="edge1" class="edge">
 <title>release_file_set:release_id&#45;&gt;release:id</title>
-<path fill="none" stroke="black" d="M668.42,-431.11C709.76,-421.13 666.48,-344.84 709.65,-312 804.95,-239.5 877.68,-343.39 976.65,-276 1035.73,-235.78 983.58,-135.6 1055.05,-135.6"/>
+<path fill="none" stroke="black" d="M668.42,-431.11C709.76,-421.13 666.48,-344.84 709.65,-312 804.95,-239.5 878.57,-344.68 976.65,-276 1028.04,-240.02 979.49,-151 1042.23,-151"/>
 <polygon fill="black" stroke="black" points="668.53,-431.1 658.11,-427.69 663.22,-431.67 658.92,-432.13 658.92,-432.13 658.92,-432.13 663.22,-431.67 659.06,-436.64 668.53,-431.1"/>
 <text text-anchor="start" x="103.37" y="-442.2" font-family="Arial" font-size="10.00">FOREIGN KEY (release_id) REFERENCES release (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE</text>
 </g>
@@ -96,8 +99,8 @@
 <!-- release_system&#45;&gt;release -->
 <g id="edge3" class="edge">
 <title>release_system:release_id&#45;&gt;release:id</title>
-<path fill="none" stroke="black" d="M964.9,-429.81C1020.54,-401.74 989.14,-135.6 1055.05,-135.6"/>
-<polygon fill="black" stroke="black" points="964.82,-429.83 954.05,-427.74 959.63,-431.05 955.41,-432.05 955.41,-432.05 955.41,-432.05 959.63,-431.05 956.12,-436.5 964.82,-429.83"/>
+<path fill="none" stroke="black" d="M964.56,-429.77C1015.78,-402.28 980.36,-151 1042.23,-151"/>
+<polygon fill="black" stroke="black" points="964.79,-429.71 954,-427.75 959.61,-431 955.41,-432.04 955.41,-432.04 955.41,-432.04 959.61,-431 956.17,-436.49 964.79,-429.71"/>
 <text text-anchor="start" x="680.82" y="-416.2" font-family="Arial" font-size="10.00">FOREIGN KEY (release_id) REFERENCES release (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE</text>
 </g>
 <!-- system -->
@@ -140,8 +143,8 @@
 <!-- release_software_title&#45;&gt;release -->
 <g id="edge5" class="edge">
 <title>release_software_title:release_id&#45;&gt;release:id</title>
-<path fill="none" stroke="black" d="M1325.91,-431.38C1281.83,-423.52 1308.19,-361 1284.65,-312 1246.16,-231.85 1279.18,-135.6 1190.26,-135.6"/>
-<polygon fill="black" stroke="black" points="1325.77,-431.36 1335.37,-436.66 1331.08,-431.8 1335.4,-432.15 1335.4,-432.15 1335.4,-432.15 1331.08,-431.8 1336.1,-427.69 1325.77,-431.36"/>
+<path fill="none" stroke="black" d="M1327.45,-426.58C1295.57,-386.95 1257.78,-151 1227.08,-151"/>
+<polygon fill="black" stroke="black" points="1327.41,-426.55 1333.33,-435.79 1331.88,-429.47 1335.51,-431.83 1335.51,-431.83 1335.51,-431.83 1331.88,-429.47 1338.24,-428.25 1327.41,-426.55"/>
 <text text-anchor="start" x="1343.07" y="-442.2" font-family="Arial" font-size="10.00">FOREIGN KEY (release_id) REFERENCES release (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE</text>
 </g>
 <!-- software_title -->
@@ -193,8 +196,8 @@
 <!-- release_item&#45;&gt;release -->
 <g id="edge7" class="edge">
 <title>release_item:release_id&#45;&gt;release:id</title>
-<path fill="none" stroke="black" d="M1047.46,-431.14C1008.06,-421.96 1034,-355.17 1058.55,-312 1092.14,-252.96 1155.62,-291.81 1189.26,-232.8 1210.66,-195.27 1233.46,-135.6 1190.26,-135.6"/>
-<polygon fill="black" stroke="black" points="1047.27,-431.12 1056.75,-436.64 1052.58,-431.68 1056.89,-432.13 1056.89,-432.13 1056.89,-432.13 1052.58,-431.68 1057.69,-427.69 1047.27,-431.12"/>
+<path fill="none" stroke="black" d="M1047.41,-431.11C1007.52,-421.63 1030.2,-352.78 1058.55,-312 1104.04,-246.59 1180.53,-313.57 1226.08,-248.2 1250.78,-212.75 1270.28,-151 1227.08,-151"/>
+<polygon fill="black" stroke="black" points="1047.28,-431.09 1056.74,-436.64 1052.58,-431.66 1056.89,-432.13 1056.89,-432.13 1056.89,-432.13 1052.58,-431.66 1057.7,-427.69 1047.28,-431.09"/>
 <text text-anchor="start" x="1064.55" y="-442.2" font-family="Arial" font-size="10.00">FOREIGN KEY (release_id) REFERENCES release (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE</text>
 </g>
 <!-- release_item_file_set -->

@@ -111,6 +111,9 @@ impl Component for ImportResults {
                                 FileSetImportStatus::Failed(error) => {
                                     format!("Import failed: {}", error)
                                 }
+                                FileSetImportStatus::AlreadyExists => {
+                                    "File set already exists".to_string()
+                                }
                             };
                             MessageListItem {
                                 message: format!(
@@ -123,6 +126,7 @@ impl Component for ImportResults {
                                         MessageStatus::Warning
                                     }
                                     FileSetImportStatus::Failed(_) => MessageStatus::Error,
+                                    FileSetImportStatus::AlreadyExists => MessageStatus::Info,
                                 },
                             }
                         })

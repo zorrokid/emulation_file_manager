@@ -2,7 +2,7 @@ use crate::{
     error::Error,
     mass_import::{
         common_steps::context::MassImportContextOps,
-        models::{FileSetImportResult, FileSetImportStatus},
+        models::{FileSetImportResult, FileSetImportStatus, MassImportSyncEvent},
     },
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
@@ -250,7 +250,7 @@ impl<T: MassImportContextOps + Send + Sync> PipelineStep<T> for ImportFileSetsSt
             });
 
             if let Some(sender_tx) = &context.progress_tx() {
-                let event = crate::mass_import::models::MassImportSyncEvent {
+                let event = MassImportSyncEvent {
                     file_set_name,
                     status,
                 };

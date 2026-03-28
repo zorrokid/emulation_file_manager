@@ -2,6 +2,8 @@
 
 ## Description
 
+Collections of files that belong together
+
 <details>
 <summary><strong>Table Definition</strong></summary>
 
@@ -20,7 +22,7 @@ CREATE TABLE file_set (
 
 | Name | Type | Default | Nullable | Children | Parents | Comment |
 | ---- | ---- | ------- | -------- | -------- | ------- | ------- |
-| id | INTEGER |  | false | [file_set_file_info](file_set_file_info.md) [release_file_set](release_file_set.md) [release_item_file_set](release_item_file_set.md) [file_set_item_type](file_set_item_type.md) |  |  |
+| id | INTEGER |  | false | [release_file_set](release_file_set.md) [release_item_file_set](release_item_file_set.md) [file_set_item_type](file_set_item_type.md) [file_set_dat_file_link](file_set_dat_file_link.md) [file_set_file_info](file_set_file_info.md) |  |  |
 | file_name | TEXT |  | false |  |  |  |
 | file_type | INTEGER |  | false |  |  |  |
 | name | TEXT |  | false |  |  |  |

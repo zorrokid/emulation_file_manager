@@ -2,6 +2,8 @@
 
 ## Description
 
+Platform/console systems (e.g., Commodore 64, Atari 2600)
+
 <details>
 <summary><strong>Table Definition</strong></summary>
 
@@ -18,7 +20,7 @@ CREATE TABLE system (
 
 | Name | Type | Default | Nullable | Children | Parents | Comment |
 | ---- | ---- | ------- | -------- | -------- | ------- | ------- |
-| id | INTEGER |  | false | [emulator](emulator.md) [release_system](release_system.md) [file_info_system](file_info_system.md) |  |  |
+| id | INTEGER |  | false | [emulator](emulator.md) [release_system](release_system.md) [file_info_system](file_info_system.md) [dat_file](dat_file.md) [system_libretro_core](system_libretro_core.md) |  |  |
 | name | TEXT |  | false |  |  |  |
 
 ## Constraints
