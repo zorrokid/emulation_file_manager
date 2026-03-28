@@ -15,6 +15,9 @@ pub trait CheckExistingFilesContext {
     fn set_existing_files(&mut self, existing_files: Vec<FileInfo>);
 }
 
+/// Pipeline step that checks for existing files in the database based on their SHA1 checksums.
+/// Existing file information is then stored in the context for use in later steps, such as
+/// skipping files that already exist in the database.
 pub struct CheckExistingFilesStep<T: CheckExistingFilesContext> {
     // `PhantomData<T>` is required to satisfy Rust's type system for generic structs that don't store their generic type directly.
     _phantom: std::marker::PhantomData<T>,

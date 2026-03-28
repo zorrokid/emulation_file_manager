@@ -7,6 +7,15 @@ use crate::{
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
 
+/// Pipeline step that creates a new file set in the database based on the provided context. This
+/// step is responsible for creating the file set record in the database, linking it to the
+/// appropriate release and dat file if needed, and handling any errors that may occur during the
+/// database operation.
+///
+/// If the file set is successfully created, its ID is stored in the context for use in later steps.
+///
+/// If an error occurs, the step will attempt to clean up any imported files and abort the pipeline
+/// with an appropriate error message.
 pub struct CreateFileSetToDatabaseStep;
 
 #[async_trait::async_trait]
@@ -247,6 +256,7 @@ mod tests {
                 sha1_checksum: checksum,
                 file_size: 1024,
                 archive_file_name: "archive123.zst".to_string(),
+                is_available: true,
             },
         );
 
@@ -304,6 +314,7 @@ mod tests {
                 sha1_checksum: checksum1,
                 file_size: 1024,
                 archive_file_name: "new_archive.zst".to_string(),
+                is_available: true,
             },
         );
 

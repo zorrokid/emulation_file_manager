@@ -15,6 +15,9 @@ pub trait AddFileSetContextOps {
     fn is_new_files_to_be_imported(&self) -> bool;
 }
 
+/// Pipeline step responsible for importing files that are not already in the repository.
+/// It uses the FileImportOps to perform the import and updates the context with the results.
+/// The step will be skipped if there are no new files to be imported.
 pub struct ImportFilesStep<T: AddFileSetContextOps> {
     _phantom: std::marker::PhantomData<T>,
 }
@@ -44,7 +47,7 @@ impl<T: AddFileSetContextOps + Send + Sync> PipelineStep<T> for ImportFilesStep<
     }
 
     async fn execute(&self, context: &mut T) -> StepAction {
-        println!("Importing files...");
+        tracing::info!("Importing new files that are not already in the database.");
         let file_import_model = context.get_file_import_model();
         match context.file_import_ops().import(&file_import_model) {
             Ok(imported_files) => {
@@ -164,6 +167,7 @@ mod tests {
                 sha1_checksum: checksum,
                 file_size: 1024,
                 archive_file_name: "archive123.zst".to_string(),
+                is_available: true,
             },
         );
 

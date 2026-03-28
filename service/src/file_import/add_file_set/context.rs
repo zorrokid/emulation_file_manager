@@ -159,6 +159,7 @@ impl AddFileSetContext {
                     sha1_checksum: file_info.sha1_checksum,
                     file_size: file_info.file_size,
                     archive_file_name: file_info.archive_file_name.clone(),
+                    is_available: file_info.is_available,
                 })
             }))
             .collect()
@@ -357,6 +358,7 @@ mod tests {
                 sha1_checksum: checksum,
                 file_size: 1024,
                 archive_file_name: "archive123.zst".to_string(),
+                is_available: true,
             },
         );
 
@@ -462,6 +464,7 @@ mod tests {
                 sha1_checksum: checksum1,
                 file_size: 1024,
                 archive_file_name: "new_archive_file_name".to_string(),
+                is_available: true,
             },
         );
 

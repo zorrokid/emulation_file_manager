@@ -430,6 +430,7 @@ mod tests {
             DatGameFileSetStatus::ExistingWithReleaseAndLinkedToDat {
                 file_set_id: 1,
                 game: dat_game_3.clone(),
+                is_missing_files: false,
             },
         ];
 

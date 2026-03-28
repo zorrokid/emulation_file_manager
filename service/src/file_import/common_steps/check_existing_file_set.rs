@@ -20,6 +20,11 @@ pub trait CheckExistingFileSetContext {
     fn set_file_set_id(&mut self, file_set_id: Option<i64>);
 }
 
+/// Pipeline step that checks for an existing file set in the database based on the provided
+/// equality specifications. If a matching file set is found, its ID is stored in the context for
+/// use in later steps, such as skipping the import of a file set that already exists in the
+/// database or updating an existing file set instead of creating a new one.
+///
 // This is generic so that can be used in both add file set and update file set pipelines.
 pub struct CheckExistingFileSetStep<T: CheckExistingFileSetContext> {
     // `PhantomData<T>` is required to satisfy Rust's type system for generic structs that don't store their generic type directly.
@@ -51,21 +56,26 @@ impl<T: CheckExistingFileSetContext + Send + Sync> PipelineStep<T> for CheckExis
     }
 
     async fn execute(&self, context: &mut T) -> StepAction {
-        println!("Checking for existing file set in the database...");
+        tracing::info!("Checking for existing file set in the database.");
 
-        let existing_file_set = context
+        let existing_file_set_result = context
             .repository_manager()
             .get_file_set_repository()
             .find_file_set(&context.file_set_equality_specs())
             .await;
 
-        match existing_file_set {
-            Ok(file_set_id) => {
+        match existing_file_set_result {
+            Ok(Some(find_file_set_result)) => {
                 tracing::info!(
-                    file_set_id = file_set_id,
+                    file_set_id = find_file_set_result.file_set_id,
                     "Got result for existing file set in repository"
                 );
-                context.set_file_set_id(file_set_id);
+                context.set_file_set_id(Some(find_file_set_result.file_set_id));
+                StepAction::Continue
+            }
+            Ok(None) => {
+                tracing::info!("No existing file set found in repository");
+                context.set_file_set_id(None);
                 StepAction::Continue
             }
             Err(e) => {
@@ -135,6 +145,7 @@ mod tests {
             archive_file_name: "test_file".to_string(),
             file_size: 1234,
             sha1_checksum,
+            is_available: true,
         }];
 
         let file_set_id = file_set_repository

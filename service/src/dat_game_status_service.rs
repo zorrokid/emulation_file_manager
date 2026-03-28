@@ -15,11 +15,13 @@ pub enum DatGameFileSetStatus {
     ExistingWithReleaseAndLinkedToDat {
         file_set_id: i64,
         game: DatGame,
+        is_missing_files: bool,
     },
     // Create Release and Software Title for this and link to Dat
     ExistingWithoutReleaseAndWithoutLinkToDat {
         file_set_id: i64,
         game: DatGame,
+        is_missing_files: bool,
     },
     NonExistingWithoutLocalFiles(DatGame),
 }
@@ -85,18 +87,21 @@ impl DatGameStatusService {
             .await;
 
         match existing_file_set_res {
-            Ok(Some(existing_file_set_id)) => {
+            Ok(Some(find_file_set_result)) => {
                 tracing::info!(
                     file_set_name = %game.name,
-                    file_set_id = existing_file_set_id,
+                    file_set_id = find_file_set_result.file_set_id,
+                    has_missing_files = find_file_set_result.missing_files.is_empty(),
                     "Found existing file set matching the game in DAT file",
                 );
+
                 // Let's check if this file set is already linked to the dat game
                 let file_set_dat = self
                     .repository_manager
                     .get_file_set_repository()
-                    .get_dat_files_for_file_set(existing_file_set_id)
+                    .get_dat_files_for_file_set(find_file_set_result.file_set_id)
                     .await;
+
                 match file_set_dat {
                     Ok(dat_file_ids) => {
                         // TODO: currently we just assume that when file set is linked to a dat
@@ -105,18 +110,23 @@ impl DatGameStatusService {
                         if dat_file_ids.contains(&dat_file_id) {
                             tracing::info!(
                                 file_set_name = %game.name,
-                                file_set_id = existing_file_set_id,
+                                file_set_id = find_file_set_result.file_set_id,
+                                has_missing_files = find_file_set_result.missing_files.is_empty(),
                                 "Existing file set is already linked to the DAT game",
                             );
                             Ok(DatGameFileSetStatus::ExistingWithReleaseAndLinkedToDat {
-                                file_set_id: existing_file_set_id,
+                                file_set_id: find_file_set_result.file_set_id,
                                 game: game.clone(),
+                                is_missing_files: !find_file_set_result.missing_files.is_empty(),
                             })
                         } else {
                             Ok(
                                 DatGameFileSetStatus::ExistingWithoutReleaseAndWithoutLinkToDat {
-                                    file_set_id: existing_file_set_id,
+                                    file_set_id: find_file_set_result.file_set_id,
                                     game: game.clone(),
+                                    is_missing_files: !find_file_set_result
+                                        .missing_files
+                                        .is_empty(),
                                 },
                             )
                         }
@@ -125,12 +135,12 @@ impl DatGameStatusService {
                         tracing::error!(
                             error = ?e,
                             file_set_name = %game.name,
-                            file_set_id = existing_file_set_id,
+                            file_set_id = find_file_set_result.file_set_id,
                             "Failed to check if existing file set is linked to the DAT game",
                         );
                         Err(Error::DbError(format!(
                             "Failed to check if existing file set with id {} is linked to the DAT game '{}': {}",
-                            existing_file_set_id, game.name, e
+                            find_file_set_result.file_set_id, game.name, e
                         )))
                     }
                 }
@@ -319,6 +329,7 @@ mod tests {
                     archive_file_name: "test_rom.bin".to_string(),
                     file_size: 1024,
                     sha1_checksum: sha1_from_hex_string(&game.roms[0].sha1).unwrap(),
+                    is_available: true,
                 }],
                 &[system_id],
             )
@@ -347,7 +358,8 @@ mod tests {
             status,
             DatGameFileSetStatus::ExistingWithoutReleaseAndWithoutLinkToDat {
                 file_set_id,
-                game: game.clone()
+                game: game.clone(),
+                is_missing_files: false,
             },
             "Expected status to be NonExisting, but got: {:?}",
             status
@@ -420,6 +432,7 @@ mod tests {
                     archive_file_name: "test_rom.bin".to_string(),
                     file_size: 1024,
                     sha1_checksum: sha1_from_hex_string(&game.roms[0].sha1).unwrap(),
+                    is_available: true,
                 }],
                 &[system_id],
             )
@@ -454,7 +467,8 @@ mod tests {
             status,
             DatGameFileSetStatus::ExistingWithReleaseAndLinkedToDat {
                 file_set_id,
-                game: game.clone()
+                game: game.clone(),
+                is_missing_files: false,
             },
             "Expected status to be NonExisting, but got: {:?}",
             status

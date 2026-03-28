@@ -553,6 +553,7 @@ mod tests {
             archive_file_name: "archive_file_name".to_string(),
             sha1_checksum: file_1_checksum,
             file_size: 1024,
+            is_available: true,
         }];
 
         let file_set_id = repository_manager
@@ -628,6 +629,7 @@ mod tests {
                 sha1_checksum: file_1_checksum,
                 file_size: 1024,
                 archive_file_name: "archive123.zst".to_string(),
+                is_available: true,
             },
         );
 

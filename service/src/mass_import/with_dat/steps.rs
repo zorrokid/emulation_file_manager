@@ -14,6 +14,8 @@ use crate::{
 
 pub struct ImportDatFileStep;
 
+/// This step is responsible for parsing the provided DAT file and storing its content in the
+/// context state.
 #[async_trait::async_trait]
 impl PipelineStep<DatFileMassImportContext> for ImportDatFileStep {
     fn name(&self) -> &'static str {
@@ -34,10 +36,21 @@ impl PipelineStep<DatFileMassImportContext> for ImportDatFileStep {
         let parse_res = context.ops.dat_file_parser_ops.parse_dat_file(dat_path);
         match parse_res {
             Ok(dat_file) => {
-                println!("Successfully parsed DAT file: {:?}", dat_file);
+                tracing::info!(
+                    dat_file_name = %dat_file.header.name,
+                    dat_file_version = %dat_file.header.version,
+                    system_id = context.input.system_id,
+                    "Successfully parsed DAT file",
+                );
                 context.state.dat_file = Some(dat_file.into());
             }
             Err(e) => {
+                tracing::error!(
+                    error = ?e,
+                    dat_file_path = %dat_path.display(),
+                    system_id = context.input.system_id,
+                    "Failed to parse DAT file",
+                );
                 // Abort since dat file was explicitly provided
                 return StepAction::Abort(Error::ParseError(format!(
                     "Failed to parse DAT file {}: {}",
@@ -51,6 +64,9 @@ impl PipelineStep<DatFileMassImportContext> for ImportDatFileStep {
     }
 }
 
+/// This step checks if the parsed DAT file already exists in the database based on its metadata
+/// (name, version, system). If it exists, we store its ID in the context state to link file sets
+/// to it later. If it doesn't exist, we will proceed to store it in the next step.
 pub struct CheckExistingDatFileStep;
 #[async_trait::async_trait]
 impl PipelineStep<DatFileMassImportContext> for CheckExistingDatFileStep {
@@ -84,10 +100,6 @@ impl PipelineStep<DatFileMassImportContext> for CheckExistingDatFileStep {
 
         match is_existing_dat_res {
             Ok(id_res) => {
-                println!(
-                    "Check existing DAT file result for '{}': {:?}",
-                    dat_file.header.name, id_res
-                );
                 if let Some(id) = id_res {
                     tracing::info!(
                         system_id = context.input.system_id,
@@ -123,12 +135,16 @@ impl PipelineStep<DatFileMassImportContext> for CheckExistingDatFileStep {
     }
 }
 
+/// This step stores the parsed DAT file in the database if it doesn't exist and updates the
+/// context state with the new dat file ID. If the dat file already exists (dat_file_id is already
+/// set in the state), this step will be skipped.
 pub struct StoreDatFileStep;
 #[async_trait::async_trait]
 impl PipelineStep<DatFileMassImportContext> for StoreDatFileStep {
     fn name(&self) -> &'static str {
         "store_dat_file_step"
     }
+
     fn should_execute(&self, context: &DatFileMassImportContext) -> bool {
         context.state.dat_file.is_some() && context.state.dat_file_id.is_none()
     }
@@ -146,11 +162,23 @@ impl PipelineStep<DatFileMassImportContext> for StoreDatFileStep {
             .await
         {
             Ok(dat_file_id) => {
-                println!("Successfully stored DAT file with ID: {}", dat_file_id);
+                tracing::info!(
+                    system_id = context.input.system_id,
+                    dat_name = %dat_file.header.name,
+                    dat_version = %dat_file.header.version,
+                    dat_file_id = dat_file_id,
+                    "Successfully stored DAT file in the database",
+                );
                 context.state.dat_file_id = Some(dat_file_id);
             }
             Err(e) => {
-                println!("Failed to store DAT file: {}", e);
+                tracing::error!(
+                    system_id = context.input.system_id,
+                    dat_name = %dat_file.header.name,
+                    dat_version = %dat_file.header.version,
+                    error = ?e,
+                    "Failed to store DAT file in the database",
+                );
                 return StepAction::Abort(Error::DbError(format!(
                     "Failed to store DAT file: {}",
                     e
@@ -163,6 +191,10 @@ impl PipelineStep<DatFileMassImportContext> for StoreDatFileStep {
 }
 
 /// This step will filter out file sets that already exist in the database based on their metadata.
+/// Uses DatGameStatusService to check the status of each game in dat file and determine if file
+/// set already exists in the database and if it is linked to dat file or not. The status for each
+/// game will be stored in the context state to be used in the next step to handle existing file
+/// sets.
 ///
 /// There can be following cases:
 ///
@@ -172,7 +204,9 @@ impl PipelineStep<DatFileMassImportContext> for StoreDatFileStep {
 ///
 /// There is no existing file set with the same signature. We can proceed with importing it as a
 /// new file set and link it to dat file. We will also create a new software title and release for
-/// it. We don't currenctly check duplicates for software titles and releases in this case. The
+/// it.
+///
+/// We don't currenctly check duplicates for software titles and releases in this case. The
 /// possible duplicates should be merged manually by the user after the import. We will provide a
 /// functionality to merge software titles and releases in the future.
 ///
@@ -182,12 +216,11 @@ impl PipelineStep<DatFileMassImportContext> for StoreDatFileStep {
 /// dat file already exists and abort the import but we will have a separate functionality for
 /// adding dat files without import. So dat file may exists because of that.
 ///
-/// There is an existing file set that is already linked to current dat file. We can consider it
-/// as a duplicate and skip it.
+/// There is an existing file set that is already linked to current dat file. We can skip it.
 ///
-/// 3. Existing file set, existing software title, existing release, not linked to dat file:
+/// 3. Existing file set, existing software title, existing release, *not* linked to dat file:
 ///
-/// There is an existing file set with exactly the same signature but it's not linked to this
+/// There is an existing file set with exactly the same equality signature but it's not linked to this
 /// file set (e.g. because it was imported with a different DAT file or without a DAT file). In
 /// this case we can link the existing file set to dat file.
 ///
@@ -196,7 +229,7 @@ impl PipelineStep<DatFileMassImportContext> for StoreDatFileStep {
 /// This case could happen when the same file set was imported with a different DAT file or by
 /// adding as single file set software title and release may differ because of that.
 ///
-/// Currently we treat this case as an existing file set and create a releaes and software title
+/// Currently we treat this case as an existing file set and create a release and software title
 /// for it and link it to dat file. Possible duplicates should be merged manually by the user after
 /// the import. We will provide a functionality to merge software titles and releases in the
 /// future.
@@ -225,6 +258,7 @@ impl PipelineStep<DatFileMassImportContext> for FilterExistingFileSetsStep {
         // now it's fine since we use in mem test db anyway in tests
         let dat_game_status_service =
             DatGameStatusService::new(context.deps.repository_manager.clone());
+
         let dat_file = context
             .state
             .dat_file
@@ -235,6 +269,11 @@ impl PipelineStep<DatFileMassImportContext> for FilterExistingFileSetsStep {
             .dat_file_id
             .expect("DAT file ID should be present in state");
         for game in &dat_file.games {
+            tracing::info!(
+                game = %game.name,
+                dat_file_id = dat_file_id,
+                "Checking file set status for game",
+            );
             let status = dat_game_status_service
                 .get_status(
                     game,
@@ -249,6 +288,7 @@ impl PipelineStep<DatFileMassImportContext> for FilterExistingFileSetsStep {
                     tracing::info!(
                         game = %game.name,
                         dat_file_id = dat_file_id,
+                        status = ?status,
                         "Got file set status for game",
                     );
                     context.state.statuses.push(status);
@@ -272,6 +312,11 @@ impl PipelineStep<DatFileMassImportContext> for FilterExistingFileSetsStep {
     }
 }
 
+/// This step handles existing file sets, both the ones that are linked to dat file and the ones
+/// that are not linked to dat file. For the ones that are not linked to dat file, we will link
+/// them to dat file and create a release for them. For the ones that are already linked to dat
+/// file, we will skip them. Import status for each file set will be stored in the context state to
+/// show to the user in the end of import process.
 pub struct HandleExistingFileSetsStep;
 
 #[async_trait::async_trait]
@@ -304,6 +349,7 @@ impl PipelineStep<DatFileMassImportContext> for HandleExistingFileSetsStep {
                 DatGameFileSetStatus::ExistingWithoutReleaseAndWithoutLinkToDat {
                     game,
                     file_set_id,
+                    is_missing_files: _, // TODO
                 } => {
                     tracing::info!(
                         game = %game.name,
@@ -358,7 +404,11 @@ impl PipelineStep<DatFileMassImportContext> for HandleExistingFileSetsStep {
                         file_set_name: game.name.clone(),
                     });
                 }
-                DatGameFileSetStatus::ExistingWithReleaseAndLinkedToDat { file_set_id, game } => {
+                DatGameFileSetStatus::ExistingWithReleaseAndLinkedToDat {
+                    file_set_id,
+                    game,
+                    is_missing_files: _, // TODO
+                } => {
                     tracing::info!(
                         game = %game.name,
                         file_set_id = file_set_id,
@@ -732,6 +782,7 @@ mod tests {
             DatGameFileSetStatus::ExistingWithoutReleaseAndWithoutLinkToDat {
                 game: dat_file.games[0].clone(),
                 file_set_id: existing_file_set_id,
+                is_missing_files: false,
             },
         ];
 
@@ -852,6 +903,7 @@ mod tests {
         context.state.statuses = vec![DatGameFileSetStatus::ExistingWithReleaseAndLinkedToDat {
             game: dat_file.games[0].clone(),
             file_set_id: 1,
+            is_missing_files: false,
         }];
 
         // Act

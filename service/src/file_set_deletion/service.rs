@@ -94,6 +94,7 @@ mod tests {
             archive_file_name: "file1.zst".to_string(),
             sha1_checksum: Sha1Checksum::from([0; 20]),
             file_size: 1234,
+            is_available: true,
         };
 
         let mock_fs = Arc::new(MockFileSystemOps::new());

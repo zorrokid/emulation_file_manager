@@ -9,6 +9,11 @@ use crate::{
     models::{FileSet, FileSetFileInfo},
 };
 
+pub struct FindFileSetResult {
+    pub file_set_id: i64,
+    pub missing_files: Vec<Sha1Checksum>,
+}
+
 #[derive(Debug)]
 pub struct FileSetRepository {
     pool: Arc<Pool<Sqlite>>,
@@ -237,14 +242,13 @@ impl FileSetRepository {
         Ok(file_sets)
     }
 
+    /// Finds a file set that matches the given equality specs.
     pub async fn find_file_set(
         &self,
         equality_specs: &FileSetEqualitySpecs,
-    ) -> Result<Option<i64>, DatabaseError> {
-        // Does file set(s) with same signature exist:
+    ) -> Result<Option<FindFileSetResult>, DatabaseError> {
         let file_type = equality_specs.file_type.to_db_int();
-        // NOTE: there shouldn't be multiple candidates usually so no point to optimize this query
-        // now.
+        // NOTE: there shouldn't be multiple candidates usually so no point to optimize this query now.
         let matching_file_sets = sqlx::query_scalar!(
             "SELECT id 
                  FROM file_set 
@@ -261,6 +265,12 @@ impl FileSetRepository {
         for file_set_id in matching_file_sets {
             let file_set_file_infos = self.get_file_set_file_info(file_set_id).await?;
 
+            let missing_files = file_set_file_infos
+                .iter()
+                .filter(|file_info| !file_info.is_available)
+                .map(|file_info| file_info.sha1_checksum)
+                .collect::<Vec<_>>();
+
             let file_name_to_checksum_map = file_set_file_infos
                 .iter()
                 .map(|file_info| (file_info.file_name.clone(), file_info.sha1_checksum))
@@ -273,7 +283,10 @@ impl FileSetRepository {
                 .collect::<HashSet<_>>();
 
             if file_name_to_checksum_map == file_name_to_checksum_map_from_input {
-                return Ok(Some(file_set_id));
+                return Ok(Some(FindFileSetResult {
+                    file_set_id,
+                    missing_files,
+                }));
             }
         }
 
@@ -373,12 +386,14 @@ impl FileSetRepository {
                             sha1_checksum, 
                             file_size, 
                             archive_file_name,
-                            file_type
-                        ) VALUES (?, ?, ?, ?)",
+                            file_type,
+                            is_available
+                        ) VALUES (?, ?, ?, ?, ?)",
                         checksum,
                         file_size,
                         archive_file_name,
-                        file_type
+                        file_type,
+                        file.is_available
                     )
                     .execute(&mut *tx)
                     .await?;
@@ -968,12 +983,14 @@ mod tests {
                 file_size: 123,
                 original_file_name: "test".to_string(),
                 archive_file_name: archive_file_name_1.to_string(),
+                is_available: true,
             },
             ImportedFile {
                 sha1_checksum: checksum_2,
                 file_size: 123,
                 original_file_name: "test2".to_string(),
                 archive_file_name: archive_file_name_2.to_string(),
+                is_available: true,
             },
         ];
 
@@ -1024,18 +1041,21 @@ mod tests {
                 file_size: 123,
                 original_file_name: "file 1".to_string(),
                 archive_file_name: "file_1.zip".to_string(),
+                is_available: true,
             },
             ImportedFile {
                 sha1_checksum: checksum_2,
                 file_size: 123,
                 original_file_name: "file 2".to_string(),
                 archive_file_name: "file_2.zip".to_string(),
+                is_available: true,
             },
             ImportedFile {
                 sha1_checksum: checksum_3,
                 file_size: 123,
                 original_file_name: "file 3".to_string(),
                 archive_file_name: "file_3.zip".to_string(),
+                is_available: true,
             },
         ];
 
@@ -1325,6 +1345,7 @@ mod tests {
             file_size: 123,
             original_file_name: "test.rom".to_string(),
             archive_file_name: "archive_file_name_1".to_string(),
+            is_available: true,
         }];
 
         let system_id = SystemRepository::new(pool.clone())
@@ -1351,6 +1372,7 @@ mod tests {
             file_size: 456,
             original_file_name: "test2.rom".to_string(),
             archive_file_name: "archive_file_name_2".to_string(),
+            is_available: true,
         };
 
         let file_info_repo = FileInfoRepository::new(pool.clone());
@@ -1426,6 +1448,7 @@ mod tests {
             file_size: 123,
             original_file_name: "test.rom".to_string(),
             archive_file_name: "archive_file_name_1".to_string(),
+            is_available: true,
         }];
 
         let system_id = SystemRepository::new(pool.clone())
@@ -1452,6 +1475,7 @@ mod tests {
             file_size: 456,
             original_file_name: "test2.rom".to_string(),
             archive_file_name: "archive_file_name_2".to_string(),
+            is_available: true,
         };
 
         let file_info_repo = FileInfoRepository::new(pool.clone());
@@ -1554,6 +1578,7 @@ mod tests {
             file_size: 456,
             original_file_name: "test2.rom".to_string(),
             archive_file_name: "archive_file_name_2".to_string(),
+            is_available: true,
         };
 
         let file_info_repo = FileInfoRepository::new(pool.clone());
@@ -1589,12 +1614,14 @@ mod tests {
                 file_size: 123,
                 original_file_name: "test1.rom".to_string(),
                 archive_file_name: "archive_file_name_1".to_string(),
+                is_available: true,
             },
             ImportedFile {
                 sha1_checksum: [1; 20],
                 file_size: 456,
                 original_file_name: "test2.rom".to_string(),
                 archive_file_name: "archive_file_name_2".to_string(),
+                is_available: true,
             },
         ];
 
@@ -1908,12 +1935,14 @@ mod tests {
                 file_size: 123,
                 original_file_name: "test1.rom".to_string(),
                 archive_file_name: "archive_file_name_1".to_string(),
+                is_available: true,
             },
             ImportedFile {
                 sha1_checksum: [1; 20],
                 file_size: 456,
                 original_file_name: "test2.rom".to_string(),
                 archive_file_name: "archive_file_name_2".to_string(),
+                is_available: true,
             },
         ];
 
@@ -1945,13 +1974,87 @@ mod tests {
         };
 
         // Act
-        let found_id = file_set_repository
+        let find_file_set_result = file_set_repository
             .find_file_set(&file_set_equality_specs)
             .await
             .unwrap();
 
         // Assert
-        assert_eq!(found_id, Some(file_set_id));
+        assert!(find_file_set_result.is_some());
+        let result = find_file_set_result.as_ref().unwrap();
+        assert_eq!(result.file_set_id, file_set_id);
+    }
+
+    #[async_std::test]
+    async fn test_find_file_set_missing_files() {
+        // Arrange
+        let pool = Arc::new(setup_test_db().await);
+        let file_set_repository = FileSetRepository { pool: pool.clone() };
+
+        let system_id = SystemRepository::new(pool.clone())
+            .add_system("Test System")
+            .await
+            .unwrap();
+
+        let file_1_sha1 = [0; 20];
+        let file_2_sha1 = [1; 20];
+        let files = vec![
+            ImportedFile {
+                sha1_checksum: file_1_sha1,
+                file_size: 123,
+                original_file_name: "test1.rom".to_string(),
+                archive_file_name: "archive_file_name_1".to_string(),
+                is_available: true,
+            },
+            ImportedFile {
+                sha1_checksum: file_2_sha1,
+                file_size: 456,
+                original_file_name: "test2.rom".to_string(),
+                archive_file_name: "archive_file_name_2".to_string(),
+                is_available: false,
+            },
+        ];
+
+        let file_set_id = file_set_repository
+            .add_file_set(
+                "Test File Set",
+                "test_file_set",
+                &FileType::Rom,
+                "Unit Test",
+                &files,
+                &[system_id],
+            )
+            .await
+            .unwrap();
+
+        let file_set_equality_specs = FileSetEqualitySpecs {
+            file_set_name: "Test File Set".to_string(),
+            file_set_file_name: "test_file_set".to_string(),
+            file_type: FileType::Rom,
+            source: "Unit Test".to_string(),
+            file_set_file_info: files
+                .iter()
+                .map(|f| FileSetFileEqualitySpecs {
+                    file_name: f.original_file_name.clone(),
+                    file_type: FileType::Rom,
+                    sha1_checksum: f.sha1_checksum,
+                })
+                .collect(),
+        };
+
+        // Act
+        let find_file_set_result = file_set_repository
+            .find_file_set(&file_set_equality_specs)
+            .await
+            .unwrap();
+
+        // Assert
+        assert!(find_file_set_result.is_some());
+        let result = find_file_set_result.as_ref().unwrap();
+        assert_eq!(result.file_set_id, file_set_id);
+        assert_eq!(result.missing_files.len(), 1);
+        let missing_file_sha1 = result.missing_files[0];
+        assert_eq!(missing_file_sha1, file_2_sha1);
     }
 
     #[async_std::test]
@@ -1971,12 +2074,14 @@ mod tests {
                 file_size: 123,
                 original_file_name: "test1.rom".to_string(),
                 archive_file_name: "archive_file_name_1".to_string(),
+                is_available: true,
             },
             ImportedFile {
                 sha1_checksum: [1; 20],
                 file_size: 456,
                 original_file_name: "test2.rom".to_string(),
                 archive_file_name: "archive_file_name_2".to_string(),
+                is_available: true,
             },
         ];
 

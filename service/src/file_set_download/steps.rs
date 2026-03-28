@@ -879,6 +879,7 @@ mod tests {
             archive_file_name: archive_file_name.to_string(),
             sha1_checksum: Sha1Checksum::from([1; 20]),
             file_size: 5678,
+            is_available: true,
         };
 
         repo_manager

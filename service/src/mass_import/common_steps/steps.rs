@@ -7,6 +7,9 @@ use crate::{
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
 
+/// Step to read files from the source path and populate context with read_ok_files and
+/// read_failed_files based on whether each file was read successfully or not. Also populates
+/// dir_scan_errors in case of any errors while reading the source directory.
 pub struct ReadFilesStep<T: MassImportContextOps> {
     _phantom: std::marker::PhantomData<T>,
 }
@@ -65,7 +68,6 @@ impl<T: MassImportContextOps + Send + Sync> PipelineStep<T> for ReadFilesStep<T>
                         file_path = %file.path.display(),
                         "Successfully read file entry from source path",
                     );
-                    tracing::info!("Found file: {}", file.path.display());
                     context.read_ok_files_mut().push(file.path.clone());
                 }
                 Err(e) => {
@@ -84,6 +86,13 @@ impl<T: MassImportContextOps + Send + Sync> PipelineStep<T> for ReadFilesStep<T>
     }
 }
 
+/// Step to read metadata for files read in the previous step and populate context with
+/// file_metadata for successfully read metadata and read_failed_files for files whose metadata
+/// could not be read for any reason.
+///
+/// For example if the file is a zip archive, metadata of each
+/// file in the zip archive is read and stored in the context. If the file is a regular file,
+/// metadata of the file is read and stored in the context.
 pub struct ReadFileMetadataStep<T: MassImportContextOps> {
     _phantom: std::marker::PhantomData<T>,
 }
@@ -161,6 +170,18 @@ impl<T: MassImportContextOps + Send + Sync> PipelineStep<T> for ReadFileMetadata
     }
 }
 
+/// Step to import file sets represented by FileSetImportModel in the context and populate context
+/// with import_results for each file set import. Handles only those file sets that are new.
+///
+/// For example, file sets to import can be compiled
+/// based on the file metadata read in the previous step and data from the DAT file if the import
+/// is based on a DAT file.
+///
+/// Each file set is imported using the FileImportService and the result of
+/// each import is stored in the context.
+///
+/// The step continues even if some file set imports fail, and the result of each import is stored
+/// in the context to be included in the final result of the mass import operation.
 pub struct ImportFileSetsStep<T: MassImportContextOps> {
     _phantom: std::marker::PhantomData<T>,
 }
@@ -241,7 +262,11 @@ impl<T: MassImportContextOps + Send + Sync> PipelineStep<T> for ImportFileSetsSt
                     (None, FileSetImportStatus::Failed(format!("{}", e)))
                 }
             };
-            println!("Import result for file set {}: {:?}", file_set_name, status);
+            tracing::info!(
+                file_set_name = %file_set_name,
+                import_status = ?status,
+                "File set import result",
+            );
 
             context.import_results().push(FileSetImportResult {
                 file_set_id: id,

@@ -622,6 +622,7 @@ mod tests {
             file_size: 1234,
             archive_file_name,
             original_file_name: "original_test_file.rom".to_string(),
+            is_available: true,
         };
 
         repository_manager

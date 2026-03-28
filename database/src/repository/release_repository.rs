@@ -639,6 +639,7 @@ mod tests {
                     archive_file_name: "File1.zst".to_string(),
                     file_size: 1024,
                     sha1_checksum: [0; 20],
+                    is_available: true,
                 }],
                 &[system_1_id],
             )
@@ -656,6 +657,7 @@ mod tests {
                     archive_file_name: "File1.zst".to_string(),
                     file_size: 1024,
                     sha1_checksum: [1; 20],
+                    is_available: true,
                 }],
                 &[system_2_id],
             )
@@ -673,6 +675,7 @@ mod tests {
                     archive_file_name: "File1.zst".to_string(),
                     file_size: 1024,
                     sha1_checksum: [2; 20],
+                    is_available: true,
                 }],
                 &[system_3_id],
             )
@@ -1015,6 +1018,7 @@ mod tests {
                     archive_file_name: "File1.zst".to_string(),
                     file_size: 1024,
                     sha1_checksum: file_1_sha,
+                    is_available: true,
                 }],
                 &[system_id],
             )
