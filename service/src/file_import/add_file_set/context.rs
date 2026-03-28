@@ -403,6 +403,7 @@ mod tests {
             file_size: 2048,
             archive_file_name: "existing_archive_file".to_string(),
             file_type: FileType::Rom,
+            is_available: true,
         });
 
         let result = context.get_files_in_file_set();
@@ -451,6 +452,7 @@ mod tests {
             file_size: 2048,
             archive_file_name: "existing_archive_file_name".to_string(),
             file_type: FileType::Rom,
+            is_available: true,
         });
         // Add a newly imported file
         context.state.imported_files.insert(

@@ -6,7 +6,6 @@ Database URL is defined in `.env` file.
 
 Creating database: `sqlx database create`
 
-
 Dev db is created to data/db.sqlite 
 
 ## runtime database
@@ -27,10 +26,13 @@ sqlite3 ~/.local/share/efm/db.sqlite
 
 Add migration in database crate: `sqlx migrate add <name>`
 
-Run migrations: `sqlx migrate run`
+Run migrations to development db in database crate: `sqlx migrate run`
 
 Migrations are automatically run at application startup via `sqlx::migrate!().run(&pool)` in `lib.rs`.
 
+## Reverting migrations
+
+down-files are not currently used. The development database can be reset by deleting `data/db.sqlite` , creating and running migrations again.
 
 # Schema Documentation
 

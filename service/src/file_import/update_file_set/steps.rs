@@ -143,6 +143,7 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileInfoToDatabaseStep {
                         file_size: imported_file.file_size,
                         archive_file_name: imported_file.archive_file_name.clone(),
                         file_type,
+                        is_available: true,
                     });
                 }
                 Err(err) => {
@@ -669,6 +670,7 @@ mod tests {
             file_size: 2048,
             archive_file_name: "test_archive_name_2".to_string(),
             file_type: FileType::Rom,
+            is_available: true,
         });
 
         // Update file_import_data to only include the new file (file_2)

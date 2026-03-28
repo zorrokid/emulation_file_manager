@@ -310,6 +310,7 @@ mod tests {
             file_type: FileType::Rom,
             archive_file_name: "archive_file_name_1".to_string(),
             file_size: 1024,
+            is_available: true,
         });
         context.state.new_files.push(FileInfo {
             id: 2,
@@ -317,6 +318,7 @@ mod tests {
             file_type: FileType::Rom,
             archive_file_name: "archive_file_name_2".to_string(),
             file_size: 4096,
+            is_available: true,
         });
 
         let result = context.get_file_info_ids_with_file_names();
@@ -353,6 +355,7 @@ mod tests {
             file_type: FileType::Rom,
             archive_file_name: "archive_file_name_1".to_string(),
             file_size: 1024,
+            is_available: true,
         });
 
         let result = context.get_file_info_ids_with_file_names();

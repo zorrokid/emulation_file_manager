@@ -299,6 +299,12 @@
           "name": "file_type",
           "type": "INTEGER",
           "nullable": true
+        },
+        {
+          "name": "is_available",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "1"
         }
       ],
       "constraints": [
@@ -312,7 +318,7 @@
           ]
         }
       ],
-      "def": "CREATE TABLE file_info (\n    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,\n    sha1_checksum BLOB NOT NULL,\n    file_size INTEGER NOT NULL,\n    archive_file_name TEXT NOT NULL\n, file_type INTEGER)"
+      "def": "CREATE TABLE file_info (\n    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,\n    sha1_checksum BLOB NOT NULL,\n    file_size INTEGER NOT NULL,\n    archive_file_name TEXT NOT NULL\n, file_type INTEGER, is_available INTEGER NOT NULL DEFAULT 1)"
     },
     {
       "name": "file_set",

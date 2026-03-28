@@ -261,6 +261,7 @@ mod tests {
             file_size: 2048,
             file_type: FileType::Rom,
             archive_file_name: "archive_file_name".to_string(),
+            is_available: true,
         }];
 
         let result = file_import_data.get_new_selected_file_names(&existing_files);
@@ -331,6 +332,7 @@ mod tests {
             file_size: 1024,
             file_type: FileType::Rom,
             archive_file_name: "archive_file_name".to_string(),
+            is_available: true,
         }];
         let model: FileImportModel = file_import_data.get_file_import_model(&existing_files);
         assert_eq!(model.file_type, FileType::Rom);

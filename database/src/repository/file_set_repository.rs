@@ -97,6 +97,7 @@ impl FromRow<'_, SqliteRow> for FileSetFileInfo {
             file_size: row.try_get("file_size")?,
             archive_file_name: row.try_get("archive_file_name")?,
             sort_order: row.try_get("sort_order")?,
+            is_available: row.try_get("is_available")?,
         })
     }
 }
@@ -633,7 +634,8 @@ impl FileSetRepository {
                 fi.file_size, 
                 fi.archive_file_name,
                 fi.file_type,
-                fsfi.sort_order
+                fsfi.sort_order,
+                fi.is_available
              FROM file_set_file_info fsfi
              JOIN file_info fi ON fsfi.file_info_id = fi.id
              WHERE fsfi.file_set_id = ?

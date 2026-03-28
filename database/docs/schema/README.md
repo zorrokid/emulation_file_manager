@@ -10,7 +10,7 @@
 | [franchise](franchise.md) | 2 | Game/software franchises (e.g., Zork, Jet Set Willy) | table |
 | [software_title](software_title.md) | 3 | Individual software titles that can belong to a franchise | table |
 | [release](release.md) | 3 | Specific releases of software (versions, editions, regions, compilations, different media) | table |
-| [file_info](file_info.md) | 5 | Metadata about files including checksums and sizes | table |
+| [file_info](file_info.md) | 6 | Metadata about files including checksums and sizes | table |
 | [file_set](file_set.md) | 5 | Collections of files that belong together | table |
 | [release_file_set](release_file_set.md) | 2 |  | table |
 | [setting](setting.md) | 2 | Application settings stored as key-value pairs | table |
