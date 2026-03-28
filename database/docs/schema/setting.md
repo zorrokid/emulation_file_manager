@@ -2,6 +2,8 @@
 
 ## Description
 
+Application settings stored as key-value pairs
+
 <details>
 <summary><strong>Table Definition</strong></summary>
 

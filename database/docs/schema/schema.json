@@ -72,6 +72,7 @@
     {
       "name": "system",
       "type": "table",
+      "comment": "Platform/console systems (e.g., Commodore 64, Atari 2600)",
       "columns": [
         {
           "name": "id",
@@ -100,6 +101,7 @@
     {
       "name": "emulator",
       "type": "table",
+      "comment": "Emulator configurations for running software on different systems",
       "columns": [
         {
           "name": "id",
@@ -161,6 +163,7 @@
     {
       "name": "franchise",
       "type": "table",
+      "comment": "Game/software franchises (e.g., Zork, Jet Set Willy)",
       "columns": [
         {
           "name": "id",
@@ -189,6 +192,7 @@
     {
       "name": "software_title",
       "type": "table",
+      "comment": "Individual software titles that can belong to a franchise",
       "columns": [
         {
           "name": "id",
@@ -235,6 +239,7 @@
     {
       "name": "release",
       "type": "table",
+      "comment": "Specific releases of software (versions, editions, regions, compilations, different media)",
       "columns": [
         {
           "name": "id",
@@ -245,6 +250,11 @@
           "name": "name",
           "type": "TEXT",
           "nullable": false
+        },
+        {
+          "name": "thumbnail_filename",
+          "type": "TEXT",
+          "nullable": true
         }
       ],
       "constraints": [
@@ -258,11 +268,12 @@
           ]
         }
       ],
-      "def": "CREATE TABLE release (\n    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,\n    name TEXT NOT NULL\n)"
+      "def": "CREATE TABLE release (\n    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,\n    name TEXT NOT NULL\n, thumbnail_filename TEXT)"
     },
     {
       "name": "file_info",
       "type": "table",
+      "comment": "Metadata about files including checksums and sizes",
       "columns": [
         {
           "name": "id",
@@ -306,6 +317,7 @@
     {
       "name": "file_set",
       "type": "table",
+      "comment": "Collections of files that belong together",
       "columns": [
         {
           "name": "id",
@@ -346,101 +358,6 @@
         }
       ],
       "def": "CREATE TABLE file_set (\n    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,\n    file_name TEXT NOT NULL,\n    file_type INTEGER NOT NULL,\n    name TEXT NOT NULL\n , source TEXT NOT NULL DEFAULT '')"
-    },
-    {
-      "name": "file_set_file_info",
-      "type": "table",
-      "columns": [
-        {
-          "name": "file_set_id",
-          "type": "INTEGER",
-          "nullable": false
-        },
-        {
-          "name": "file_info_id",
-          "type": "INTEGER",
-          "nullable": false
-        },
-        {
-          "name": "file_name",
-          "type": "TEXT",
-          "nullable": false
-        },
-        {
-          "name": "sort_order",
-          "type": "INTEGER",
-          "nullable": false,
-          "default": "0"
-        }
-      ],
-      "indexes": [
-        {
-          "name": "sqlite_autoindex_file_set_file_info_1",
-          "def": "PRIMARY KEY (file_set_id, file_info_id)",
-          "table": "file_set_file_info",
-          "columns": [
-            "file_set_id",
-            "file_info_id"
-          ]
-        }
-      ],
-      "constraints": [
-        {
-          "name": "file_set_id",
-          "type": "PRIMARY KEY",
-          "def": "PRIMARY KEY (file_set_id)",
-          "table": "file_set_file_info",
-          "columns": [
-            "file_set_id"
-          ]
-        },
-        {
-          "name": "file_info_id",
-          "type": "PRIMARY KEY",
-          "def": "PRIMARY KEY (file_info_id)",
-          "table": "file_set_file_info",
-          "columns": [
-            "file_info_id"
-          ]
-        },
-        {
-          "name": "- (Foreign key ID: 0)",
-          "type": "FOREIGN KEY",
-          "def": "FOREIGN KEY (file_info_id) REFERENCES file_info (id) ON UPDATE NO ACTION ON DELETE NO ACTION MATCH NONE",
-          "table": "file_set_file_info",
-          "referenced_table": "file_info",
-          "columns": [
-            "file_info_id"
-          ],
-          "referenced_columns": [
-            "id"
-          ]
-        },
-        {
-          "name": "- (Foreign key ID: 1)",
-          "type": "FOREIGN KEY",
-          "def": "FOREIGN KEY (file_set_id) REFERENCES file_set (id) ON UPDATE NO ACTION ON DELETE NO ACTION MATCH NONE",
-          "table": "file_set_file_info",
-          "referenced_table": "file_set",
-          "columns": [
-            "file_set_id"
-          ],
-          "referenced_columns": [
-            "id"
-          ]
-        },
-        {
-          "name": "sqlite_autoindex_file_set_file_info_1",
-          "type": "PRIMARY KEY",
-          "def": "PRIMARY KEY (file_set_id, file_info_id)",
-          "table": "file_set_file_info",
-          "columns": [
-            "file_set_id",
-            "file_info_id"
-          ]
-        }
-      ],
-      "def": "CREATE TABLE file_set_file_info (\n    file_set_id INTEGER NOT NULL,\n    file_info_id INTEGER NOT NULL,\n    -- same file can have different names in different file sets \n    file_name TEXT NOT NULL, sort_order INTEGER NOT NULL DEFAULT 0,\n    PRIMARY KEY (file_set_id, file_info_id),\n    FOREIGN KEY (file_set_id) REFERENCES file_set(id),\n    FOREIGN KEY (file_info_id) REFERENCES file_info(id)\n)"
     },
     {
       "name": "release_file_set",
@@ -529,6 +446,7 @@
     {
       "name": "setting",
       "type": "table",
+      "comment": "Application settings stored as key-value pairs",
       "columns": [
         {
           "name": "key",
@@ -576,6 +494,7 @@
     {
       "name": "document_viewer",
       "type": "table",
+      "comment": "Configuration for external document viewers",
       "columns": [
         {
           "name": "id",
@@ -877,6 +796,7 @@
     {
       "name": "file_sync_log",
       "type": "table",
+      "comment": "Tracking log for file synchronization operations",
       "columns": [
         {
           "name": "id",
@@ -1129,6 +1049,550 @@
         }
       ],
       "def": "CREATE TABLE file_set_item_type (\n    file_set_id INTEGER NOT NULL,\n    item_type INTEGER NOT NULL,\n    PRIMARY KEY (file_set_id, item_type),\n    FOREIGN KEY (file_set_id) REFERENCES file_set(id) ON DELETE CASCADE\n)"
+    },
+    {
+      "name": "dat_file",
+      "type": "table",
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "dat_id",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "type": "TEXT",
+          "nullable": false
+        },
+        {
+          "name": "description",
+          "type": "TEXT",
+          "nullable": false
+        },
+        {
+          "name": "version",
+          "type": "TEXT",
+          "nullable": false
+        },
+        {
+          "name": "date",
+          "type": "TEXT",
+          "nullable": true
+        },
+        {
+          "name": "author",
+          "type": "TEXT",
+          "nullable": false
+        },
+        {
+          "name": "homepage",
+          "type": "TEXT",
+          "nullable": true
+        },
+        {
+          "name": "url",
+          "type": "TEXT",
+          "nullable": true
+        },
+        {
+          "name": "subset",
+          "type": "TEXT",
+          "nullable": true
+        },
+        {
+          "name": "imported_at",
+          "type": "TEXT",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP"
+        },
+        {
+          "name": "system_id",
+          "type": "INTEGER",
+          "nullable": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_dat_file_system_id",
+          "def": "CREATE INDEX idx_dat_file_system_id ON dat_file(system_id)",
+          "table": "dat_file",
+          "columns": [
+            "system_id"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "id",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (id)",
+          "table": "dat_file",
+          "columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "- (Foreign key ID: 0)",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (system_id) REFERENCES system (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE",
+          "table": "dat_file",
+          "referenced_table": "system",
+          "columns": [
+            "system_id"
+          ],
+          "referenced_columns": [
+            "id"
+          ]
+        }
+      ],
+      "def": "CREATE TABLE dat_file (\n    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,\n    dat_id INTEGER NOT NULL,\n    name TEXT NOT NULL,\n    description TEXT NOT NULL,\n    version TEXT NOT NULL,\n    date TEXT,\n    author TEXT NOT NULL,\n    homepage TEXT,\n    url TEXT,\n    subset TEXT,\n    imported_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP\n, system_id INTEGER NOT NULL REFERENCES system(id) ON DELETE CASCADE)"
+    },
+    {
+      "name": "dat_game",
+      "type": "table",
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "dat_file_id",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "type": "TEXT",
+          "nullable": false
+        },
+        {
+          "name": "game_id",
+          "type": "TEXT",
+          "nullable": true
+        },
+        {
+          "name": "description",
+          "type": "TEXT",
+          "nullable": false
+        },
+        {
+          "name": "cloneof",
+          "type": "TEXT",
+          "nullable": true
+        },
+        {
+          "name": "cloneofid",
+          "type": "TEXT",
+          "nullable": true
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_dat_game_dat_file_id",
+          "def": "CREATE INDEX idx_dat_game_dat_file_id ON dat_game(dat_file_id)",
+          "table": "dat_game",
+          "columns": [
+            "dat_file_id"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "id",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (id)",
+          "table": "dat_game",
+          "columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "- (Foreign key ID: 0)",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (dat_file_id) REFERENCES dat_file (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE",
+          "table": "dat_game",
+          "referenced_table": "dat_file",
+          "columns": [
+            "dat_file_id"
+          ],
+          "referenced_columns": [
+            "id"
+          ]
+        }
+      ],
+      "def": "CREATE TABLE dat_game (\n    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,\n    dat_file_id INTEGER NOT NULL,\n    name TEXT NOT NULL,\n    game_id TEXT,\n    description TEXT NOT NULL,\n    cloneof TEXT,\n    cloneofid TEXT,\n    FOREIGN KEY (dat_file_id) REFERENCES dat_file(id) ON DELETE CASCADE\n)"
+    },
+    {
+      "name": "dat_rom",
+      "type": "table",
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "dat_game_id",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "type": "TEXT",
+          "nullable": false
+        },
+        {
+          "name": "size",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "crc",
+          "type": "TEXT",
+          "nullable": false
+        },
+        {
+          "name": "md5",
+          "type": "TEXT",
+          "nullable": false
+        },
+        {
+          "name": "sha1",
+          "type": "TEXT",
+          "nullable": false
+        },
+        {
+          "name": "sha256",
+          "type": "TEXT",
+          "nullable": true
+        },
+        {
+          "name": "status",
+          "type": "TEXT",
+          "nullable": true
+        },
+        {
+          "name": "serial",
+          "type": "TEXT",
+          "nullable": true
+        },
+        {
+          "name": "header",
+          "type": "TEXT",
+          "nullable": true
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_dat_rom_crc",
+          "def": "CREATE INDEX idx_dat_rom_crc ON dat_rom(crc)",
+          "table": "dat_rom",
+          "columns": [
+            "crc"
+          ]
+        },
+        {
+          "name": "idx_dat_rom_md5",
+          "def": "CREATE INDEX idx_dat_rom_md5 ON dat_rom(md5)",
+          "table": "dat_rom",
+          "columns": [
+            "md5"
+          ]
+        },
+        {
+          "name": "idx_dat_rom_sha1",
+          "def": "CREATE INDEX idx_dat_rom_sha1 ON dat_rom(sha1)",
+          "table": "dat_rom",
+          "columns": [
+            "sha1"
+          ]
+        },
+        {
+          "name": "idx_dat_rom_dat_game_id",
+          "def": "CREATE INDEX idx_dat_rom_dat_game_id ON dat_rom(dat_game_id)",
+          "table": "dat_rom",
+          "columns": [
+            "dat_game_id"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "id",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (id)",
+          "table": "dat_rom",
+          "columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "- (Foreign key ID: 0)",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (dat_game_id) REFERENCES dat_game (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE",
+          "table": "dat_rom",
+          "referenced_table": "dat_game",
+          "columns": [
+            "dat_game_id"
+          ],
+          "referenced_columns": [
+            "id"
+          ]
+        }
+      ],
+      "def": "CREATE TABLE dat_rom (\n    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,\n    dat_game_id INTEGER NOT NULL,\n    name TEXT NOT NULL,\n    size INTEGER NOT NULL,\n    crc TEXT NOT NULL,\n    md5 TEXT NOT NULL,\n    sha1 TEXT NOT NULL,\n    sha256 TEXT,\n    status TEXT,\n    serial TEXT,\n    header TEXT,\n    FOREIGN KEY (dat_game_id) REFERENCES dat_game(id) ON DELETE CASCADE\n)"
+    },
+    {
+      "name": "file_set_dat_file_link",
+      "type": "table",
+      "columns": [
+        {
+          "name": "file_set_id",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "dat_file_id",
+          "type": "INTEGER",
+          "nullable": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "sqlite_autoindex_file_set_dat_file_link_1",
+          "def": "PRIMARY KEY (file_set_id, dat_file_id)",
+          "table": "file_set_dat_file_link",
+          "columns": [
+            "file_set_id",
+            "dat_file_id"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "file_set_id",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (file_set_id)",
+          "table": "file_set_dat_file_link",
+          "columns": [
+            "file_set_id"
+          ]
+        },
+        {
+          "name": "dat_file_id",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (dat_file_id)",
+          "table": "file_set_dat_file_link",
+          "columns": [
+            "dat_file_id"
+          ]
+        },
+        {
+          "name": "- (Foreign key ID: 0)",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (dat_file_id) REFERENCES dat_file (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE",
+          "table": "file_set_dat_file_link",
+          "referenced_table": "dat_file",
+          "columns": [
+            "dat_file_id"
+          ],
+          "referenced_columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "- (Foreign key ID: 1)",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (file_set_id) REFERENCES file_set (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE",
+          "table": "file_set_dat_file_link",
+          "referenced_table": "file_set",
+          "columns": [
+            "file_set_id"
+          ],
+          "referenced_columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_file_set_dat_file_link_1",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (file_set_id, dat_file_id)",
+          "table": "file_set_dat_file_link",
+          "columns": [
+            "file_set_id",
+            "dat_file_id"
+          ]
+        }
+      ],
+      "def": "CREATE TABLE file_set_dat_file_link (\n    file_set_id INTEGER NOT NULL,\n    dat_file_id INTEGER NOT NULL,\n    PRIMARY KEY (file_set_id, dat_file_id),\n    FOREIGN KEY (file_set_id) REFERENCES file_set(id) ON DELETE CASCADE,\n    FOREIGN KEY (dat_file_id) REFERENCES dat_file(id) ON DELETE CASCADE\n)"
+    },
+    {
+      "name": "file_set_file_info",
+      "type": "table",
+      "columns": [
+        {
+          "name": "file_set_id",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "file_info_id",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "file_name",
+          "type": "TEXT",
+          "nullable": false
+        },
+        {
+          "name": "sort_order",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "0"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "sqlite_autoindex_file_set_file_info_1",
+          "def": "PRIMARY KEY (file_set_id, file_info_id)",
+          "table": "file_set_file_info",
+          "columns": [
+            "file_set_id",
+            "file_info_id"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "file_set_id",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (file_set_id)",
+          "table": "file_set_file_info",
+          "columns": [
+            "file_set_id"
+          ]
+        },
+        {
+          "name": "file_info_id",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (file_info_id)",
+          "table": "file_set_file_info",
+          "columns": [
+            "file_info_id"
+          ]
+        },
+        {
+          "name": "- (Foreign key ID: 0)",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (file_info_id) REFERENCES file_info (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE",
+          "table": "file_set_file_info",
+          "referenced_table": "file_info",
+          "columns": [
+            "file_info_id"
+          ],
+          "referenced_columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "- (Foreign key ID: 1)",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (file_set_id) REFERENCES file_set (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE",
+          "table": "file_set_file_info",
+          "referenced_table": "file_set",
+          "columns": [
+            "file_set_id"
+          ],
+          "referenced_columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_file_set_file_info_1",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (file_set_id, file_info_id)",
+          "table": "file_set_file_info",
+          "columns": [
+            "file_set_id",
+            "file_info_id"
+          ]
+        }
+      ],
+      "def": "CREATE TABLE file_set_file_info (\n    file_set_id INTEGER NOT NULL,\n    file_info_id INTEGER NOT NULL,\n    -- same file can have different names in different file sets\n    file_name TEXT NOT NULL,\n    sort_order INTEGER NOT NULL DEFAULT 0,\n    PRIMARY KEY (file_set_id, file_info_id),\n    FOREIGN KEY (file_set_id) REFERENCES file_set(id) ON DELETE CASCADE,\n    FOREIGN KEY (file_info_id) REFERENCES file_info(id) ON DELETE CASCADE\n)"
+    },
+    {
+      "name": "system_libretro_core",
+      "type": "table",
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "system_id",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "core_name",
+          "type": "TEXT",
+          "nullable": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "sqlite_autoindex_system_libretro_core_1",
+          "def": "UNIQUE (system_id, core_name)",
+          "table": "system_libretro_core",
+          "columns": [
+            "system_id",
+            "core_name"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "id",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (id)",
+          "table": "system_libretro_core",
+          "columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "- (Foreign key ID: 0)",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (system_id) REFERENCES system (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE",
+          "table": "system_libretro_core",
+          "referenced_table": "system",
+          "columns": [
+            "system_id"
+          ],
+          "referenced_columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_system_libretro_core_1",
+          "type": "UNIQUE",
+          "def": "UNIQUE (system_id, core_name)",
+          "table": "system_libretro_core",
+          "columns": [
+            "system_id",
+            "core_name"
+          ]
+        }
+      ],
+      "def": "CREATE TABLE \"system_libretro_core\" (\n    id        INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,\n    system_id INTEGER NOT NULL REFERENCES system(id) ON DELETE CASCADE,\n    core_name TEXT NOT NULL,\n    UNIQUE(system_id, core_name)\n)"
     }
   ],
   "relations": [
@@ -1157,32 +1621,6 @@
       ],
       "parent_cardinality": "zero_or_one",
       "def": "FOREIGN KEY (franchise_id) REFERENCES franchise (id) ON UPDATE NO ACTION ON DELETE NO ACTION MATCH NONE"
-    },
-    {
-      "table": "file_set_file_info",
-      "columns": [
-        "file_info_id"
-      ],
-      "cardinality": "zero_or_one",
-      "parent_table": "file_info",
-      "parent_columns": [
-        "id"
-      ],
-      "parent_cardinality": "exactly_one",
-      "def": "FOREIGN KEY (file_info_id) REFERENCES file_info (id) ON UPDATE NO ACTION ON DELETE NO ACTION MATCH NONE"
-    },
-    {
-      "table": "file_set_file_info",
-      "columns": [
-        "file_set_id"
-      ],
-      "cardinality": "zero_or_one",
-      "parent_table": "file_set",
-      "parent_columns": [
-        "id"
-      ],
-      "parent_cardinality": "exactly_one",
-      "def": "FOREIGN KEY (file_set_id) REFERENCES file_set (id) ON UPDATE NO ACTION ON DELETE NO ACTION MATCH NONE"
     },
     {
       "table": "release_file_set",
@@ -1339,6 +1777,110 @@
       ],
       "parent_cardinality": "exactly_one",
       "def": "FOREIGN KEY (file_set_id) REFERENCES file_set (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
+    },
+    {
+      "table": "dat_file",
+      "columns": [
+        "system_id"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "system",
+      "parent_columns": [
+        "id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (system_id) REFERENCES system (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
+    },
+    {
+      "table": "dat_game",
+      "columns": [
+        "dat_file_id"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "dat_file",
+      "parent_columns": [
+        "id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (dat_file_id) REFERENCES dat_file (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
+    },
+    {
+      "table": "dat_rom",
+      "columns": [
+        "dat_game_id"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "dat_game",
+      "parent_columns": [
+        "id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (dat_game_id) REFERENCES dat_game (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
+    },
+    {
+      "table": "file_set_dat_file_link",
+      "columns": [
+        "dat_file_id"
+      ],
+      "cardinality": "zero_or_one",
+      "parent_table": "dat_file",
+      "parent_columns": [
+        "id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (dat_file_id) REFERENCES dat_file (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
+    },
+    {
+      "table": "file_set_dat_file_link",
+      "columns": [
+        "file_set_id"
+      ],
+      "cardinality": "zero_or_one",
+      "parent_table": "file_set",
+      "parent_columns": [
+        "id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (file_set_id) REFERENCES file_set (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
+    },
+    {
+      "table": "file_set_file_info",
+      "columns": [
+        "file_info_id"
+      ],
+      "cardinality": "zero_or_one",
+      "parent_table": "file_info",
+      "parent_columns": [
+        "id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (file_info_id) REFERENCES file_info (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
+    },
+    {
+      "table": "file_set_file_info",
+      "columns": [
+        "file_set_id"
+      ],
+      "cardinality": "zero_or_one",
+      "parent_table": "file_set",
+      "parent_columns": [
+        "id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (file_set_id) REFERENCES file_set (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
+    },
+    {
+      "table": "system_libretro_core",
+      "columns": [
+        "system_id"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "system",
+      "parent_columns": [
+        "id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (system_id) REFERENCES system (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
     }
   ],
   "driver": {

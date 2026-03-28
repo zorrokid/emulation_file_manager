@@ -1,21 +1,16 @@
-# emulator
+# system_libretro_core
 
 ## Description
-
-Emulator configurations for running software on different systems
 
 <details>
 <summary><strong>Table Definition</strong></summary>
 
 ```sql
-CREATE TABLE emulator (
-    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-    name TEXT NOT NULL,
-    executable TEXT NOT NULL,
-    extract_files INTEGER NOT NULL,
-    arguments TEXT NOT NULL, -- arguments as JSON string 
-    system_id INTEGER NOT NULL,
-    FOREIGN KEY (system_id) REFERENCES system(id) ON DELETE CASCADE
+CREATE TABLE "system_libretro_core" (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+    system_id INTEGER NOT NULL REFERENCES system(id) ON DELETE CASCADE,
+    core_name TEXT NOT NULL,
+    UNIQUE(system_id, core_name)
 )
 ```
 
@@ -26,11 +21,8 @@ CREATE TABLE emulator (
 | Name | Type | Default | Nullable | Children | Parents | Comment |
 | ---- | ---- | ------- | -------- | -------- | ------- | ------- |
 | id | INTEGER |  | false |  |  |  |
-| name | TEXT |  | false |  |  |  |
-| executable | TEXT |  | false |  |  |  |
-| extract_files | INTEGER |  | false |  |  |  |
-| arguments | TEXT |  | false |  |  |  |
 | system_id | INTEGER |  | false |  | [system](system.md) |  |
+| core_name | TEXT |  | false |  |  |  |
 
 ## Constraints
 
@@ -38,10 +30,17 @@ CREATE TABLE emulator (
 | ---- | ---- | ---------- |
 | id | PRIMARY KEY | PRIMARY KEY (id) |
 | - (Foreign key ID: 0) | FOREIGN KEY | FOREIGN KEY (system_id) REFERENCES system (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE |
+| sqlite_autoindex_system_libretro_core_1 | UNIQUE | UNIQUE (system_id, core_name) |
+
+## Indexes
+
+| Name | Definition |
+| ---- | ---------- |
+| sqlite_autoindex_system_libretro_core_1 | UNIQUE (system_id, core_name) |
 
 ## Relations
 
-![er](emulator.svg)
+![er](system_libretro_core.svg)
 
 ---
 

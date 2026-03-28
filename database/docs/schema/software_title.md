@@ -2,6 +2,8 @@
 
 ## Description
 
+Individual software titles that can belong to a franchise
+
 <details>
 <summary><strong>Table Definition</strong></summary>
 

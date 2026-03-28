@@ -2,6 +2,8 @@
 
 ## Description
 
+Tracking log for file synchronization operations
+
 <details>
 <summary><strong>Table Definition</strong></summary>
 

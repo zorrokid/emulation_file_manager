@@ -9,22 +9,22 @@ er:
 
 comments:
   - table: system
-    comment: Platform/console systems (e.g., Commodore 64, Atari 2600)
+    tableComment: Platform/console systems (e.g., Commodore 64, Atari 2600)
   - table: emulator
-    comment: Emulator configurations for running software on different systems
+    tableComment: Emulator configurations for running software on different systems
   - table: franchise
-    comment: Game/software franchises (e.g., Zork, Jet Set Willy)
+    tableComment: Game/software franchises (e.g., Zork, Jet Set Willy)
   - table: software_title
-    comment: Individual software titles that can belong to a franchise
+    tableComment: Individual software titles that can belong to a franchise
   - table: release
-    comment: Specific releases of software (versions, editions, regions, compilations, different media)
+    tableComment: Specific releases of software (versions, editions, regions, compilations, different media)
   - table: file_info
-    comment: Metadata about files including checksums and sizes
+    tableComment: Metadata about files including checksums and sizes
   - table: file_set
-    comment: Collections of files that belong together
+    tableComment: Collections of files that belong together
   - table: file_sync_log
-    comment: Tracking log for file synchronization operations
+    tableComment: Tracking log for file synchronization operations
   - table: setting
-    comment: Application settings stored as key-value pairs
+    tableComment: Application settings stored as key-value pairs
   - table: document_viewer
-    comment: Configuration for external document viewers
+    tableComment: Configuration for external document viewers
