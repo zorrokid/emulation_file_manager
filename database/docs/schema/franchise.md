@@ -2,6 +2,8 @@
 
 ## Description
 
+Game/software franchises (e.g., Zork, Jet Set Willy)
+
 <details>
 <summary><strong>Table Definition</strong></summary>
 

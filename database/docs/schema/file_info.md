@@ -2,6 +2,8 @@
 
 ## Description
 
+Metadata about files including checksums and sizes
+
 <details>
 <summary><strong>Table Definition</strong></summary>
 
@@ -20,7 +22,7 @@ CREATE TABLE file_info (
 
 | Name | Type | Default | Nullable | Children | Parents | Comment |
 | ---- | ---- | ------- | -------- | -------- | ------- | ------- |
-| id | INTEGER |  | false | [file_set_file_info](file_set_file_info.md) [file_info_system](file_info_system.md) |  |  |
+| id | INTEGER |  | false | [file_info_system](file_info_system.md) [file_set_file_info](file_set_file_info.md) |  |  |
 | sha1_checksum | BLOB |  | false |  |  |  |
 | file_size | INTEGER |  | false |  |  |  |
 | archive_file_name | TEXT |  | false |  |  |  |

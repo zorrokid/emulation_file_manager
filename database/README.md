@@ -6,6 +6,7 @@ Database URL is defined in `.env` file.
 
 Creating database: `sqlx database create`
 
+
 Dev db is created to data/db.sqlite 
 
 ## runtime database
@@ -30,13 +31,17 @@ Run migrations: `sqlx migrate run`
 
 Migrations are automatically run at application startup via `sqlx::migrate!().run(&pool)` in `lib.rs`.
 
+
+# Schema Documentation
+
+Schema documentation is maintained using `tbls`. There's configuration file `tbls.yml` in workspace root.
+
 ## Updating Schema Documentation
 
-After creating or running migrations, regenerate the schema documentation:
+After creating or running migrations, regenerate the schema documentation from workspace root:
 
 ```bash
-# From the workspace root
-tbls doc
+tbls doc --force
 ```
 
 This updates the ER diagrams and table documentation in `database/docs/schema/`. Commit the updated documentation along with your migrations.
