@@ -5,8 +5,7 @@ use core_types::{FileType, ReadFile, item_type::ItemType};
 use crate::{
     error::Error,
     mass_import::{
-        common_steps::context::CommonMassImportState,
-        with_dat::context::{DatFileMassImportState, DatImportItem},
+        common_steps::context::CommonMassImportState, with_dat::context::DatFileMassImportState,
         with_files_only::context::FilesOnlyMassImportState,
     },
 };

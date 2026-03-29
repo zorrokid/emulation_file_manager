@@ -28,13 +28,6 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-pub enum ImportItemStatus {
-    Pending,
-    Success,
-    Failed(String), // Error message
-}
-
-#[derive(Debug, Clone)]
 pub struct DatImportItem {
     pub dat_game: DatGame,
     pub release_name: String,
@@ -42,7 +35,6 @@ pub struct DatImportItem {
     // This can be passed directly to create_file_set in file_import service to proceed with
     // actual creation of file sets.
     pub file_set: Option<FileSetImportModel>,
-    pub status: ImportItemStatus,
 }
 
 impl DatImportItem {
@@ -54,7 +46,6 @@ impl DatImportItem {
             release_name,
             software_title_name,
             file_set,
-            status: ImportItemStatus::Pending,
         }
     }
 }
