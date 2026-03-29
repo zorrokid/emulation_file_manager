@@ -1,6 +1,9 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
-use core_types::{FileType, item_type::ItemType};
+use core_types::{FileType, ReadFile, item_type::ItemType};
 use domain::title_normalizer::file_name_to_canonical_software_title;
 use file_metadata::SendReaderFactoryFn;
 use flume::Sender;
@@ -61,6 +64,51 @@ impl FilesOnlyMassImportContext {
             progress_tx,
         }
     }
+
+    fn create_file_set_import_model(
+        &self,
+        file_path: &Path,
+        metadata: &[ReadFile],
+        system_id: i64,
+        file_type: FileType,
+        item_type: Option<ItemType>,
+        source: String,
+    ) -> FileSetImportModel {
+        let file_name = file_path.file_name().unwrap().to_string_lossy().to_string();
+        let software_title = file_name_to_canonical_software_title(&file_name);
+
+        FileSetImportModel {
+            file_set_name: file_path.file_stem().unwrap().to_string_lossy().to_string(),
+            file_set_file_name: file_path.file_name().unwrap().to_string_lossy().to_string(),
+            import_files: vec![FileImportSource {
+                path: PathBuf::from(file_path),
+                content: metadata
+                    .iter()
+                    .map(|f| {
+                        (
+                            f.sha1_checksum,
+                            ImportFileContent {
+                                file_name: f.file_name.clone(),
+                                file_size: f.file_size,
+                                sha1_checksum: f.sha1_checksum,
+                            },
+                        )
+                    })
+                    .collect(),
+            }],
+            selected_files: metadata.iter().map(|meta| meta.sha1_checksum).collect(),
+            system_ids: vec![system_id],
+            source: source.clone(),
+            file_type,
+            item_ids: vec![],
+            item_types: item_type.into_iter().collect(),
+            create_release: Some(CreateReleaseParams {
+                software_title_name: software_title,
+                release_name: "".to_string(), // TODO: improve later,
+            }),
+            dat_extras: None,
+        }
+    }
 }
 
 impl MassImportContextOps for FilesOnlyMassImportContext {
@@ -95,41 +143,14 @@ impl MassImportContextOps for FilesOnlyMassImportContext {
         let source = self.input.source.clone();
         let mut file_import_sets: Vec<FileSetImportModel> = vec![];
         for (file_path, metadata) in self.state.common_state.file_metadata.iter() {
-            let file_name = file_path.file_name().unwrap().to_string_lossy().to_string();
-            let software_title = file_name_to_canonical_software_title(&file_name);
-
-            let file_set_import_model = FileSetImportModel {
-                file_set_name: file_path.file_stem().unwrap().to_string_lossy().to_string(),
-                file_set_file_name: file_path.file_name().unwrap().to_string_lossy().to_string(),
-                import_files: vec![FileImportSource {
-                    path: file_path.clone(),
-                    content: metadata
-                        .iter()
-                        .map(|f| {
-                            (
-                                f.sha1_checksum,
-                                ImportFileContent {
-                                    file_name: f.file_name.clone(),
-                                    file_size: f.file_size,
-                                    sha1_checksum: f.sha1_checksum,
-                                },
-                            )
-                        })
-                        .collect(),
-                }],
-                selected_files: metadata.iter().map(|meta| meta.sha1_checksum).collect(),
-                system_ids: vec![system_id],
-                source: source.clone(),
+            file_import_sets.push(self.create_file_set_import_model(
+                file_path,
+                metadata,
+                system_id,
                 file_type,
-                item_ids: vec![],
-                item_types: item_type.into_iter().collect(),
-                create_release: Some(CreateReleaseParams {
-                    software_title_name: software_title,
-                    release_name: "".to_string(), // TODO: improve later,
-                }),
-                dat_extras: None,
-            };
-            file_import_sets.push(file_set_import_model);
+                item_type,
+                source.clone(),
+            ));
         }
         file_import_sets
     }
