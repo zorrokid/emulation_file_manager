@@ -332,6 +332,7 @@ mod tests {
         file_set::mock_file_set_service::MockFileSetService,
         file_system_ops::{FileSystemOps, SimpleDirEntry, mock::MockFileSystemOps},
         mass_import::{
+            common_steps::context::CommonMassImportState,
             models::{FileSetImportResult, MassImportInput, MassImportSyncEvent},
             test_utils::create_mock_reader_factory,
             with_dat::context::DatFileMassImportOps,
@@ -339,6 +340,7 @@ mod tests {
     };
 
     struct TestMassImportContext {
+        common_state: CommonMassImportState,
         state: TestMassImportState,
         ops: DatFileMassImportOps,
         input: MassImportInput,
@@ -361,6 +363,7 @@ mod tests {
             state: Option<TestMassImportState>,
         ) -> Self {
             TestMassImportContext {
+                common_state: CommonMassImportState::default(),
                 state: state.unwrap_or_default(),
                 ops,
                 input,
@@ -397,6 +400,14 @@ mod tests {
     }
 
     impl MassImportContextOps for TestMassImportContext {
+        fn common_state(&self) -> &CommonMassImportState {
+            &self.common_state
+        }
+
+        fn common_state_mut(&mut self) -> &mut CommonMassImportState {
+            &mut self.common_state
+        }
+
         fn reader_factory_fn(&self) -> Arc<SendReaderFactoryFn> {
             self.ops.reader_factory_fn.clone()
         }

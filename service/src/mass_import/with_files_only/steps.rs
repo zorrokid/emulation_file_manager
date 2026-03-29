@@ -20,7 +20,7 @@ impl PipelineStep<FilesOnlyMassImportContext> for FilterExistingFileSetsStep {
     }
 
     fn should_execute(&self, context: &FilesOnlyMassImportContext) -> bool {
-        !context.state.file_metadata.is_empty()
+        !context.state.common_state.file_metadata.is_empty()
     }
 
     async fn execute(&self, context: &mut FilesOnlyMassImportContext) -> StepAction {
@@ -67,6 +67,7 @@ impl PipelineStep<FilesOnlyMassImportContext> for FilterExistingFileSetsStep {
                         );
                         context
                             .state
+                            .common_state
                             .file_metadata
                             .remove(&file_set_import_model.import_files[0].path);
                     }
@@ -156,7 +157,7 @@ mod tests {
             ),
         ]);
 
-        context.state.file_metadata = file_meta_data;
+        context.state.common_state.file_metadata = file_meta_data;
 
         insert_file_set_to_db(&context, &file_1_path, FileType::Rom).await;
 
@@ -167,8 +168,20 @@ mod tests {
 
         // Assert
         assert!(matches!(action, StepAction::Continue));
-        assert!(!context.state.file_metadata.contains_key(&file_1_path));
-        assert!(context.state.file_metadata.contains_key(&file_2_path));
+        assert!(
+            !context
+                .state
+                .common_state
+                .file_metadata
+                .contains_key(&file_1_path)
+        );
+        assert!(
+            context
+                .state
+                .common_state
+                .file_metadata
+                .contains_key(&file_2_path)
+        );
 
         // insert first file set to test database
         /*let import_files = context.get_import_file_sets();

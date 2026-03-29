@@ -4,8 +4,8 @@ use core_types::{FileType, ReadFile, item_type::ItemType};
 
 use crate::{
     error::Error,
-    file_import::model::FileSetImportModel,
     mass_import::{
+        common_steps::context::CommonMassImportState,
         with_dat::context::{DatFileMassImportState, DatImportItem},
         with_files_only::context::FilesOnlyMassImportState,
     },
@@ -63,13 +63,7 @@ impl From<DatFileMassImportState> for DatFileMassImportResult {
         DatFileMassImportResult {
             dat_import_items: state.import_items,
             dat_file: state.dat_file,
-            result: FileImportResult {
-                read_ok_files: state.read_ok_files,
-                read_failed_files: state.read_failed_files,
-                dir_scan_errors: state.dir_scan_errors,
-                file_metadata: state.file_metadata,
-                import_results: state.import_results,
-            },
+            result: state.common_state.into(),
         }
     }
 }
@@ -79,16 +73,22 @@ pub struct FilesOnlyMassImportResult {
     pub result: FileImportResult,
 }
 
+impl From<CommonMassImportState> for FileImportResult {
+    fn from(state: CommonMassImportState) -> Self {
+        FileImportResult {
+            read_ok_files: state.read_ok_files,
+            read_failed_files: state.read_failed_files,
+            dir_scan_errors: state.dir_scan_errors,
+            file_metadata: state.file_metadata,
+            import_results: state.import_results,
+        }
+    }
+}
+
 impl From<FilesOnlyMassImportState> for FilesOnlyMassImportResult {
     fn from(state: FilesOnlyMassImportState) -> Self {
         FilesOnlyMassImportResult {
-            result: FileImportResult {
-                read_ok_files: state.read_ok_files,
-                read_failed_files: state.read_failed_files,
-                dir_scan_errors: state.dir_scan_errors,
-                file_metadata: state.file_metadata,
-                import_results: state.import_results,
-            },
+            result: state.common_state.into(),
         }
     }
 }

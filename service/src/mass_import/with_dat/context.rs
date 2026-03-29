@@ -6,15 +6,14 @@ use std::{
 
 use crate::{
     dat_game_status_service::DatGameFileSetStatus,
-    error::Error,
     file_import::model::CreateReleaseParams,
     file_set::FileSetServiceOps,
     mass_import::{
-        common_steps::context::{MassImportContextOps, MassImportDeps},
-        models::{FileSetImportResult, MassImportInput, MassImportSyncEvent},
+        common_steps::context::{CommonMassImportState, MassImportContextOps, MassImportDeps},
+        models::{MassImportInput, MassImportSyncEvent},
     },
 };
-use core_types::{ReadFile, Sha1Checksum, sha1_from_hex_string};
+use core_types::{Sha1Checksum, sha1_from_hex_string};
 use dat_file_parser::DatFileParserOps;
 use domain::naming_conventions::no_intro::{DatFile, DatGame, DatHeader, DatRom};
 use file_metadata::SendReaderFactoryFn;
@@ -94,18 +93,20 @@ impl std::fmt::Debug for DatFileMassImportOps {
 
 #[derive(Default, Debug)]
 pub struct DatFileMassImportState {
+    pub common_state: CommonMassImportState,
     pub import_items: Vec<DatImportItem>,
-    pub read_ok_files: Vec<PathBuf>,
-    pub read_failed_files: Vec<PathBuf>,
-    pub dir_scan_errors: Vec<Error>,
-    pub file_metadata: HashMap<PathBuf, Vec<ReadFile>>,
     pub dat_file: Option<DatFile>,
     pub dat_file_id: Option<i64>,
-    pub import_results: Vec<FileSetImportResult>,
     pub statuses: Vec<DatGameFileSetStatus>,
 }
 
 impl MassImportContextOps for DatFileMassImportContext {
+    fn common_state(&self) -> &CommonMassImportState {
+        &self.state.common_state
+    }
+    fn common_state_mut(&mut self) -> &mut CommonMassImportState {
+        &mut self.state.common_state
+    }
     fn reader_factory_fn(&self) -> Arc<SendReaderFactoryFn> {
         self.ops.reader_factory_fn.clone()
     }
@@ -118,30 +119,6 @@ impl MassImportContextOps for DatFileMassImportContext {
         &self.input.source_path
     }
 
-    fn read_ok_files_mut(&mut self) -> &mut Vec<PathBuf> {
-        &mut self.state.read_ok_files
-    }
-
-    fn read_ok_files(&self) -> &Vec<PathBuf> {
-        &self.state.read_ok_files
-    }
-
-    fn read_failed_files(&self) -> &Vec<PathBuf> {
-        &self.state.read_failed_files
-    }
-
-    fn read_failed_files_mut(&mut self) -> &mut Vec<PathBuf> {
-        &mut self.state.read_failed_files
-    }
-
-    fn dir_scan_errors(&mut self) -> &mut Vec<Error> {
-        &mut self.state.dir_scan_errors
-    }
-
-    fn file_metadata(&mut self) -> &mut HashMap<PathBuf, Vec<ReadFile>> {
-        &mut self.state.file_metadata
-    }
-
     fn get_import_file_sets(&self) -> Vec<FileSetImportModel> {
         self.get_import_items()
             .iter()
@@ -151,10 +128,6 @@ impl MassImportContextOps for DatFileMassImportContext {
 
     fn import_service_ops(&self) -> Arc<dyn FileImportServiceOps> {
         self.ops.file_import_service_ops.clone()
-    }
-
-    fn import_results(&mut self) -> &mut Vec<FileSetImportResult> {
-        &mut self.state.import_results
     }
 
     fn progress_tx(&self) -> &Option<Sender<MassImportSyncEvent>> {
@@ -200,6 +173,7 @@ impl DatFileMassImportContext {
 
     pub fn build_sha1_to_file_map(&self) -> HashMap<Sha1Checksum, PathBuf> {
         self.state
+            .common_state
             .file_metadata
             .iter()
             .flat_map(|(path, metadata_entries)| {
@@ -333,7 +307,7 @@ impl DatFileMassImportContext {
 #[cfg(test)]
 mod tests {
 
-    use core_types::{FileType, item_type::ItemType};
+    use core_types::{FileType, ReadFile, item_type::ItemType};
     use dat_file_parser::MockDatParser;
     use database::repository_manager::RepositoryManager;
     use file_metadata::create_mock_factory_with_test_data;
@@ -482,7 +456,7 @@ mod tests {
         };
         let mut context = create_test_context(Some(dat_file.clone()), Some(input)).await;
 
-        context.state.file_metadata = file_metadata;
+        context.state.common_state.file_metadata = file_metadata;
         context.state.statuses = statuses;
 
         // Execute: Get import items
@@ -545,13 +519,18 @@ mod tests {
     async fn test_get_non_failed_files() {
         let mut context = create_test_context(None, None).await;
 
-        let state = DatFileMassImportState {
+        let common_state = CommonMassImportState {
             read_ok_files: vec![
                 PathBuf::from("/test/file1.zip"),
                 PathBuf::from("/test/file2.zip"),
                 PathBuf::from("/test/file3.zip"),
             ],
             read_failed_files: vec![PathBuf::from("/test/file2.zip")],
+            ..Default::default()
+        };
+
+        let state = DatFileMassImportState {
+            common_state,
             ..Default::default()
         };
         context.state = state;

@@ -243,7 +243,7 @@ impl PipelineStep<DatFileMassImportContext> for FilterExistingFileSetsStep {
     }
     fn should_execute(&self, context: &DatFileMassImportContext) -> bool {
         // we need file metadata to check for existing file sets
-        !context.state.file_metadata.is_empty()
+        !context.state.common_state.file_metadata.is_empty()
             // dat file has to be parsed for this step
             && context.state.dat_file.is_some()
             // dat file has to be inserted for this step
@@ -398,11 +398,15 @@ impl PipelineStep<DatFileMassImportContext> for HandleExistingFileSetsStep {
                             ))
                         }
                     };
-                    context.state.import_results.push(FileSetImportResult {
-                        file_set_id: Some(file_set_id),
-                        status,
-                        file_set_name: game.name.clone(),
-                    });
+                    context
+                        .state
+                        .common_state
+                        .import_results
+                        .push(FileSetImportResult {
+                            file_set_id: Some(file_set_id),
+                            status,
+                            file_set_name: game.name.clone(),
+                        });
                 }
                 DatGameFileSetStatus::ExistingWithReleaseAndLinkedToDat {
                     file_set_id,
@@ -414,11 +418,15 @@ impl PipelineStep<DatFileMassImportContext> for HandleExistingFileSetsStep {
                         file_set_id = file_set_id,
                         "File set already exists with release and linked to dat file, skipping import",
                     );
-                    context.state.import_results.push(FileSetImportResult {
-                        file_set_id: Some(*file_set_id),
-                        status: FileSetImportStatus::AlreadyExists,
-                        file_set_name: game.name.clone(),
-                    });
+                    context
+                        .state
+                        .common_state
+                        .import_results
+                        .push(FileSetImportResult {
+                            file_set_id: Some(*file_set_id),
+                            status: FileSetImportStatus::AlreadyExists,
+                            file_set_name: game.name.clone(),
+                        });
                 }
                 _ => {}
             }
@@ -843,7 +851,7 @@ mod tests {
             dat_file.games[0].get_software_title_name(),
             "Software title name should match the expected format"
         );
-        let results = context.state.import_results;
+        let results = context.state.common_state.import_results;
         assert_eq!(results.len(), 1);
         let result = &results[0];
         assert_eq!(result.status, FileSetImportStatus::Success);
@@ -912,7 +920,7 @@ mod tests {
 
         // Assert
         assert!(matches!(result, StepAction::Continue));
-        let results = context.state.import_results;
+        let results = context.state.common_state.import_results;
         assert_eq!(results.len(), 1);
         let result = &results[0];
         assert_eq!(result.status, FileSetImportStatus::AlreadyExists);
