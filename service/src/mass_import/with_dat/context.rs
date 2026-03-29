@@ -15,7 +15,7 @@ use crate::{
 };
 use core_types::{Sha1Checksum, sha1_from_hex_string};
 use dat_file_parser::DatFileParserOps;
-use domain::naming_conventions::no_intro::{DatFile, DatGame, DatHeader};
+use domain::naming_conventions::no_intro::{DatFile, DatGame, DatHeader, DatRom};
 use file_metadata::SendReaderFactoryFn;
 use flume::Sender;
 
@@ -150,9 +150,10 @@ impl DatFileMassImportContext {
         tracing::info!(game = game.name.as_str(), "Processing DAT game");
 
         let mut import_files: HashMap<PathBuf, Vec<ImportFileContent>> = HashMap::new();
-        let mut available_roms: Vec<domain::naming_conventions::no_intro::DatRom> = vec![];
-        let mut missing_roms: Vec<domain::naming_conventions::no_intro::DatRom> = vec![];
+        let mut available_roms: Vec<DatRom> = vec![];
+        let mut missing_roms: Vec<DatRom> = vec![];
 
+        let mut selected_files: Vec<Sha1Checksum> = vec![];
         for rom in &game.roms {
             let sha1_bytes_res: Sha1Checksum =
                 sha1_from_hex_string(&rom.sha1).expect("Invalid SHA1 in DAT");
@@ -164,6 +165,7 @@ impl DatFileMassImportContext {
                     "Matched ROM to source file"
                 );
                 available_roms.push(rom.clone());
+                selected_files.push(sha1_bytes_res);
                 import_files
                     .entry(source_file.clone())
                     .or_default()
@@ -180,13 +182,6 @@ impl DatFileMassImportContext {
                 missing_roms.push(rom.clone());
             }
         }
-
-        let selected_files: Vec<Sha1Checksum> = available_roms
-            .iter()
-            .filter_map(|rom| sha1_from_hex_string(&rom.sha1).ok())
-            .collect();
-
-        let game: domain::naming_conventions::no_intro::DatGame = game.clone();
 
         let create_release_params = CreateReleaseParams {
             release_name: game.get_release_name(),
