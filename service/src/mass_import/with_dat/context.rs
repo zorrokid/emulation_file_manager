@@ -119,6 +119,11 @@ impl MassImportContextOps for DatFileMassImportContext {
         &self.input.source_path
     }
 
+    fn can_import_file_sets(&self) -> bool {
+        // File set statuses has to be determined and the parsed dat file has to be available.
+        !self.state.statuses.is_empty() && self.state.dat_file.is_some()
+    }
+
     fn get_import_file_sets(&self) -> Vec<FileSetImportModel> {
         self.get_import_items()
             .iter()

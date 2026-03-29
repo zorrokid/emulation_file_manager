@@ -61,4 +61,5 @@ pub trait MassImportContextOps {
         &mut self.common_state_mut().import_results
     }
     fn progress_tx(&self) -> &Option<Sender<MassImportSyncEvent>>;
+    fn can_import_file_sets(&self) -> bool;
 }

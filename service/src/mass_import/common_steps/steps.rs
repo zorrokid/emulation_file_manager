@@ -207,7 +207,7 @@ impl<T: MassImportContextOps + Send + Sync> PipelineStep<T> for ImportFileSetsSt
     }
 
     fn should_execute(&self, context: &T) -> bool {
-        !context.get_import_file_sets().is_empty()
+        context.can_import_file_sets()
     }
 
     async fn execute(&self, context: &mut T) -> StepAction {
@@ -458,6 +458,10 @@ mod tests {
 
         fn progress_tx(&self) -> &Option<Sender<MassImportSyncEvent>> {
             &None
+        }
+
+        fn can_import_file_sets(&self) -> bool {
+            true
         }
     }
 

@@ -84,6 +84,10 @@ impl MassImportContextOps for FilesOnlyMassImportContext {
         &self.input.source_path
     }
 
+    fn can_import_file_sets(&self) -> bool {
+        !self.state.common_state.file_metadata.is_empty()
+    }
+
     fn get_import_file_sets(&self) -> Vec<FileSetImportModel> {
         let system_id = self.input.system_id;
         let file_type = self.input.file_type;
