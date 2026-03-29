@@ -76,14 +76,12 @@ impl From<DatFileMassImportState> for DatFileMassImportResult {
 
 #[derive(Debug, Clone)]
 pub struct FilesOnlyMassImportResult {
-    pub imported_file_sets: Vec<FileSetImportModel>,
     pub result: FileImportResult,
 }
 
 impl From<FilesOnlyMassImportState> for FilesOnlyMassImportResult {
     fn from(state: FilesOnlyMassImportState) -> Self {
         FilesOnlyMassImportResult {
-            imported_file_sets: state.import_items,
             result: FileImportResult {
                 read_ok_files: state.read_ok_files,
                 read_failed_files: state.read_failed_files,

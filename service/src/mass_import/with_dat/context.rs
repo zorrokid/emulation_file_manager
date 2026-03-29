@@ -102,7 +102,6 @@ pub struct DatFileMassImportState {
     pub dat_file: Option<DatFile>,
     pub dat_file_id: Option<i64>,
     pub import_results: Vec<FileSetImportResult>,
-    pub game_file_set_statuses: Vec<DatGameFileSetStatus>,
     pub statuses: Vec<DatGameFileSetStatus>,
 }
 
