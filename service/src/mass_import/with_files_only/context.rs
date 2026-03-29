@@ -29,7 +29,6 @@ pub struct FilesOnlyMassImportOps {
 #[derive(Default)]
 pub struct FilesOnlyMassImportState {
     pub common_state: CommonMassImportState,
-    pub import_items: Vec<FileSetImportModel>,
 }
 
 #[derive(Debug, Clone)]
@@ -225,7 +224,6 @@ mod tests {
                 file_metadata: HashMap::from([(file_path.clone(), file_metadata)]),
                 import_results: vec![],
             },
-            import_items: vec![],
         };
 
         let context = FilesOnlyMassImportContext {

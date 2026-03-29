@@ -85,7 +85,6 @@ impl std::fmt::Debug for DatFileMassImportOps {
 #[derive(Default, Debug)]
 pub struct DatFileMassImportState {
     pub common_state: CommonMassImportState,
-    pub import_items: Vec<DatImportItem>,
     pub dat_file: Option<DatFile>,
     pub dat_file_id: Option<i64>,
     pub statuses: Vec<DatGameFileSetStatus>,

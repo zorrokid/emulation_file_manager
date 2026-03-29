@@ -38,7 +38,6 @@ pub struct FileImportResult {
 
 #[derive(Debug, Clone)]
 pub struct DatFileMassImportResult {
-    pub dat_import_items: Vec<DatImportItem>,
     pub dat_file: Option<DatFile>,
     pub result: FileImportResult,
 }
@@ -61,7 +60,6 @@ pub struct FileSetImportResult {
 impl From<DatFileMassImportState> for DatFileMassImportResult {
     fn from(state: DatFileMassImportState) -> Self {
         DatFileMassImportResult {
-            dat_import_items: state.import_items,
             dat_file: state.dat_file,
             result: state.common_state.into(),
         }
