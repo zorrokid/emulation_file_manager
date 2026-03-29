@@ -333,14 +333,13 @@ mod tests {
         file_system_ops::{FileSystemOps, SimpleDirEntry, mock::MockFileSystemOps},
         mass_import::{
             common_steps::context::CommonMassImportState,
-            models::{FileSetImportResult, MassImportInput, MassImportSyncEvent},
+            models::{MassImportInput, MassImportSyncEvent},
             test_utils::create_mock_reader_factory,
             with_dat::context::DatFileMassImportOps,
         },
     };
 
     struct TestMassImportContext {
-        common_state: CommonMassImportState,
         state: TestMassImportState,
         ops: DatFileMassImportOps,
         input: MassImportInput,
@@ -348,11 +347,7 @@ mod tests {
 
     #[derive(Default, Debug)]
     pub struct TestMassImportState {
-        pub read_ok_files: Vec<PathBuf>,
-        pub read_failed_files: Vec<PathBuf>,
-        pub dir_scan_errors: Vec<Error>,
-        pub file_metadata: HashMap<PathBuf, Vec<ReadFile>>,
-        pub import_results: Vec<FileSetImportResult>,
+        pub common_state: CommonMassImportState,
         pub file_sets_to_import: Vec<FileSetImportModel>,
     }
 
@@ -363,7 +358,6 @@ mod tests {
             state: Option<TestMassImportState>,
         ) -> Self {
             TestMassImportContext {
-                common_state: CommonMassImportState::default(),
                 state: state.unwrap_or_default(),
                 ops,
                 input,
@@ -401,11 +395,11 @@ mod tests {
 
     impl MassImportContextOps for TestMassImportContext {
         fn common_state(&self) -> &CommonMassImportState {
-            &self.common_state
+            &self.state.common_state
         }
 
         fn common_state_mut(&mut self) -> &mut CommonMassImportState {
-            &mut self.common_state
+            &mut self.state.common_state
         }
 
         fn reader_factory_fn(&self) -> Arc<SendReaderFactoryFn> {
@@ -420,40 +414,12 @@ mod tests {
             &self.input.source_path
         }
 
-        fn read_ok_files_mut(&mut self) -> &mut Vec<PathBuf> {
-            &mut self.state.read_ok_files
-        }
-
-        fn read_ok_files(&self) -> &Vec<PathBuf> {
-            &self.state.read_ok_files
-        }
-
-        fn read_failed_files(&self) -> &Vec<PathBuf> {
-            &self.state.read_failed_files
-        }
-
-        fn read_failed_files_mut(&mut self) -> &mut Vec<PathBuf> {
-            &mut self.state.read_failed_files
-        }
-
-        fn dir_scan_errors(&mut self) -> &mut Vec<Error> {
-            &mut self.state.dir_scan_errors
-        }
-
-        fn file_metadata(&mut self) -> &mut HashMap<PathBuf, Vec<ReadFile>> {
-            &mut self.state.file_metadata
-        }
-
         fn get_import_file_sets(&self) -> Vec<FileSetImportModel> {
             self.state.file_sets_to_import.clone()
         }
 
         fn import_service_ops(&self) -> Arc<dyn FileImportServiceOps> {
             self.ops.file_import_service_ops.clone()
-        }
-
-        fn import_results(&mut self) -> &mut Vec<FileSetImportResult> {
-            &mut self.state.import_results
         }
 
         fn progress_tx(&self) -> &Option<Sender<MassImportSyncEvent>> {
@@ -502,11 +468,29 @@ mod tests {
         let step = ReadFilesStep::<TestMassImportContext>::new();
         let result = step.execute(&mut context).await;
         assert!(matches!(result, StepAction::Continue));
-        assert_eq!(context.state.read_ok_files.len(), 2);
-        assert_eq!(context.state.dir_scan_errors.len(), 1);
-        assert!(context.state.read_ok_files.contains(&PathBuf::from(&file1)));
-        assert!(context.state.read_ok_files.contains(&PathBuf::from(&file2)));
-        assert!(context.state.dir_scan_errors.contains(&entry3_error));
+        assert_eq!(context.state.common_state.read_ok_files.len(), 2);
+        assert_eq!(context.state.common_state.dir_scan_errors.len(), 1);
+        assert!(
+            context
+                .state
+                .common_state
+                .read_ok_files
+                .contains(&PathBuf::from(&file1))
+        );
+        assert!(
+            context
+                .state
+                .common_state
+                .read_ok_files
+                .contains(&PathBuf::from(&file2))
+        );
+        assert!(
+            context
+                .state
+                .common_state
+                .dir_scan_errors
+                .contains(&entry3_error)
+        );
     }
 
     #[async_std::test]
@@ -556,32 +540,37 @@ mod tests {
 
         context
             .state
+            .common_state
             .read_ok_files
             .push(PathBuf::from("/mock/file1.zip"));
         context
             .state
+            .common_state
             .read_ok_files
             .push(PathBuf::from("/mock/file2.zip"));
 
         let step = ReadFileMetadataStep::<TestMassImportContext>::new();
         let res = step.execute(&mut context).await;
         assert!(matches!(res, StepAction::Continue));
-        assert_eq!(context.state.file_metadata.len(), 2);
+        assert_eq!(context.state.common_state.file_metadata.len(), 2);
         assert!(
             context
                 .state
+                .common_state
                 .file_metadata
                 .contains_key(&PathBuf::from("/mock/file1.zip"))
         );
         assert!(
             context
                 .state
+                .common_state
                 .file_metadata
                 .contains_key(&PathBuf::from("/mock/file2.zip"))
         );
-        assert!(context.state.read_failed_files.is_empty());
+        assert!(context.state.common_state.read_failed_files.is_empty());
         let file_1_metadata = context
             .state
+            .common_state
             .file_metadata
             .get(&PathBuf::from("/mock/file1.zip"))
             .unwrap();
@@ -594,6 +583,7 @@ mod tests {
         assert_eq!(file_1_metadata[1].sha1_checksum, [3u8; 20]);
         let file_2_metadata = context
             .state
+            .common_state
             .file_metadata
             .get(&PathBuf::from("/mock/file2.zip"))
             .unwrap();
@@ -604,6 +594,7 @@ mod tests {
         assert!(
             !context
                 .state
+                .common_state
                 .read_failed_files
                 .contains(&PathBuf::from("/mock/file1.zip"))
         );
@@ -647,7 +638,7 @@ mod tests {
         );
 
         // Pre-populate state as if previous steps succeeded
-        context.state.file_metadata = file_metadata;
+        context.state.common_state.file_metadata = file_metadata;
 
         let import_file_content = ImportFileContent {
             file_name: file.file_name.clone(),
@@ -675,6 +666,7 @@ mod tests {
 
         context
             .state
+            .common_state
             .read_ok_files
             .push(PathBuf::from("/mock/rom1.zip"));
 
@@ -684,8 +676,8 @@ mod tests {
 
         // Assert
         assert!(matches!(result, StepAction::Continue));
-        assert_eq!(context.state.import_results.len(), 1);
-        let import_result = &context.state.import_results[0];
+        assert_eq!(context.state.common_state.import_results.len(), 1);
+        let import_result = &context.state.common_state.import_results[0];
         assert_eq!(import_result.file_set_id, Some(42));
         match &import_result.status {
             FileSetImportStatus::Success => {}
