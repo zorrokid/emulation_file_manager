@@ -146,26 +146,6 @@ impl DatFileMassImportContext {
         }
     }
 
-    pub fn get_sha1_checksum_to_game_name_map(&self) -> HashMap<String, String> {
-        let map: HashMap<String, String> = self
-            .state
-            .dat_file
-            .as_ref()
-            .map(|dat_file| {
-                dat_file
-                    .games
-                    .iter()
-                    .flat_map(|game| {
-                        game.roms
-                            .iter()
-                            .map(|rom| (rom.sha1.clone(), game.name.clone()))
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-        map
-    }
-
     pub fn build_sha1_to_file_map(&self) -> HashMap<Sha1Checksum, PathBuf> {
         self.state
             .common_state
