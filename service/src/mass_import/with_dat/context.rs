@@ -15,7 +15,7 @@ use crate::{
 };
 use core_types::{Sha1Checksum, sha1_from_hex_string};
 use dat_file_parser::DatFileParserOps;
-use domain::naming_conventions::no_intro::{DatFile, DatGame, DatHeader, DatRom};
+use domain::naming_conventions::no_intro::{DatFile, DatGame, DatHeader};
 use file_metadata::SendReaderFactoryFn;
 use flume::Sender;
 
@@ -37,8 +37,6 @@ pub enum ImportItemStatus {
 #[derive(Debug, Clone)]
 pub struct DatImportItem {
     pub dat_game: DatGame,
-    pub dat_roms_available: Vec<DatRom>,
-    pub dat_roms_missing: Vec<DatRom>,
     pub release_name: String,
     pub software_title_name: String,
     // This can be passed directly to create_file_set in file_import service to proceed with
@@ -48,18 +46,11 @@ pub struct DatImportItem {
 }
 
 impl DatImportItem {
-    pub fn new(
-        dat_game: DatGame,
-        file_set: Option<FileSetImportModel>,
-        dat_roms_available: Vec<DatRom>,
-        dat_roms_missing: Vec<DatRom>,
-    ) -> Self {
+    pub fn new(dat_game: DatGame, file_set: Option<FileSetImportModel>) -> Self {
         let software_title_name = dat_game.name.clone();
         let release_name = dat_game.description.clone();
         DatImportItem {
             dat_game,
-            dat_roms_available,
-            dat_roms_missing,
             release_name,
             software_title_name,
             file_set,
@@ -281,7 +272,7 @@ impl DatFileMassImportContext {
                 dat_file_id: self.state.dat_file_id,
             }),
         });
-        DatImportItem::new(game.clone(), file_set, available_roms, missing_roms)
+        DatImportItem::new(game.clone(), file_set)
     }
 
     /// Builds the list of import items from the DAT file from those file sets that are marked as
@@ -315,6 +306,7 @@ mod tests {
     use core_types::{FileType, ReadFile, item_type::ItemType};
     use dat_file_parser::MockDatParser;
     use database::repository_manager::RepositoryManager;
+    use domain::naming_conventions::no_intro::DatRom;
     use file_metadata::create_mock_factory_with_test_data;
 
     use crate::{
@@ -472,8 +464,6 @@ mod tests {
 
         // Verify: First game should have all ROMs available
         assert_eq!(import_items[0].dat_game.name, "Game1");
-        assert_eq!(import_items[0].dat_roms_available.len(), 1);
-        assert_eq!(import_items[0].dat_roms_missing.len(), 0);
         assert_eq!(import_items[0].release_name, "First Game");
         assert_eq!(import_items[0].software_title_name, "Game1");
         assert!(import_items[0].file_set.is_some());
@@ -496,8 +486,6 @@ mod tests {
 
         // Verify: Second game should have 1 ROM available and 1 missing
         assert_eq!(import_items[1].dat_game.name, "Game2");
-        assert_eq!(import_items[1].dat_roms_available.len(), 1);
-        assert_eq!(import_items[1].dat_roms_missing.len(), 1);
         assert_eq!(import_items[1].release_name, "Second Game");
         assert_eq!(import_items[1].software_title_name, "Game2");
         assert!(import_items[1].file_set.is_some());
@@ -517,7 +505,8 @@ mod tests {
         );
 
         // Verify: Missing ROM
-        assert_eq!(import_items[1].dat_roms_missing[0].name, "game2b.rom");
+        let dat_extras = file_set_2.dat_extras.as_ref().unwrap();
+        assert_eq!(dat_extras.missing_files.len(), 1);
     }
 
     #[async_std::test]
