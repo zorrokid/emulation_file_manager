@@ -1,4 +1,8 @@
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+    sync::Arc,
+};
 
 use core_types::ReadFile;
 use database::repository_manager::RepositoryManager;
@@ -48,8 +52,9 @@ pub trait MassImportContextOps {
         &mut self.common_state_mut().dir_scan_errors
     }
     fn get_non_failed_files(&self) -> Vec<PathBuf> {
+        let failed: HashSet<_> = self.read_failed_files().iter().collect();
         let mut non_failed_files = self.read_ok_files().clone();
-        non_failed_files.retain(|file| !self.read_failed_files().contains(file));
+        non_failed_files.retain(|file| !failed.contains(file));
         non_failed_files
     }
     fn file_metadata(&mut self) -> &mut HashMap<PathBuf, Vec<ReadFile>> {
