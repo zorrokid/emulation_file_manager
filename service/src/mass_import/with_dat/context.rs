@@ -178,7 +178,7 @@ impl DatFileMassImportContext {
             if let Some(source_file) = sha1_to_file_map.get(&sha1_bytes_res) {
                 tracing::info!(
                     rom_sha1 = rom.sha1.as_str(),
-                    source_file = source_file.display().to_string().as_str(),
+                    source_file = %source_file.display(),
                     "Matched ROM to source file"
                 );
                 available_roms.push(rom.clone());

@@ -119,15 +119,12 @@ impl<T: MassImportContextOps + Send + Sync> PipelineStep<T> for ReadFileMetadata
     }
 
     fn should_execute(&self, context: &T) -> bool {
-        !context.get_non_failed_files().is_empty()
+        !context.read_ok_files().is_empty()
     }
 
     async fn execute(&self, context: &mut T) -> StepAction {
-        tracing::info!(
-            len = %context.get_non_failed_files().len(),
-            "Reading metadata for files...",
-        );
-        for file in &mut context.get_non_failed_files() {
+        tracing::info!("Reading metadata for files.",);
+        for file in &context.get_non_failed_files() {
             tracing::info!("Creating metadata reader for file: {}", file.display());
             let reader_res = (context.reader_factory_fn())(file);
             match reader_res {

@@ -182,44 +182,6 @@ mod tests {
                 .file_metadata
                 .contains_key(&file_2_path)
         );
-
-        // insert first file set to test database
-        /*let import_files = context.get_import_file_sets();
-        let file_1_file_set: &FileSetImportModel = import_files
-            .iter()
-            .find(|file_set| {
-                file_set
-                    .import_files
-                    .iter()
-                    .any(|import_file| import_file.path == file_1_path)
-            })
-            .unwrap();
-
-        let file_1_files = file_1_file_set
-            .import_files
-            .iter()
-            .flat_map(|import_file| import_file.content.values())
-            .collect::<Vec<_>>();
-        let file_set_repository = context.deps.repository_manager.get_file_set_repository();
-        file_set_repository
-            .add_file_set(
-                &file_1_file_set.file_set_name,
-                &file_1_file_set.file_set_file_name,
-                &file_1_file_set.file_type,
-                &context.input.source,
-                &file_1_files
-                    .iter()
-                    .map(|file| ImportedFile {
-                        original_file_name: file.file_name.clone(),
-                        archive_file_name: "1234abcd".to_string(),
-                        sha1_checksum: file.sha1_checksum,
-                        file_size: 1024,
-                    })
-                    .collect::<Vec<_>>(),
-                &[context.input.system_id],
-            )
-            .await
-            .unwrap();*/
     }
 
     async fn add_system(repository_manager: Arc<RepositoryManager>) -> i64 {
