@@ -83,10 +83,7 @@ impl PipelineStep<DatFileMassImportContext> for CheckExistingDatFileStep {
             .dat_file
             .as_ref()
             .expect("DAT file should be present in state");
-        println!(
-            "Checking if DAT file already exists in the database: name='{}', version='{}, system_id={}'",
-            dat_file.header.name, dat_file.header.version, context.input.system_id
-        );
+
         let is_existing_dat_res = context
             .deps
             .repository_manager
