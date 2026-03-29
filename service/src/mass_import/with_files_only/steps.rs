@@ -9,14 +9,14 @@ use crate::{
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
 
-pub struct FilterExistingFileSetsStep;
+pub struct FilterOutAlreadyExistingFileSetsStep;
 
 /// Filter out files from file_metadata that already have file sets in the system so that they
 /// won't be imported again.
 #[async_trait::async_trait]
-impl PipelineStep<FilesOnlyMassImportContext> for FilterExistingFileSetsStep {
+impl PipelineStep<FilesOnlyMassImportContext> for FilterOutAlreadyExistingFileSetsStep {
     fn name(&self) -> &'static str {
-        "filter_existing_file_sets"
+        "filter_out_already_existing_file_sets"
     }
 
     fn should_execute(&self, context: &FilesOnlyMassImportContext) -> bool {
@@ -163,7 +163,7 @@ mod tests {
 
         // Act
 
-        let step = FilterExistingFileSetsStep;
+        let step = FilterOutAlreadyExistingFileSetsStep;
         let action = step.execute(&mut context).await;
 
         // Assert

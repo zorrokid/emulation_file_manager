@@ -1,7 +1,9 @@
 use crate::{
     mass_import::{
         common_steps::steps::{ImportFileSetsStep, ReadFileMetadataStep, ReadFilesStep},
-        with_files_only::{context::FilesOnlyMassImportContext, steps::FilterExistingFileSetsStep},
+        with_files_only::{
+            context::FilesOnlyMassImportContext, steps::FilterOutAlreadyExistingFileSetsStep,
+        },
     },
     pipeline::generic_pipeline::Pipeline,
 };
@@ -11,7 +13,7 @@ impl Pipeline<FilesOnlyMassImportContext> {
         Self::with_steps(vec![
             Box::new(ReadFilesStep::<FilesOnlyMassImportContext>::new()),
             Box::new(ReadFileMetadataStep::<FilesOnlyMassImportContext>::new()),
-            Box::new(FilterExistingFileSetsStep),
+            Box::new(FilterOutAlreadyExistingFileSetsStep),
             Box::new(ImportFileSetsStep::<FilesOnlyMassImportContext>::new()),
         ])
     }

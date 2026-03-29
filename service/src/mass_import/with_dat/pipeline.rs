@@ -4,8 +4,8 @@ use crate::{
         with_dat::{
             context::DatFileMassImportContext,
             steps::{
-                CheckExistingDatFileStep, FilterExistingFileSetsStep, HandleExistingFileSetsStep,
-                ImportDatFileStep, StoreDatFileStep,
+                CategorizeFileSetsForImportStep, CheckExistingDatFileStep,
+                HandleExistingFileSetsStep, ImportDatFileStep, StoreDatFileStep,
             },
         },
     },
@@ -20,7 +20,7 @@ impl Pipeline<DatFileMassImportContext> {
             Box::new(StoreDatFileStep),
             Box::new(ReadFilesStep::<DatFileMassImportContext>::new()),
             Box::new(ReadFileMetadataStep::<DatFileMassImportContext>::new()),
-            Box::new(FilterExistingFileSetsStep),
+            Box::new(CategorizeFileSetsForImportStep),
             Box::new(ImportFileSetsStep::<DatFileMassImportContext>::new()),
             Box::new(HandleExistingFileSetsStep),
         ])

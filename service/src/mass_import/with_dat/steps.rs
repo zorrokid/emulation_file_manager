@@ -190,7 +190,9 @@ impl PipelineStep<DatFileMassImportContext> for StoreDatFileStep {
     }
 }
 
-/// This step will filter out file sets that already exist in the database based on their metadata.
+/// This step categories file sets based on their status whether they're completely new file sets,
+/// existing file sets with linking to release and dat file or not.
+///
 /// Uses DatGameStatusService to check the status of each game in dat file and determine if file
 /// set already exists in the database and if it is linked to dat file or not. The status for each
 /// game will be stored in the context state to be used in the next step to handle existing file
@@ -234,13 +236,14 @@ impl PipelineStep<DatFileMassImportContext> for StoreDatFileStep {
 /// the import. We will provide a functionality to merge software titles and releases in the
 /// future.
 ///
-pub struct FilterExistingFileSetsStep;
+pub struct CategorizeFileSetsForImportStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<DatFileMassImportContext> for FilterExistingFileSetsStep {
+impl PipelineStep<DatFileMassImportContext> for CategorizeFileSetsForImportStep {
     fn name(&self) -> &'static str {
-        "filter_existing_file_sets_step"
+        "categorize_file_sets_for_import_step"
     }
+
     fn should_execute(&self, context: &DatFileMassImportContext) -> bool {
         // we need file metadata to check for existing file sets
         !context.state.common_state.file_metadata.is_empty()
