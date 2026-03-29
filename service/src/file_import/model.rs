@@ -32,6 +32,17 @@ pub struct ImportFileContent {
     pub file_size: FileSize,
 }
 
+/// DAT-import-specific extras. Only populated during DAT-file-driven imports.
+/// When `None` on [`FileSetImportModel`], the import has no DAT association.
+#[derive(Debug, Clone, Default)]
+pub struct DatImportExtras {
+    /// ROMs declared in the DAT that could not be matched to a source file.
+    /// These are stored as `file_info` records with `is_available = false`.
+    pub missing_files: Vec<ImportFileContent>,
+    /// ID of the DAT file this file set should be linked to.
+    pub dat_file_id: Option<i64>,
+}
+
 /// Single file import source model including path and content info.
 #[derive(Debug, Clone)]
 pub struct FileImportSource {
@@ -72,6 +83,11 @@ pub struct FileImportData {
     /// TODO: instead having existing info in FileImportSoure, maybe add a separate field for it?
     /// OR: maybe provide existing files as parameter for get_new_selected_file_names
     pub import_files: Vec<FileImportSource>,
+
+    /// When importing with DAT file, some files from the DAT file can be missing. Obviously we
+    /// cannot import the actual files but we record them to file_info with is_available = false,
+    /// and link them also to the file set. So file set can have both available and missing files.
+    pub missing_files: Vec<ImportFileContent>,
 }
 
 impl FileImportData {
@@ -81,6 +97,7 @@ impl FileImportData {
             output_dir,
             selected_files: Vec::new(),
             import_files: Vec::new(),
+            missing_files: Vec::new(),
         }
     }
 
@@ -170,7 +187,8 @@ pub struct FileSetImportModel {
     pub item_types: Vec<ItemType>,
     /// If this is set, creates a release, links file set to it and creates a new software title and links the release to it.
     pub create_release: Option<CreateReleaseParams>,
-    pub dat_file_id: Option<i64>,
+    /// DAT-import-specific extras. `None` for non-DAT imports (files-only, etc.).
+    pub dat_extras: Option<DatImportExtras>,
 }
 
 #[derive(Debug)]
@@ -178,9 +196,6 @@ pub struct UpdateFileSetModel {
     // This contains only new import files to be added to the file set
     pub import_files: Vec<FileImportSource>,
     pub selected_files: Vec<Sha1Checksum>,
-    // TODO: maybe removed files is not needed, we can determine it by comparing selected_files and
-    // files already in the file set
-    //pub removed_files: Vec<Sha1Checksum>,
     pub source: String, // TODO: this should be for each import source
     pub file_set_id: i64,
     pub file_set_name: String,
@@ -204,6 +219,7 @@ mod tests {
             selected_files,
             output_dir: PathBuf::from("/imported/files"),
             import_files,
+            missing_files: vec![],
         }
     }
 

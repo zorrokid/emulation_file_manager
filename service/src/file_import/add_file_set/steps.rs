@@ -7,10 +7,9 @@ use crate::{
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
 
-/// Pipeline step that creates a new file set in the database based on the provided context. This
-/// step is responsible for creating the file set record in the database, linking it to the
-/// appropriate release and dat file if needed, and handling any errors that may occur during the
-/// database operation.
+/// Pipeline step that creates a new file set in the database:
+/// - creates a file set record in the database
+/// - links it to the release and dat file if needed
 ///
 /// If the file set is successfully created, its ID is stored in the context for use in later steps.
 ///
@@ -229,6 +228,7 @@ mod tests {
             selected_files,
             output_dir: PathBuf::from("/imported/files"),
             import_files,
+            missing_files: vec![],
         }
     }
 

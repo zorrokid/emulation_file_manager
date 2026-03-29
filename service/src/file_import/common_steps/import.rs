@@ -15,7 +15,7 @@ pub trait AddFileSetContextOps {
     fn is_new_files_to_be_imported(&self) -> bool;
 }
 
-/// Pipeline step responsible for importing files that are not already in the repository.
+/// Pipeline step responsible for importing the actual files that are not already in the collection.
 /// It uses the FileImportOps to perform the import and updates the context with the results.
 /// The step will be skipped if there are no new files to be imported.
 pub struct ImportFilesStep<T: AddFileSetContextOps> {
@@ -119,6 +119,7 @@ mod tests {
             selected_files,
             output_dir: PathBuf::from("/imported/files"),
             import_files,
+            missing_files: vec![],
         }
     }
 

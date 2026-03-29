@@ -33,6 +33,7 @@ impl<T: MassImportContextOps + Send + Sync> PipelineStep<T> for ReadFilesStep<T>
     fn name(&self) -> &'static str {
         "read_files_step"
     }
+
     async fn execute(&self, context: &mut T) -> StepAction {
         let files_res = context.fs_ops().read_dir(context.source_path());
         tracing::info!(
@@ -173,9 +174,8 @@ impl<T: MassImportContextOps + Send + Sync> PipelineStep<T> for ReadFileMetadata
 /// Step to import file sets represented by FileSetImportModel in the context and populate context
 /// with import_results for each file set import. Handles only those file sets that are new.
 ///
-/// For example, file sets to import can be compiled
-/// based on the file metadata read in the previous step and data from the DAT file if the import
-/// is based on a DAT file.
+/// For example, file sets to import can be compiled based on the file metadata read in the previous
+/// step and data from the DAT file if the import is based on a DAT file.
 ///
 /// Each file set is imported using the FileImportService and the result of
 /// each import is stored in the context.
@@ -219,7 +219,20 @@ impl<T: MassImportContextOps + Send + Sync> PipelineStep<T> for ImportFileSetsSt
             );
             let file_set_name = file_set.file_set_name.clone();
             let service = context.import_service_ops();
-            let import_res = service.create_file_set(file_set);
+            let import_res = service.create_file_set(file_set.clone());
+
+            let missing_file_messages = if let Some(dat_extras) = &file_set.dat_extras
+                && !dat_extras.missing_files.is_empty()
+            {
+                dat_extras
+                    .missing_files
+                    .iter()
+                    .map(|f| format!("Missing file: {}", f.file_name))
+                    .collect::<Vec<String>>()
+            } else {
+                vec![]
+            };
+
             let (id, status) = match import_res.await {
                 Ok(import_result) => {
                     if import_result.failed_steps.is_empty() {
@@ -227,20 +240,26 @@ impl<T: MassImportContextOps + Send + Sync> PipelineStep<T> for ImportFileSetsSt
                             file_set_id = %import_result.file_set_id,
                             "Successfully imported file set",
                         );
-                        (
-                            Some(import_result.file_set_id),
-                            FileSetImportStatus::Success,
-                        )
+                        let status = if missing_file_messages.is_empty() {
+                            FileSetImportStatus::Success
+                        } else {
+                            FileSetImportStatus::SucessWithWarnings(missing_file_messages)
+                        };
+                        (Some(import_result.file_set_id), status)
                     } else {
                         tracing::warn!(
                             file_set_id = %import_result.file_set_id,
                             "File set imported with some failed steps",
                         );
+
                         let errors: Vec<String> = import_result
                             .failed_steps
                             .iter()
                             .map(|(step, error)| format!("{}: {}", step, error))
                             .collect();
+
+                        let messages = [errors, missing_file_messages].concat();
+
                         for (step, error) in import_result.failed_steps {
                             tracing::warn!(
                                 step = %step,
@@ -250,7 +269,7 @@ impl<T: MassImportContextOps + Send + Sync> PipelineStep<T> for ImportFileSetsSt
                         }
                         (
                             Some(import_result.file_set_id),
-                            FileSetImportStatus::SucessWithWarnings(errors),
+                            FileSetImportStatus::SucessWithWarnings(messages),
                         )
                     }
                 }
@@ -636,7 +655,7 @@ mod tests {
             item_ids: vec![],
             item_types: vec![],
             create_release: None,
-            dat_file_id: None,
+            dat_extras: None,
         });
 
         context

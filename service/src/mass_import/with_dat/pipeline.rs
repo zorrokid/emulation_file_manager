@@ -21,7 +21,6 @@ impl Pipeline<DatFileMassImportContext> {
             Box::new(ReadFilesStep::<DatFileMassImportContext>::new()),
             Box::new(ReadFileMetadataStep::<DatFileMassImportContext>::new()),
             Box::new(FilterExistingFileSetsStep),
-            // This step handles only those which are new file sets
             Box::new(ImportFileSetsStep::<DatFileMassImportContext>::new()),
             Box::new(HandleExistingFileSetsStep),
         ])

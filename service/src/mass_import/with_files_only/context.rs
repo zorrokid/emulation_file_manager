@@ -143,7 +143,7 @@ impl MassImportContextOps for FilesOnlyMassImportContext {
                     software_title_name: software_title,
                     release_name: "".to_string(), // TODO: improve later,
                 }),
-                dat_file_id: None,
+                dat_extras: None,
             };
             file_import_sets.push(file_set_import_model);
         }

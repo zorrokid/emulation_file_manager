@@ -302,6 +302,7 @@ mod tests {
                 .into_iter()
                 .collect(),
             }],
+            missing_files: vec![],
         };
         let mut context = create_test_context(file_import_data).await;
         context.state.existing_files.push(FileInfo {
@@ -347,6 +348,7 @@ mod tests {
                 .into_iter()
                 .collect(),
             }],
+            missing_files: vec![],
         };
         let mut context = create_test_context(file_import_data).await;
         context.state.existing_files.push(FileInfo {

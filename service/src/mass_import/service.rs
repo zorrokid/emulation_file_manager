@@ -165,7 +165,7 @@ mod tests {
     use database::setup_test_db;
 
     #[async_std::test]
-    async fn test_mass_import_service_runs_pipeline_and_returns_result() {
+    async fn test_import_with_dat() {
         let fs_ops = MockFileSystemOps::new();
         fs_ops.add_file("/mock/Test Game.zip");
 
@@ -272,6 +272,132 @@ mod tests {
             import_result.result.import_results[0].status,
             crate::mass_import::models::FileSetImportStatus::Success,
             "First import result should be successful",
+        );
+    }
+
+    #[async_std::test]
+    async fn test_import_with_dat_has_missing_file() {
+        let fs_ops = MockFileSystemOps::new();
+        fs_ops.add_file("/mock/Test Game.zip");
+
+        let rom1_sha1_checksum: Sha1Checksum = [0xaa; 20];
+        let rom1_sha1_checksum_string = sha1_bytes_to_hex_string(&rom1_sha1_checksum);
+
+        let rom2_sha1_checksum: Sha1Checksum = [0xbb; 20];
+        let rom2_sha1_checksum_string = sha1_bytes_to_hex_string(&rom2_sha1_checksum);
+
+        let dat_game = DatGame {
+            name: "Test Game".to_string(),
+            description: "Test Game".to_string(),
+            roms: vec![
+                DatRom {
+                    name: "rom1.bin".to_string(),
+                    sha1: rom1_sha1_checksum_string.clone(),
+                    size: 123,
+                    ..Default::default()
+                },
+                DatRom {
+                    name: "rom2.bin".to_string(),
+                    sha1: rom2_sha1_checksum_string.clone(),
+                    size: 123,
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+
+        let dat_file = DatFile {
+            header: DatHeader {
+                ..Default::default()
+            },
+            games: vec![dat_game],
+        };
+
+        let dat_file_parser_ops: Arc<dyn DatFileParserOps> =
+            Arc::new(MockDatParser::new(Ok(dat_file)));
+
+        let file_import_service_ops: Arc<dyn FileImportServiceOps> = Arc::new(
+            MockFileImportServiceOps::with_create_mock(CreateMockState {
+                file_set_id: 1,
+                release_id: Some(1),
+            }),
+        );
+
+        // Metadata only contains rom1, rom2 is missing
+        let mut metadata_by_path = HashMap::new();
+        metadata_by_path.insert(
+            PathBuf::from("/mock/Test Game.zip"),
+            vec![ReadFile {
+                file_name: "rom.bin".to_string(),
+                sha1_checksum: rom1_sha1_checksum,
+                file_size: 123,
+            }],
+        );
+        let reader_factory_fn = Arc::new(create_mock_reader_factory(metadata_by_path, vec![]));
+
+        let fs_ops = Arc::new(fs_ops);
+        let pool = Arc::new(setup_test_db().await);
+        let repository_manager = Arc::new(RepositoryManager::new(pool));
+        let system_id = repository_manager
+            .get_system_repository()
+            .add_system("Test System")
+            .await
+            .unwrap();
+
+        let file_set_service_ops = Arc::new(MockFileSetService::new());
+        let service = MassImportService::new_with_ops(
+            fs_ops,
+            dat_file_parser_ops,
+            file_import_service_ops,
+            reader_factory_fn,
+            file_set_service_ops,
+            repository_manager,
+        );
+
+        let input = MassImportInput {
+            source_path: PathBuf::from("/mock"),
+            dat_file_path: Some(PathBuf::from("/mock/datfile.dat")),
+            file_type: FileType::Rom,
+            item_type: None,
+            system_id,
+        };
+
+        // Optional progress channel (not asserted here, just exercised)
+        let (tx, rx) = flume::unbounded();
+
+        // Act
+        let result = service.import_with_dat(input, Some(tx)).await;
+
+        // Assert
+        // There should be one progress event for the one file set imported
+        let event = rx.recv();
+
+        assert!(
+            event.is_ok(),
+            "Should receive a progress event during import"
+        );
+        let event = event.unwrap();
+        assert_eq!(
+            event.file_set_name, "Test Game",
+            "Progress event should have correct file set name"
+        );
+
+        assert!(
+            result.is_ok(),
+            "Mass import service should complete without error"
+        );
+
+        let import_result = result.unwrap();
+        assert!(
+            !import_result.result.import_results.is_empty(),
+            "Import items should not be empty",
+        );
+
+        assert_eq!(
+            import_result.result.import_results[0].status,
+            crate::mass_import::models::FileSetImportStatus::SucessWithWarnings(vec![
+                "Missing file: rom2.bin".to_string()
+            ])
         );
     }
 

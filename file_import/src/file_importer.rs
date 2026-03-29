@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet}, fs::File, io::Read, path::{Path, PathBuf}};
+/*use std::{collections::{HashMap, HashSet}, fs::File, io::Read, path::{Path, PathBuf}};
 
 use core_types::{FileType, ImportedFile, ReadFile, Sha1Checksum};
 use sha1::{digest::{consts::U20, generic_array::GenericArray}, Digest, Sha1};
@@ -22,7 +22,7 @@ impl<W: FileWriter> FileImporter<W> {
         for file_path in &file_import_model.file_path {
             println!(
                 "Importing file: {} with file type: {} from path: {} to output directory: {} with filter: {:?}",
-                file_import_model.file_name, file_import_model.file_type, 
+                file_import_model.file_name, file_import_model.file_type,
                 file_path.display(),
                 file_import_model.output_dir.display(),
                 file_import_model.new_files_file_name_filter
@@ -50,8 +50,8 @@ impl<W: FileWriter> FileImporter<W> {
                     &file_import_model.file_type,
                 )?;
                 imported_files_map.extend(res);
-            }   
-        } 
+            }
+        }
         Ok(imported_files_map)
     }
 }
@@ -361,4 +361,4 @@ mod tests {
         };
         assert_eq!(hash_map[&checksum], expected_file);
     }
-}
+}*/

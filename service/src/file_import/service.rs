@@ -113,11 +113,16 @@ impl FileImportService {
     ) -> Result<FileImportResult, Error> {
         let file_type = import_model.file_type;
         let output_dir = self.get_output_dir_for_file_type(&file_type);
+        let (missing_files, dat_file_id) = import_model
+            .dat_extras
+            .map(|e| (e.missing_files, e.dat_file_id))
+            .unwrap_or_default();
         let file_import_data = FileImportData {
             output_dir,
             file_type,
             selected_files: import_model.selected_files,
             import_files: import_model.import_files,
+            missing_files,
         };
 
         let ops = AddFileSetOps {
@@ -138,7 +143,7 @@ impl FileImportService {
             source: import_model.source,
             system_ids: import_model.system_ids,
             create_release: import_model.create_release,
-            dat_file_id: import_model.dat_file_id,
+            dat_file_id,
         };
 
         let mut context = AddFileSetContext::new(ops, deps, input);
@@ -173,6 +178,7 @@ impl FileImportService {
             file_type: import_model.file_type,
             selected_files: import_model.selected_files,
             import_files: import_model.import_files,
+            missing_files: vec![], // TODO?
         };
         let deps = UpdateFileSetDeps {
             repository_manager: self.repository_manager.clone(),
@@ -307,7 +313,7 @@ mod tests {
             item_ids: vec![],
             item_types: vec![],
             create_release: None,
-            dat_file_id: None,
+            dat_extras: None,
         };
 
         let result = service.create_file_set(file_set_import_model).await;

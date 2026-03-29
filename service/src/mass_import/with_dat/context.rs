@@ -23,7 +23,7 @@ use flume::Sender;
 use crate::{
     file_import::{
         file_import_service_ops::FileImportServiceOps,
-        model::{FileImportSource, FileSetImportModel, ImportFileContent},
+        model::{DatImportExtras, FileImportSource, FileSetImportModel, ImportFileContent},
     },
     file_system_ops::FileSystemOps,
 };
@@ -220,9 +220,9 @@ impl DatFileMassImportContext {
         tracing::info!(game = game.name.as_str(), "Processing DAT game");
 
         let mut import_files: HashMap<PathBuf, Vec<ImportFileContent>> = HashMap::new();
-
         let mut available_roms: Vec<domain::naming_conventions::no_intro::DatRom> = vec![];
         let mut missing_roms: Vec<domain::naming_conventions::no_intro::DatRom> = vec![];
+
         for rom in &game.roms {
             let sha1_bytes_res: Sha1Checksum =
                 sha1_from_hex_string(&rom.sha1).expect("Invalid SHA1 in DAT");
@@ -274,6 +274,7 @@ impl DatFileMassImportContext {
                         .collect(),
                 })
                 .collect(),
+
             selected_files,
 
             system_ids: vec![self.input.system_id],
@@ -289,11 +290,24 @@ impl DatFileMassImportContext {
                 .item_type
                 .map_or_else(Vec::new, |item_type| vec![item_type]),
             create_release: Some(create_release_params),
-            dat_file_id: self.state.dat_file_id,
+            dat_extras: Some(DatImportExtras {
+                missing_files: missing_roms
+                    .iter()
+                    .map(|rom| ImportFileContent {
+                        file_name: rom.name.clone(),
+                        sha1_checksum: sha1_from_hex_string(&rom.sha1)
+                            .expect("Invalid SHA1 in DAT"),
+                        file_size: rom.size,
+                    })
+                    .collect(),
+                dat_file_id: self.state.dat_file_id,
+            }),
         });
         DatImportItem::new(game.clone(), file_set, available_roms, missing_roms)
     }
 
+    /// Builds the list of import items from the DAT file from those file sets that are marked as
+    /// non-existing in the system. This is used to prepare the data for the actual import step.
     pub fn get_import_items(&self) -> Vec<DatImportItem> {
         let non_existing_games = self
             .state
