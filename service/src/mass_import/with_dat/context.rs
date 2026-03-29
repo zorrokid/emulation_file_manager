@@ -30,8 +30,6 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct DatImportItem {
     pub dat_game: DatGame,
-    pub release_name: String,
-    pub software_title_name: String,
     // This can be passed directly to create_file_set in file_import service to proceed with
     // actual creation of file sets.
     pub file_set: Option<FileSetImportModel>,
@@ -39,14 +37,7 @@ pub struct DatImportItem {
 
 impl DatImportItem {
     pub fn new(dat_game: DatGame, file_set: Option<FileSetImportModel>) -> Self {
-        let software_title_name = dat_game.name.clone();
-        let release_name = dat_game.description.clone();
-        DatImportItem {
-            dat_game,
-            release_name,
-            software_title_name,
-            file_set,
-        }
+        DatImportItem { dat_game, file_set }
     }
 }
 
@@ -202,6 +193,12 @@ impl DatFileMassImportContext {
             software_title_name: game.get_software_title_name(),
         };
 
+        println!(
+            "create_release_params '{}': {:#?}",
+            game.get_release_name(),
+            game.get_software_title_name()
+        );
+
         let file_set = Some(FileSetImportModel {
             import_files: import_files
                 .into_iter()
@@ -339,7 +336,7 @@ mod tests {
             ..Default::default()
         };
         let dat_game_2 = DatGame {
-            name: "Game2".to_string(),
+            name: "Game2 (EU)".to_string(),
             id: Some("2".to_string()),
             description: "Second Game".to_string(),
             roms: vec![
@@ -434,8 +431,7 @@ mod tests {
 
         // Verify: First game should have all ROMs available
         assert_eq!(import_items[0].dat_game.name, "Game1");
-        assert_eq!(import_items[0].release_name, "First Game");
-        assert_eq!(import_items[0].software_title_name, "Game1");
+
         assert!(import_items[0].file_set.is_some());
 
         let file_set_1 = import_items[0].file_set.as_ref().unwrap();
@@ -455,13 +451,22 @@ mod tests {
         );
 
         // Verify: Second game should have 1 ROM available and 1 missing
-        assert_eq!(import_items[1].dat_game.name, "Game2");
-        assert_eq!(import_items[1].release_name, "Second Game");
-        assert_eq!(import_items[1].software_title_name, "Game2");
+        assert_eq!(import_items[1].dat_game.name, "Game2 (EU)");
+
+        let item = &import_items[1];
+        assert!(item.file_set.is_some());
+
+        let file_set = item.file_set.as_ref().unwrap();
+        assert!(file_set.create_release.is_some());
+
+        let create_release_params = file_set.create_release.as_ref().unwrap();
+
+        assert_eq!(create_release_params.release_name, "EU");
+        assert_eq!(create_release_params.software_title_name, "Game2");
         assert!(import_items[1].file_set.is_some());
 
         let file_set_2 = import_items[1].file_set.as_ref().unwrap();
-        assert_eq!(file_set_2.file_set_name, "Game2");
+        assert_eq!(file_set_2.file_set_name, "Game2 (EU)");
         assert_eq!(file_set_2.import_files.len(), 1);
         assert_eq!(file_set_2.import_files[0].path, file2_path);
         assert_eq!(
