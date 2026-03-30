@@ -15,7 +15,7 @@ use crate::{
 };
 use core_types::{Sha1Checksum, sha1_from_hex_string};
 use dat_file_parser::DatFileParserOps;
-use domain::naming_conventions::no_intro::{DatFile, DatGame, DatHeader, DatRom};
+use domain::naming_conventions::no_intro::{DatFile, DatGame, DatHeader};
 use file_metadata::SendReaderFactoryFn;
 use flume::Sender;
 
@@ -150,10 +150,9 @@ impl DatFileMassImportContext {
         tracing::info!(game = game.name.as_str(), "Processing DAT game");
 
         let mut import_files: HashMap<PathBuf, Vec<ImportFileContent>> = HashMap::new();
-        let mut available_roms: Vec<DatRom> = vec![];
-        let mut missing_roms: Vec<DatRom> = vec![];
-
         let mut selected_files: Vec<Sha1Checksum> = vec![];
+        let mut missing_files: Vec<ImportFileContent> = vec![];
+
         for rom in &game.roms {
             let sha1_bytes_res: Sha1Checksum =
                 sha1_from_hex_string(&rom.sha1).expect("Invalid SHA1 in DAT");
@@ -164,7 +163,6 @@ impl DatFileMassImportContext {
                     source_file = %source_file.display(),
                     "Matched ROM to source file"
                 );
-                available_roms.push(rom.clone());
                 selected_files.push(sha1_bytes_res);
                 import_files
                     .entry(source_file.clone())
@@ -179,7 +177,11 @@ impl DatFileMassImportContext {
                     rom_sha1 = rom.sha1.as_str(),
                     "No matching source file found for ROM"
                 );
-                missing_roms.push(rom.clone());
+                missing_files.push(ImportFileContent {
+                    file_name: rom.name.clone(),
+                    sha1_checksum: sha1_bytes_res,
+                    file_size: rom.size,
+                });
             }
         }
 
@@ -188,21 +190,12 @@ impl DatFileMassImportContext {
             software_title_name: game.get_software_title_name(),
         };
 
-        println!(
-            "create_release_params '{}': {:#?}",
-            game.get_release_name(),
-            game.get_software_title_name()
-        );
-
-        let file_set = Some(FileSetImportModel {
+        let file_set_import_model = Some(FileSetImportModel {
             import_files: import_files
                 .into_iter()
                 .map(|(path, contents)| FileImportSource {
                     path,
-                    content: contents
-                        .iter()
-                        .map(|c| (c.sha1_checksum, c.clone()))
-                        .collect(),
+                    content: contents.into_iter().map(|c| (c.sha1_checksum, c)).collect(),
                 })
                 .collect(),
 
@@ -222,19 +215,11 @@ impl DatFileMassImportContext {
                 .map_or_else(Vec::new, |item_type| vec![item_type]),
             create_release: Some(create_release_params),
             dat_extras: Some(DatImportExtras {
-                missing_files: missing_roms
-                    .iter()
-                    .map(|rom| ImportFileContent {
-                        file_name: rom.name.clone(),
-                        sha1_checksum: sha1_from_hex_string(&rom.sha1)
-                            .expect("Invalid SHA1 in DAT"),
-                        file_size: rom.size,
-                    })
-                    .collect(),
+                missing_files,
                 dat_file_id: self.state.dat_file_id,
             }),
         });
-        DatImportItem::new(game.clone(), file_set)
+        DatImportItem::new(game.clone(), file_set_import_model)
     }
 
     /// Builds the list of import items from the DAT file for those file sets

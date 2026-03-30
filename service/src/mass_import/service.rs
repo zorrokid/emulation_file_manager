@@ -395,7 +395,7 @@ mod tests {
 
         assert_eq!(
             import_result.result.import_results[0].status,
-            crate::mass_import::models::FileSetImportStatus::SucessWithWarnings(vec![
+            crate::mass_import::models::FileSetImportStatus::SuccessWithWarnings(vec![
                 "Missing file: rom2.bin".to_string()
             ])
         );

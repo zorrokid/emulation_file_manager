@@ -240,7 +240,7 @@ impl<T: MassImportContextOps + Send + Sync> PipelineStep<T> for ImportFileSetsSt
                         let status = if missing_file_messages.is_empty() {
                             FileSetImportStatus::Success
                         } else {
-                            FileSetImportStatus::SucessWithWarnings(missing_file_messages)
+                            FileSetImportStatus::SuccessWithWarnings(missing_file_messages)
                         };
                         (Some(import_result.file_set_id), status)
                     } else {
@@ -266,7 +266,7 @@ impl<T: MassImportContextOps + Send + Sync> PipelineStep<T> for ImportFileSetsSt
                         }
                         (
                             Some(import_result.file_set_id),
-                            FileSetImportStatus::SucessWithWarnings(messages),
+                            FileSetImportStatus::SuccessWithWarnings(messages),
                         )
                     }
                 }

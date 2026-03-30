@@ -1,21 +1,13 @@
 use std::{
     collections::{HashMap, HashSet},
     path::PathBuf,
-    sync::Arc,
 };
 
 use core_types::{FileSize, FileType, ImportedFile, Sha1Checksum, item_type::ItemType};
-use database::{models::FileInfo, repository_manager::RepositoryManager};
-use file_import::{FileImportModel, FileImportOps};
+use database::models::FileInfo;
+use file_import::FileImportModel;
 
-use crate::{error::Error, file_system_ops::FileSystemOps, view_models::Settings};
-
-/*pub struct FileSetOperationDeps {
-    pub repository_manager: Arc<RepositoryManager>,
-    pub settings: Arc<Settings>,
-    pub file_import_ops: Arc<dyn FileImportOps>,
-    pub fs_ops: Arc<dyn FileSystemOps>,
-}*/
+use crate::error::Error;
 
 #[derive(Debug, Clone)]
 pub struct FileImportMetadata {
@@ -273,7 +265,7 @@ mod tests {
 
         let existing_files = vec![FileInfo {
             id: 123,
-            sha1_checksum: checksum2.into(),
+            sha1_checksum: checksum2,
             file_size: 2048,
             file_type: FileType::Rom,
             archive_file_name: "archive_file_name".to_string(),
@@ -344,7 +336,7 @@ mod tests {
 
         let existing_files = vec![FileInfo {
             id: 123,
-            sha1_checksum: checksum.into(),
+            sha1_checksum: checksum,
             file_size: 1024,
             file_type: FileType::Rom,
             archive_file_name: "archive_file_name".to_string(),

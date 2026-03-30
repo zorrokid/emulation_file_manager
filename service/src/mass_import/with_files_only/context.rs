@@ -132,11 +132,12 @@ impl MassImportContextOps for FilesOnlyMassImportContext {
     }
 
     fn get_import_file_sets(&self) -> Vec<FileSetImportModel> {
-        let mut file_import_sets: Vec<FileSetImportModel> = vec![];
-        for (file_path, metadata) in self.state.common_state.file_metadata.iter() {
-            file_import_sets.push(self.create_file_set_import_model(file_path, metadata));
-        }
-        file_import_sets
+        self.state
+            .common_state
+            .file_metadata
+            .iter()
+            .map(|(file_path, metadata)| self.create_file_set_import_model(file_path, metadata))
+            .collect()
     }
 
     fn import_service_ops(&self) -> Arc<dyn FileImportServiceOps> {

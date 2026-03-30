@@ -102,7 +102,7 @@ impl Component for ImportResults {
                             let status = import_result.status.clone();
                             let status_message = match status {
                                 FileSetImportStatus::Success => "Import successful".to_string(),
-                                FileSetImportStatus::SucessWithWarnings(warnings) => {
+                                FileSetImportStatus::SuccessWithWarnings(warnings) => {
                                     format!(
                                         "Import successful with warnings: {}",
                                         warnings.join(", ")
@@ -122,7 +122,7 @@ impl Component for ImportResults {
                                 ),
                                 status: match import_result.status {
                                     FileSetImportStatus::Success => MessageStatus::Info,
-                                    FileSetImportStatus::SucessWithWarnings(_) => {
+                                    FileSetImportStatus::SuccessWithWarnings(_) => {
                                         MessageStatus::Warning
                                     }
                                     FileSetImportStatus::Failed(_) => MessageStatus::Error,
