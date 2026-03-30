@@ -68,10 +68,6 @@ impl FilesOnlyMassImportContext {
         &self,
         file_path: &Path,
         metadata: &[ReadFile],
-        system_id: i64,
-        file_type: FileType,
-        item_type: Option<ItemType>,
-        source: String,
     ) -> FileSetImportModel {
         let file_name = file_path.file_name().unwrap().to_string_lossy().to_string();
         let software_title = file_name_to_canonical_software_title(&file_name);
@@ -96,11 +92,11 @@ impl FilesOnlyMassImportContext {
                     .collect(),
             }],
             selected_files: metadata.iter().map(|meta| meta.sha1_checksum).collect(),
-            system_ids: vec![system_id],
-            source: source.clone(),
-            file_type,
+            system_ids: vec![self.input.system_id],
+            source: self.input.source.clone(),
+            file_type: self.input.file_type,
             item_ids: vec![],
-            item_types: item_type.into_iter().collect(),
+            item_types: self.input.item_type.into_iter().collect(),
             create_release: Some(CreateReleaseParams {
                 software_title_name: software_title,
                 release_name: "".to_string(), // TODO: improve later,
@@ -136,20 +132,9 @@ impl MassImportContextOps for FilesOnlyMassImportContext {
     }
 
     fn get_import_file_sets(&self) -> Vec<FileSetImportModel> {
-        let system_id = self.input.system_id;
-        let file_type = self.input.file_type;
-        let item_type = self.input.item_type;
-        let source = self.input.source.clone();
         let mut file_import_sets: Vec<FileSetImportModel> = vec![];
         for (file_path, metadata) in self.state.common_state.file_metadata.iter() {
-            file_import_sets.push(self.create_file_set_import_model(
-                file_path,
-                metadata,
-                system_id,
-                file_type,
-                item_type,
-                source.clone(),
-            ));
+            file_import_sets.push(self.create_file_set_import_model(file_path, metadata));
         }
         file_import_sets
     }

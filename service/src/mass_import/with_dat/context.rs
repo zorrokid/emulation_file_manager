@@ -98,8 +98,8 @@ impl MassImportContextOps for DatFileMassImportContext {
 
     fn get_import_file_sets(&self) -> Vec<FileSetImportModel> {
         self.get_import_items()
-            .iter()
-            .filter_map(|item| item.file_set.clone())
+            .into_iter()
+            .filter_map(|item| item.file_set)
             .collect()
     }
 
