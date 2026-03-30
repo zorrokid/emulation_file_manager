@@ -237,28 +237,28 @@ impl DatFileMassImportContext {
         DatImportItem::new(game.clone(), file_set)
     }
 
-    /// Builds the list of import items from the DAT file from those file sets that are marked as
-    /// non-existing in the system. This is used to prepare the data for the actual import step.
+    /// Builds the list of import items from the DAT file for those file sets
+    /// that are marked as non-existing in the system. This is used to prepare
+    /// the data for the actual import step.
     pub fn get_import_items(&self) -> Vec<DatImportItem> {
-        let non_existing_games = self
-            .state
+        let Some(dat_file) = &self.state.dat_file else {
+            tracing::error!("Attempted to get import items but DAT file is not loaded");
+            return Vec::new();
+        };
+
+        tracing::info!("Mapping DAT entries to import items...");
+        let sha1_to_file_map = self.build_sha1_to_file_map();
+
+        self.state
             .statuses
             .iter()
-            .filter(|status| matches!(status, DatGameFileSetStatus::NonExisting(_)))
-            .map(|status| match status {
-                DatGameFileSetStatus::NonExisting(dat_game) => dat_game.clone(),
-                _ => unreachable!(),
-            });
-
-        self.state.dat_file.as_ref().map_or(Vec::new(), |dat_file| {
-            let mut import_items: Vec<DatImportItem> = Vec::new();
-            tracing::info!("Mapping DAT entries to import items...");
-            let sha1_to_file_map = self.build_sha1_to_file_map();
-            non_existing_games.for_each(|game| {
-                import_items.push(self.get_import_item(&game, &dat_file.header, &sha1_to_file_map));
-            });
-            import_items
-        })
+            .filter_map(|status| match status {
+                DatGameFileSetStatus::NonExisting(dat_game) => {
+                    Some(self.get_import_item(dat_game, &dat_file.header, &sha1_to_file_map))
+                }
+                _ => None,
+            })
+            .collect()
     }
 }
 
