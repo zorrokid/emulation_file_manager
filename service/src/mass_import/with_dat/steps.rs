@@ -275,13 +275,7 @@ impl PipelineStep<DatFileMassImportContext> for CategorizeFileSetsForImportStep 
                 "Checking file set status for game",
             );
             let status = dat_game_status_service
-                .get_status(
-                    game,
-                    context.input.file_type,
-                    &dat_file.header,
-                    dat_file_id,
-                    &file_sha1s,
-                )
+                .get_status(game, context.input.file_type, &dat_file.header, dat_file_id)
                 .await;
             match status {
                 Ok(status) => {
@@ -349,7 +343,7 @@ impl PipelineStep<DatFileMassImportContext> for HandleExistingFileSetsStep {
                 DatGameFileSetStatus::ExistingWithoutReleaseAndWithoutLinkToDat {
                     game,
                     file_set_id,
-                    is_missing_files: _, // TODO
+                    missing_files: _, // TODO
                 } => {
                     tracing::info!(
                         game = %game.name,
@@ -411,7 +405,7 @@ impl PipelineStep<DatFileMassImportContext> for HandleExistingFileSetsStep {
                 DatGameFileSetStatus::ExistingWithReleaseAndLinkedToDat {
                     file_set_id,
                     game,
-                    is_missing_files: _, // TODO
+                    missing_files: _, // TODO
                 } => {
                     tracing::info!(
                         game = %game.name,
@@ -790,7 +784,7 @@ mod tests {
             DatGameFileSetStatus::ExistingWithoutReleaseAndWithoutLinkToDat {
                 game: dat_file.games[0].clone(),
                 file_set_id: existing_file_set_id,
-                is_missing_files: false,
+                missing_files: vec![],
             },
         ];
 
@@ -911,7 +905,7 @@ mod tests {
         context.state.statuses = vec![DatGameFileSetStatus::ExistingWithReleaseAndLinkedToDat {
             game: dat_file.games[0].clone(),
             file_set_id: 1,
-            is_missing_files: false,
+            missing_files: vec![],
         }];
 
         // Act
