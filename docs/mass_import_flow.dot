@@ -8,11 +8,11 @@ digraph MassImport {
         label="relm4-ui  (GTK4 / relm4)";
         style=filled; fillcolor="#e8f4f8"; color="#4a90d9"; fontsize=13;
 
-        ImportForm   [label="ImportForm\n(Component)",   shape=box,     fillcolor="#b3d9f2", style=filled];
-        StartImport  [label="StartImport\n(msg)",        shape=ellipse, fillcolor="#d0eaf8", style=filled];
+        ImportForm      [label="ImportForm\n(Component)",   shape=box,     fillcolor="#b3d9f2", style=filled];
+        StartImport     [label="StartImport\n(msg)",        shape=ellipse, fillcolor="#d0eaf8", style=filled];
         MassImportInput [label="MassImportInput\n{source_path, file_type,\ndat_file_path, system_id}", shape=note, fillcolor="#fffbe6", style=filled];
-        SyncEvent    [label="ProcessSyncEvent\n(progress channel)", shape=ellipse, fillcolor="#d0eaf8", style=filled];
-        ImportResults [label="ImportResults\n(Component)", shape=box,   fillcolor="#b3d9f2", style=filled];
+        SyncEvent       [label="ProcessSyncEvent\n(progress channel)", shape=ellipse, fillcolor="#d0eaf8", style=filled];
+        ImportResults   [label="ImportResults\n(Component)", shape=box,    fillcolor="#b3d9f2", style=filled];
     }
 
     // ─── Service Layer ───────────────────────────────────────────────────────
@@ -26,35 +26,60 @@ digraph MassImport {
             label="Pipeline<DatFileMassImportContext>";
             style=filled; fillcolor="#f1f8f1"; color="#81c784"; fontsize=12;
 
-            S1 [label="1. ImportDatFileStep\nparse DAT file",              shape=box, fillcolor="#ffffff", style=filled];
-            S2 [label="2. CheckExistingDatFileStep\nlook up DAT in DB",    shape=box, fillcolor="#ffffff", style=filled];
-            S3 [label="3. StoreDatFileStep\nwrite DAT to DB",              shape=box, fillcolor="#ffffff", style=filled];
-            S4 [label="4. ReadFilesStep\nscan source directory",           shape=box, fillcolor="#ffffff", style=filled];
-            S5 [label="5. ReadFileMetadataStep\nread SHA1 / file size",    shape=box, fillcolor="#ffffff", style=filled];
-            S6 [label="6. FilterExistingFileSetsStep\ncheck which files are new", shape=box, fillcolor="#ffffff", style=filled];
-            S7 [label="7. ImportFileSetsStep\ncreate new file sets",       shape=box, fillcolor="#ffffff", style=filled];
-            S8 [label="8. HandleExistingFileSetsStep\nlink existing file sets to DAT", shape=box, fillcolor="#ffffff", style=filled];
+            S1 [label="1. ImportDatFileStep\nparse DAT file",                                   shape=box, fillcolor="#ffffff", style=filled];
+            S2 [label="2. CheckExistingDatFileStep\nlook up DAT in DB",                         shape=box, fillcolor="#ffffff", style=filled];
+            S3 [label="3. StoreDatFileStep\nwrite DAT to DB\n[skip: already exists]",           shape=box, fillcolor="#ffffff", style=filled];
+            S4 [label="4. ReadFilesStep\nscan source directory",                                 shape=box, fillcolor="#ffffff", style=filled];
+            S5 [label="5. ReadFileMetadataStep\nread SHA1 / file size",                         shape=box, fillcolor="#ffffff", style=filled];
+            S6 [label="6. CategorizeFileSetsForImportStep\nclassify each DAT game via DB",      shape=box, fillcolor="#ffffff", style=filled];
+            S7 [label="7. RouteAndProcessFileSetsStep\nroute each game to handler\nsend progress event per game", shape=box, fillcolor="#ffffff", style=filled];
 
-            S1 -> S2 -> S3 -> S4 -> S5 -> S6 -> S7 -> S8;
+            S1 -> S2 -> S3 -> S4 -> S5 -> S6 -> S7;
         }
 
-        FileImportService [label="FileImportService\ncreate_file_set()", shape=box, fillcolor="#b2dfdb", style=filled];
+        // ─── Router handlers ─────────────────────────────────────────────────
+        subgraph cluster_handlers {
+            label="RouteAndProcessFileSetsStep — handlers";
+            style=filled; fillcolor="#f0fff0"; color="#43a047"; fontsize=12;
+
+            H1 [label="handle_new_file_set\n→ Success / SuccessWithWarnings", shape=diamond, fillcolor="#c8e6c9", style=filled];
+            H2 [label="handle_already_complete\n→ AlreadyExists",             shape=diamond, fillcolor="#c8e6c9", style=filled];
+            H3 [label="handle_link_existing_to_dat\n→ link + optionally complete missing", shape=diamond, fillcolor="#c8e6c9", style=filled];
+            H4 [label="complete_missing_files\n→ Success / SuccessWithWarnings\n   / StillMissingFiles", shape=diamond, fillcolor="#c8e6c9", style=filled];
+        }
+
+        FileImportService  [label="FileImportService\ncreate_file_set()\nupdate_file_set()", shape=box, fillcolor="#b2dfdb", style=filled];
+        FileSetService     [label="FileSetService\ncreate_release_for_file_set()",           shape=box, fillcolor="#b2dfdb", style=filled];
 
         subgraph cluster_add_pipeline {
-            label="Pipeline<AddFileSetContext>\n(called once per file set)";
+            label="Pipeline<AddFileSetContext>\n(new file sets)";
             style=filled; fillcolor="#f5f5ff"; color="#7c4dff"; fontsize=12;
 
-            A1 [label="1. CheckExistingFilesStep\ncheck if files already in storage", shape=box, fillcolor="#ede7f6", style=filled];
-            A2 [label="2. CheckExistingFileSetStep\ncheck if file set in DB",         shape=box, fillcolor="#ede7f6", style=filled];
-            A3 [label="3. ImportFilesStep\ncopy files to output dir",                 shape=box, fillcolor="#ede7f6", style=filled];
-            A4 [label="4. CreateFileSetToDatabaseStep\ninsert file_set + release",    shape=box, fillcolor="#ede7f6", style=filled];
-            A5 [label="5. AddFileSetItemTypesStep\nassociate item types",              shape=box, fillcolor="#ede7f6", style=filled];
+            A1 [label="1. CheckExistingFilesStep\nquery file_info by SHA1\n(excludes already-linked SHA1s)", shape=box, fillcolor="#ede7f6", style=filled];
+            A2 [label="2. CheckExistingFileSetStep\ncheck if file set in DB",                                shape=box, fillcolor="#ede7f6", style=filled];
+            A3 [label="3. ImportFilesStep\ncopy files to output dir\n[skip: needs_file_info_upsert=false]",  shape=box, fillcolor="#ede7f6", style=filled];
+            A4 [label="4. CreateFileSetToDatabaseStep\ninsert file_set, file_info,\nrelease, software_title", shape=box, fillcolor="#ede7f6", style=filled];
+            A5 [label="5. AddFileSetItemTypesStep\nassociate item types\n[skip: none specified]",            shape=box, fillcolor="#ede7f6", style=filled];
 
             A1 -> A2 -> A3 -> A4 -> A5;
         }
 
-        DatFileService  [label="DatFileService\nstore_dat_file()",     shape=box, fillcolor="#b2dfdb", style=filled];
-        DatGameStatus   [label="DatGameStatusService\ncheck game status", shape=box, fillcolor="#b2dfdb", style=filled];
+        subgraph cluster_update_pipeline {
+            label="Pipeline<UpdateFileSetContext>\n(complete missing files)";
+            style=filled; fillcolor="#fff8f0"; color="#e65100"; fontsize=12;
+
+            U1 [label="1. FetchFileSetStep\nload file set from DB",                                                    shape=box, fillcolor="#ffe0b2", style=filled];
+            U2 [label="2. FetchFilesInFileSetStep\nload linked file_info records",                                     shape=box, fillcolor="#ffe0b2", style=filled];
+            U3 [label="3. UpdateFileInfoToDatabaseStep\ninsert new file_info OR restore is_available\n[skip: needs_file_info_upsert=false]", shape=box, fillcolor="#ffe0b2", style=filled];
+            U4 [label="4. UpdateFileSetFilesStep\nlink new file_info to file set\n[skip: no new ids]",                 shape=box, fillcolor="#ffe0b2", style=filled];
+            U5 [label="5. CollectDeletionCandidatesStep\nidentify unlinked files\n[skip: no removals]",                shape=box, fillcolor="#ffe0b2", style=filled];
+            U6 [label="6. UnlinkFilesFromFileSetStep\nremove from file_set_file_info\n[skip: no removals]",            shape=box, fillcolor="#ffe0b2", style=filled];
+
+            U1 -> U2 -> U3 -> U4 -> U5 -> U6;
+        }
+
+        DatFileService [label="DatFileService\nstore_dat_file()",          shape=box, fillcolor="#b2dfdb", style=filled];
+        DatGameStatus  [label="DatGameStatusService\nclassify game status", shape=box, fillcolor="#b2dfdb", style=filled];
     }
 
     // ─── Infrastructure ──────────────────────────────────────────────────────
@@ -62,43 +87,61 @@ digraph MassImport {
         label="Infrastructure";
         style=filled; fillcolor="#fef9e7"; color="#f39c12"; fontsize=13;
 
-        FileSystem  [label="FileSystemOps\nread_dir()",              shape=folder,    fillcolor="#fdebd0", style=filled];
-        DatParser   [label="DatFileParserOps\nparse_dat_file()",   shape=component, fillcolor="#fdebd0", style=filled];
-        MetaReader  [label="MetadataReader\n(SHA1 + file size)",   shape=component, fillcolor="#fdebd0", style=filled];
-        FileStorage [label="FileImportOps\ncopy files to disk",    shape=folder,    fillcolor="#fdebd0", style=filled];
+        FileSystem  [label="FileSystemOps\nread_dir()",            shape=folder,    fillcolor="#fdebd0", style=filled];
+        DatParser   [label="DatFileParserOps\nparse_dat_file()", shape=component, fillcolor="#fdebd0", style=filled];
+        MetaReader  [label="MetadataReader\n(SHA1 + file size)", shape=component, fillcolor="#fdebd0", style=filled];
+        FileStorage [label="FileImportOps\ncopy files to disk",  shape=folder,    fillcolor="#fdebd0", style=filled];
         RepoDB      [label="RepositoryManager\n→ SQLite (database crate)", shape=cylinder, fillcolor="#f9e4b7", style=filled];
-
     }
 
     // ─── UI flow ─────────────────────────────────────────────────────────────
-    ImportForm -> StartImport        [label="user clicks"];
-    StartImport -> MassImportInput   [label="builds"];
-    StartImport -> MassImportService [label="calls import_with_dat()"];
-    StartImport -> MassImportService [label="progress_tx\n(flume Sender)", style=dashed, color="#888888", constraint=false];
-    S7 -> SyncEvent                  [label="sender_tx.send()\nper file set", style=dashed, color="#888888", constraint=false];
-    SyncEvent -> ImportForm          [label="progress update",                style=dashed, color="#888888", constraint=false];
+    ImportForm -> StartImport          [label="user clicks"];
+    StartImport -> MassImportInput     [label="builds"];
+    StartImport -> MassImportService   [label="calls import_with_dat()"];
+    StartImport -> MassImportService   [label="progress_tx\n(flume Sender)", style=dashed, color="#888888", constraint=false];
+    S7 -> SyncEvent                    [label="send() per game", style=dashed, color="#888888", constraint=false];
+    SyncEvent -> ImportForm            [label="progress update", style=dashed, color="#888888", constraint=false];
     MassImportService -> ImportResults [label="DatFileMassImportResult\n(on completion)"];
 
     // ─── Mass import pipeline ─────────────────────────────────────────────────
     MassImportService -> S1;
 
-    S1 -> DatParser     [label="parse_dat_file()", style=dashed];
-    S2 -> RepoDB        [label="check_dat_file_exists()", style=dashed];
+    S1 -> DatParser      [label="parse_dat_file()", style=dashed];
+    S2 -> RepoDB         [label="check_dat_file_exists()", style=dashed];
     S3 -> DatFileService [style=dashed];
     DatFileService -> RepoDB [label="insert DAT", style=dashed];
-    S4 -> FileSystem    [label="read_dir()", style=dashed];
-    S5 -> MetaReader    [label="read SHA1/size", style=dashed];
-    S6 -> DatGameStatus [style=dashed];
-    DatGameStatus -> RepoDB [label="query file sets", style=dashed];
-    S7 -> FileImportService [label="per file set", style=dashed];
-    S8 -> RepoDB        [label="link file set to DAT", style=dashed];
+    S4 -> FileSystem     [label="read_dir()", style=dashed];
+    S5 -> MetaReader     [label="read SHA1/size", style=dashed];
+    S6 -> DatGameStatus  [style=dashed];
+    DatGameStatus -> RepoDB [label="query file sets by SHA1", style=dashed];
+
+    // ─── Routing ─────────────────────────────────────────────────────────────
+    S7 -> H1 [label="NonExisting"];
+    S7 -> H2 [label="ExistingWithReleaseAndLinkedToDat\n(no missing files)"];
+    S7 -> H3 [label="ExistingWithoutReleaseAndWithoutLinkToDat"];
+    S7 -> H4 [label="ExistingWithReleaseAndLinkedToDat\n(has missing files)", constraint=false];
+    H3 -> H4 [label="if missing files\nafter linking", style=dashed];
+
+    H1 -> FileImportService [label="create_file_set()", style=dashed];
+    H3 -> FileSetService    [label="create_release_for_file_set()", style=dashed];
+    H4 -> FileImportService [label="update_file_set()\n[skip: nothing newly available]", style=dashed];
+    FileSetService -> RepoDB [label="insert release\n+ dat link", style=dashed];
 
     // ─── AddFileSet sub-pipeline ──────────────────────────────────────────────
-    FileImportService -> A1;
+    FileImportService -> A1 [label="create_file_set"];
 
-    A1 -> RepoDB      [label="check files by SHA1", style=dashed];
-    A2 -> RepoDB      [label="check file set exists", style=dashed];
+    A1 -> RepoDB      [label="query file_info by SHA1", style=dashed];
+    A2 -> RepoDB      [label="check file set name", style=dashed];
     A3 -> FileStorage [label="copy to output dir", style=dashed];
-    A4 -> RepoDB      [label="insert file_set\nrelease\nsoftware_title", style=dashed];
+    A4 -> RepoDB      [label="insert file_set, file_info\nrelease, software_title", style=dashed];
     A5 -> RepoDB      [label="insert item types", style=dashed];
+
+    // ─── UpdateFileSet sub-pipeline ───────────────────────────────────────────
+    FileImportService -> U1 [label="update_file_set"];
+
+    U1 -> RepoDB      [label="fetch file set", style=dashed];
+    U2 -> RepoDB      [label="fetch linked file_info", style=dashed];
+    U3 -> RepoDB      [label="insert file_info\nor update is_available", style=dashed];
+    U4 -> RepoDB      [label="insert file_set_file_info rows", style=dashed];
+    U6 -> RepoDB      [label="delete file_set_file_info rows", style=dashed];
 }
