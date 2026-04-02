@@ -2,6 +2,10 @@
 
 **Emulation File Manager** is a GTK4 desktop application (Linux) for managing emulation software collections (ROMs, disk images, manuals, cover art), launching them with emulators, and syncing to cloud storage. It is a Rust workspace with ~14 crates.
 
+## Recommended Model
+
+Use **Claude Sonnet** (or better) for all sessions in this project. The codebase involves async Rust, SQLx query macros, complex trait hierarchies, and pipeline patterns — smaller models (e.g. Haiku) make significantly more errors and require more rework. Switch with `/model` if needed.
+
 ## Commands
 
 ```bash
