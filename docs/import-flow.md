@@ -159,7 +159,7 @@ The game has never been imported. A full import is performed:
 - All ROMs missing → file set is still created (as a placeholder), all files marked unavailable;
   `SuccessWithWarnings` with all files listed as missing
 - Import pipeline step failures → `SuccessWithWarnings` includes both step errors and missing
-  file warnings
+  file warnings <= TODO is this clear enough what it does, what failed? Is it really always success?
 
 ### Case 2: Already complete (`ExistingWithReleaseAndLinkedToDat`, no missing files)
 
@@ -210,7 +210,7 @@ Called by cases 3 and 4 when a file set has previously-recorded missing files.
 **Edge case — SHA1 no longer in DAT game:** If a newly-available SHA1 cannot be matched back to
 a ROM in `game.roms` (can happen if the DAT file changed between the initial import and the
 re-run), that SHA1 is skipped with a warning log. Only matched SHA1s are included in the update
-model.
+model. <= TODO: DAT file shouldn't change between impots, since the DAT files are versioned?
 
 ---
 
