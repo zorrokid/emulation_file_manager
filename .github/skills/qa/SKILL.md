@@ -291,6 +291,7 @@ Before marking a feature done, verify:
 3. Use `setup_test_db()` + `setup_test_repository_manager()` for DB-touching tests
 4. Follow Arrange–Act–Assert structure with clear section comments
 5. Use descriptive test names
+6. **Show the full generated test code in your response before writing any files** — never silently write tests. The user must be able to review the code, request changes, and explicitly confirm before you write anything to disk.
 
 **When analysing coverage**, always:
 1. List which branches / variants / error paths currently have no test
