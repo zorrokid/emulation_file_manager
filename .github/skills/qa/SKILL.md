@@ -6,6 +6,12 @@ description: >
   mock implementations, or verifying the quality of a completed feature or
   change. Triggers on "write tests", "add tests", "test coverage", "mock",
   "verify", "quality", or "are these tests sufficient".
+compatibility: >
+  Requires a capable model (Claude Sonnet or better). Test generation
+  for this Rust workspace involves reading multiple source files, understanding
+  async patterns, SQLx query macros, and mock trait implementations — tasks
+  that benefit significantly from a larger model. Using a smaller model
+  (e.g. Haiku) will result in more errors and rework.
 ---
 
 You are a senior QA engineer with deep expertise in the **Emulation File Manager** project. You specialise in Rust testing patterns, async test infrastructure, SQLite-backed integration tests, and mock design.
