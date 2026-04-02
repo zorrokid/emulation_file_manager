@@ -301,12 +301,14 @@ impl PipelineStep<DatFileMassImportContext> for CategorizeFileSetsForImportStep 
 mod tests {
     use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
+    use core_types::sha1_from_hex_string;
     use dat_file_parser::{DatFileParserError, DatFileParserOps, MockDatParser};
     use database::helper::AddDatFileParams;
-    use domain::naming_conventions::no_intro::{DatFile, DatHeader};
+    use domain::naming_conventions::no_intro::{DatFile, DatGame, DatHeader, DatRom};
     use file_metadata::SendReaderFactoryFn;
 
     use crate::{
+        dat_game_status_service::DatGameFileSetStatus,
         file_import::file_import_service_ops::{FileImportServiceOps, MockFileImportServiceOps},
         file_set::mock_file_set_service::MockFileSetService,
         file_system_ops::{FileSystemOps, mock::MockFileSystemOps},
@@ -555,6 +557,157 @@ mod tests {
         // Act
         let step = StoreDatFileStep;
         assert!(!step.should_execute(&context));
+    }
+
+    #[async_std::test]
+    async fn test_import_dat_file_step_with_parse_failure_aborts_pipeline() {
+        // Arrange: Mock DAT parser to return parse error
+        let parse_error = Err(DatFileParserError::ParseError(
+            "Invalid XML format".to_string(),
+        ));
+        let dat_file_parser_ops = Arc::new(MockDatParser::new(parse_error));
+
+        let mut context = DatFileMassImportContext::new(
+            get_deps().await,
+            MassImportInput {
+                source_path: PathBuf::from("/path/to/source"),
+                dat_file_path: Some(PathBuf::from("/path/to/invalid.dat")),
+                file_type: core_types::FileType::Rom,
+                item_type: None,
+                system_id: 1,
+            },
+            get_ops(Some(dat_file_parser_ops), None, None, None),
+            None,
+        );
+
+        // Verify should_execute returns true (dat_file_path is present)
+        let step = ImportDatFileStep;
+        assert!(step.should_execute(&context));
+
+        // Act: Execute step with parse error
+        let result = step.execute(&mut context).await;
+
+        // Assert: Pipeline should abort with error
+        assert!(matches!(result, StepAction::Abort(_)));
+        // Verify the parsed dat_file was not stored in context (no partial state on failure)
+        assert!(context.state.dat_file.is_none());
+    }
+
+    #[async_std::test]
+    async fn test_categorize_file_sets_for_import_step_non_existing_game() {
+        // Arrange: Create real repository manager and database
+        let deps = get_deps().await;
+        let system_repo = deps.repository_manager.get_system_repository();
+        let system_id = system_repo
+            .add_system("Test System")
+            .await
+            .expect("Failed to add test system");
+
+        // Create DAT file in database
+        let dat_repo = deps.repository_manager.get_dat_repository();
+        let dat_file_db = dat_repo
+            .add_dat_file(AddDatFileParams {
+                dat_id: 12345,
+                name: "Test DAT",
+                description: "",
+                version: "1.0",
+                date: None,
+                author: "Test Author",
+                homepage: None,
+                url: None,
+                subset: None,
+                system_id,
+            })
+            .await
+            .expect("Failed to add DAT file");
+
+        // Create DAT file with one game that does NOT exist in database
+        let dat_file = DatFile {
+            header: DatHeader {
+                id: 0,
+                name: "Test DAT".to_string(),
+                version: "1.0".to_string(),
+                description: "Test Description".to_string(),
+                date: None,
+                author: "Test Author".to_string(),
+                homepage: None,
+                url: None,
+                subset: None,
+            },
+            games: vec![DatGame {
+                name: "NonExistent Game".to_string(),
+                id: None,
+                cloneof: None,
+                cloneofid: None,
+                categories: vec![],
+                description: "A game that doesn't exist".to_string(),
+                roms: vec![DatRom {
+                    name: "game.bin".to_string(),
+                    size: 1024,
+                    crc: "12345678".to_string(),
+                    md5: "".to_string(),
+                    sha1: "0123456789abcdef0123456789abcdef01234567".to_string(),
+                    sha256: None,
+                    status: None,
+                    serial: None,
+                    header: None,
+                }],
+                releases: vec![],
+            }],
+        };
+
+        // Create context with file metadata populated
+        let mut context = DatFileMassImportContext::new(
+            deps,
+            MassImportInput {
+                source_path: PathBuf::from("/path/to/source"),
+                dat_file_path: Some(PathBuf::from("/path/to/datfile.dat")),
+                file_type: core_types::FileType::Rom,
+                item_type: None,
+                system_id,
+            },
+            get_ops(None, None, None, None),
+            None,
+        );
+
+        // Populate state with DAT file and ID
+        context.state.dat_file = Some(dat_file);
+        context.state.dat_file_id = Some(dat_file_db);
+
+        // Populate file_metadata so should_execute returns true
+        context.state.common_state.file_metadata = {
+            let mut map = HashMap::new();
+            map.insert(
+                PathBuf::from("/source/game.bin"),
+                vec![core_types::ReadFile {
+                    file_name: "game.bin".to_string(),
+                    sha1_checksum: sha1_from_hex_string(
+                        "0123456789abcdef0123456789abcdef01234567",
+                    )
+                    .expect("Failed to parse SHA1"),
+                    file_size: 1024,
+                }],
+            );
+            map
+        };
+
+        // Verify should_execute returns true
+        let step = CategorizeFileSetsForImportStep;
+        assert!(step.should_execute(&context));
+
+        // Act
+        let result = step.execute(&mut context).await;
+
+        // Assert
+        assert!(matches!(result, StepAction::Continue));
+        assert_eq!(context.state.dat_game_statuses.len(), 1);
+        assert!(matches!(
+            &context.state.dat_game_statuses[0],
+            DatGameFileSetStatus::NonExisting(_)
+        ));
+        // Verify the game name is preserved
+        let game = context.state.dat_game_statuses[0].game();
+        assert_eq!(game.name, "NonExistent Game");
     }
 
     // TODO: create a test case where re-importing the same dat file
