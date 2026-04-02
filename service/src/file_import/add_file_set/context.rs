@@ -213,7 +213,7 @@ impl AddFileSetContextOps for AddFileSetContext {
             .file_import_data
             .get_file_import_model(&self.state.existing_files)
     }
-    fn is_new_files_to_be_imported(&self) -> bool {
+    fn needs_file_info_upsert(&self) -> bool {
         self.input
             .file_import_data
             .is_new_files_to_be_imported(&self.state.existing_files)

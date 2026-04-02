@@ -128,7 +128,7 @@ impl FileImportData {
                         if self.selected_files.contains(sha1_checksum)
                             && !existing_files
                                 .iter()
-                                .any(|f| f.sha1_checksum == *sha1_checksum)
+                                .any(|f| f.sha1_checksum == *sha1_checksum && f.is_available)
                         {
                             Some(import_content.file_name.clone())
                         } else {

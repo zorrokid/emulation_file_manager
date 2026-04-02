@@ -12,7 +12,7 @@ pub trait AddFileSetContextOps {
     fn set_imported_files(&mut self, imported_files: HashMap<Sha1Checksum, ImportedFile>);
     fn file_import_ops(&self) -> &Arc<dyn FileImportOps>;
     fn get_file_import_model(&self) -> FileImportModel;
-    fn is_new_files_to_be_imported(&self) -> bool;
+    fn needs_file_info_upsert(&self) -> bool;
 }
 
 /// Pipeline step responsible for importing the actual files that are not already in the collection.
@@ -43,7 +43,7 @@ impl<T: AddFileSetContextOps + Send + Sync> PipelineStep<T> for ImportFilesStep<
     }
 
     fn should_execute(&self, context: &T) -> bool {
-        context.is_new_files_to_be_imported()
+        context.needs_file_info_upsert()
     }
 
     async fn execute(&self, context: &mut T) -> StepAction {
@@ -104,7 +104,7 @@ mod tests {
             self.file_import_data
                 .get_file_import_model(&self.existing_files)
         }
-        fn is_new_files_to_be_imported(&self) -> bool {
+        fn needs_file_info_upsert(&self) -> bool {
             self.file_import_data
                 .is_new_files_to_be_imported(&self.existing_files)
         }

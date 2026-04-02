@@ -108,6 +108,12 @@ impl Component for ImportResults {
                                         warnings.join(", ")
                                     )
                                 }
+                                FileSetImportStatus::StillMissingFiles(missing) => {
+                                    format!(
+                                        "Files still missing: {}",
+                                        missing.join(", ")
+                                    )
+                                }
                                 FileSetImportStatus::Failed(error) => {
                                     format!("Import failed: {}", error)
                                 }
@@ -123,6 +129,9 @@ impl Component for ImportResults {
                                 status: match import_result.status {
                                     FileSetImportStatus::Success => MessageStatus::Info,
                                     FileSetImportStatus::SuccessWithWarnings(_) => {
+                                        MessageStatus::Warning
+                                    }
+                                    FileSetImportStatus::StillMissingFiles(_) => {
                                         MessageStatus::Warning
                                     }
                                     FileSetImportStatus::Failed(_) => MessageStatus::Error,

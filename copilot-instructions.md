@@ -84,6 +84,10 @@ Use async-std as the async runtime throughout the application.
 - Prefer ? operator over unwrap/expect
 - Pipeline steps in service layer is an exception to use expect when the value is tested in should_execute
 - Use descriptive variable names
+- Do **not** use `// ---` or similar comment dividers to split code into sections — split into separate files instead
+- Public functions, structs, traits, and methods must have doc comments (`///`)
+- **Single responsibility, no side effects**: Each function should do one thing and return its result. A function that computes a value must return it — never write computed results to shared state as a side effect inside the function. Callers are responsible for recording, sending, or persisting results.
+- **DRY (Don't Repeat Yourself)**: Do not duplicate logic or code. Extract shared logic into the appropriate abstraction for the layer — a shared function, a reusable component, or a helper module. Place the abstraction at the nearest common ancestor so both consumers can access it without increasing visibility unnecessarily.
 
 ### Dependencies
 When adding crates, prefer:
@@ -91,14 +95,25 @@ When adding crates, prefer:
 - Well-maintained crates with active development
 - Minimal dependency trees
 
+### Model Selection
+
+When using the `task` tool or `/model` command, choose based on complexity:
+
+- **Claude Haiku 4.5** (fast/cheap): Simple edits, searching, straightforward grep/view operations, file reading
+- **Claude Sonnet 4.5** (default, standard): Most coding work — refactoring, bug fixes, straightforward implementations, tests
+- **Claude Opus 4.6** (premium): Complex architecture decisions, design trade-offs, intricate debugging, multi-layer feature planning, sophisticated analysis
+
+Default assumption is Sonnet — only override when the task clearly requires more (Opus) or less (Haiku) reasoning.
+
 ## Validation Checklist
 
 After making changes:
 - [ ] `cargo test` passes
-- [ ] `cargo build` succeeds
+- [ ] `cargo check` succeeds (use `cargo check` instead of `cargo build` to verify compilation)
 - [ ] Regenerated `.sqlx/` if queries changed
 - [ ] Ran `tbls doc` if schema changed
 - [ ] No layer boundary violations
+- [ ] Changes committed in small increments to keep diffs focused and reviewable
 
 ## When in Doubt
 

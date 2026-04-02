@@ -103,11 +103,11 @@ pub struct UpdateFileInfoToDatabaseStep;
 #[async_trait::async_trait]
 impl PipelineStep<UpdateFileSetContext> for UpdateFileInfoToDatabaseStep {
     fn name(&self) -> &'static str {
-        "add_file_info_to_database"
+        "update_file_info_in_database"
     }
 
     fn should_execute(&self, context: &UpdateFileSetContext) -> bool {
-        context.is_new_files_to_be_imported()
+        context.needs_file_info_upsert()
             && !context.state.imported_files.is_empty()
             && context.state.file_set.is_some()
     }
@@ -115,47 +115,86 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileInfoToDatabaseStep {
     async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
         println!("Adding file info records to database...");
         let file_type = context.state.file_set.as_ref().unwrap().file_type;
-        for imported_file in context.state.imported_files.values() {
-            let add_file_info_result = context
-                .deps
-                .repository_manager
-                .get_file_info_repository()
-                .add_file_info(
-                    &imported_file.sha1_checksum,
-                    imported_file.file_size as i64,
-                    &imported_file.archive_file_name,
-                    file_type,
-                )
-                .await;
-            match add_file_info_result {
-                Ok(id) => {
-                    println!(
-                        "Added file info record with id {} for file '{}'",
-                        id, imported_file.archive_file_name
-                    );
-                    tracing::info!(
-                        file_count = context.state.imported_files.len(),
-                        "Added file info records to database"
-                    );
-                    context.state.new_files.push(FileInfo {
-                        id,
-                        sha1_checksum: imported_file.sha1_checksum,
-                        file_size: imported_file.file_size,
-                        archive_file_name: imported_file.archive_file_name.clone(),
-                        file_type,
-                        is_available: true,
-                    });
+        let imported_files: Vec<_> = context.state.imported_files.values().cloned().collect();
+        for imported_file in &imported_files {
+            // If this file was previously recorded as unavailable in this file set,
+            // update its existing record instead of inserting a duplicate.
+            if let Some(existing) = context
+                .state
+                .files_in_file_set
+                .iter()
+                .find(|f| f.sha1_checksum == imported_file.sha1_checksum && !f.is_available)
+            {
+                let existing_id = existing.id;
+                let existing_file_size = existing.file_size;
+                let existing_archive_file_name = existing.archive_file_name.clone();
+                let result = context
+                    .deps
+                    .repository_manager
+                    .get_file_info_repository()
+                    .update_is_available(existing_id)
+                    .await;
+                match result {
+                    Ok(_) => {
+                        tracing::info!(
+                            file_info_id = existing_id,
+                            archive_file_name = %existing_archive_file_name,
+                            "Restored previously unavailable file info record",
+                        );
+                        context.state.new_files.push(FileInfo {
+                            id: existing_id,
+                            sha1_checksum: imported_file.sha1_checksum,
+                            file_size: existing_file_size,
+                            archive_file_name: existing_archive_file_name,
+                            file_type,
+                            is_available: true,
+                        });
+                    }
+                    Err(err) => {
+                        tracing::error!(
+                            error = %err,
+                            file_info_id = existing_id,
+                            "Error restoring unavailable file info record",
+                        );
+                        // TODO: collect failed
+                    }
                 }
-                Err(err) => {
-                    println!(
-                        "Error adding file info record for file '{}': {}",
-                        imported_file.archive_file_name, err
-                    );
-                    tracing::error!(
-                        error = %err,
-                        "Error adding file info records to database"
-                    );
-                    // TODO: collect failed
+            } else {
+                let add_file_info_result = context
+                    .deps
+                    .repository_manager
+                    .get_file_info_repository()
+                    .add_file_info(
+                        &imported_file.sha1_checksum,
+                        imported_file.file_size as i64,
+                        &imported_file.archive_file_name,
+                        file_type,
+                    )
+                    .await;
+                match add_file_info_result {
+                    Ok(id) => {
+                        tracing::info!(
+                            file_info_id = id,
+                            archive_file_name = %imported_file.archive_file_name,
+                            "Added new file info record to database",
+                        );
+                        context.state.new_files.push(FileInfo {
+                            id,
+                            sha1_checksum: imported_file.sha1_checksum,
+                            file_size: imported_file.file_size,
+                            archive_file_name: imported_file.archive_file_name.clone(),
+                            file_type,
+                            is_available: true,
+                        });
+                    }
+                    Err(err) => {
+                        tracing::error!(
+                            error = %err,
+                            archive_file_name = %imported_file.archive_file_name,
+                            "Error adding file info record to database",
+                        );
+                        // TODO: collect failed
+                    }
                 }
             }
         }

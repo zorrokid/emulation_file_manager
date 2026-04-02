@@ -4,3 +4,7 @@ target
 logs/
 *.deb
 vendor/
+.claude
+.copilot
+.vscode
+specs

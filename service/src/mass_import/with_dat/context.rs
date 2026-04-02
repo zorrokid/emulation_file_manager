@@ -6,14 +6,13 @@ use std::{
 
 use crate::{
     dat_game_status_service::DatGameFileSetStatus,
-    file_import::model::CreateReleaseParams,
     file_set::FileSetServiceOps,
     mass_import::{
         common_steps::context::{CommonMassImportState, MassImportContextOps, MassImportDeps},
         models::{MassImportInput, MassImportSyncEvent},
     },
 };
-use core_types::{Sha1Checksum, sha1_from_hex_string};
+use core_types::Sha1Checksum;
 use dat_file_parser::DatFileParserOps;
 use domain::naming_conventions::no_intro::{DatFile, DatGame, DatHeader};
 use file_metadata::SendReaderFactoryFn;
@@ -22,24 +21,10 @@ use flume::Sender;
 use crate::{
     file_import::{
         file_import_service_ops::FileImportServiceOps,
-        model::{DatImportExtras, FileImportSource, FileSetImportModel, ImportFileContent},
+        model::FileSetImportModel,
     },
     file_system_ops::FileSystemOps,
 };
-
-#[derive(Debug, Clone)]
-pub struct DatImportItem {
-    pub dat_game: DatGame,
-    // This can be passed directly to create_file_set in file_import service to proceed with
-    // actual creation of file sets.
-    pub file_set: Option<FileSetImportModel>,
-}
-
-impl DatImportItem {
-    pub fn new(dat_game: DatGame, file_set: Option<FileSetImportModel>) -> Self {
-        DatImportItem { dat_game, file_set }
-    }
-}
 
 #[derive(Debug)]
 pub struct DatFileMassImportContext {
@@ -69,7 +54,7 @@ pub struct DatFileMassImportState {
     pub common_state: CommonMassImportState,
     pub dat_file: Option<DatFile>,
     pub dat_file_id: Option<i64>,
-    pub statuses: Vec<DatGameFileSetStatus>,
+    pub dat_game_statuses: Vec<DatGameFileSetStatus>,
 }
 
 impl MassImportContextOps for DatFileMassImportContext {
@@ -93,13 +78,23 @@ impl MassImportContextOps for DatFileMassImportContext {
 
     fn can_import_file_sets(&self) -> bool {
         // File set statuses has to be determined and the parsed dat file has to be available.
-        !self.state.statuses.is_empty() && self.state.dat_file.is_some()
+        !self.state.dat_game_statuses.is_empty() && self.state.dat_file.is_some()
     }
 
     fn get_import_file_sets(&self) -> Vec<FileSetImportModel> {
-        self.get_import_items()
-            .into_iter()
-            .filter_map(|item| item.file_set)
+        let Some(dat_file) = &self.state.dat_file else {
+            return Vec::new();
+        };
+        let sha1_to_file_map = self.scanned_files_by_sha1();
+        self.state
+            .dat_game_statuses
+            .iter()
+            .filter_map(|status| match status {
+                DatGameFileSetStatus::NonExisting(game) => {
+                    Some(super::build_file_set_import_model(game, &dat_file.header, &sha1_to_file_map, self))
+                }
+                _ => None,
+            })
             .collect()
     }
 
@@ -128,7 +123,9 @@ impl DatFileMassImportContext {
         }
     }
 
-    pub fn build_sha1_to_file_map(&self) -> HashMap<Sha1Checksum, PathBuf> {
+    /// Builds a map from SHA1 checksum to local file path using the scanned file metadata.
+    /// Used to look up whether a DAT game's required ROM is locally available.
+    pub fn scanned_files_by_sha1(&self) -> HashMap<Sha1Checksum, PathBuf> {
         self.state
             .common_state
             .file_metadata
@@ -137,123 +134,6 @@ impl DatFileMassImportContext {
                 metadata_entries
                     .iter()
                     .map(move |entry| (entry.sha1_checksum, path.clone()))
-            })
-            .collect()
-    }
-
-    fn get_import_item(
-        &self,
-        game: &DatGame,
-        header: &DatHeader,
-        sha1_to_file_map: &HashMap<Sha1Checksum, PathBuf>,
-    ) -> DatImportItem {
-        tracing::info!(game = game.name.as_str(), "Processing DAT game");
-
-        let mut import_files: HashMap<PathBuf, Vec<ImportFileContent>> = HashMap::new();
-        let mut selected_files: Vec<Sha1Checksum> = vec![];
-        let mut missing_files: Vec<ImportFileContent> = vec![];
-
-        for rom in &game.roms {
-            let sha1_bytes_res: Sha1Checksum =
-                sha1_from_hex_string(&rom.sha1).expect("Invalid SHA1 in DAT");
-
-            if let Some(source_file) = sha1_to_file_map.get(&sha1_bytes_res) {
-                tracing::info!(
-                    rom_sha1 = rom.sha1.as_str(),
-                    source_file = %source_file.display(),
-                    "Matched ROM to source file"
-                );
-                selected_files.push(sha1_bytes_res);
-                import_files
-                    .entry(source_file.clone())
-                    .or_default()
-                    .push(ImportFileContent {
-                        file_name: rom.name.clone(),
-                        sha1_checksum: sha1_bytes_res,
-                        file_size: rom.size,
-                    });
-            } else {
-                tracing::warn!(
-                    rom_sha1 = rom.sha1.as_str(),
-                    "No matching source file found for ROM"
-                );
-                missing_files.push(ImportFileContent {
-                    file_name: rom.name.clone(),
-                    sha1_checksum: sha1_bytes_res,
-                    file_size: rom.size,
-                });
-            }
-        }
-
-        let create_release_params = CreateReleaseParams {
-            release_name: game.get_release_name(),
-            software_title_name: game.get_software_title_name(),
-        };
-
-        let file_set_import_model = Some(FileSetImportModel {
-            import_files: import_files
-                .into_iter()
-                .map(|(path, contents)| FileImportSource {
-                    path,
-                    content: contents.into_iter().map(|c| (c.sha1_checksum, c)).collect(),
-                })
-                .collect(),
-
-            selected_files,
-
-            system_ids: vec![self.input.system_id],
-            file_type: self.input.file_type,
-
-            source: header.get_source(),
-            file_set_name: game.name.clone(),
-            file_set_file_name: game.name.clone(),
-
-            item_ids: vec![],
-            item_types: self
-                .input
-                .item_type
-                .map_or_else(Vec::new, |item_type| vec![item_type]),
-            create_release: Some(create_release_params),
-            dat_extras: Some(DatImportExtras {
-                missing_files,
-                dat_file_id: self.state.dat_file_id,
-            }),
-        });
-        DatImportItem::new(game.clone(), file_set_import_model)
-    }
-
-    /// Builds the list of import items from the DAT file for those file sets
-    /// that are marked as non-existing in the system. This is used to prepare
-    /// the data for the actual import step.
-    pub fn get_import_items(&self) -> Vec<DatImportItem> {
-        let Some(dat_file) = &self.state.dat_file else {
-            tracing::error!("Attempted to get import items but DAT file is not loaded");
-            return Vec::new();
-        };
-
-        tracing::info!("Mapping DAT entries to import items...");
-        let sha1_to_file_map = self.build_sha1_to_file_map();
-
-        self.state
-            .statuses
-            .iter()
-            .filter_map(|status| match status {
-                DatGameFileSetStatus::NonExisting(dat_game) => {
-                    Some(self.get_import_item(dat_game, &dat_file.header, &sha1_to_file_map))
-                }
-                DatGameFileSetStatus::ExistingWithReleaseAndLinkedToDat {
-                    file_set_id,
-                    game,
-                    ..
-                } => {
-                    tracing::info!(
-                        game = game.name.as_str(),
-                        file_set_id = *file_set_id,
-                        "Game has existing file set"
-                    );
-                    Some(self.get_import_item(game, &dat_file.header, &sha1_to_file_map))
-                }
-                _ => None,
             })
             .collect()
     }

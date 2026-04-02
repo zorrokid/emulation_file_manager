@@ -8,7 +8,7 @@ use domain::naming_conventions::no_intro::{DatGame, DatHeader};
 
 use crate::error::Error;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DatGameFileSetStatus {
     NonExisting(DatGame),
     /// Existing with release means that both Software Title and Release matches
@@ -23,7 +23,16 @@ pub enum DatGameFileSetStatus {
         game: DatGame,
         missing_files: Vec<Sha1Checksum>,
     },
-    //NonExistingWithoutLocalFiles(DatGame),
+}
+
+impl DatGameFileSetStatus {
+    pub fn game(&self) -> &DatGame {
+        match self {
+            Self::NonExisting(game) => game,
+            Self::ExistingWithReleaseAndLinkedToDat { game, .. } => game,
+            Self::ExistingWithoutReleaseAndWithoutLinkToDat { game, .. } => game,
+        }
+    }
 }
 
 pub struct DatGameStatusService {
@@ -86,7 +95,7 @@ impl DatGameStatusService {
                 tracing::info!(
                     file_set_name = %game.name,
                     file_set_id = find_file_set_result.file_set_id,
-                    has_missing_files = find_file_set_result.missing_files.is_empty(),
+                    missing_file_count = find_file_set_result.missing_files.len(),
                     "Found existing file set matching the game in DAT file",
                 );
 
@@ -106,7 +115,7 @@ impl DatGameStatusService {
                             tracing::info!(
                                 file_set_name = %game.name,
                                 file_set_id = find_file_set_result.file_set_id,
-                                has_missing_files = find_file_set_result.missing_files.is_empty(),
+                                missing_file_count = find_file_set_result.missing_files.len(),
                                 "Existing file set is already linked to the DAT game",
                             );
                             Ok(DatGameFileSetStatus::ExistingWithReleaseAndLinkedToDat {
@@ -170,50 +179,6 @@ mod tests {
 
     #[async_std::test]
     async fn test_get_status_non_existing_file_set() {
-        // Arrange
-        let repository_manager = setup_test_repository_manager().await;
-        let service = DatGameStatusService::new(repository_manager);
-        let game = DatGame {
-            name: "Test Game".to_string(),
-            roms: vec![DatRom {
-                name: "test_rom.bin".to_string(),
-                size: 1024,
-                sha1: "1234567890abcdef1234567890abcdef12345678".to_string(),
-                ..Default::default()
-            }],
-            ..Default::default()
-        };
-        let header = DatHeader {
-            name: "Test Dat".to_string(),
-            version: "1.0".to_string(),
-            ..Default::default()
-        };
-
-        let file_type = FileType::Rom;
-        let dat_file_id = 1;
-
-        // Act
-        let result = service
-            .get_status(&game, file_type, &header, dat_file_id)
-            .await;
-
-        // Assert
-        assert!(
-            result.is_ok(),
-            "Expected get_status to succeed, but got error: {:?}",
-            result.err()
-        );
-        let status = result.unwrap();
-        assert_eq!(
-            status,
-            DatGameFileSetStatus::NonExisting(game.clone()),
-            "Expected status to be NonExisting, but got: {:?}",
-            status
-        );
-    }
-
-    #[async_std::test]
-    async fn test_get_status_non_existing_without_local_files_file_set() {
         // Arrange
         let repository_manager = setup_test_repository_manager().await;
         let service = DatGameStatusService::new(repository_manager);

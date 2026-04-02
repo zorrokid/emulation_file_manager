@@ -378,7 +378,17 @@ impl FileSetRepository {
             let archive_file_name = &file.archive_file_name;
 
             let file_info_id = match existing_file_info {
-                Some(id) => id,
+                Some(id) => {
+                    if file.is_available {
+                        sqlx::query!(
+                            "UPDATE file_info SET is_available = 1 WHERE id = ?",
+                            id
+                        )
+                        .execute(&mut *tx)
+                        .await?;
+                    }
+                    id
+                }
                 None => {
                     let file_size = file.file_size as i64;
                     let file_info_result = sqlx::query!(

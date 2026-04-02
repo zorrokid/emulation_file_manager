@@ -44,8 +44,9 @@ pub struct DatFileMassImportResult {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FileSetImportStatus {
     Success,
-    SuccessWithWarnings(Vec<String>), // Warning message
-    Failed(String),                   // Error message
+    SuccessWithWarnings(Vec<String>),
+    StillMissingFiles(Vec<String>), // Re-run attempted but no files became available
+    Failed(String),
     AlreadyExists,
 }
 

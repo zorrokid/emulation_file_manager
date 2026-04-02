@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::{HashMap, HashSet}, sync::Arc};
 
 use crate::{
     error::Error,
@@ -49,7 +49,8 @@ pub struct UpdateFileSetState {
     pub file_set: Option<FileSet>,
     /// files currently associated with the file set
     pub files_in_file_set: Vec<FileInfo>,
-    /// existing files found in the database, not yet associated with the file set
+    /// files found in the database that match selected SHA1s but are linked to other file sets,
+    /// not this one. Does not include records already in `files_in_file_set`.
     pub existing_files: Vec<FileInfo>,
     pub new_files: Vec<FileInfo>,
     pub imported_files: HashMap<Sha1Checksum, ImportedFile>,
@@ -104,6 +105,11 @@ impl UpdateFileSetContext {
     }
 
     pub fn get_file_info_ids_with_file_names(&self) -> Vec<(i64, String)> {
+        // SHA1s already linked to this file set are handled in-place by
+        // UpdateFileInfoToDatabaseStep — they must not be re-linked (PK violation).
+        let already_linked_sha1s: HashSet<Sha1Checksum> =
+            self.state.files_in_file_set.iter().map(|f| f.sha1_checksum).collect();
+
         let mut file_info_ids_with_names = Vec::new();
 
         for file in self
@@ -115,38 +121,44 @@ impl UpdateFileSetContext {
         {
             let sha1_checksum = file.sha1_checksum;
 
-            // file has to be selected for import
-            if self
+            if !self
                 .input
                 .file_import_data
                 .selected_files
                 .contains(&sha1_checksum)
             {
-                // file info for file is either in existing files or new files
-                let file_info_id = if let Some(existing_file) = self
-                    .state
-                    .existing_files
-                    .iter()
-                    .find(|f| f.sha1_checksum == sha1_checksum)
-                {
-                    existing_file.id
-                } else if let Some(new_file) = self
-                    .state
-                    .new_files
-                    .iter()
-                    .find(|f| f.sha1_checksum == sha1_checksum)
-                {
-                    new_file.id
-                } else {
-                    // this should never happen
-                    panic!(
-                        "File info not found for selected file with checksum: {:?}",
-                        sha1_checksum
-                    );
-                };
-
-                file_info_ids_with_names.push((file_info_id, file.file_name.clone()));
+                continue;
             }
+
+            if already_linked_sha1s.contains(&sha1_checksum) {
+                continue;
+            }
+
+            // File must be in existing_files (linked to another file set) or new_files.
+            // existing_files no longer contains already-linked records, so this lookup
+            // is unambiguous.
+            let file_info_id = if let Some(existing_file) = self
+                .state
+                .existing_files
+                .iter()
+                .find(|f| f.sha1_checksum == sha1_checksum)
+            {
+                existing_file.id
+            } else if let Some(new_file) = self
+                .state
+                .new_files
+                .iter()
+                .find(|f| f.sha1_checksum == sha1_checksum)
+            {
+                new_file.id
+            } else {
+                panic!(
+                    "File info not found for selected file with checksum: {:?}",
+                    sha1_checksum
+                );
+            };
+
+            file_info_ids_with_names.push((file_info_id, file.file_name.clone()));
         }
 
         file_info_ids_with_names
@@ -154,8 +166,18 @@ impl UpdateFileSetContext {
 }
 
 impl CheckExistingFilesContext for UpdateFileSetContext {
+    /// Returns SHA1s that need to be checked in the database, excluding any already linked to
+    /// this file set — those are handled in-place by `UpdateFileInfoToDatabaseStep`.
     fn get_sha1_checksums(&self) -> Vec<Sha1Checksum> {
-        self.input.file_import_data.selected_files.clone()
+        let already_linked: HashSet<Sha1Checksum> =
+            self.state.files_in_file_set.iter().map(|f| f.sha1_checksum).collect();
+        self.input
+            .file_import_data
+            .selected_files
+            .iter()
+            .filter(|sha1| !already_linked.contains(*sha1))
+            .cloned()
+            .collect()
     }
     fn file_type(&self) -> FileType {
         self.input.file_import_data.file_type
@@ -181,7 +203,7 @@ impl AddFileSetContextOps for UpdateFileSetContext {
             .get_file_import_model(&self.state.existing_files)
     }
 
-    fn is_new_files_to_be_imported(&self) -> bool {
+    fn needs_file_info_upsert(&self) -> bool {
         self.input
             .file_import_data
             .selected_files
@@ -191,7 +213,7 @@ impl AddFileSetContextOps for UpdateFileSetContext {
                     .state
                     .existing_files
                     .iter()
-                    .any(|file_info| file_info.sha1_checksum == *sha1_checksum)
+                    .any(|file_info| file_info.sha1_checksum == *sha1_checksum && file_info.is_available)
             })
     }
 }

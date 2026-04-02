@@ -139,6 +139,13 @@ impl FileInfoRepository {
         query.execute(&*self.pool).await?;
         Ok(())
     }
+
+    pub async fn update_is_available(&self, id: i64) -> Result<(), Error> {
+        sqlx::query!("UPDATE file_info SET is_available = 1 WHERE id = ?", id)
+            .execute(&*self.pool)
+            .await?;
+        Ok(())
+    }
 }
 #[cfg(test)]
 mod tests {
