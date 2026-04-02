@@ -72,15 +72,26 @@ cargo test <test_name>            # single test by name
 
 ### Structure
 
-Bundle all state into a **single `Arc<Mutex<MockState>>`** — never one `Arc<Mutex<>>` per field:
+Bundle all state into a **single `Arc<Mutex<MockState>>`** — never one `Arc<Mutex<>>` per field.
+
+**Field names must be domain-specific** — name them after what they represent, not generic placeholders.
+Each method on the trait typically needs its own fail set and its own tracking collection:
 
 ```rust
 #[derive(Default)]
 struct MockState {
-    next_id: i64,
-    operations: HashMap<Key, Data>,
-    configured_results: HashMap<Key, Value>,
-    fail_for: HashSet<Key>,
+    // ID generation — use named counters matching the domain entity
+    next_entity_id: i64,
+
+    // Operation tracking — one map per operation, named semantically
+    created_entities: HashMap<i64, CreateEntityParams>,
+
+    // Pre-configured lookup results — use BTreeSet keys for SHA1/checksum collections
+    lookup_results: HashMap<BTreeSet<Sha1Checksum>, EntityId>,
+
+    // Failure simulation — one set per operation that can fail
+    fail_create_for: Vec<String>,
+    fail_find_for: Vec<BTreeSet<Sha1Checksum>>,
 }
 
 #[derive(Clone)]
@@ -94,42 +105,55 @@ impl Default for MockSomething {
 
 impl MockSomething {
     pub fn new() -> Self {
-        Self { state: Arc::new(Mutex::new(MockState { next_id: 1, ..Default::default() })) }
+        Self { state: Arc::new(Mutex::new(MockState { next_entity_id: 1, ..Default::default() })) }
     }
 
-    // Configuration
-    pub fn add_result(&self, key: Key, value: Value) {
-        self.state.lock().unwrap().configured_results.insert(key, value);
+    // Configuration — one method per configurable scenario
+    pub fn add_lookup_result(&self, checksums: Vec<Sha1Checksum>, id: EntityId) {
+        let key: BTreeSet<_> = checksums.into_iter().collect();
+        self.state.lock().unwrap().lookup_results.insert(key, id);
     }
-    pub fn fail_for(&self, key: Key) {
-        self.state.lock().unwrap().fail_for.insert(key);
+    pub fn fail_create_for(&self, name: impl Into<String>) {
+        self.state.lock().unwrap().fail_create_for.push(name.into());
     }
 
-    // Verification
-    pub fn call_count(&self) -> usize { self.state.lock().unwrap().operations.len() }
-    pub fn was_called(&self, key: &Key) -> bool { self.state.lock().unwrap().operations.contains_key(key) }
+    // Verification — semantic names matching what the mock tracks
+    pub fn created_count(&self) -> usize { self.state.lock().unwrap().created_entities.len() }
+    pub fn was_created(&self, name: &str) -> bool {
+        self.state.lock().unwrap().created_entities.values().any(|p| p.name == name)
+    }
 
-    // Reset
+    // Reset — replace entire state with fresh default
     pub fn clear(&self) {
-        *self.state.lock().unwrap() = MockState { next_id: 1, ..Default::default() };
+        *self.state.lock().unwrap() = MockState { next_entity_id: 1, ..Default::default() };
     }
 }
 ```
 
 ### Trait Implementation
 
+Use the **crate's own error type** — never invent a `MockFailure` variant. Use an existing generic
+variant such as `DatabaseError(String)` or `Other(String)` that the real error enum already provides:
+
 ```rust
 #[async_trait]
 impl SomethingOps for MockSomething {
-    async fn do_something(&self, input: Input) -> Result<Output, Error> {
+    async fn create_entity(&self, params: CreateEntityParams) -> Result<EntityId, SomethingError> {
         let mut state = self.state.lock().unwrap();
-        if state.fail_for.contains(&input.key) {
-            return Err(Error::MockFailure("...".to_string()));
+
+        // Check failure condition first, using the crate's own error type
+        if state.fail_create_for.contains(&params.name) {
+            return Err(SomethingError::DatabaseError(
+                format!("mock: forced failure for '{}'", params.name)
+            ));
         }
-        let id = state.next_id;
-        state.next_id += 1;
-        state.operations.insert(input.key.clone(), input.data.clone());
-        Ok(Output { id })
+
+        // Generate ID and track the operation
+        let id = state.next_entity_id;
+        state.next_entity_id += 1;
+        state.created_entities.insert(id, params);
+
+        Ok(id)
     }
 }
 ```
@@ -220,7 +244,7 @@ Each mock should cover (aim for ≥9 test cases):
 2. Multiple operations — state accumulates
 3. Pre-configured results — returns what was set
 4. Failure simulation — error path works
-5. Verification methods — `was_called`, `call_count` correct
+5. Verification methods — semantic names like `was_created`, `uploaded_count` are correct
 6. ID auto-increment
 7. Custom starting ID
 8. `clear()` resets all state
