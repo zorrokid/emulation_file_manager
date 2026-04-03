@@ -35,9 +35,10 @@ impl PipelineStep<DatFileMassImportContext> for RouteAndProcessFileSetsStep {
     }
 
     async fn execute(&self, context: &mut DatFileMassImportContext) -> StepAction {
-        // Clone upfront so we can pass `&mut context` into record_and_send without holding
-        // immutable borrows of context fields across the loop.
-        let statuses = context.state.dat_game_statuses.clone();
+        // Move statuses out of context so we can pass `&mut context` into handlers
+        // inside the loop without holding an immutable borrow. mem::take leaves an
+        // empty Vec in place — dat_game_statuses is not read again after this step.
+        let statuses = std::mem::take(&mut context.state.dat_game_statuses);
         let dat_file = context
             .state
             .dat_file
@@ -97,7 +98,13 @@ async fn handle_new_file_set(
 ) -> (Option<i64>, FileSetImportStatus) {
     tracing::info!(game = game.name.as_str(), "Importing new file set from DAT game");
 
-    let model = super::build_file_set_import_model(game, &dat_file.header, sha1_map, context);
+    let model = match super::build_file_set_import_model(game, &dat_file.header, sha1_map, context) {
+        Ok(m) => m,
+        Err(e) => {
+            tracing::error!(game = game.name.as_str(), error = %e, "Invalid SHA1 in DAT game — skipping");
+            return (None, FileSetImportStatus::Failed(e.to_string()));
+        }
+    };
 
     let missing_file_warnings: Vec<String> = model
         .dat_extras
@@ -461,7 +468,7 @@ mod tests {
         file_system_ops::mock::MockFileSystemOps,
         mass_import::{
             common_steps::context::MassImportDeps,
-            models::{FileSetImportStatus, MassImportInput},
+            models::{DatMassImportInput, FileSetImportStatus},
             test_utils::create_mock_reader_factory,
             with_dat::context::{DatFileMassImportContext, DatFileMassImportOps},
         },
@@ -522,9 +529,9 @@ mod tests {
         };
         let mut context = DatFileMassImportContext::new(
             deps,
-            MassImportInput {
+            DatMassImportInput {
                 source_path: PathBuf::from("/roms"),
-                dat_file_path: Some(PathBuf::from("/dat/test.dat")),
+                dat_file_path: PathBuf::from("/dat/test.dat"),
                 file_type: FileType::Rom,
                 item_type: None,
                 system_id: 1,

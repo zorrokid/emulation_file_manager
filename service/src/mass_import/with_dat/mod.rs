@@ -8,26 +8,32 @@ use std::{collections::HashMap, path::PathBuf};
 use core_types::{Sha1Checksum, sha1_from_hex_string};
 use domain::naming_conventions::no_intro::{DatGame, DatHeader};
 
-use crate::file_import::model::{
-    CreateReleaseParams, DatImportExtras, FileImportSource, FileSetImportModel, ImportFileContent,
+use crate::{
+    error::Error,
+    file_import::model::{
+        CreateReleaseParams, DatImportExtras, FileImportSource, FileSetImportModel, ImportFileContent,
+    },
 };
 
 use self::context::DatFileMassImportContext;
 
 /// Builds a `FileSetImportModel` for a DAT game, matching each ROM to a local file via SHA1.
 /// ROMs without a local match are recorded in `dat_extras.missing_files` for future re-runs.
+///
+/// Returns `Err` if any ROM in the DAT game contains an invalid SHA1 hex string.
 fn build_file_set_import_model(
     game: &DatGame,
     header: &DatHeader,
     sha1_to_file_map: &HashMap<Sha1Checksum, PathBuf>,
     context: &DatFileMassImportContext,
-) -> FileSetImportModel {
+) -> Result<FileSetImportModel, Error> {
     let mut import_files_map: HashMap<PathBuf, Vec<ImportFileContent>> = HashMap::new();
     let mut selected_files: Vec<Sha1Checksum> = vec![];
     let mut missing_files: Vec<ImportFileContent> = vec![];
 
     for rom in &game.roms {
-        let sha1: Sha1Checksum = sha1_from_hex_string(&rom.sha1).expect("Invalid SHA1 in DAT");
+        let sha1: Sha1Checksum = sha1_from_hex_string(&rom.sha1)
+            .map_err(|e| Error::ParseError(format!("Invalid SHA1 '{}' in DAT game '{}': {}", rom.sha1, game.name, e)))?;
         if let Some(path) = sha1_to_file_map.get(&sha1) {
             selected_files.push(sha1);
             import_files_map
@@ -47,7 +53,7 @@ fn build_file_set_import_model(
         }
     }
 
-    FileSetImportModel {
+    Ok(FileSetImportModel {
         import_files: import_files_map
             .into_iter()
             .map(|(path, contents)| FileImportSource {
@@ -74,5 +80,5 @@ fn build_file_set_import_model(
             missing_files,
             dat_file_id: context.state.dat_file_id,
         }),
-    }
+    })
 }

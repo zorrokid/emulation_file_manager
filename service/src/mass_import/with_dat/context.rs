@@ -9,7 +9,7 @@ use crate::{
     file_set::FileSetServiceOps,
     mass_import::{
         common_steps::context::{CommonMassImportState, MassImportContextOps, MassImportDeps},
-        models::{MassImportInput, MassImportSyncEvent},
+        models::{DatMassImportInput, MassImportSyncEvent},
     },
 };
 use core_types::Sha1Checksum;
@@ -29,7 +29,7 @@ use crate::{
 #[derive(Debug)]
 pub struct DatFileMassImportContext {
     pub deps: MassImportDeps,
-    pub input: MassImportInput,
+    pub input: DatMassImportInput,
     pub state: DatFileMassImportState,
     pub ops: DatFileMassImportOps,
     pub progress_tx: Option<Sender<MassImportSyncEvent>>,
@@ -76,28 +76,6 @@ impl MassImportContextOps for DatFileMassImportContext {
         &self.input.source_path
     }
 
-    fn can_import_file_sets(&self) -> bool {
-        // File set statuses has to be determined and the parsed dat file has to be available.
-        !self.state.dat_game_statuses.is_empty() && self.state.dat_file.is_some()
-    }
-
-    fn get_import_file_sets(&self) -> Vec<FileSetImportModel> {
-        let Some(dat_file) = &self.state.dat_file else {
-            return Vec::new();
-        };
-        let sha1_to_file_map = self.scanned_files_by_sha1();
-        self.state
-            .dat_game_statuses
-            .iter()
-            .filter_map(|status| match status {
-                DatGameFileSetStatus::NonExisting(game) => {
-                    Some(super::build_file_set_import_model(game, &dat_file.header, &sha1_to_file_map, self))
-                }
-                _ => None,
-            })
-            .collect()
-    }
-
     fn import_service_ops(&self) -> Arc<dyn FileImportServiceOps> {
         self.ops.file_import_service_ops.clone()
     }
@@ -110,7 +88,7 @@ impl MassImportContextOps for DatFileMassImportContext {
 impl DatFileMassImportContext {
     pub fn new(
         deps: MassImportDeps,
-        input: MassImportInput,
+        input: DatMassImportInput,
         ops: DatFileMassImportOps,
         progress_tx: Option<Sender<MassImportSyncEvent>>,
     ) -> Self {
@@ -157,7 +135,7 @@ mod tests {
 
     async fn create_test_context(
         dat_file: Option<DatFile>,
-        input: Option<MassImportInput>,
+        input: Option<DatMassImportInput>,
     ) -> DatFileMassImportContext {
         let dat_file = dat_file.unwrap_or_else(|| DatFile {
             header: DatHeader {
@@ -167,9 +145,9 @@ mod tests {
             },
             games: vec![],
         });
-        let input = input.unwrap_or_else(|| MassImportInput {
+        let input = input.unwrap_or_else(|| DatMassImportInput {
             source_path: PathBuf::from("/test"),
-            dat_file_path: None,
+            dat_file_path: PathBuf::from("/test/test.dat"),
             file_type: FileType::Rom,
             item_type: Some(ItemType::Cartridge),
             system_id: 42,
