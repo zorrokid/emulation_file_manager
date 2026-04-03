@@ -16,7 +16,7 @@ use relm4::{
 };
 use service::{
     error::Error,
-    mass_import::models::{DatFileMassImportResult, MassImportInput, MassImportSyncEvent},
+    mass_import::models::{DatFileMassImportResult, DatMassImportInput, MassImportSyncEvent},
     view_models::SystemListModel,
 };
 use tokio::task;
@@ -366,10 +366,16 @@ impl Component for ImportForm {
                 });
             }
             ImportFormMsg::StartImport => {
-                if let (Some(selected_system), Some(directory_path), Some(file_type)) = (
+                if let (
+                    Some(selected_system),
+                    Some(directory_path),
+                    Some(file_type),
+                    Some(dat_file_path),
+                ) = (
                     &self.selected_system,
                     &self.directory_path,
                     self.selected_file_type,
+                    &self.dat_file_path,
                 ) {
                     tracing::info!(
                         "Starting import with file_path: {:?}, source: {}, file_type: {:?}, item_type: {:?}, system: {:?}",
@@ -382,9 +388,9 @@ impl Component for ImportForm {
 
                     let mass_import_service = self.app_services.import().clone();
 
-                    let input = MassImportInput {
+                    let input = DatMassImportInput {
                         source_path: directory_path.clone(),
-                        dat_file_path: self.dat_file_path.clone(),
+                        dat_file_path: dat_file_path.clone(),
                         file_type,
                         item_type: self.selected_item_type,
                         system_id: selected_system.id,
