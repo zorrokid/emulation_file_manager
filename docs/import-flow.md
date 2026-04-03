@@ -5,8 +5,8 @@ matched to software titles, categorized by file type, stored, and tracked across
 import runs. It is intended as a reference for writing tests and for extending the import
 logic with new features.
 
-> **Note:** The diagram in `mass_import_flow.dot` / `mass_import_flow.svg` reflects an older
-> version of the pipeline and should be updated to match the current implementation.
+The pipeline diagrams in `docs/mass_import_flow.dot` / `docs/mass_import_flow.svg` reflect
+the current implementation.
 
 ---
 
