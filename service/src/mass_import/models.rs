@@ -12,9 +12,9 @@ use crate::{
 use domain::naming_conventions::no_intro::DatFile;
 
 #[derive(Debug, Clone)]
-pub struct MassImportInput {
+pub struct DatMassImportInput {
     pub source_path: PathBuf,
-    pub dat_file_path: Option<PathBuf>,
+    pub dat_file_path: PathBuf,
     pub file_type: FileType,
     pub item_type: Option<ItemType>,
     pub system_id: i64,

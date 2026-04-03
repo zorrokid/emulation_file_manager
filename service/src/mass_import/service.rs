@@ -13,7 +13,7 @@ use crate::{
     mass_import::{
         common_steps::context::MassImportDeps,
         models::{
-            DatFileMassImportResult, FilesOnlyMassImportResult, MassImportInput,
+            DatFileMassImportResult, FilesOnlyMassImportResult, DatMassImportInput,
             MassImportSyncEvent,
         },
         with_dat::context::{DatFileMassImportContext, DatFileMassImportOps},
@@ -97,7 +97,7 @@ impl MassImportService {
     ///
     pub async fn import_with_dat(
         &self,
-        input: MassImportInput,
+        input: DatMassImportInput,
         progress_tx: Option<Sender<MassImportSyncEvent>>,
     ) -> Result<DatFileMassImportResult, Error> {
         tracing::info!(
@@ -158,7 +158,7 @@ mod tests {
         file_import::file_import_service_ops::{CreateMockState, MockFileImportServiceOps},
         file_set::mock_file_set_service::MockFileSetService,
         file_system_ops::mock::MockFileSystemOps,
-        mass_import::{models::MassImportInput, test_utils::create_mock_reader_factory},
+        mass_import::{models::DatMassImportInput, test_utils::create_mock_reader_factory},
     };
     use core_types::{FileType, ReadFile, Sha1Checksum, sha1_bytes_to_hex_string};
     use dat_file_parser::{DatFile, DatFileParserError, DatGame, DatHeader, DatRom, MockDatParser};
@@ -229,9 +229,9 @@ mod tests {
             repository_manager,
         );
 
-        let input = MassImportInput {
+        let input = DatMassImportInput {
             source_path: PathBuf::from("/mock"),
-            dat_file_path: Some(PathBuf::from("/mock/datfile.dat")),
+            dat_file_path: PathBuf::from("/mock/datfile.dat"),
             file_type: FileType::Rom,
             item_type: None,
             system_id,
@@ -354,9 +354,9 @@ mod tests {
             repository_manager,
         );
 
-        let input = MassImportInput {
+        let input = DatMassImportInput {
             source_path: PathBuf::from("/mock"),
-            dat_file_path: Some(PathBuf::from("/mock/datfile.dat")),
+            dat_file_path: PathBuf::from("/mock/datfile.dat"),
             file_type: FileType::Rom,
             item_type: None,
             system_id,

@@ -16,16 +16,12 @@ impl PipelineStep<DatFileMassImportContext> for ImportDatFileStep {
         "import_dat_file_step"
     }
 
-    fn should_execute(&self, context: &DatFileMassImportContext) -> bool {
-        context.input.dat_file_path.is_some()
+    fn should_execute(&self, _context: &DatFileMassImportContext) -> bool {
+        true
     }
 
     async fn execute(&self, context: &mut DatFileMassImportContext) -> StepAction {
-        let dat_path = context
-            .input
-            .dat_file_path
-            .as_ref()
-            .expect("Dat file path should be present");
+        let dat_path = &context.input.dat_file_path;
 
         let parse_res = context.ops.dat_file_parser_ops.parse_dat_file(dat_path);
         match parse_res {
@@ -236,12 +232,11 @@ impl PipelineStep<DatFileMassImportContext> for CategorizeFileSetsForImportStep 
     }
 
     fn should_execute(&self, context: &DatFileMassImportContext) -> bool {
-        // we need file metadata to check for existing file sets
-        !context.state.common_state.file_metadata.is_empty()
-            // dat file has to be parsed for this step
-            && context.state.dat_file.is_some()
-            // dat file has to be inserted for this step
-            && context.state.dat_file_id.is_some()
+        // DAT file must be parsed and stored before we can categorise games.
+        // file_metadata is intentionally NOT required here: even when the source
+        // directory is empty (no local files), we still categorise all DAT games
+        // so that placeholder file sets with is_available=false can be created.
+        context.state.dat_file.is_some() && context.state.dat_file_id.is_some()
     }
 
     async fn execute(&self, context: &mut DatFileMassImportContext) -> StepAction {
@@ -313,7 +308,7 @@ mod tests {
         file_set::mock_file_set_service::MockFileSetService,
         file_system_ops::{FileSystemOps, mock::MockFileSystemOps},
         mass_import::{
-            common_steps::context::MassImportDeps, models::MassImportInput,
+            common_steps::context::MassImportDeps, models::DatMassImportInput,
             test_utils::create_mock_reader_factory, with_dat::context::DatFileMassImportOps,
         },
     };
@@ -365,9 +360,9 @@ mod tests {
 
         let mut context = DatFileMassImportContext::new(
             get_deps().await,
-            MassImportInput {
+            DatMassImportInput {
                 source_path: PathBuf::from("/path/to/source"),
-                dat_file_path: Some(PathBuf::from("/path/to/datfile.dat")),
+                dat_file_path: PathBuf::from("/path/to/datfile.dat"),
                 file_type: core_types::FileType::Rom,
                 item_type: None,
                 system_id: 1,
@@ -421,9 +416,9 @@ mod tests {
         let dat_file_parser_ops = Arc::new(MockDatParser::new(Ok(dat_file.clone().into())));
         let mut context = DatFileMassImportContext::new(
             deps,
-            MassImportInput {
+            DatMassImportInput {
                 source_path: PathBuf::from("/path/to/source"),
-                dat_file_path: Some(PathBuf::from("/path/to/datfile.dat")),
+                dat_file_path: PathBuf::from("/path/to/datfile.dat"),
                 file_type: core_types::FileType::Rom,
                 item_type: None,
                 system_id,
@@ -457,9 +452,9 @@ mod tests {
         let dat_file_parser_ops = Arc::new(MockDatParser::new(Ok(dat_file.clone().into())));
         let mut context = DatFileMassImportContext::new(
             get_deps().await,
-            MassImportInput {
+            DatMassImportInput {
                 source_path: PathBuf::from("/path/to/source"),
-                dat_file_path: Some(PathBuf::from("/path/to/datfile.dat")),
+                dat_file_path: PathBuf::from("/path/to/datfile.dat"),
                 file_type: core_types::FileType::Rom,
                 item_type: None,
                 system_id: 1,
@@ -499,9 +494,9 @@ mod tests {
         let dat_file_parser_ops = Arc::new(MockDatParser::new(Ok(dat_file.clone().into())));
         let mut context = DatFileMassImportContext::new(
             deps,
-            MassImportInput {
+            DatMassImportInput {
                 source_path: PathBuf::from("/path/to/source"),
-                dat_file_path: Some(PathBuf::from("/path/to/datfile.dat")),
+                dat_file_path: PathBuf::from("/path/to/datfile.dat"),
                 file_type: core_types::FileType::Rom,
                 item_type: None,
                 system_id,
@@ -539,9 +534,9 @@ mod tests {
         let dat_file_parser_ops = Arc::new(MockDatParser::new(Ok(dat_file.clone().into())));
         let mut context = DatFileMassImportContext::new(
             get_deps().await,
-            MassImportInput {
+            DatMassImportInput {
                 source_path: PathBuf::from("/path/to/source"),
-                dat_file_path: Some(PathBuf::from("/path/to/datfile.dat")),
+                dat_file_path: PathBuf::from("/path/to/datfile.dat"),
                 file_type: core_types::FileType::Rom,
                 item_type: None,
                 system_id: 1,
@@ -569,9 +564,9 @@ mod tests {
 
         let mut context = DatFileMassImportContext::new(
             get_deps().await,
-            MassImportInput {
+            DatMassImportInput {
                 source_path: PathBuf::from("/path/to/source"),
-                dat_file_path: Some(PathBuf::from("/path/to/invalid.dat")),
+                dat_file_path: PathBuf::from("/path/to/invalid.dat"),
                 file_type: core_types::FileType::Rom,
                 item_type: None,
                 system_id: 1,
@@ -580,7 +575,7 @@ mod tests {
             None,
         );
 
-        // Verify should_execute returns true (dat_file_path is present)
+        // Verify should_execute always returns true (dat_file_path is always present on DatMassImportInput)
         let step = ImportDatFileStep;
         assert!(step.should_execute(&context));
 
@@ -659,9 +654,9 @@ mod tests {
         // Create context with file metadata populated
         let mut context = DatFileMassImportContext::new(
             deps,
-            MassImportInput {
+            DatMassImportInput {
                 source_path: PathBuf::from("/path/to/source"),
-                dat_file_path: Some(PathBuf::from("/path/to/datfile.dat")),
+                dat_file_path: PathBuf::from("/path/to/datfile.dat"),
                 file_type: core_types::FileType::Rom,
                 item_type: None,
                 system_id,
@@ -826,9 +821,9 @@ mod tests {
 
         let mut context = DatFileMassImportContext::new(
             deps,
-            MassImportInput {
+            DatMassImportInput {
                 source_path: PathBuf::from("/roms"),
-                dat_file_path: Some(PathBuf::from("/dat/test.dat")),
+                dat_file_path: PathBuf::from("/dat/test.dat"),
                 file_type: core_types::FileType::Rom,
                 item_type: None,
                 system_id,
@@ -942,7 +937,10 @@ mod tests {
     // --- should_execute guard tests for CategorizeFileSetsForImportStep ---
 
     #[async_std::test]
-    async fn test_categorize_file_sets_for_import_step_skips_when_file_metadata_empty() {
+    async fn test_categorize_file_sets_for_import_step_executes_when_file_metadata_empty() {
+        // Verifies that empty file_metadata does NOT skip categorisation — this is intentional:
+        // even with no local files we still need to categorise DAT games so that placeholder
+        // file sets with is_available=false can be created.
         let deps = get_deps().await;
         let (system_id, dat_file_db_id) =
             setup_system_and_dat_file(&deps.repository_manager, 10).await;
@@ -951,7 +949,7 @@ mod tests {
 
         context.state.common_state.file_metadata.clear();
 
-        assert!(!CategorizeFileSetsForImportStep.should_execute(&context));
+        assert!(CategorizeFileSetsForImportStep.should_execute(&context));
     }
 
     #[async_std::test]
