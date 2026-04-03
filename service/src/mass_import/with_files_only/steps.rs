@@ -233,4 +233,68 @@ mod tests {
             .await
             .unwrap();
     }
+
+    #[async_std::test]
+    async fn test_filter_all_existing_file_sets_removes_all_from_metadata() {
+        // Arrange: both files in file_metadata already exist in the DB.
+        // Expected: after execute(), file_metadata is empty — nothing left to import.
+        let repository_manager = database::setup_test_repository_manager().await;
+        let system_id = add_system(repository_manager.clone()).await;
+        let input = FilesOnlyMassImportInput {
+            source_path: PathBuf::from("/test/path"),
+            file_type: FileType::Rom,
+            item_type: None,
+            system_id,
+            source: "test source".to_string(),
+        };
+
+        let deps = MassImportDeps { repository_manager };
+        let ops = FilesOnlyMassImportOps {
+            fs_ops: Arc::new(MockFileSystemOps::new()),
+            file_import_service_ops: Arc::new(MockFileImportServiceOps::new()),
+            reader_factory_fn: create_mock_factory_with_test_data(vec![]),
+        };
+
+        let mut context = FilesOnlyMassImportContext::new(deps, input, ops, None);
+
+        let file_1_sha1: Sha1Checksum = [0xaa; 20];
+        let file_1_path = PathBuf::from("/test/path/game_a.zip");
+
+        let file_2_sha1: Sha1Checksum = [0xbb; 20];
+        let file_2_path = PathBuf::from("/test/path/game_b.zip");
+
+        context.state.common_state.file_metadata = HashMap::from([
+            (
+                file_1_path.clone(),
+                vec![ReadFile {
+                    file_name: "game_a".to_string(),
+                    file_size: 512,
+                    sha1_checksum: file_1_sha1,
+                }],
+            ),
+            (
+                file_2_path.clone(),
+                vec![ReadFile {
+                    file_name: "game_b".to_string(),
+                    file_size: 1024,
+                    sha1_checksum: file_2_sha1,
+                }],
+            ),
+        ]);
+
+        // Insert both file sets so they are "already existing"
+        insert_file_set_to_db(&context, &file_1_path, FileType::Rom).await;
+        insert_file_set_to_db(&context, &file_2_path, FileType::Rom).await;
+
+        // Act
+        let step = FilterOutAlreadyExistingFileSetsStep;
+        let action = step.execute(&mut context).await;
+
+        // Assert: pipeline continues and all entries are filtered out
+        assert!(matches!(action, StepAction::Continue));
+        assert!(
+            context.state.common_state.file_metadata.is_empty(),
+            "All file sets already exist — file_metadata should be empty after filtering"
+        );
+    }
 }

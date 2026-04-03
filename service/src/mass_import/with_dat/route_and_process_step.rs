@@ -605,6 +605,138 @@ mod tests {
     }
 
     #[async_std::test]
+    async fn test_handle_new_file_set_all_roms_missing_creates_placeholder() {
+        const SHA1_A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        const SHA1_B: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        const SHA1_C: &str = "cccccccccccccccccccccccccccccccccccccccc";
+
+        // Arrange: DAT file with 3 ROMs, none locally available
+        let dat_file = DatFile {
+            header: DatHeader {
+                name: "Multi-ROM DAT".to_string(),
+                version: "1.0".to_string(),
+                ..Default::default()
+            },
+            games: vec![DatGame {
+                name: "Multi-ROM Game".to_string(),
+                description: String::new(),
+                roms: vec![
+                    DatRom {
+                        name: "rom_a.bin".to_string(),
+                        size: 512,
+                        sha1: SHA1_A.to_string(),
+                        ..Default::default()
+                    },
+                    DatRom {
+                        name: "rom_b.bin".to_string(),
+                        size: 512,
+                        sha1: SHA1_B.to_string(),
+                        ..Default::default()
+                    },
+                    DatRom {
+                        name: "rom_c.bin".to_string(),
+                        size: 512,
+                        sha1: SHA1_C.to_string(),
+                        ..Default::default()
+                    },
+                ],
+                ..Default::default()
+            }],
+        };
+        let reader_factory = Arc::new(create_mock_reader_factory(HashMap::new(), vec![]));
+        let file_import_ops = Arc::new(MockFileImportServiceOps::with_create_mock(
+            CreateMockState { file_set_id: 7, release_id: Some(3) },
+        ));
+        let ops = make_ops(file_import_ops, reader_factory.clone());
+        let statuses = vec![DatGameFileSetStatus::NonExisting(dat_file.games[0].clone())];
+        let mut context = make_context(ops, dat_file, statuses, reader_factory).await;
+        // No local files available — all 3 ROMs must be treated as missing
+        context.state.common_state.file_metadata.clear();
+
+        // Act
+        let result = RouteAndProcessFileSetsStep.execute(&mut context).await;
+
+        // Assert
+        assert!(matches!(result, StepAction::Continue));
+        let results = &context.state.common_state.import_results;
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].file_set_id, Some(7), "file_set_id should match mock");
+        let warnings = match &results[0].status {
+            FileSetImportStatus::SuccessWithWarnings(w) => w,
+            other => panic!("Expected SuccessWithWarnings, got {:?}", other),
+        };
+        assert_eq!(warnings.len(), 3, "Expected one warning per missing ROM");
+        assert!(warnings.iter().any(|w| w.contains("rom_a.bin")), "Missing warning for rom_a.bin");
+        assert!(warnings.iter().any(|w| w.contains("rom_b.bin")), "Missing warning for rom_b.bin");
+        assert!(warnings.iter().any(|w| w.contains("rom_c.bin")), "Missing warning for rom_c.bin");
+    }
+
+    #[async_std::test]
+    async fn test_handle_link_existing_to_dat_success() {
+        // Arrange: file set exists but has no release/DAT link yet; no missing files
+        let dat_file = make_dat_file("Test Game", "test.bin");
+        let reader_factory = Arc::new(create_mock_reader_factory(HashMap::new(), vec![]));
+        let ops = make_ops(Arc::new(MockFileImportServiceOps::new()), reader_factory.clone());
+        let statuses = vec![DatGameFileSetStatus::ExistingWithoutReleaseAndWithoutLinkToDat {
+            file_set_id: 42,
+            game: dat_file.games[0].clone(),
+            missing_files: vec![],
+        }];
+        let mut context = make_context(ops, dat_file, statuses, reader_factory).await;
+
+        // Act
+        let result = RouteAndProcessFileSetsStep.execute(&mut context).await;
+
+        // Assert
+        assert!(matches!(result, StepAction::Continue));
+        let results = &context.state.common_state.import_results;
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].status, FileSetImportStatus::Success);
+        assert_eq!(results[0].file_set_id, Some(42));
+    }
+
+    #[async_std::test]
+    async fn test_handle_link_existing_to_dat_with_failure() {
+        // Arrange: file set exists but linking to DAT fails
+        let dat_file = make_dat_file("Test Game", "test.bin");
+        let reader_factory = Arc::new(create_mock_reader_factory(HashMap::new(), vec![]));
+        let file_set_service = Arc::new(MockFileSetService::new());
+        file_set_service.fail_create_release();
+        let ops = DatFileMassImportOps {
+            dat_file_parser_ops: Arc::new(dat_file_parser::MockDatParser::new(Ok(
+                dat_file_parser::DatFile {
+                    header: dat_file_parser::DatHeader::default(),
+                    games: vec![],
+                },
+            ))),
+            fs_ops: Arc::new(MockFileSystemOps::new()),
+            reader_factory_fn: reader_factory.clone(),
+            file_import_service_ops: Arc::new(MockFileImportServiceOps::new()),
+            file_set_service_ops: file_set_service,
+        };
+        let statuses = vec![DatGameFileSetStatus::ExistingWithoutReleaseAndWithoutLinkToDat {
+            file_set_id: 42,
+            game: dat_file.games[0].clone(),
+            missing_files: vec![],
+        }];
+        let mut context = make_context(ops, dat_file, statuses, reader_factory).await;
+
+        // Act
+        let result = RouteAndProcessFileSetsStep.execute(&mut context).await;
+
+        // Assert: pipeline continues (doesn't abort on link failure) but result is Failed
+        assert!(matches!(result, StepAction::Continue));
+        let results = &context.state.common_state.import_results;
+        assert_eq!(results.len(), 1);
+        assert!(
+            matches!(&results[0].status, FileSetImportStatus::Failed(msg) if msg.contains("Failed to link")),
+            "Expected Failed status with descriptive message, got {:?}",
+            results[0].status
+        );
+        assert_eq!(results[0].file_set_id, Some(42), "file_set_id should be returned even on failure");
+    }
+
+    #[async_std::test]
     async fn test_already_linked_complete_file_set_produces_already_exists() {
         // Arrange: file set is already linked and has no missing files
         let dat_file = make_dat_file("Test Game", "test.bin");
@@ -661,5 +793,76 @@ mod tests {
             "All missing files are now available — expected Success"
         );
         assert_eq!(results[0].file_set_id, Some(99));
+    }
+
+    #[async_std::test]
+    async fn test_handle_existing_with_missing_files_link_fails() {
+        const SHA1_B: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+        // Arrange: file set is linked to DAT with two missing files.
+        // SHA1_HEX is locally available (from make_context) → newly available → triggers update_file_set.
+        // SHA1_B is not locally available → still missing.
+        // update_file_set is configured to fail.
+        let dat_file = make_dat_file("Test Game", "test.bin");
+        let sha1_a = sha1_from_hex_string(SHA1_HEX).unwrap();
+        let sha1_b = sha1_from_hex_string(SHA1_B).unwrap();
+        let reader_factory = Arc::new(create_mock_reader_factory(HashMap::new(), vec![]));
+        let file_import_ops = Arc::new(MockFileImportServiceOps {
+            should_fail: true,
+            ..Default::default()
+        });
+        let ops = make_ops(file_import_ops, reader_factory.clone());
+        let statuses = vec![DatGameFileSetStatus::ExistingWithReleaseAndLinkedToDat {
+            file_set_id: 99,
+            game: dat_file.games[0].clone(),
+            missing_files: vec![sha1_a, sha1_b],
+        }];
+        // make_context puts SHA1_HEX into file_metadata → sha1_a is "newly available"
+        let mut context = make_context(ops, dat_file, statuses, reader_factory).await;
+
+        // Act
+        let result = RouteAndProcessFileSetsStep.execute(&mut context).await;
+
+        // Assert: pipeline continues but the import result is Failed
+        assert!(matches!(result, StepAction::Continue));
+        let results = &context.state.common_state.import_results;
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].file_set_id, Some(99));
+        assert!(
+            matches!(&results[0].status, FileSetImportStatus::Failed(_)),
+            "Expected Failed status when update_file_set errors, got {:?}",
+            results[0].status
+        );
+    }
+
+    #[async_std::test]
+    async fn test_existing_linked_file_set_with_no_newly_available_files_returns_still_missing() {
+        // Arrange: the file set is linked to DAT and has a missing file that is NOT available
+        // locally. make_context populates file_metadata with SHA1_HEX only; MISSING_SHA1 is absent.
+        const MISSING_SHA1: &str = "cccccccccccccccccccccccccccccccccccccccc";
+        let dat_file = make_dat_file("Test Game", "test.bin");
+        let reader_factory = Arc::new(create_mock_reader_factory(HashMap::new(), vec![]));
+        let ops = make_ops(Arc::new(MockFileImportServiceOps::new()), reader_factory.clone());
+        let missing_sha1 = sha1_from_hex_string(MISSING_SHA1).unwrap();
+        let statuses = vec![DatGameFileSetStatus::ExistingWithReleaseAndLinkedToDat {
+            file_set_id: 77,
+            game: dat_file.games[0].clone(),
+            missing_files: vec![missing_sha1],
+        }];
+        let mut context = make_context(ops, dat_file, statuses, reader_factory).await;
+
+        // Act
+        let result = RouteAndProcessFileSetsStep.execute(&mut context).await;
+
+        // Assert: pipeline continues and records StillMissingFiles
+        assert!(matches!(result, StepAction::Continue));
+        let results = &context.state.common_state.import_results;
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].file_set_id, Some(77));
+        assert!(
+            matches!(&results[0].status, FileSetImportStatus::StillMissingFiles(msgs) if !msgs.is_empty()),
+            "Expected StillMissingFiles with warning messages, got {:?}",
+            results[0].status
+        );
     }
 }
