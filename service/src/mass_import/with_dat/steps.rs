@@ -710,7 +710,65 @@ mod tests {
         assert_eq!(game.name, "NonExistent Game");
     }
 
-    // Helper: insert a file set into the DB with a single ROM and return its ID.
+    // --- Helpers for CategorizeFileSetsForImportStep tests ---
+
+    /// Builds a single-game DatFile using the canonical test header.
+    fn make_single_game_dat_file(game_name: &str, rom_name: &str, rom_sha1: &str) -> DatFile {
+        DatFile {
+            header: DatHeader {
+                id: 0,
+                name: "Test DAT".to_string(),
+                version: "1.0".to_string(),
+                description: String::new(),
+                date: None,
+                author: "Test Author".to_string(),
+                homepage: None,
+                url: None,
+                subset: None,
+            },
+            games: vec![DatGame {
+                name: game_name.to_string(),
+                roms: vec![DatRom {
+                    name: rom_name.to_string(),
+                    size: 1024,
+                    sha1: rom_sha1.to_string(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+        }
+    }
+
+    /// Adds a test system and a DAT file entry to the DB; returns `(system_id, dat_file_db_id)`.
+    async fn setup_system_and_dat_file(
+        repo_manager: &Arc<database::repository_manager::RepositoryManager>,
+        dat_id: i32,
+    ) -> (i64, i64) {
+        let system_id = repo_manager
+            .get_system_repository()
+            .add_system("Test System")
+            .await
+            .unwrap();
+        let dat_file_db_id = repo_manager
+            .get_dat_repository()
+            .add_dat_file(AddDatFileParams {
+                dat_id,
+                name: "Test DAT",
+                description: "",
+                version: "1.0",
+                date: None,
+                author: "Test Author",
+                homepage: None,
+                url: None,
+                subset: None,
+                system_id,
+            })
+            .await
+            .unwrap();
+        (system_id, dat_file_db_id)
+    }
+
+    /// Inserts a file set into the DB with a single ROM and returns the new file set ID.
     async fn add_matching_file_set(
         repo_manager: &Arc<database::repository_manager::RepositoryManager>,
         game_name: &str,
@@ -741,356 +799,144 @@ mod tests {
             .expect("Failed to add file set")
     }
 
+    /// Builds a `DatFileMassImportContext` ready for `CategorizeFileSetsForImportStep`.
+    /// `file_metadata` is derived from the DAT's ROMs so the step's `should_execute` guard passes.
+    async fn make_categorize_context(
+        deps: MassImportDeps,
+        system_id: i64,
+        dat_file_db_id: i64,
+        dat_file: DatFile,
+    ) -> DatFileMassImportContext {
+        let file_metadata = dat_file
+            .games
+            .iter()
+            .flat_map(|g| g.roms.iter())
+            .map(|rom| {
+                let sha1 = sha1_from_hex_string(&rom.sha1).expect("Invalid SHA1 in test fixture");
+                (
+                    PathBuf::from(format!("/roms/{}", rom.name)),
+                    vec![core_types::ReadFile {
+                        file_name: rom.name.clone(),
+                        sha1_checksum: sha1,
+                        file_size: rom.size,
+                    }],
+                )
+            })
+            .collect();
+
+        let mut context = DatFileMassImportContext::new(
+            deps,
+            MassImportInput {
+                source_path: PathBuf::from("/roms"),
+                dat_file_path: Some(PathBuf::from("/dat/test.dat")),
+                file_type: core_types::FileType::Rom,
+                item_type: None,
+                system_id,
+            },
+            get_ops(None, None, None, None),
+            None,
+        );
+        context.state.dat_file = Some(dat_file);
+        context.state.dat_file_id = Some(dat_file_db_id);
+        context.state.common_state.file_metadata = file_metadata;
+        context
+    }
+
     #[async_std::test]
     async fn test_categorize_file_sets_existing_linked_to_dat_no_missing_files() {
-        // Arrange: a file set exists and is fully linked to the DAT file.
-        // Expected: ExistingWithReleaseAndLinkedToDat with empty missing_files.
+        // File set is fully linked to the DAT → ExistingWithReleaseAndLinkedToDat, no missing files.
         const ROM_SHA1: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
         const GAME_NAME: &str = "Linked Game";
         const ROM_NAME: &str = "game.bin";
 
         let deps = get_deps().await;
-        let system_id = deps
-            .repository_manager
-            .get_system_repository()
-            .add_system("Test System")
-            .await
-            .unwrap();
-        let dat_file_db_id = deps
-            .repository_manager
-            .get_dat_repository()
-            .add_dat_file(AddDatFileParams {
-                dat_id: 1,
-                name: "Test DAT",
-                description: "",
-                version: "1.0",
-                date: None,
-                author: "Test Author",
-                homepage: None,
-                url: None,
-                subset: None,
-                system_id,
-            })
-            .await
-            .unwrap();
-
+        let (system_id, dat_file_db_id) =
+            setup_system_and_dat_file(&deps.repository_manager, 1).await;
         let file_set_id = add_matching_file_set(
-            &deps.repository_manager,
-            GAME_NAME,
-            ROM_NAME,
-            ROM_SHA1,
-            system_id,
-            true, // all available
+            &deps.repository_manager, GAME_NAME, ROM_NAME, ROM_SHA1, system_id, true,
         )
         .await;
-
         deps.repository_manager
             .get_file_set_repository()
             .link_file_set_to_dat_file(file_set_id, dat_file_db_id)
             .await
             .unwrap();
 
-        let dat_file = DatFile {
-            header: DatHeader {
-                id: 0,
-                name: "Test DAT".to_string(),
-                version: "1.0".to_string(),
-                description: String::new(),
-                date: None,
-                author: "Test Author".to_string(),
-                homepage: None,
-                url: None,
-                subset: None,
-            },
-            games: vec![DatGame {
-                name: GAME_NAME.to_string(),
-                roms: vec![DatRom {
-                    name: ROM_NAME.to_string(),
-                    size: 1024,
-                    sha1: ROM_SHA1.to_string(),
-                    ..Default::default()
-                }],
-                ..Default::default()
-            }],
-        };
+        let dat_file = make_single_game_dat_file(GAME_NAME, ROM_NAME, ROM_SHA1);
+        let mut context =
+            make_categorize_context(deps, system_id, dat_file_db_id, dat_file).await;
 
-        let mut context = DatFileMassImportContext::new(
-            deps,
-            MassImportInput {
-                source_path: PathBuf::from("/roms"),
-                dat_file_path: Some(PathBuf::from("/dat/test.dat")),
-                file_type: core_types::FileType::Rom,
-                item_type: None,
-                system_id,
-            },
-            get_ops(None, None, None, None),
-            None,
-        );
-        context.state.dat_file = Some(dat_file);
-        context.state.dat_file_id = Some(dat_file_db_id);
-        context.state.common_state.file_metadata = {
-            let mut map = HashMap::new();
-            map.insert(
-                PathBuf::from("/roms/game.bin"),
-                vec![core_types::ReadFile {
-                    file_name: ROM_NAME.to_string(),
-                    sha1_checksum: sha1_from_hex_string(ROM_SHA1).unwrap(),
-                    file_size: 1024,
-                }],
-            );
-            map
-        };
+        let result = CategorizeFileSetsForImportStep.execute(&mut context).await;
 
-        // Act
-        let step = CategorizeFileSetsForImportStep;
-        let result = step.execute(&mut context).await;
-
-        // Assert
         assert!(matches!(result, StepAction::Continue));
-        assert_eq!(context.state.dat_game_statuses.len(), 1);
-        assert!(
-            matches!(
-                &context.state.dat_game_statuses[0],
-                DatGameFileSetStatus::ExistingWithReleaseAndLinkedToDat {
-                    missing_files,
-                    ..
-                } if missing_files.is_empty()
-            ),
-            "Expected ExistingWithReleaseAndLinkedToDat with no missing files, got {:?}",
-            context.state.dat_game_statuses[0]
-        );
+        assert!(matches!(
+            &context.state.dat_game_statuses[0],
+            DatGameFileSetStatus::ExistingWithReleaseAndLinkedToDat { missing_files, .. }
+                if missing_files.is_empty()
+        ));
     }
 
     #[async_std::test]
     async fn test_categorize_file_sets_existing_linked_to_dat_with_missing_files() {
-        // Arrange: file set is linked to DAT but the ROM is unavailable.
-        // Expected: ExistingWithReleaseAndLinkedToDat with one entry in missing_files.
+        // File set is linked to DAT but ROM is unavailable → ExistingWithReleaseAndLinkedToDat
+        // with one entry in missing_files.
         const ROM_SHA1: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
         const GAME_NAME: &str = "Linked Game With Missing";
         const ROM_NAME: &str = "missing.bin";
 
         let deps = get_deps().await;
-        let system_id = deps
-            .repository_manager
-            .get_system_repository()
-            .add_system("Test System")
-            .await
-            .unwrap();
-        let dat_file_db_id = deps
-            .repository_manager
-            .get_dat_repository()
-            .add_dat_file(AddDatFileParams {
-                dat_id: 2,
-                name: "Test DAT",
-                description: "",
-                version: "1.0",
-                date: None,
-                author: "Test Author",
-                homepage: None,
-                url: None,
-                subset: None,
-                system_id,
-            })
-            .await
-            .unwrap();
-
+        let (system_id, dat_file_db_id) =
+            setup_system_and_dat_file(&deps.repository_manager, 2).await;
         let file_set_id = add_matching_file_set(
-            &deps.repository_manager,
-            GAME_NAME,
-            ROM_NAME,
-            ROM_SHA1,
-            system_id,
-            false, // unavailable → will appear in missing_files
+            &deps.repository_manager, GAME_NAME, ROM_NAME, ROM_SHA1, system_id, false, // unavailable
         )
         .await;
-
         deps.repository_manager
             .get_file_set_repository()
             .link_file_set_to_dat_file(file_set_id, dat_file_db_id)
             .await
             .unwrap();
 
-        let dat_file = DatFile {
-            header: DatHeader {
-                id: 0,
-                name: "Test DAT".to_string(),
-                version: "1.0".to_string(),
-                description: String::new(),
-                date: None,
-                author: "Test Author".to_string(),
-                homepage: None,
-                url: None,
-                subset: None,
-            },
-            games: vec![DatGame {
-                name: GAME_NAME.to_string(),
-                roms: vec![DatRom {
-                    name: ROM_NAME.to_string(),
-                    size: 1024,
-                    sha1: ROM_SHA1.to_string(),
-                    ..Default::default()
-                }],
-                ..Default::default()
-            }],
-        };
+        let dat_file = make_single_game_dat_file(GAME_NAME, ROM_NAME, ROM_SHA1);
+        let mut context =
+            make_categorize_context(deps, system_id, dat_file_db_id, dat_file).await;
 
-        let mut context = DatFileMassImportContext::new(
-            deps,
-            MassImportInput {
-                source_path: PathBuf::from("/roms"),
-                dat_file_path: Some(PathBuf::from("/dat/test.dat")),
-                file_type: core_types::FileType::Rom,
-                item_type: None,
-                system_id,
-            },
-            get_ops(None, None, None, None),
-            None,
-        );
-        context.state.dat_file = Some(dat_file);
-        context.state.dat_file_id = Some(dat_file_db_id);
-        context.state.common_state.file_metadata = {
-            let mut map = HashMap::new();
-            map.insert(
-                PathBuf::from("/roms/missing.bin"),
-                vec![core_types::ReadFile {
-                    file_name: ROM_NAME.to_string(),
-                    sha1_checksum: sha1_from_hex_string(ROM_SHA1).unwrap(),
-                    file_size: 1024,
-                }],
-            );
-            map
-        };
+        let result = CategorizeFileSetsForImportStep.execute(&mut context).await;
 
-        // Act
-        let step = CategorizeFileSetsForImportStep;
-        let result = step.execute(&mut context).await;
-
-        // Assert
         assert!(matches!(result, StepAction::Continue));
-        assert_eq!(context.state.dat_game_statuses.len(), 1);
-        assert!(
-            matches!(
-                &context.state.dat_game_statuses[0],
-                DatGameFileSetStatus::ExistingWithReleaseAndLinkedToDat {
-                    missing_files,
-                    ..
-                } if missing_files.len() == 1
-            ),
-            "Expected ExistingWithReleaseAndLinkedToDat with one missing file, got {:?}",
-            context.state.dat_game_statuses[0]
-        );
+        assert!(matches!(
+            &context.state.dat_game_statuses[0],
+            DatGameFileSetStatus::ExistingWithReleaseAndLinkedToDat { missing_files, .. }
+                if missing_files.len() == 1
+        ));
     }
 
     #[async_std::test]
     async fn test_categorize_file_sets_existing_not_linked_to_dat() {
-        // Arrange: file set exists but is NOT linked to this DAT file.
-        // Expected: ExistingWithoutReleaseAndWithoutLinkToDat.
+        // File set exists in DB but is NOT linked to the DAT → ExistingWithoutReleaseAndWithoutLinkToDat.
         const ROM_SHA1: &str = "cccccccccccccccccccccccccccccccccccccccc";
         const GAME_NAME: &str = "Unlinked Game";
         const ROM_NAME: &str = "unlinked.bin";
 
         let deps = get_deps().await;
-        let system_id = deps
-            .repository_manager
-            .get_system_repository()
-            .add_system("Test System")
-            .await
-            .unwrap();
-        let dat_file_db_id = deps
-            .repository_manager
-            .get_dat_repository()
-            .add_dat_file(AddDatFileParams {
-                dat_id: 3,
-                name: "Test DAT",
-                description: "",
-                version: "1.0",
-                date: None,
-                author: "Test Author",
-                homepage: None,
-                url: None,
-                subset: None,
-                system_id,
-            })
-            .await
-            .unwrap();
-
-        // File set is in DB but NOT linked to the dat file
-        let _file_set_id = add_matching_file_set(
-            &deps.repository_manager,
-            GAME_NAME,
-            ROM_NAME,
-            ROM_SHA1,
-            system_id,
-            true,
+        let (system_id, dat_file_db_id) =
+            setup_system_and_dat_file(&deps.repository_manager, 3).await;
+        add_matching_file_set(
+            &deps.repository_manager, GAME_NAME, ROM_NAME, ROM_SHA1, system_id, true,
         )
         .await;
 
-        let dat_file = DatFile {
-            header: DatHeader {
-                id: 0,
-                name: "Test DAT".to_string(),
-                version: "1.0".to_string(),
-                description: String::new(),
-                date: None,
-                author: "Test Author".to_string(),
-                homepage: None,
-                url: None,
-                subset: None,
-            },
-            games: vec![DatGame {
-                name: GAME_NAME.to_string(),
-                roms: vec![DatRom {
-                    name: ROM_NAME.to_string(),
-                    size: 1024,
-                    sha1: ROM_SHA1.to_string(),
-                    ..Default::default()
-                }],
-                ..Default::default()
-            }],
-        };
+        let dat_file = make_single_game_dat_file(GAME_NAME, ROM_NAME, ROM_SHA1);
+        let mut context =
+            make_categorize_context(deps, system_id, dat_file_db_id, dat_file).await;
 
-        let mut context = DatFileMassImportContext::new(
-            deps,
-            MassImportInput {
-                source_path: PathBuf::from("/roms"),
-                dat_file_path: Some(PathBuf::from("/dat/test.dat")),
-                file_type: core_types::FileType::Rom,
-                item_type: None,
-                system_id,
-            },
-            get_ops(None, None, None, None),
-            None,
-        );
-        context.state.dat_file = Some(dat_file);
-        context.state.dat_file_id = Some(dat_file_db_id);
-        context.state.common_state.file_metadata = {
-            let mut map = HashMap::new();
-            map.insert(
-                PathBuf::from("/roms/unlinked.bin"),
-                vec![core_types::ReadFile {
-                    file_name: ROM_NAME.to_string(),
-                    sha1_checksum: sha1_from_hex_string(ROM_SHA1).unwrap(),
-                    file_size: 1024,
-                }],
-            );
-            map
-        };
+        let result = CategorizeFileSetsForImportStep.execute(&mut context).await;
 
-        // Act
-        let step = CategorizeFileSetsForImportStep;
-        let result = step.execute(&mut context).await;
-
-        // Assert
         assert!(matches!(result, StepAction::Continue));
-        assert_eq!(context.state.dat_game_statuses.len(), 1);
-        assert!(
-            matches!(
-                &context.state.dat_game_statuses[0],
-                DatGameFileSetStatus::ExistingWithoutReleaseAndWithoutLinkToDat { .. }
-            ),
-            "Expected ExistingWithoutReleaseAndWithoutLinkToDat, got {:?}",
-            context.state.dat_game_statuses[0]
-        );
+        assert!(matches!(
+            &context.state.dat_game_statuses[0],
+            DatGameFileSetStatus::ExistingWithoutReleaseAndWithoutLinkToDat { .. }
+        ));
     }
 
     // TODO: create a test case where re-importing the same dat file
