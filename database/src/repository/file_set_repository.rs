@@ -215,10 +215,7 @@ impl FileSetRepository {
         file_type: FileType,
         system_ids: &[i64],
     ) -> Result<Vec<FileSet>, DatabaseError> {
-        println!(
-            "Getting file sets for file type: {:?} and systems: {:?}",
-            file_type, system_ids
-        );
+        tracing::debug!(file_type = ?file_type, system_ids = ?system_ids, "Getting file sets");
         let placeholders = system_ids
             .iter()
             .map(|_| "?")
@@ -355,7 +352,7 @@ impl FileSetRepository {
         .execute(&mut *tx)
         .await?;
         let file_set_id = result.last_insert_rowid();
-        println!("File set created with ID: {}", file_set_id);
+        tracing::debug!(file_set_id, "File set created");
 
         for file in files_in_fileset {
             let checksum = file.sha1_checksum.to_vec();
@@ -370,22 +367,16 @@ impl FileSetRepository {
             .fetch_optional(&mut *tx)
             .await?;
 
-            println!(
-                "Existing file info for checksum {:?}: {:?}",
-                checksum, existing_file_info
-            );
+            tracing::debug!(sha1 = ?checksum, existing_file_info = ?existing_file_info, "Checked existing file_info");
 
             let archive_file_name = &file.archive_file_name;
 
             let file_info_id = match existing_file_info {
                 Some(id) => {
                     if file.is_available {
-                        sqlx::query!(
-                            "UPDATE file_info SET is_available = 1 WHERE id = ?",
-                            id
-                        )
-                        .execute(&mut *tx)
-                        .await?;
+                        sqlx::query!("UPDATE file_info SET is_available = 1 WHERE id = ?", id)
+                            .execute(&mut *tx)
+                            .await?;
                     }
                     id
                 }
@@ -412,10 +403,7 @@ impl FileSetRepository {
                 }
             };
 
-            println!(
-                "File info ID for file {}: {}",
-                file.original_file_name, file_info_id
-            );
+            tracing::debug!(file_name = %file.original_file_name, file_info_id, "Resolved file_info ID");
 
             // insert new systems for file_info
 
@@ -433,19 +421,13 @@ impl FileSetRepository {
             .map(|row| row.system_id)
             .collect::<HashSet<_>>();
 
-            println!(
-                "Existing systems for file info ID {}: {:?}",
-                file_info_id, file_info_systems
-            );
+            tracing::debug!(file_info_id, systems = ?file_info_systems, "Existing systems for file_info");
 
             let system_ids: HashSet<i64> = system_ids.iter().copied().collect();
 
             let new_system_ids = system_ids.difference(&file_info_systems);
 
-            println!(
-                "New systems to add for file info ID {}: {:?}",
-                file_info_id, new_system_ids
-            );
+            tracing::debug!(file_info_id, new_systems = ?new_system_ids, "New systems to link to file_info");
 
             for system_id in new_system_ids {
                 sqlx::query!(
@@ -481,7 +463,7 @@ impl FileSetRepository {
             .await?;
         }
 
-        println!("File set with ID {} added successfully", file_set_id);
+        tracing::debug!(file_set_id, "File set added successfully");
 
         Ok(file_set_id)
     }
