@@ -939,6 +939,47 @@ mod tests {
         ));
     }
 
+    // --- should_execute guard tests for CategorizeFileSetsForImportStep ---
+
+    #[async_std::test]
+    async fn test_categorize_file_sets_for_import_step_skips_when_file_metadata_empty() {
+        let deps = get_deps().await;
+        let (system_id, dat_file_db_id) =
+            setup_system_and_dat_file(&deps.repository_manager, 10).await;
+        let dat_file = make_single_game_dat_file("Game", "rom.bin", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        let mut context = make_categorize_context(deps, system_id, dat_file_db_id, dat_file).await;
+
+        context.state.common_state.file_metadata.clear();
+
+        assert!(!CategorizeFileSetsForImportStep.should_execute(&context));
+    }
+
+    #[async_std::test]
+    async fn test_categorize_file_sets_for_import_step_skips_when_dat_file_not_loaded() {
+        let deps = get_deps().await;
+        let (system_id, dat_file_db_id) =
+            setup_system_and_dat_file(&deps.repository_manager, 11).await;
+        let dat_file = make_single_game_dat_file("Game", "rom.bin", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        let mut context = make_categorize_context(deps, system_id, dat_file_db_id, dat_file).await;
+
+        context.state.dat_file = None;
+
+        assert!(!CategorizeFileSetsForImportStep.should_execute(&context));
+    }
+
+    #[async_std::test]
+    async fn test_categorize_file_sets_for_import_step_skips_when_dat_file_id_not_set() {
+        let deps = get_deps().await;
+        let (system_id, dat_file_db_id) =
+            setup_system_and_dat_file(&deps.repository_manager, 12).await;
+        let dat_file = make_single_game_dat_file("Game", "rom.bin", "cccccccccccccccccccccccccccccccccccccccc");
+        let mut context = make_categorize_context(deps, system_id, dat_file_db_id, dat_file).await;
+
+        context.state.dat_file_id = None;
+
+        assert!(!CategorizeFileSetsForImportStep.should_execute(&context));
+    }
+
     // TODO: create a test case where re-importing the same dat file
     // - shouldn't create a new dat file in the database
     // - shouldn't create duplicate file sets
