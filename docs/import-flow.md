@@ -1,8 +1,9 @@
 # Import Flow
 
 This document describes the domain logic of the mass import system — how files are scanned,
-matched to DAT game definitions, stored, and tracked across multiple import runs. It is intended
-as a reference for writing tests and for extending the import logic with new features.
+matched to software titles, categorized by file type, stored, and tracked across multiple
+import runs. It is intended as a reference for writing tests and for extending the import
+logic with new features.
 
 > **Note:** The diagram in `mass_import_flow.dot` / `mass_import_flow.svg` reflects an older
 > version of the pipeline and should be updated to match the current implementation.
@@ -27,9 +28,10 @@ The rest of this document focuses on DAT-guided mode, which is significantly mor
 
 ### Identity: SHA1-based matching
 
-A file set is identified by the set of SHA1 checksums of its files. Two file sets are considered
-the same if they have the same SHA1s for the same file type. The DAT file provides the expected
-SHA1s; the local scan provides what is actually present on disk.
+A file set is identified by the set of SHA1 checksums of its constituent files, scoped by
+file type. Two file sets are considered equivalent if they declare the same SHA1s for the
+same file type. In DAT-guided imports the expected SHA1s come from the DAT file; in
+files-only imports they are computed directly from the scanned files.
 
 ### `file_info` is shared across file sets
 
@@ -38,8 +40,8 @@ physical file (same SHA1 + file type). When a new file set is imported:
 - If a `file_info` record already exists for that SHA1, it is reused — no duplicate is created.
 - The `file_set_file_info` junction table links file sets to file info records.
 
-This means a file physically imported for one game is automatically available for another game
-that shares the same ROM file.
+This means a file physically imported for one software title is automatically available for
+any other title that references the same file (same SHA1 and file type).
 
 ### `is_available` flag
 
@@ -50,10 +52,10 @@ created.
 
 ### DAT extras: recording missing files
 
-When a new file set is imported with some ROMs missing, those missing ROMs are stored as
-`DatImportExtras.missing_files` (as `Sha1Checksum` + file name + size). On subsequent import
-runs, these stored SHA1s are cross-referenced against the current local scan to detect newly
-available files.
+When a new file set is imported with some files missing from the source directory, those
+missing files are stored as `DatImportExtras.missing_files` (as `Sha1Checksum` + file name
++ size). On subsequent import runs, these stored SHA1s are cross-referenced against the
+current local scan to detect newly available files.
 
 ---
 
@@ -76,7 +78,7 @@ ImportDatFileStep
 Parses the DAT file at `input.dat_file_path` using the DAT parser and stores the result in
 context state. Aborts the pipeline on parse failure.
 
-**Skip condition:** No DAT file path provided.
+**Skip condition:** Always executes — `dat_file_path` is required on `DatMassImportInput`.
 
 ### Step 2: CheckExistingDatFileStep
 
@@ -115,7 +117,7 @@ resulting `Vec<DatGameFileSetStatus>` is stored in context state and drives the 
 - `ExistingWithReleaseAndLinkedToDat` — file set exists and is already linked to this DAT
 - `ExistingWithoutReleaseAndWithoutLinkToDat` — file set exists but is not yet linked to this DAT
 
-**Skip condition:** No file metadata available, or DAT not parsed, or no DAT file ID.
+**Skip condition:** DAT not yet parsed, or no DAT file ID in context.
 
 ### Step 7: RouteAndProcessFileSetsStep
 
