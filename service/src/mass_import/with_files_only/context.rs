@@ -15,7 +15,7 @@ use crate::{
     },
     file_system_ops::FileSystemOps,
     mass_import::{
-        common_steps::context::{CommonMassImportState, MassImportContextOps, MassImportDeps},
+        common_steps::context::{CommonMassImportState, ImportableFileSets, MassImportContextOps, MassImportDeps},
         models::MassImportSyncEvent,
     },
 };
@@ -127,6 +127,16 @@ impl MassImportContextOps for FilesOnlyMassImportContext {
         &self.input.source_path
     }
 
+    fn import_service_ops(&self) -> Arc<dyn FileImportServiceOps> {
+        self.ops.file_import_service_ops.clone()
+    }
+
+    fn progress_tx(&self) -> &Option<Sender<MassImportSyncEvent>> {
+        &self.progress_tx
+    }
+}
+
+impl ImportableFileSets for FilesOnlyMassImportContext {
     fn can_import_file_sets(&self) -> bool {
         !self.state.common_state.file_metadata.is_empty()
     }
@@ -138,14 +148,6 @@ impl MassImportContextOps for FilesOnlyMassImportContext {
             .iter()
             .map(|(file_path, metadata)| self.create_file_set_import_model(file_path, metadata))
             .collect()
-    }
-
-    fn import_service_ops(&self) -> Arc<dyn FileImportServiceOps> {
-        self.ops.file_import_service_ops.clone()
-    }
-
-    fn progress_tx(&self) -> &Option<Sender<MassImportSyncEvent>> {
-        &self.progress_tx
     }
 }
 

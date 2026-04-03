@@ -3,7 +3,7 @@ use core_types::{FileSetEqualitySpecs, FileSetFileEqualitySpecs};
 use crate::{
     error::Error,
     mass_import::{
-        common_steps::context::MassImportContextOps,
+        common_steps::context::{ImportableFileSets, MassImportContextOps},
         with_files_only::context::FilesOnlyMassImportContext,
     },
     pipeline::pipeline_step::{PipelineStep, StepAction},

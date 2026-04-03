@@ -60,11 +60,18 @@ pub trait MassImportContextOps {
     fn file_metadata(&mut self) -> &mut HashMap<PathBuf, Vec<ReadFile>> {
         &mut self.common_state_mut().file_metadata
     }
-    fn get_import_file_sets(&self) -> Vec<FileSetImportModel>;
     fn import_service_ops(&self) -> Arc<dyn FileImportServiceOps>;
     fn import_results(&mut self) -> &mut Vec<FileSetImportResult> {
         &mut self.common_state_mut().import_results
     }
     fn progress_tx(&self) -> &Option<Sender<MassImportSyncEvent>>;
+}
+
+/// Extension of [`MassImportContextOps`] for contexts that support the generic
+/// [`ImportFileSetsStep`][crate::mass_import::common_steps::steps::ImportFileSetsStep].
+/// DAT contexts use [`RouteAndProcessFileSetsStep`][crate::mass_import::with_dat::route_and_process_step::RouteAndProcessFileSetsStep]
+/// instead and do not implement this trait.
+pub trait ImportableFileSets: MassImportContextOps {
+    fn get_import_file_sets(&self) -> Vec<FileSetImportModel>;
     fn can_import_file_sets(&self) -> bool;
 }

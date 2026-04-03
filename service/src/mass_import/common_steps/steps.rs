@@ -1,7 +1,7 @@
 use crate::{
     error::Error,
     mass_import::{
-        common_steps::context::MassImportContextOps,
+        common_steps::context::{ImportableFileSets, MassImportContextOps},
         models::{FileSetImportResult, FileSetImportStatus, MassImportSyncEvent},
     },
     pipeline::pipeline_step::{PipelineStep, StepAction},
@@ -179,17 +179,17 @@ impl<T: MassImportContextOps + Send + Sync> PipelineStep<T> for ReadFileMetadata
 ///
 /// The step continues even if some file set imports fail, and the result of each import is stored
 /// in the context to be included in the final result of the mass import operation.
-pub struct ImportFileSetsStep<T: MassImportContextOps> {
+pub struct ImportFileSetsStep<T: ImportableFileSets> {
     _phantom: std::marker::PhantomData<T>,
 }
 
-impl<T: MassImportContextOps> Default for ImportFileSetsStep<T> {
+impl<T: ImportableFileSets> Default for ImportFileSetsStep<T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T: MassImportContextOps> ImportFileSetsStep<T> {
+impl<T: ImportableFileSets> ImportFileSetsStep<T> {
     pub fn new() -> Self {
         Self {
             _phantom: std::marker::PhantomData,
@@ -198,7 +198,7 @@ impl<T: MassImportContextOps> ImportFileSetsStep<T> {
 }
 
 #[async_trait::async_trait]
-impl<T: MassImportContextOps + Send + Sync> PipelineStep<T> for ImportFileSetsStep<T> {
+impl<T: ImportableFileSets + Send + Sync> PipelineStep<T> for ImportFileSetsStep<T> {
     fn name(&self) -> &'static str {
         "import_file_sets_step"
     }
@@ -329,8 +329,8 @@ mod tests {
         file_set::mock_file_set_service::MockFileSetService,
         file_system_ops::{FileSystemOps, SimpleDirEntry, mock::MockFileSystemOps},
         mass_import::{
-            common_steps::context::CommonMassImportState,
-            models::{MassImportInput, MassImportSyncEvent},
+            common_steps::context::{CommonMassImportState, ImportableFileSets},
+            models::{DatMassImportInput, MassImportSyncEvent},
             test_utils::create_mock_reader_factory,
             with_dat::context::DatFileMassImportOps,
         },
@@ -339,7 +339,7 @@ mod tests {
     struct TestMassImportContext {
         state: TestMassImportState,
         ops: DatFileMassImportOps,
-        input: MassImportInput,
+        input: DatMassImportInput,
     }
 
     #[derive(Default, Debug)]
@@ -350,7 +350,7 @@ mod tests {
 
     impl TestMassImportContext {
         pub fn new(
-            input: MassImportInput,
+            input: DatMassImportInput,
             ops: DatFileMassImportOps,
             state: Option<TestMassImportState>,
         ) -> Self {
@@ -411,16 +411,18 @@ mod tests {
             &self.input.source_path
         }
 
-        fn get_import_file_sets(&self) -> Vec<FileSetImportModel> {
-            self.state.file_sets_to_import.clone()
-        }
-
         fn import_service_ops(&self) -> Arc<dyn FileImportServiceOps> {
             self.ops.file_import_service_ops.clone()
         }
 
         fn progress_tx(&self) -> &Option<Sender<MassImportSyncEvent>> {
             &None
+        }
+    }
+
+    impl ImportableFileSets for TestMassImportContext {
+        fn get_import_file_sets(&self) -> Vec<FileSetImportModel> {
+            self.state.file_sets_to_import.clone()
         }
 
         fn can_import_file_sets(&self) -> bool {
@@ -451,9 +453,9 @@ mod tests {
         let ops = get_ops(None, Some(Arc::new(mock_fs_ops)), None, None);
 
         let mut context = TestMassImportContext::new(
-            MassImportInput {
+            DatMassImportInput {
                 source_path: PathBuf::from("/mock"),
-                dat_file_path: None,
+                dat_file_path: PathBuf::from("/dummy.dat"),
                 file_type: core_types::FileType::Rom,
                 item_type: None,
                 system_id: 1,
@@ -524,9 +526,9 @@ mod tests {
             create_mock_reader_factory(metadata_by_path, vec![PathBuf::from("/mock/file3.zip")]);
         let ops = get_ops(None, None, Some(Arc::new(reader_factory)), None);
         let mut context = TestMassImportContext::new(
-            MassImportInput {
+            DatMassImportInput {
                 source_path: PathBuf::from("/mock"),
-                dat_file_path: None,
+                dat_file_path: PathBuf::from("/dummy.dat"),
                 file_type: core_types::FileType::Rom,
                 item_type: None,
                 system_id: 1,
@@ -623,9 +625,9 @@ mod tests {
 
         let ops = get_ops(None, None, None, Some(Arc::new(mock_file_import_ops)));
         let mut context = TestMassImportContext::new(
-            MassImportInput {
+            DatMassImportInput {
                 source_path: PathBuf::from("/mock"),
-                dat_file_path: None,
+                dat_file_path: PathBuf::from("/dummy.dat"),
                 file_type: core_types::FileType::Rom,
                 item_type: None,
                 system_id: 1,
