@@ -18,6 +18,7 @@ struct MockState {
     checksum_to_file_set: HashMap<BTreeSet<Sha1Checksum>, i64>,
     fail_create_for: Vec<String>,
     fail_find_for: Vec<BTreeSet<Sha1Checksum>>,
+    fail_create_release: bool,
 }
 
 /// Mock implementation of FileSetServiceOps for testing
@@ -73,6 +74,11 @@ impl MockFileSetService {
     pub fn fail_find_for(&self, checksums: Vec<Sha1Checksum>) {
         let checksum_set: BTreeSet<Sha1Checksum> = checksums.into_iter().collect();
         self.state.lock().unwrap().fail_find_for.push(checksum_set);
+    }
+
+    /// Make create_release_for_file_set always return an error
+    pub fn fail_create_release(&self) {
+        self.state.lock().unwrap().fail_create_release = true;
     }
 
     /// Get all created file sets
@@ -182,8 +188,12 @@ impl FileSetServiceOps for MockFileSetService {
         _system_ids: &[i64],
         _dat_file_id: Option<i64>,
     ) -> Result<i64, FileSetServiceError> {
-        // TODO: improve if needed
         let mut state = self.state.lock().unwrap();
+        if state.fail_create_release {
+            return Err(FileSetServiceError::DatabaseError(
+                "mock: forced create_release_for_file_set failure".to_string(),
+            ));
+        }
         let release_id = state.next_release_id;
         state.next_release_id += 1;
         Ok(release_id)

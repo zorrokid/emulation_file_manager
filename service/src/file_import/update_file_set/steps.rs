@@ -891,4 +891,97 @@ mod tests {
         assert!(item_types_in_db.contains(&ItemType::DiskOrSetOfDisks));
         assert!(item_types_in_db.contains(&ItemType::Manual));
     }
+
+    #[async_std::test]
+    async fn test_update_file_info_to_database_step_restores_unavailable_file_without_pk_violation() {
+        // Arrange: create a file set with file_info A recorded as is_available = false.
+        // This represents a file that was imported when the ROM wasn't locally present.
+        let sha1_a: Sha1Checksum = [7u8; 20];
+        let mut context = create_test_context(None).await;
+        let repo = context.deps.repository_manager.clone();
+
+        let system_id = repo.get_system_repository().add_system("Test System").await.unwrap();
+
+        // Create file_info as unavailable
+        let file_info_id = repo
+            .get_file_info_repository()
+            .add_file_info(&sha1_a, 1024, "placeholder.zst", FileType::Rom)
+            .await
+            .unwrap();
+
+        // Create file set with file_info A already linked (but unavailable)
+        let files_in_file_set = vec![core_types::ImportedFile {
+            original_file_name: "game.rom".to_string(),
+            archive_file_name: "placeholder.zst".to_string(),
+            sha1_checksum: sha1_a,
+            file_size: 1024,
+            is_available: false,
+        }];
+        let file_set_id = repo
+            .get_file_set_repository()
+            .add_file_set("Test Game", "test_game", &FileType::Rom, "test_src", &files_in_file_set, &[system_id])
+            .await
+            .unwrap();
+
+        context.input.file_set_id = file_set_id;
+        context.state.file_set = Some(FileSet {
+            id: file_set_id,
+            name: "Test Game".to_string(),
+            file_name: "test_game".to_string(),
+            file_type: FileType::Rom,
+            source: "test_src".to_string(),
+        });
+
+        // Populate files_in_file_set in context with the unavailable record
+        context.state.files_in_file_set = vec![database::models::FileInfo {
+            id: file_info_id,
+            sha1_checksum: sha1_a,
+            file_type: FileType::Rom,
+            archive_file_name: "placeholder.zst".to_string(),
+            file_size: 1024,
+            is_available: false,
+        }];
+
+        // Simulate the ROM being locally available now — in imported_files
+        context.state.imported_files.insert(sha1_a, ImportedFile {
+            original_file_name: "game.rom".to_string(),
+            archive_file_name: "placeholder.zst".to_string(),
+            sha1_checksum: sha1_a,
+            file_size: 1024,
+            is_available: true,
+        });
+
+        // Act: UpdateFileInfoToDatabaseStep should call update_is_available, NOT add_file_info
+        let step = super::UpdateFileInfoToDatabaseStep;
+        let action = step.execute(&mut context).await;
+        assert!(matches!(action, StepAction::Continue));
+
+        // Assert: file_info is now available in DB
+        let updated = repo
+            .get_file_info_repository()
+            .get_file_info(file_info_id)
+            .await
+            .unwrap();
+        assert!(updated.is_available, "Expected file_info to be marked available after restore");
+
+        // Assert: still exactly ONE file_info record for this SHA1 — no duplicate was inserted
+        let infos = repo
+            .get_file_info_repository()
+            .get_file_infos_by_sha1_checksums(&[sha1_a], FileType::Rom)
+            .await
+            .unwrap();
+        assert_eq!(infos.len(), 1, "Expected exactly one file_info row — no duplicate on restore");
+
+        // Assert: junction table still has exactly one row for (file_set_id, file_info_id)
+        let files_in_set = repo
+            .get_file_set_repository()
+            .get_file_set_file_info(file_set_id)
+            .await
+            .unwrap();
+        let matching: Vec<_> = files_in_set.iter().filter(|f| f.file_info_id == file_info_id).collect();
+        assert_eq!(
+            matching.len(), 1,
+            "Expected exactly one junction entry for (file_set_id, file_info_id) — no PK violation"
+        );
+    }
 }
