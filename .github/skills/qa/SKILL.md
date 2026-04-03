@@ -207,6 +207,59 @@ async fn test_create_file_set_success() {
 }
 ```
 
+### Keep Test Code Compact — Extract Setup Helpers
+
+Repeated setup logic **must** be extracted into helpers. Each test body should read as a clear Arrange–Act–Assert, not as a wall of boilerplate. Apply this rule whenever two or more tests share the same construction pattern:
+
+```rust
+// ✅ Good: shared context setup in one place
+async fn create_test_context(system_id: i64) -> AddFileSetContext {
+    let repo_manager = setup_test_repository_manager().await;
+    let ops = AddFileSetOps {
+        file_import_ops: Arc::new(MockFileImportOps::new()),
+        fs_ops: Arc::new(MockFileSystemOps::new()),
+        file_set_service_ops: Arc::new(MockFileSetService::new()),
+    };
+    let input = AddFileSetInput {
+        system_ids: vec![system_id],
+        file_set_name: "Test Game".to_string(),
+        ..Default::default()
+    };
+    AddFileSetContext::new(ops, AddFileSetDeps { repository_manager: repo_manager }, input)
+}
+
+#[async_std::test]
+async fn test_create_file_set_success() {
+    let mut context = create_test_context(1).await;
+    // ... test body is concise
+}
+
+// ❌ Bad: full construction repeated in every test body
+#[async_std::test]
+async fn test_create_file_set_success() {
+    let pool = Arc::new(setup_test_db().await);
+    let repository_manager = Arc::new(RepositoryManager::new(pool));
+    let settings = Arc::new(Settings::default());
+    let file_import_ops = Arc::new(MockFileImportOps::new());
+    let file_system_ops = Arc::new(MockFileSystemOps::new());
+    let file_set_service_ops = Arc::new(MockFileSetService::new());
+    let ops = AddFileSetOps { file_import_ops, fs_ops: file_system_ops, file_set_service_ops };
+    let input = AddFileSetInput { ... };
+    let deps = AddFileSetDeps { repository_manager, settings };
+    let mut context = AddFileSetContext::new(ops, deps, input);
+    // ...
+}
+```
+
+**Helper naming conventions:**
+- `create_test_<subject>(...)` — builds a struct under test with sensible defaults; parameters are only the values that vary across tests
+- `create_<entity>_fixture(...)` — builds a domain value (e.g. `DatGame`, `FileImportData`) with minimal required fields
+- Use `..Default::default()` for fields that are not relevant to the test being written
+
+**Where helpers live:**
+- If used only within one test module, define them as private `fn` inside the `#[cfg(test)]` block
+- If shared across multiple test files in the same crate, put them in `src/<module>/test_utils.rs` (already established pattern in `mass_import/test_utils.rs`)
+
 ### Required Test Cases per Feature
 
 Every non-trivial function or pipeline should have tests covering:

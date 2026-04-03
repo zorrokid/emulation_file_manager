@@ -105,6 +105,22 @@ When using the `task` tool or `/model` command, choose based on complexity:
 
 Default assumption is Sonnet — only override when the task clearly requires more (Opus) or less (Haiku) reasoning.
 
+## Code Change Transparency
+
+**Before making any edits, show the user exactly what will change and wait for confirmation.**
+
+For each file to be modified:
+1. Show the proposed change (old → new, or a clear description of the diff)
+2. Wait for the user to confirm before applying the edit
+
+After all edits are applied, run:
+```bash
+git --no-pager diff HEAD <file1> <file2> ...
+```
+and display the output so the user can verify the final result matches what was agreed.
+
+Do not apply edits and then show the diff after the fact — confirmation must come **before** changes are written.
+
 ## Validation Checklist
 
 After making changes:
