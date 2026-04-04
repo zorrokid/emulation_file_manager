@@ -13,7 +13,7 @@ CREATE TABLE file_info (
     sha1_checksum BLOB NOT NULL,
     file_size INTEGER NOT NULL,
     archive_file_name TEXT NOT NULL
-, file_type INTEGER)
+, file_type INTEGER, is_available INTEGER NOT NULL DEFAULT 1)
 ```
 
 </details>
@@ -27,6 +27,7 @@ CREATE TABLE file_info (
 | file_size | INTEGER |  | false |  |  |  |
 | archive_file_name | TEXT |  | false |  |  |  |
 | file_type | INTEGER |  | true |  |  |  |
+| is_available | INTEGER | 1 | false |  |  |  |
 
 ## Constraints
 

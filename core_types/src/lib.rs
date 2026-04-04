@@ -75,6 +75,9 @@ pub struct ImportedFile {
     pub archive_file_name: String,
     pub sha1_checksum: Sha1Checksum,
     pub file_size: FileSize,
+    /// When importing with DAT files, some of the files described in the DAT may not be available
+    /// in local file system for import operation.
+    pub is_available: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]

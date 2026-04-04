@@ -7,6 +7,14 @@ use crate::{
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
 
+/// Pipeline step that creates a new file set in the database:
+/// - creates a file set record in the database
+/// - links it to the release and dat file if needed
+///
+/// If the file set is successfully created, its ID is stored in the context for use in later steps.
+///
+/// If an error occurs, the step will attempt to clean up any imported files and abort the pipeline
+/// with an appropriate error message.
 pub struct CreateFileSetToDatabaseStep;
 
 #[async_trait::async_trait]
@@ -220,6 +228,7 @@ mod tests {
             selected_files,
             output_dir: PathBuf::from("/imported/files"),
             import_files,
+            missing_files: vec![],
         }
     }
 
@@ -247,6 +256,7 @@ mod tests {
                 sha1_checksum: checksum,
                 file_size: 1024,
                 archive_file_name: "archive123.zst".to_string(),
+                is_available: true,
             },
         );
 
@@ -304,6 +314,7 @@ mod tests {
                 sha1_checksum: checksum1,
                 file_size: 1024,
                 archive_file_name: "new_archive.zst".to_string(),
+                is_available: true,
             },
         );
 
@@ -349,5 +360,66 @@ mod tests {
         assert_eq!(item_types_in_db.len(), 2);
         assert!(item_types_in_db.contains(&ItemType::Manual));
         assert!(item_types_in_db.contains(&ItemType::Box));
+    }
+
+    #[async_std::test]
+    async fn test_same_sha1_imported_for_two_file_sets_creates_single_file_info_record() {
+        // Arrange: a file_info already exists in DB (from a previous import of file set A)
+        let sha1_shared: Sha1Checksum = [42u8; 20];
+        let mut context = create_test_context(None).await;
+        let repo = context.deps.repository_manager.clone();
+
+        let existing_id = repo
+            .get_file_info_repository()
+            .add_file_info(&sha1_shared, 2048, "archive_from_set_a.zst", FileType::Rom)
+            .await
+            .unwrap();
+
+        // Act: run CheckExistingFilesStep for file set B importing the same SHA1
+        let file_import_data = create_file_import_data(
+            vec![sha1_shared],
+            vec![FileImportSource {
+                path: PathBuf::from("/roms/game.zip"),
+                content: [(
+                    sha1_shared,
+                    ImportFileContent {
+                        file_name: "game.rom".to_string(),
+                        sha1_checksum: sha1_shared,
+                        file_size: 2048,
+                    },
+                )]
+                .into_iter()
+                .collect(),
+            }],
+        );
+        context.input.file_import_data = file_import_data;
+
+        let step = crate::file_import::common_steps::check_existing_files::CheckExistingFilesStep::<
+            AddFileSetContext,
+        >::new();
+        let action = step.execute(&mut context).await;
+
+        // Assert: step continues and the existing file_info is found
+        assert!(matches!(action, StepAction::Continue));
+        assert_eq!(context.state.existing_files.len(), 1);
+        assert_eq!(context.state.existing_files[0].id, existing_id);
+        assert_eq!(context.state.existing_files[0].sha1_checksum, sha1_shared);
+
+        // Assert: no new import needed — the SHA1 is already in the DB
+        assert!(
+            !context.input.file_import_data.is_new_files_to_be_imported(&context.state.existing_files),
+            "Expected no new files to import since SHA1 already exists in DB"
+        );
+
+        // Assert: DB still has exactly one file_info record for this SHA1
+        let infos = repo
+            .get_file_info_repository()
+            .get_file_infos_by_sha1_checksums(&[sha1_shared], FileType::Rom)
+            .await
+            .unwrap();
+        assert_eq!(
+            infos.len(), 1,
+            "Expected exactly one file_info row for SHA1 — no duplicates should be created"
+        );
     }
 }

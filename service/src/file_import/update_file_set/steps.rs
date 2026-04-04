@@ -19,7 +19,10 @@ impl PipelineStep<UpdateFileSetContext> for FetchFileSetStep {
     }
 
     async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
-        println!("Fetching file set with id {}", context.input.file_set_id);
+        tracing::info!(
+            file_set_id = %context.input.file_set_id,
+            "Starting to fetch file set from database"
+        );
         // TODO: add test with non existing file set
         let file_set_result = context
             .deps
@@ -103,58 +106,100 @@ pub struct UpdateFileInfoToDatabaseStep;
 #[async_trait::async_trait]
 impl PipelineStep<UpdateFileSetContext> for UpdateFileInfoToDatabaseStep {
     fn name(&self) -> &'static str {
-        "add_file_info_to_database"
+        "update_file_info_in_database"
     }
 
     fn should_execute(&self, context: &UpdateFileSetContext) -> bool {
-        context.is_new_files_to_be_imported()
+        context.needs_file_info_upsert()
             && !context.state.imported_files.is_empty()
             && context.state.file_set.is_some()
     }
 
     async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
-        println!("Adding file info records to database...");
+        tracing::info!(
+            file_set_id = %context.input.file_set_id,
+            "Starting to add/update file info records in database"
+        );
         let file_type = context.state.file_set.as_ref().unwrap().file_type;
-        for imported_file in context.state.imported_files.values() {
-            let add_file_info_result = context
-                .deps
-                .repository_manager
-                .get_file_info_repository()
-                .add_file_info(
-                    &imported_file.sha1_checksum,
-                    imported_file.file_size as i64,
-                    &imported_file.archive_file_name,
-                    file_type,
-                )
-                .await;
-            match add_file_info_result {
-                Ok(id) => {
-                    println!(
-                        "Added file info record with id {} for file '{}'",
-                        id, imported_file.archive_file_name
-                    );
-                    tracing::info!(
-                        file_count = context.state.imported_files.len(),
-                        "Added file info records to database"
-                    );
-                    context.state.new_files.push(FileInfo {
-                        id,
-                        sha1_checksum: imported_file.sha1_checksum,
-                        file_size: imported_file.file_size,
-                        archive_file_name: imported_file.archive_file_name.clone(),
-                        file_type,
-                    });
+        let imported_files: Vec<_> = context.state.imported_files.values().cloned().collect();
+        for imported_file in &imported_files {
+            // If this file was previously recorded as unavailable in this file set,
+            // update its existing record instead of inserting a duplicate.
+            if let Some(existing) = context
+                .state
+                .files_in_file_set
+                .iter()
+                .find(|f| f.sha1_checksum == imported_file.sha1_checksum && !f.is_available)
+            {
+                let existing_id = existing.id;
+                let existing_file_size = existing.file_size;
+                let result = context
+                    .deps
+                    .repository_manager
+                    .get_file_info_repository()
+                    .update_is_available(existing_id, &imported_file.archive_file_name)
+                    .await;
+                match result {
+                    Ok(_) => {
+                        tracing::info!(
+                            file_info_id = existing_id,
+                            archive_file_name = %imported_file.archive_file_name,
+                            "Restored previously unavailable file info record",
+                        );
+                        context.state.new_files.push(FileInfo {
+                            id: existing_id,
+                            sha1_checksum: imported_file.sha1_checksum,
+                            file_size: existing_file_size,
+                            archive_file_name: imported_file.archive_file_name.clone(),
+                            file_type,
+                            is_available: true,
+                        });
+                    }
+                    Err(err) => {
+                        tracing::error!(
+                            error = %err,
+                            file_info_id = existing_id,
+                            "Error restoring unavailable file info record",
+                        );
+                        // TODO: collect failed
+                    }
                 }
-                Err(err) => {
-                    println!(
-                        "Error adding file info record for file '{}': {}",
-                        imported_file.archive_file_name, err
-                    );
-                    tracing::error!(
-                        error = %err,
-                        "Error adding file info records to database"
-                    );
-                    // TODO: collect failed
+            } else {
+                let add_file_info_result = context
+                    .deps
+                    .repository_manager
+                    .get_file_info_repository()
+                    .add_file_info(
+                        &imported_file.sha1_checksum,
+                        imported_file.file_size as i64,
+                        &imported_file.archive_file_name,
+                        file_type,
+                    )
+                    .await;
+                match add_file_info_result {
+                    Ok(id) => {
+                        tracing::info!(
+                            file_info_id = id,
+                            archive_file_name = %imported_file.archive_file_name,
+                            "Added new file info record to database",
+                        );
+                        context.state.new_files.push(FileInfo {
+                            id,
+                            sha1_checksum: imported_file.sha1_checksum,
+                            file_size: imported_file.file_size,
+                            archive_file_name: imported_file.archive_file_name.clone(),
+                            file_type,
+                            is_available: true,
+                        });
+                    }
+                    Err(err) => {
+                        tracing::error!(
+                            error = %err,
+                            archive_file_name = %imported_file.archive_file_name,
+                            "Error adding file info record to database",
+                        );
+                        // TODO: collect failed
+                    }
                 }
             }
         }
@@ -491,6 +536,7 @@ mod tests {
             selected_files,
             output_dir: PathBuf::from("/imported/files"),
             import_files,
+            missing_files: vec![],
         }
     }
 
@@ -552,6 +598,7 @@ mod tests {
             archive_file_name: "archive_file_name".to_string(),
             sha1_checksum: file_1_checksum,
             file_size: 1024,
+            is_available: true,
         }];
 
         let file_set_id = repository_manager
@@ -627,6 +674,7 @@ mod tests {
                 sha1_checksum: file_1_checksum,
                 file_size: 1024,
                 archive_file_name: "archive123.zst".to_string(),
+                is_available: true,
             },
         );
 
@@ -669,6 +717,7 @@ mod tests {
             file_size: 2048,
             archive_file_name: "test_archive_name_2".to_string(),
             file_type: FileType::Rom,
+            is_available: true,
         });
 
         // Update file_import_data to only include the new file (file_2)
@@ -846,5 +895,124 @@ mod tests {
         assert_eq!(item_types_in_db.len(), 2);
         assert!(item_types_in_db.contains(&ItemType::DiskOrSetOfDisks));
         assert!(item_types_in_db.contains(&ItemType::Manual));
+    }
+
+    #[async_std::test]
+    async fn test_update_file_info_to_database_step_restores_unavailable_file_without_pk_violation()
+    {
+        // Arrange: create a file set with file_info A recorded as is_available = false.
+        // This represents a file that was imported when the ROM wasn't locally present.
+        let sha1_a: Sha1Checksum = [7u8; 20];
+        let mut context = create_test_context(None).await;
+        let repo = context.deps.repository_manager.clone();
+
+        let system_id = repo
+            .get_system_repository()
+            .add_system("Test System")
+            .await
+            .unwrap();
+
+        // Create file_info as unavailable
+        let file_info_id = repo
+            .get_file_info_repository()
+            .add_file_info(&sha1_a, 1024, "placeholder.zst", FileType::Rom)
+            .await
+            .unwrap();
+
+        // Create file set with file_info A already linked (but unavailable)
+        let files_in_file_set = vec![core_types::ImportedFile {
+            original_file_name: "game.rom".to_string(),
+            archive_file_name: "placeholder.zst".to_string(),
+            sha1_checksum: sha1_a,
+            file_size: 1024,
+            is_available: false,
+        }];
+        let file_set_id = repo
+            .get_file_set_repository()
+            .add_file_set(
+                "Test Game",
+                "test_game",
+                &FileType::Rom,
+                "test_src",
+                &files_in_file_set,
+                &[system_id],
+            )
+            .await
+            .unwrap();
+
+        context.input.file_set_id = file_set_id;
+        context.state.file_set = Some(FileSet {
+            id: file_set_id,
+            name: "Test Game".to_string(),
+            file_name: "test_game".to_string(),
+            file_type: FileType::Rom,
+            source: "test_src".to_string(),
+        });
+
+        // Populate files_in_file_set in context with the unavailable record
+        context.state.files_in_file_set = vec![database::models::FileInfo {
+            id: file_info_id,
+            sha1_checksum: sha1_a,
+            file_type: FileType::Rom,
+            archive_file_name: "placeholder.zst".to_string(),
+            file_size: 1024,
+            is_available: false,
+        }];
+
+        // Simulate the ROM being locally available now — in imported_files
+        context.state.imported_files.insert(
+            sha1_a,
+            ImportedFile {
+                original_file_name: "game.rom".to_string(),
+                archive_file_name: "placeholder.zst".to_string(),
+                sha1_checksum: sha1_a,
+                file_size: 1024,
+                is_available: true,
+            },
+        );
+
+        // Act: UpdateFileInfoToDatabaseStep should call update_is_available, NOT add_file_info
+        let step = super::UpdateFileInfoToDatabaseStep;
+        let action = step.execute(&mut context).await;
+        assert!(matches!(action, StepAction::Continue));
+
+        // Assert: file_info is now available in DB
+        let updated = repo
+            .get_file_info_repository()
+            .get_file_info(file_info_id)
+            .await
+            .unwrap();
+        assert!(
+            updated.is_available,
+            "Expected file_info to be marked available after restore"
+        );
+
+        // Assert: still exactly ONE file_info record for this SHA1 — no duplicate was inserted
+        let infos = repo
+            .get_file_info_repository()
+            .get_file_infos_by_sha1_checksums(&[sha1_a], FileType::Rom)
+            .await
+            .unwrap();
+        assert_eq!(
+            infos.len(),
+            1,
+            "Expected exactly one file_info row — no duplicate on restore"
+        );
+
+        // Assert: junction table still has exactly one row for (file_set_id, file_info_id)
+        let files_in_set = repo
+            .get_file_set_repository()
+            .get_file_set_file_info(file_set_id)
+            .await
+            .unwrap();
+        let matching: Vec<_> = files_in_set
+            .iter()
+            .filter(|f| f.file_info_id == file_info_id)
+            .collect();
+        assert_eq!(
+            matching.len(),
+            1,
+            "Expected exactly one junction entry for (file_set_id, file_info_id) — no PK violation"
+        );
     }
 }

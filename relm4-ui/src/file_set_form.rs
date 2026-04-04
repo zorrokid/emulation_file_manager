@@ -896,7 +896,7 @@ impl FileSetFormModel {
             item_ids: vec![],
             item_types,
             create_release: None,
-            dat_file_id: None,
+            dat_extras: None,
         };
 
         let app_services = Arc::clone(&self.app_services);

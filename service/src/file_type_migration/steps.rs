@@ -278,6 +278,7 @@ impl PipelineStep<FileTypeMigrationContext> for MoveCloudFilesStep {
                             file_size: file.file_size,
                             archive_file_name: file.archive_file_name.clone(),
                             file_type: file_type_migration.new_file_type,
+                            is_available: file.is_available,
                         };
 
                         let new_cloud_key = new_file.generate_cloud_key();
@@ -621,6 +622,7 @@ mod tests {
             file_size: 1234,
             archive_file_name,
             original_file_name: "original_test_file.rom".to_string(),
+            is_available: true,
         };
 
         repository_manager
@@ -775,6 +777,7 @@ mod tests {
             file_size: 1234,
             archive_file_name: archive_file_name.clone(),
             file_type: FileType::ManualScan, // to be migrated to FileType::Scan
+            is_available: true,
         };
 
         let file_set_id = insert_test_file_set(
@@ -827,6 +830,7 @@ mod tests {
             file_size: file_info.file_size,
             archive_file_name: file_info.archive_file_name.clone(),
             file_type: FileType::Scan,
+            is_available: file_info.is_available,
         };
 
         let new_cloud_key = new_file.generate_cloud_key();

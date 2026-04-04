@@ -74,6 +74,8 @@ impl AddFileSetContext {
         }
     }
 
+    /// Combines newly imported and existing files that were selected for import and missing files into a
+    /// single list of `ImportedFile` that will be used for creating the file set.
     pub fn get_files_in_file_set(&self) -> Vec<ImportedFile> {
         println!(
             "Getting files in file set. Imported files count: {}, Existing files count: {}",
@@ -83,7 +85,8 @@ impl AddFileSetContext {
 
         dbg!("existing files", &self.state.existing_files);
 
-        // conbine newly imported files and existing files that were selected for import
+        // combine newly imported files, existing files and missing files
+        // TODO: can be simplified
         self.state.imported_files
             .values()
             .cloned()
@@ -159,8 +162,23 @@ impl AddFileSetContext {
                     sha1_checksum: file_info.sha1_checksum,
                     file_size: file_info.file_size,
                     archive_file_name: file_info.archive_file_name.clone(),
+                    is_available: file_info.is_available,
                 })
             }))
+            .chain(
+                self.input
+                    .file_import_data
+                    .missing_files
+                    .iter()
+                    .map(|file| ImportedFile {
+                        original_file_name: file.file_name.clone(),
+                        sha1_checksum: file.sha1_checksum,
+                        file_size: file.file_size,
+                        // TODO: this should be optional now
+                        archive_file_name: "".to_string(),
+                        is_available: false,
+                    }),
+            )
             .collect()
     }
 
@@ -195,7 +213,7 @@ impl AddFileSetContextOps for AddFileSetContext {
             .file_import_data
             .get_file_import_model(&self.state.existing_files)
     }
-    fn is_new_files_to_be_imported(&self) -> bool {
+    fn needs_file_info_upsert(&self) -> bool {
         self.input
             .file_import_data
             .is_new_files_to_be_imported(&self.state.existing_files)
@@ -293,6 +311,7 @@ mod tests {
             file_type: FileType::Rom,
             selected_files,
             import_files,
+            missing_files: vec![],
         }
     }
 
@@ -357,6 +376,7 @@ mod tests {
                 sha1_checksum: checksum,
                 file_size: 1024,
                 archive_file_name: "archive123.zst".to_string(),
+                is_available: true,
             },
         );
 
@@ -403,6 +423,7 @@ mod tests {
             file_size: 2048,
             archive_file_name: "existing_archive_file".to_string(),
             file_type: FileType::Rom,
+            is_available: true,
         });
 
         let result = context.get_files_in_file_set();
@@ -451,6 +472,7 @@ mod tests {
             file_size: 2048,
             archive_file_name: "existing_archive_file_name".to_string(),
             file_type: FileType::Rom,
+            is_available: true,
         });
         // Add a newly imported file
         context.state.imported_files.insert(
@@ -460,6 +482,7 @@ mod tests {
                 sha1_checksum: checksum1,
                 file_size: 1024,
                 archive_file_name: "new_archive_file_name".to_string(),
+                is_available: true,
             },
         );
 

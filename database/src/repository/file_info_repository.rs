@@ -25,6 +25,7 @@ impl FromRow<'_, SqliteRow> for FileInfo {
             sha1_checksum,
             file_size: row.try_get("file_size")?,
             archive_file_name: row.try_get("archive_file_name")?,
+            is_available: row.try_get("is_available")?,
         })
     }
 }
@@ -62,7 +63,7 @@ impl FileInfoRepository {
 
     pub async fn get_file_info(&self, id: i64) -> Result<FileInfo, Error> {
         let result = sqlx::query_as::<_, FileInfo>(
-            "SELECT id, sha1_checksum, file_size, archive_file_name, file_type
+            "SELECT id, sha1_checksum, file_size, archive_file_name, file_type, is_available
              FROM file_info WHERE id = ?",
         )
         .bind(id)
@@ -77,7 +78,7 @@ impl FileInfoRepository {
         file_type: FileType,
     ) -> Result<Vec<FileInfo>, Error> {
         let mut query_builder = QueryBuilder::<Sqlite>::new(
-            "SELECT id, sha1_checksum, file_size, archive_file_name, file_type
+            "SELECT id, sha1_checksum, file_size, archive_file_name, file_type, is_available
              FROM file_info WHERE file_type = ",
         );
         query_builder.push_bind(file_type.to_db_int());
@@ -97,7 +98,7 @@ impl FileInfoRepository {
         file_set_id: i64,
     ) -> Result<Vec<FileInfo>, Error> {
         let query = sqlx::query_as::<_, FileInfo>(
-            "SELECT id, sha1_checksum, file_size, archive_file_name, file_type
+            "SELECT id, sha1_checksum, file_size, archive_file_name, file_type, is_available
              FROM file_info fi
              JOIN file_set_file_info fsfi ON fi.id = fsfi.file_info_id
              WHERE fsfi.file_set_id = ?",
@@ -113,7 +114,7 @@ impl FileInfoRepository {
         offset: i64,
     ) -> Result<Vec<FileInfo>, Error> {
         let query = sqlx::query_as::<_, FileInfo>(
-            "SELECT fi.id, fi.sha1_checksum, fi.file_size, fi.archive_file_name, fi.file_type
+            "SELECT fi.id, fi.sha1_checksum, fi.file_size, fi.archive_file_name, fi.file_type, fi.is_available
              FROM file_info fi
              LEFT JOIN file_sync_log fsl ON fi.id = fsl.file_info_id
              WHERE fsl.file_info_id IS NULL 
@@ -136,6 +137,21 @@ impl FileInfoRepository {
             .bind(new_file_type.to_db_int())
             .bind(id);
         query.execute(&*self.pool).await?;
+        Ok(())
+    }
+
+    pub async fn update_is_available(
+        &self,
+        id: i64,
+        archive_file_name: &str,
+    ) -> Result<(), Error> {
+        sqlx::query!(
+            "UPDATE file_info SET is_available = 1, archive_file_name = ? WHERE id = ?",
+            archive_file_name,
+            id
+        )
+        .execute(&*self.pool)
+        .await?;
         Ok(())
     }
 }
