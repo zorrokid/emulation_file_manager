@@ -582,7 +582,6 @@ mod tests {
     async fn test_new_file_set_all_files_present_produces_success() {
         // Arrange: ROM is locally available (sha1_map will find it)
         let dat_file = make_dat_file("Test Game", "test.bin");
-        let sha1 = sha1_from_hex_string(SHA1_HEX).unwrap();
         let reader_factory = Arc::new(create_mock_reader_factory(HashMap::new(), vec![]));
         let file_import_ops = Arc::new(MockFileImportServiceOps::with_create_mock(
             CreateMockState {
@@ -594,7 +593,6 @@ mod tests {
         let statuses = vec![DatGameFileSetStatus::NonExisting(dat_file.games[0].clone())];
         let mut context = make_context(ops, dat_file, statuses, reader_factory).await;
         // The scanned file metadata already points SHA1 → /roms/test.bin via make_context
-        let _ = sha1; // used via make_context
 
         // Act
         let result = RouteAndProcessFileSetsStep.execute(&mut context).await;
@@ -805,14 +803,12 @@ mod tests {
             Arc::new(MockFileImportServiceOps::new()),
             reader_factory.clone(),
         );
-        let sha1 = sha1_from_hex_string(SHA1_HEX).unwrap();
         let statuses = vec![DatGameFileSetStatus::ExistingWithReleaseAndLinkedToDat {
             file_set_id: 42,
             game: dat_file.games[0].clone(),
             missing_files: vec![],
         }];
         let mut context = make_context(ops, dat_file, statuses, reader_factory).await;
-        let _ = sha1;
 
         // Act
         let result = RouteAndProcessFileSetsStep.execute(&mut context).await;
