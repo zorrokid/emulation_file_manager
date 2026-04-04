@@ -19,7 +19,10 @@ impl PipelineStep<UpdateFileSetContext> for FetchFileSetStep {
     }
 
     async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
-        println!("Fetching file set with id {}", context.input.file_set_id);
+        tracing::info!(
+            file_set_id = %context.input.file_set_id,
+            "Starting to fetch file set from database"
+        );
         // TODO: add test with non existing file set
         let file_set_result = context
             .deps
@@ -113,7 +116,10 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileInfoToDatabaseStep {
     }
 
     async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
-        println!("Adding file info records to database...");
+        tracing::info!(
+            file_set_id = %context.input.file_set_id,
+            "Starting to add/update file info records in database"
+        );
         let file_type = context.state.file_set.as_ref().unwrap().file_type;
         let imported_files: Vec<_> = context.state.imported_files.values().cloned().collect();
         for imported_file in &imported_files {
@@ -892,14 +898,19 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn test_update_file_info_to_database_step_restores_unavailable_file_without_pk_violation() {
+    async fn test_update_file_info_to_database_step_restores_unavailable_file_without_pk_violation()
+    {
         // Arrange: create a file set with file_info A recorded as is_available = false.
         // This represents a file that was imported when the ROM wasn't locally present.
         let sha1_a: Sha1Checksum = [7u8; 20];
         let mut context = create_test_context(None).await;
         let repo = context.deps.repository_manager.clone();
 
-        let system_id = repo.get_system_repository().add_system("Test System").await.unwrap();
+        let system_id = repo
+            .get_system_repository()
+            .add_system("Test System")
+            .await
+            .unwrap();
 
         // Create file_info as unavailable
         let file_info_id = repo
@@ -918,7 +929,14 @@ mod tests {
         }];
         let file_set_id = repo
             .get_file_set_repository()
-            .add_file_set("Test Game", "test_game", &FileType::Rom, "test_src", &files_in_file_set, &[system_id])
+            .add_file_set(
+                "Test Game",
+                "test_game",
+                &FileType::Rom,
+                "test_src",
+                &files_in_file_set,
+                &[system_id],
+            )
             .await
             .unwrap();
 
@@ -942,13 +960,16 @@ mod tests {
         }];
 
         // Simulate the ROM being locally available now — in imported_files
-        context.state.imported_files.insert(sha1_a, ImportedFile {
-            original_file_name: "game.rom".to_string(),
-            archive_file_name: "placeholder.zst".to_string(),
-            sha1_checksum: sha1_a,
-            file_size: 1024,
-            is_available: true,
-        });
+        context.state.imported_files.insert(
+            sha1_a,
+            ImportedFile {
+                original_file_name: "game.rom".to_string(),
+                archive_file_name: "placeholder.zst".to_string(),
+                sha1_checksum: sha1_a,
+                file_size: 1024,
+                is_available: true,
+            },
+        );
 
         // Act: UpdateFileInfoToDatabaseStep should call update_is_available, NOT add_file_info
         let step = super::UpdateFileInfoToDatabaseStep;
@@ -961,7 +982,10 @@ mod tests {
             .get_file_info(file_info_id)
             .await
             .unwrap();
-        assert!(updated.is_available, "Expected file_info to be marked available after restore");
+        assert!(
+            updated.is_available,
+            "Expected file_info to be marked available after restore"
+        );
 
         // Assert: still exactly ONE file_info record for this SHA1 — no duplicate was inserted
         let infos = repo
@@ -969,7 +993,11 @@ mod tests {
             .get_file_infos_by_sha1_checksums(&[sha1_a], FileType::Rom)
             .await
             .unwrap();
-        assert_eq!(infos.len(), 1, "Expected exactly one file_info row — no duplicate on restore");
+        assert_eq!(
+            infos.len(),
+            1,
+            "Expected exactly one file_info row — no duplicate on restore"
+        );
 
         // Assert: junction table still has exactly one row for (file_set_id, file_info_id)
         let files_in_set = repo
@@ -977,9 +1005,13 @@ mod tests {
             .get_file_set_file_info(file_set_id)
             .await
             .unwrap();
-        let matching: Vec<_> = files_in_set.iter().filter(|f| f.file_info_id == file_info_id).collect();
+        let matching: Vec<_> = files_in_set
+            .iter()
+            .filter(|f| f.file_info_id == file_info_id)
+            .collect();
         assert_eq!(
-            matching.len(), 1,
+            matching.len(),
+            1,
             "Expected exactly one junction entry for (file_set_id, file_info_id) — no PK violation"
         );
     }

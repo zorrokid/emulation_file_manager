@@ -16,10 +16,6 @@ impl PipelineStep<DatFileMassImportContext> for ImportDatFileStep {
         "import_dat_file_step"
     }
 
-    fn should_execute(&self, _context: &DatFileMassImportContext) -> bool {
-        true
-    }
-
     async fn execute(&self, context: &mut DatFileMassImportContext) -> StepAction {
         let dat_path = &context.input.dat_file_path;
 
@@ -676,10 +672,8 @@ mod tests {
                 PathBuf::from("/source/game.bin"),
                 vec![core_types::ReadFile {
                     file_name: "game.bin".to_string(),
-                    sha1_checksum: sha1_from_hex_string(
-                        "0123456789abcdef0123456789abcdef01234567",
-                    )
-                    .expect("Failed to parse SHA1"),
+                    sha1_checksum: sha1_from_hex_string("0123456789abcdef0123456789abcdef01234567")
+                        .expect("Failed to parse SHA1"),
                     file_size: 1024,
                 }],
             );
@@ -848,7 +842,12 @@ mod tests {
         let (system_id, dat_file_db_id) =
             setup_system_and_dat_file(&deps.repository_manager, 1).await;
         let file_set_id = add_matching_file_set(
-            &deps.repository_manager, GAME_NAME, ROM_NAME, ROM_SHA1, system_id, true,
+            &deps.repository_manager,
+            GAME_NAME,
+            ROM_NAME,
+            ROM_SHA1,
+            system_id,
+            true,
         )
         .await;
         deps.repository_manager
@@ -858,8 +857,7 @@ mod tests {
             .unwrap();
 
         let dat_file = make_single_game_dat_file(GAME_NAME, ROM_NAME, ROM_SHA1);
-        let mut context =
-            make_categorize_context(deps, system_id, dat_file_db_id, dat_file).await;
+        let mut context = make_categorize_context(deps, system_id, dat_file_db_id, dat_file).await;
 
         let result = CategorizeFileSetsForImportStep.execute(&mut context).await;
 
@@ -883,7 +881,12 @@ mod tests {
         let (system_id, dat_file_db_id) =
             setup_system_and_dat_file(&deps.repository_manager, 2).await;
         let file_set_id = add_matching_file_set(
-            &deps.repository_manager, GAME_NAME, ROM_NAME, ROM_SHA1, system_id, false, // unavailable
+            &deps.repository_manager,
+            GAME_NAME,
+            ROM_NAME,
+            ROM_SHA1,
+            system_id,
+            false, // unavailable
         )
         .await;
         deps.repository_manager
@@ -893,8 +896,7 @@ mod tests {
             .unwrap();
 
         let dat_file = make_single_game_dat_file(GAME_NAME, ROM_NAME, ROM_SHA1);
-        let mut context =
-            make_categorize_context(deps, system_id, dat_file_db_id, dat_file).await;
+        let mut context = make_categorize_context(deps, system_id, dat_file_db_id, dat_file).await;
 
         let result = CategorizeFileSetsForImportStep.execute(&mut context).await;
 
@@ -917,13 +919,17 @@ mod tests {
         let (system_id, dat_file_db_id) =
             setup_system_and_dat_file(&deps.repository_manager, 3).await;
         add_matching_file_set(
-            &deps.repository_manager, GAME_NAME, ROM_NAME, ROM_SHA1, system_id, true,
+            &deps.repository_manager,
+            GAME_NAME,
+            ROM_NAME,
+            ROM_SHA1,
+            system_id,
+            true,
         )
         .await;
 
         let dat_file = make_single_game_dat_file(GAME_NAME, ROM_NAME, ROM_SHA1);
-        let mut context =
-            make_categorize_context(deps, system_id, dat_file_db_id, dat_file).await;
+        let mut context = make_categorize_context(deps, system_id, dat_file_db_id, dat_file).await;
 
         let result = CategorizeFileSetsForImportStep.execute(&mut context).await;
 
@@ -944,7 +950,11 @@ mod tests {
         let deps = get_deps().await;
         let (system_id, dat_file_db_id) =
             setup_system_and_dat_file(&deps.repository_manager, 10).await;
-        let dat_file = make_single_game_dat_file("Game", "rom.bin", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        let dat_file = make_single_game_dat_file(
+            "Game",
+            "rom.bin",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        );
         let mut context = make_categorize_context(deps, system_id, dat_file_db_id, dat_file).await;
 
         context.state.common_state.file_metadata.clear();
@@ -957,7 +967,11 @@ mod tests {
         let deps = get_deps().await;
         let (system_id, dat_file_db_id) =
             setup_system_and_dat_file(&deps.repository_manager, 11).await;
-        let dat_file = make_single_game_dat_file("Game", "rom.bin", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        let dat_file = make_single_game_dat_file(
+            "Game",
+            "rom.bin",
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        );
         let mut context = make_categorize_context(deps, system_id, dat_file_db_id, dat_file).await;
 
         context.state.dat_file = None;
@@ -970,7 +984,11 @@ mod tests {
         let deps = get_deps().await;
         let (system_id, dat_file_db_id) =
             setup_system_and_dat_file(&deps.repository_manager, 12).await;
-        let dat_file = make_single_game_dat_file("Game", "rom.bin", "cccccccccccccccccccccccccccccccccccccccc");
+        let dat_file = make_single_game_dat_file(
+            "Game",
+            "rom.bin",
+            "cccccccccccccccccccccccccccccccccccccccc",
+        );
         let mut context = make_categorize_context(deps, system_id, dat_file_db_id, dat_file).await;
 
         context.state.dat_file_id = None;
