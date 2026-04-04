@@ -175,6 +175,7 @@ mod tests {
             archive_file_name: "file2.zst".to_string(),
             sha1_checksum: Sha1Checksum::from([1; 20]),
             file_size: 5678,
+            is_available: true,
         };
 
         let file_set_id =
@@ -281,6 +282,7 @@ mod tests {
             archive_file_name: "file1.zst".to_string(),
             sha1_checksum: Sha1Checksum::from([0; 20]),
             file_size: 1234,
+            is_available: true,
         };
 
         TestSetup {

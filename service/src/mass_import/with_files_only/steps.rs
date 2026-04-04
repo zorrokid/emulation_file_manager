@@ -4,23 +4,24 @@ use crate::{
     error::Error,
     mass_import::{
         common_steps::context::MassImportContextOps,
+        models::{FileSetImportResult, FileSetImportStatus, MassImportSyncEvent},
         with_files_only::context::FilesOnlyMassImportContext,
     },
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
 
-pub struct FilterExistingFileSetsStep;
+pub struct FilterOutAlreadyExistingFileSetsStep;
 
 /// Filter out files from file_metadata that already have file sets in the system so that they
 /// won't be imported again.
 #[async_trait::async_trait]
-impl PipelineStep<FilesOnlyMassImportContext> for FilterExistingFileSetsStep {
+impl PipelineStep<FilesOnlyMassImportContext> for FilterOutAlreadyExistingFileSetsStep {
     fn name(&self) -> &'static str {
-        "filter_existing_file_sets"
+        "filter_out_already_existing_file_sets"
     }
 
     fn should_execute(&self, context: &FilesOnlyMassImportContext) -> bool {
-        !context.state.file_metadata.is_empty()
+        !context.state.common_state.file_metadata.is_empty()
     }
 
     async fn execute(&self, context: &mut FilesOnlyMassImportContext) -> StepAction {
@@ -67,6 +68,7 @@ impl PipelineStep<FilesOnlyMassImportContext> for FilterExistingFileSetsStep {
                         );
                         context
                             .state
+                            .common_state
                             .file_metadata
                             .remove(&file_set_import_model.import_files[0].path);
                     }
@@ -84,17 +86,98 @@ impl PipelineStep<FilesOnlyMassImportContext> for FilterExistingFileSetsStep {
     }
 }
 
+/// Step to import file sets derived from the scanned file metadata and populate context
+/// with import results for each file set. Skips if no file metadata is present.
+///
+/// The step continues even if some file set imports fail — the result of each import is
+/// stored in the context and included in the final mass import result.
+pub struct ImportFileSetsStep;
+
+#[async_trait::async_trait]
+impl PipelineStep<FilesOnlyMassImportContext> for ImportFileSetsStep {
+    fn name(&self) -> &'static str {
+        "import_file_sets_step"
+    }
+
+    fn should_execute(&self, context: &FilesOnlyMassImportContext) -> bool {
+        context.can_import_file_sets()
+    }
+
+    async fn execute(&self, context: &mut FilesOnlyMassImportContext) -> StepAction {
+        let import_file_sets = context.get_import_file_sets();
+        for file_set in import_file_sets {
+            tracing::info!(
+                file_set_name = %file_set.file_set_name,
+                "Creating file set for import",
+            );
+            let file_set_name = file_set.file_set_name.clone();
+            let service = context.import_service_ops();
+            let import_res = service.create_file_set(file_set.clone());
+
+            let (id, status) = match import_res.await {
+                Ok(import_result) => {
+                    if import_result.failed_steps.is_empty() {
+                        tracing::info!(
+                            file_set_id = %import_result.file_set_id,
+                            "Successfully imported file set",
+                        );
+                        (Some(import_result.file_set_id), FileSetImportStatus::Success)
+                    } else {
+                        tracing::warn!(
+                            file_set_id = %import_result.file_set_id,
+                            "File set imported with some failed steps",
+                        );
+                        let messages: Vec<String> = import_result
+                            .failed_steps
+                            .iter()
+                            .map(|(step, error)| format!("{}: {}", step, error))
+                            .collect();
+                        for (step, error) in import_result.failed_steps {
+                            tracing::warn!(step = %step, error = %error, "Failed step in file set import");
+                        }
+                        (
+                            Some(import_result.file_set_id),
+                            FileSetImportStatus::SuccessWithWarnings(messages),
+                        )
+                    }
+                }
+                Err(e) => {
+                    tracing::error!(error = ?e, "Failed to import file set");
+                    (None, FileSetImportStatus::Failed(format!("{}", e)))
+                }
+            };
+            tracing::info!(
+                file_set_name = %file_set_name,
+                import_status = ?status,
+                "File set import result",
+            );
+            context.import_results().push(FileSetImportResult {
+                file_set_id: id,
+                status: status.clone(),
+                file_set_name: file_set_name.clone(),
+            });
+            if let Some(sender_tx) = &context.progress_tx() {
+                let event = MassImportSyncEvent { file_set_name, status };
+                if let Err(e) = sender_tx.send(event) {
+                    tracing::error!(error = ?e, "Failed to send progress event");
+                }
+            }
+        }
+        StepAction::Continue
+    }
+}
 #[cfg(test)]
 mod tests {
     use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
-    use core_types::{FileType, ImportedFile, ReadFile, Sha1Checksum};
+    use core_types::{FileType, ImportedFile, ReadFile, Sha1Checksum, sha1_from_hex_string};
     use database::repository_manager::RepositoryManager;
     use file_metadata::create_mock_factory_with_test_data;
 
     use crate::{
         file_import::{
-            file_import_service_ops::MockFileImportServiceOps, model::FileSetImportModel,
+            file_import_service_ops::{CreateMockState, MockFileImportServiceOps},
+            model::FileSetImportModel,
         },
         file_system_ops::mock::MockFileSystemOps,
         mass_import::{
@@ -105,39 +188,41 @@ mod tests {
 
     use super::*;
 
-    #[async_std::test]
-    async fn test_filter_existing_file_sets() {
-        let repository_manager = database::setup_test_repository_manager().await;
-        let system_id = add_system(repository_manager.clone()).await;
-        let input: FilesOnlyMassImportInput = FilesOnlyMassImportInput {
+    /// Builds a `FilesOnlyMassImportContext` with standard test input and mock ops.
+    fn make_files_only_context(
+        repository_manager: Arc<RepositoryManager>,
+        system_id: i64,
+    ) -> FilesOnlyMassImportContext {
+        let deps = MassImportDeps { repository_manager };
+        let input = FilesOnlyMassImportInput {
             source_path: PathBuf::from("/test/path"),
             file_type: FileType::Rom,
             item_type: None,
             system_id,
             source: "test source".to_string(),
         };
-
-        let deps = MassImportDeps { repository_manager };
-
         let ops = FilesOnlyMassImportOps {
             fs_ops: Arc::new(MockFileSystemOps::new()),
             file_import_service_ops: Arc::new(MockFileImportServiceOps::new()),
             reader_factory_fn: create_mock_factory_with_test_data(vec![]),
         };
+        FilesOnlyMassImportContext::new(deps, input, ops, None)
+    }
 
-        let mut context = FilesOnlyMassImportContext::new(deps, input, ops, None);
+    #[async_std::test]
+    async fn test_filter_existing_file_sets() {
+        // One of two files already exists in the DB — only that one should be removed.
+        let repository_manager = database::setup_test_repository_manager().await;
+        let system_id = add_system(repository_manager.clone()).await;
+        let mut context = make_files_only_context(repository_manager, system_id);
 
-        // TODO: populate context with file metadata
-        // and add some of the file sets to the database
-        // assert that after executing the step, the file metadata for existing file sets is
-        // removed from the context
         let file_1_sha1_checksum: Sha1Checksum = [0; 20];
         let file_1_path = PathBuf::from("/test/path/file.zip");
 
         let file_2_sha1_checksum: Sha1Checksum = [1; 20];
         let file_2_path = PathBuf::from("/test/path/file2.zip");
 
-        let file_meta_data: HashMap<PathBuf, Vec<ReadFile>> = HashMap::from([
+        context.state.common_state.file_metadata = HashMap::from([
             (
                 file_1_path.clone(),
                 vec![ReadFile {
@@ -156,57 +241,16 @@ mod tests {
             ),
         ]);
 
-        context.state.file_metadata = file_meta_data;
-
         insert_file_set_to_db(&context, &file_1_path, FileType::Rom).await;
 
         // Act
-
-        let step = FilterExistingFileSetsStep;
+        let step = FilterOutAlreadyExistingFileSetsStep;
         let action = step.execute(&mut context).await;
 
-        // Assert
+        // Assert: file_1 (already in DB) is removed; file_2 (new) remains
         assert!(matches!(action, StepAction::Continue));
-        assert!(!context.state.file_metadata.contains_key(&file_1_path));
-        assert!(context.state.file_metadata.contains_key(&file_2_path));
-
-        // insert first file set to test database
-        /*let import_files = context.get_import_file_sets();
-        let file_1_file_set: &FileSetImportModel = import_files
-            .iter()
-            .find(|file_set| {
-                file_set
-                    .import_files
-                    .iter()
-                    .any(|import_file| import_file.path == file_1_path)
-            })
-            .unwrap();
-
-        let file_1_files = file_1_file_set
-            .import_files
-            .iter()
-            .flat_map(|import_file| import_file.content.values())
-            .collect::<Vec<_>>();
-        let file_set_repository = context.deps.repository_manager.get_file_set_repository();
-        file_set_repository
-            .add_file_set(
-                &file_1_file_set.file_set_name,
-                &file_1_file_set.file_set_file_name,
-                &file_1_file_set.file_type,
-                &context.input.source,
-                &file_1_files
-                    .iter()
-                    .map(|file| ImportedFile {
-                        original_file_name: file.file_name.clone(),
-                        archive_file_name: "1234abcd".to_string(),
-                        sha1_checksum: file.sha1_checksum,
-                        file_size: 1024,
-                    })
-                    .collect::<Vec<_>>(),
-                &[context.input.system_id],
-            )
-            .await
-            .unwrap();*/
+        assert!(!context.state.common_state.file_metadata.contains_key(&file_1_path));
+        assert!(context.state.common_state.file_metadata.contains_key(&file_2_path));
     }
 
     async fn add_system(repository_manager: Arc<RepositoryManager>) -> i64 {
@@ -250,11 +294,92 @@ mod tests {
                         archive_file_name: "1234abcd".to_string(),
                         sha1_checksum: file.sha1_checksum,
                         file_size: file.file_size,
+                        is_available: true,
                     })
                     .collect::<Vec<_>>(),
                 &[context.input.system_id],
             )
             .await
             .unwrap();
+    }
+
+    #[async_std::test]
+    async fn test_filter_all_existing_file_sets_removes_all_from_metadata() {
+        // Both files already exist in the DB — file_metadata should be empty after the step.
+        let repository_manager = database::setup_test_repository_manager().await;
+        let system_id = add_system(repository_manager.clone()).await;
+        let mut context = make_files_only_context(repository_manager, system_id);
+
+        let file_1_path = PathBuf::from("/test/path/game_a.zip");
+        let file_2_path = PathBuf::from("/test/path/game_b.zip");
+
+        context.state.common_state.file_metadata = HashMap::from([
+            (
+                file_1_path.clone(),
+                vec![ReadFile { file_name: "game_a".to_string(), file_size: 512, sha1_checksum: [0xaa; 20] }],
+            ),
+            (
+                file_2_path.clone(),
+                vec![ReadFile { file_name: "game_b".to_string(), file_size: 1024, sha1_checksum: [0xbb; 20] }],
+            ),
+        ]);
+
+        insert_file_set_to_db(&context, &file_1_path, FileType::Rom).await;
+        insert_file_set_to_db(&context, &file_2_path, FileType::Rom).await;
+
+        let action = FilterOutAlreadyExistingFileSetsStep.execute(&mut context).await;
+
+        assert!(matches!(action, StepAction::Continue));
+        assert!(context.state.common_state.file_metadata.is_empty());
+    }
+
+    #[async_std::test]
+    async fn test_import_file_sets_step_success() {
+        let file_checksum =
+            sha1_from_hex_string("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").unwrap();
+        let file_path = PathBuf::from("/mock/rom1.zip");
+
+        let mock_file_import_ops = MockFileImportServiceOps::with_create_mock(CreateMockState {
+            file_set_id: 42,
+            release_id: Some(7),
+        });
+        let ops = FilesOnlyMassImportOps {
+            fs_ops: Arc::new(MockFileSystemOps::new()),
+            file_import_service_ops: Arc::new(mock_file_import_ops),
+            reader_factory_fn: file_metadata::create_mock_factory_with_test_data(vec![]),
+        };
+        let input = FilesOnlyMassImportInput {
+            source_path: PathBuf::from("/mock"),
+            file_type: core_types::FileType::Rom,
+            item_type: None,
+            system_id: 1,
+            source: "test".to_string(),
+        };
+        let mut context = FilesOnlyMassImportContext::new(
+            MassImportDeps {
+                repository_manager: database::setup_test_repository_manager().await,
+            },
+            input,
+            ops,
+            None,
+        );
+
+        context.state.common_state.file_metadata = HashMap::from([(
+            file_path.clone(),
+            vec![ReadFile {
+                file_name: "rom1.bin".to_string(),
+                sha1_checksum: file_checksum,
+                file_size: 123,
+            }],
+        )]);
+
+        let step = ImportFileSetsStep;
+        let result = step.execute(&mut context).await;
+
+        assert!(matches!(result, StepAction::Continue));
+        assert_eq!(context.state.common_state.import_results.len(), 1);
+        let import_result = &context.state.common_state.import_results[0];
+        assert_eq!(import_result.file_set_id, Some(42));
+        assert!(matches!(import_result.status, FileSetImportStatus::Success));
     }
 }

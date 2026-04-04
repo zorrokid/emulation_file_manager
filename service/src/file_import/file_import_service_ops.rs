@@ -69,6 +69,7 @@ pub struct MockFileImportServiceOps {
     pub update_calls: Vec<UpdateFileSetModel>,
     pub prepare_calls: Vec<(String, FileType)>,
     pub setup_create_mock: Option<CreateMockState>,
+    pub setup_update_mock: Option<CreateMockState>,
 }
 
 impl MockFileImportServiceOps {
@@ -78,6 +79,12 @@ impl MockFileImportServiceOps {
     pub fn with_create_mock(setup: CreateMockState) -> Self {
         Self {
             setup_create_mock: Some(setup),
+            ..Default::default()
+        }
+    }
+    pub fn with_update_mock(setup: CreateMockState) -> Self {
+        Self {
+            setup_update_mock: Some(setup),
             ..Default::default()
         }
     }
@@ -116,6 +123,7 @@ impl FileImportServiceOps for MockFileImportServiceOps {
                             archive_file_name: generate_random_uuid(),
                             sha1_checksum: c.sha1_checksum,
                             file_size: c.file_size,
+                            is_available: true,
                         })
                     })
                     .collect();
@@ -136,8 +144,38 @@ impl FileImportServiceOps for MockFileImportServiceOps {
 
     async fn update_file_set(
         &self,
-        _import_model: UpdateFileSetModel,
+        import_model: UpdateFileSetModel,
     ) -> Result<FileImportResult, Error> {
-        unimplemented!()
+        if self.should_fail {
+            return Err(Error::FileImportError(
+                "Mock update_file_set failure".to_string(),
+            ));
+        }
+        match &self.setup_update_mock {
+            Some(setup) => {
+                let imported_new_files: Vec<ImportedFile> = import_model
+                    .import_files
+                    .iter()
+                    .flat_map(|f| {
+                        f.content.values().map(|c| ImportedFile {
+                            original_file_name: c.file_name.clone(),
+                            archive_file_name: generate_random_uuid(),
+                            sha1_checksum: c.sha1_checksum,
+                            file_size: c.file_size,
+                            is_available: true,
+                        })
+                    })
+                    .collect();
+                Ok(FileImportResult {
+                    file_set_id: setup.file_set_id,
+                    release_id: setup.release_id,
+                    imported_new_files,
+                    failed_steps: HashMap::new(),
+                })
+            }
+            None => Err(Error::FileImportError(
+                "No mock setup for update_file_set".to_string(),
+            )),
+        }
     }
 }

@@ -120,6 +120,7 @@ pub fn import_file(
         archive_file_name: archive_file_name.to_string(),
         sha1_checksum,
         file_size,
+        is_available: true,
     };
 
     let mut file_name_to_checksum_map: HashMap<Sha1Checksum, ImportedFile> = HashMap::new();
@@ -186,6 +187,7 @@ pub fn import_files_from_zip(
                 archive_file_name: archive_file_name.to_string(),
                 sha1_checksum,
                 file_size,
+                is_available: true,
             };
 
             file_name_to_checksum_map.insert(sha1_checksum, imported_file);

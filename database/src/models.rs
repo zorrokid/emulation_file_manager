@@ -5,13 +5,17 @@ use std::fmt::{Display, Formatter};
 
 use sqlx::FromRow;
 
+/// File metadata for both availble and missing files. File set can contain both available and
+/// missing files that are presented by FileInfo.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FileInfo {
     pub id: i64,
     pub sha1_checksum: Sha1Checksum,
     pub file_size: u64,
+    // TODO: make optional? Since now FileInfo stores meta data for both available files and missing files
     pub archive_file_name: String,
     pub file_type: FileType,
+    pub is_available: bool,
 }
 
 impl From<&FileSetFileInfo> for FileInfo {
@@ -22,6 +26,7 @@ impl From<&FileSetFileInfo> for FileInfo {
             file_size: file_set_file_info.file_size as u64,
             archive_file_name: file_set_file_info.archive_file_name.clone(),
             file_type: file_set_file_info.file_type,
+            is_available: file_set_file_info.is_available,
         }
     }
 }
@@ -65,6 +70,7 @@ pub struct FileSetFileInfo {
     pub archive_file_name: String,
     pub file_type: FileType,
     pub sort_order: i64,
+    pub is_available: bool,
 }
 
 impl Display for FileSetFileInfo {

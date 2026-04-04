@@ -1,4 +1,7 @@
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use core_types::{FileType, ReadFile, item_type::ItemType};
 use domain::title_normalizer::file_name_to_canonical_software_title;
@@ -12,8 +15,8 @@ use crate::{
     },
     file_system_ops::FileSystemOps,
     mass_import::{
-        common_steps::context::{MassImportContextOps, MassImportDeps},
-        models::{FileSetImportResult, MassImportSyncEvent},
+        common_steps::context::{CommonMassImportState, MassImportContextOps, MassImportDeps},
+        models::MassImportSyncEvent,
     },
 };
 
@@ -25,12 +28,7 @@ pub struct FilesOnlyMassImportOps {
 
 #[derive(Default)]
 pub struct FilesOnlyMassImportState {
-    pub read_ok_files: Vec<std::path::PathBuf>,
-    pub read_failed_files: Vec<std::path::PathBuf>,
-    pub dir_scan_errors: Vec<crate::error::Error>,
-    pub file_metadata: HashMap<PathBuf, Vec<ReadFile>>,
-    pub import_items: Vec<FileSetImportModel>,
-    pub import_results: Vec<FileSetImportResult>,
+    pub common_state: CommonMassImportState,
 }
 
 #[derive(Debug, Clone)]
@@ -65,9 +63,58 @@ impl FilesOnlyMassImportContext {
             progress_tx,
         }
     }
+
+    fn create_file_set_import_model(
+        &self,
+        file_path: &Path,
+        metadata: &[ReadFile],
+    ) -> FileSetImportModel {
+        let file_name = file_path.file_name().unwrap().to_string_lossy().to_string();
+        let software_title = file_name_to_canonical_software_title(&file_name);
+
+        FileSetImportModel {
+            file_set_name: file_path.file_stem().unwrap().to_string_lossy().to_string(),
+            file_set_file_name: file_path.file_name().unwrap().to_string_lossy().to_string(),
+            import_files: vec![FileImportSource {
+                path: PathBuf::from(file_path),
+                content: metadata
+                    .iter()
+                    .map(|f| {
+                        (
+                            f.sha1_checksum,
+                            ImportFileContent {
+                                file_name: f.file_name.clone(),
+                                file_size: f.file_size,
+                                sha1_checksum: f.sha1_checksum,
+                            },
+                        )
+                    })
+                    .collect(),
+            }],
+            selected_files: metadata.iter().map(|meta| meta.sha1_checksum).collect(),
+            system_ids: vec![self.input.system_id],
+            source: self.input.source.clone(),
+            file_type: self.input.file_type,
+            item_ids: vec![],
+            item_types: self.input.item_type.into_iter().collect(),
+            create_release: Some(CreateReleaseParams {
+                software_title_name: software_title,
+                release_name: "".to_string(), // TODO: improve later,
+            }),
+            dat_extras: None,
+        }
+    }
 }
 
 impl MassImportContextOps for FilesOnlyMassImportContext {
+    fn common_state(&self) -> &CommonMassImportState {
+        &self.state.common_state
+    }
+
+    fn common_state_mut(&mut self) -> &mut CommonMassImportState {
+        &mut self.state.common_state
+    }
+
     fn reader_factory_fn(&self) -> Arc<SendReaderFactoryFn> {
         self.ops.reader_factory_fn.clone()
     }
@@ -80,82 +127,8 @@ impl MassImportContextOps for FilesOnlyMassImportContext {
         &self.input.source_path
     }
 
-    fn read_ok_files_mut(&mut self) -> &mut Vec<PathBuf> {
-        &mut self.state.read_ok_files
-    }
-
-    fn read_ok_files(&self) -> &Vec<PathBuf> {
-        &self.state.read_ok_files
-    }
-
-    fn read_failed_files(&self) -> &Vec<PathBuf> {
-        &self.state.read_failed_files
-    }
-
-    fn read_failed_files_mut(&mut self) -> &mut Vec<PathBuf> {
-        &mut self.state.read_failed_files
-    }
-
-    fn dir_scan_errors(&mut self) -> &mut Vec<crate::error::Error> {
-        &mut self.state.dir_scan_errors
-    }
-
-    fn file_metadata(&mut self) -> &mut HashMap<PathBuf, Vec<ReadFile>> {
-        &mut self.state.file_metadata
-    }
-
-    fn get_import_file_sets(&self) -> Vec<FileSetImportModel> {
-        let system_id = self.input.system_id;
-        let file_type = self.input.file_type;
-        let item_type = self.input.item_type;
-        let source = self.input.source.clone();
-        let mut file_import_sets: Vec<FileSetImportModel> = vec![];
-        for (file_path, metadata) in self.state.file_metadata.iter() {
-            let file_name = file_path.file_name().unwrap().to_string_lossy().to_string();
-            let software_title = file_name_to_canonical_software_title(&file_name);
-
-            let file_set_import_model = FileSetImportModel {
-                file_set_name: file_path.file_stem().unwrap().to_string_lossy().to_string(),
-                file_set_file_name: file_path.file_name().unwrap().to_string_lossy().to_string(),
-                import_files: vec![FileImportSource {
-                    path: file_path.clone(),
-                    content: metadata
-                        .iter()
-                        .map(|f| {
-                            (
-                                f.sha1_checksum,
-                                ImportFileContent {
-                                    file_name: f.file_name.clone(),
-                                    file_size: f.file_size,
-                                    sha1_checksum: f.sha1_checksum,
-                                },
-                            )
-                        })
-                        .collect(),
-                }],
-                selected_files: metadata.iter().map(|meta| meta.sha1_checksum).collect(),
-                system_ids: vec![system_id],
-                source: source.clone(),
-                file_type,
-                item_ids: vec![],
-                item_types: item_type.into_iter().collect(),
-                create_release: Some(CreateReleaseParams {
-                    software_title_name: software_title,
-                    release_name: "".to_string(), // TODO: improve later,
-                }),
-                dat_file_id: None,
-            };
-            file_import_sets.push(file_set_import_model);
-        }
-        file_import_sets
-    }
-
     fn import_service_ops(&self) -> Arc<dyn FileImportServiceOps> {
         self.ops.file_import_service_ops.clone()
-    }
-
-    fn import_results(&mut self) -> &mut Vec<FileSetImportResult> {
-        self.state.import_results.as_mut()
     }
 
     fn progress_tx(&self) -> &Option<Sender<MassImportSyncEvent>> {
@@ -163,10 +136,27 @@ impl MassImportContextOps for FilesOnlyMassImportContext {
     }
 }
 
+impl FilesOnlyMassImportContext {
+    pub fn can_import_file_sets(&self) -> bool {
+        !self.state.common_state.file_metadata.is_empty()
+    }
+
+    pub fn get_import_file_sets(&self) -> Vec<FileSetImportModel> {
+        self.state
+            .common_state
+            .file_metadata
+            .iter()
+            .map(|(file_path, metadata)| self.create_file_set_import_model(file_path, metadata))
+            .collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
-    use core_types::Sha1Checksum;
+    use std::collections::HashMap;
+
+    use core_types::{ReadFile, Sha1Checksum};
     use database::setup_test_repository_manager;
     use file_metadata::create_mock_factory_with_test_data;
 
@@ -215,12 +205,13 @@ mod tests {
         }];
 
         let state = FilesOnlyMassImportState {
-            read_ok_files: vec![],
-            read_failed_files: vec![],
-            dir_scan_errors: vec![],
-            file_metadata: HashMap::from([(file_path.clone(), file_metadata)]),
-            import_items: vec![],
-            import_results: vec![],
+            common_state: CommonMassImportState {
+                read_ok_files: vec![],
+                read_failed_files: vec![],
+                dir_scan_errors: vec![],
+                file_metadata: HashMap::from([(file_path.clone(), file_metadata)]),
+                import_results: vec![],
+            },
         };
 
         let context = FilesOnlyMassImportContext {

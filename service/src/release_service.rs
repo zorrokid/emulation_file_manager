@@ -96,6 +96,7 @@ mod tests {
             archive_file_name: "test.rom".to_string(),
             file_size: 512,
             sha1_checksum: checksum,
+            is_available: true,
         };
         repo_manager
             .get_file_set_repository()

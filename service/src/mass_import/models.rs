@@ -4,18 +4,17 @@ use core_types::{FileType, ReadFile, item_type::ItemType};
 
 use crate::{
     error::Error,
-    file_import::model::FileSetImportModel,
     mass_import::{
-        with_dat::context::{DatFileMassImportState, DatImportItem},
+        common_steps::context::CommonMassImportState, with_dat::context::DatFileMassImportState,
         with_files_only::context::FilesOnlyMassImportState,
     },
 };
 use domain::naming_conventions::no_intro::DatFile;
 
 #[derive(Debug, Clone)]
-pub struct MassImportInput {
+pub struct DatMassImportInput {
     pub source_path: PathBuf,
-    pub dat_file_path: Option<PathBuf>,
+    pub dat_file_path: PathBuf,
     pub file_type: FileType,
     pub item_type: Option<ItemType>,
     pub system_id: i64,
@@ -38,7 +37,6 @@ pub struct FileImportResult {
 
 #[derive(Debug, Clone)]
 pub struct DatFileMassImportResult {
-    pub dat_import_items: Vec<DatImportItem>,
     pub dat_file: Option<DatFile>,
     pub result: FileImportResult,
 }
@@ -46,8 +44,9 @@ pub struct DatFileMassImportResult {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FileSetImportStatus {
     Success,
-    SucessWithWarnings(Vec<String>), // Warning message
-    Failed(String),                  // Error message
+    SuccessWithWarnings(Vec<String>),
+    StillMissingFiles(Vec<String>), // Re-run attempted but no files became available
+    Failed(String),
     AlreadyExists,
 }
 
@@ -61,36 +60,33 @@ pub struct FileSetImportResult {
 impl From<DatFileMassImportState> for DatFileMassImportResult {
     fn from(state: DatFileMassImportState) -> Self {
         DatFileMassImportResult {
-            dat_import_items: state.import_items,
             dat_file: state.dat_file,
-            result: FileImportResult {
-                read_ok_files: state.read_ok_files,
-                read_failed_files: state.read_failed_files,
-                dir_scan_errors: state.dir_scan_errors,
-                file_metadata: state.file_metadata,
-                import_results: state.import_results,
-            },
+            result: state.common_state.into(),
         }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct FilesOnlyMassImportResult {
-    pub imported_file_sets: Vec<FileSetImportModel>,
     pub result: FileImportResult,
+}
+
+impl From<CommonMassImportState> for FileImportResult {
+    fn from(state: CommonMassImportState) -> Self {
+        FileImportResult {
+            read_ok_files: state.read_ok_files,
+            read_failed_files: state.read_failed_files,
+            dir_scan_errors: state.dir_scan_errors,
+            file_metadata: state.file_metadata,
+            import_results: state.import_results,
+        }
+    }
 }
 
 impl From<FilesOnlyMassImportState> for FilesOnlyMassImportResult {
     fn from(state: FilesOnlyMassImportState) -> Self {
         FilesOnlyMassImportResult {
-            imported_file_sets: state.import_items,
-            result: FileImportResult {
-                read_ok_files: state.read_ok_files,
-                read_failed_files: state.read_failed_files,
-                dir_scan_errors: state.dir_scan_errors,
-                file_metadata: state.file_metadata,
-                import_results: state.import_results,
-            },
+            result: state.common_state.into(),
         }
     }
 }
