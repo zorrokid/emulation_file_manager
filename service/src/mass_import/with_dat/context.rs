@@ -14,15 +14,12 @@ use crate::{
 };
 use core_types::Sha1Checksum;
 use dat_file_parser::DatFileParserOps;
-use domain::naming_conventions::no_intro::{DatFile, DatGame, DatHeader};
+use domain::naming_conventions::no_intro::{DatFile, DatHeader};
 use file_metadata::SendReaderFactoryFn;
 use flume::Sender;
 
 use crate::{
-    file_import::{
-        file_import_service_ops::FileImportServiceOps,
-        model::FileSetImportModel,
-    },
+    file_import::file_import_service_ops::FileImportServiceOps,
     file_system_ops::FileSystemOps,
 };
 

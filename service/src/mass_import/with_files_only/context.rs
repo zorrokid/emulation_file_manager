@@ -15,7 +15,7 @@ use crate::{
     },
     file_system_ops::FileSystemOps,
     mass_import::{
-        common_steps::context::{CommonMassImportState, ImportableFileSets, MassImportContextOps, MassImportDeps},
+        common_steps::context::{CommonMassImportState, MassImportContextOps, MassImportDeps},
         models::MassImportSyncEvent,
     },
 };
@@ -136,12 +136,12 @@ impl MassImportContextOps for FilesOnlyMassImportContext {
     }
 }
 
-impl ImportableFileSets for FilesOnlyMassImportContext {
-    fn can_import_file_sets(&self) -> bool {
+impl FilesOnlyMassImportContext {
+    pub fn can_import_file_sets(&self) -> bool {
         !self.state.common_state.file_metadata.is_empty()
     }
 
-    fn get_import_file_sets(&self) -> Vec<FileSetImportModel> {
+    pub fn get_import_file_sets(&self) -> Vec<FileSetImportModel> {
         self.state
             .common_state
             .file_metadata

@@ -11,7 +11,7 @@ use flume::Sender;
 
 use crate::{
     error::Error,
-    file_import::{file_import_service_ops::FileImportServiceOps, model::FileSetImportModel},
+    file_import::file_import_service_ops::FileImportServiceOps,
     file_system_ops::FileSystemOps,
     mass_import::models::{FileSetImportResult, MassImportSyncEvent},
 };
@@ -67,11 +67,4 @@ pub trait MassImportContextOps {
     fn progress_tx(&self) -> &Option<Sender<MassImportSyncEvent>>;
 }
 
-/// Extension of [`MassImportContextOps`] for contexts that support the generic
-/// [`ImportFileSetsStep`][crate::mass_import::common_steps::steps::ImportFileSetsStep].
-/// DAT contexts use [`RouteAndProcessFileSetsStep`][crate::mass_import::with_dat::route_and_process_step::RouteAndProcessFileSetsStep]
-/// instead and do not implement this trait.
-pub trait ImportableFileSets: MassImportContextOps {
-    fn get_import_file_sets(&self) -> Vec<FileSetImportModel>;
-    fn can_import_file_sets(&self) -> bool;
-}
+
