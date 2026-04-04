@@ -127,25 +127,24 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileInfoToDatabaseStep {
             {
                 let existing_id = existing.id;
                 let existing_file_size = existing.file_size;
-                let existing_archive_file_name = existing.archive_file_name.clone();
                 let result = context
                     .deps
                     .repository_manager
                     .get_file_info_repository()
-                    .update_is_available(existing_id)
+                    .update_is_available(existing_id, &imported_file.archive_file_name)
                     .await;
                 match result {
                     Ok(_) => {
                         tracing::info!(
                             file_info_id = existing_id,
-                            archive_file_name = %existing_archive_file_name,
+                            archive_file_name = %imported_file.archive_file_name,
                             "Restored previously unavailable file info record",
                         );
                         context.state.new_files.push(FileInfo {
                             id: existing_id,
                             sha1_checksum: imported_file.sha1_checksum,
                             file_size: existing_file_size,
-                            archive_file_name: existing_archive_file_name,
+                            archive_file_name: imported_file.archive_file_name.clone(),
                             file_type,
                             is_available: true,
                         });
