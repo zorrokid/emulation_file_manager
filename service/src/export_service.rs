@@ -124,19 +124,16 @@ fn prepare_fileset_for_export(
     let output_mapping = file_set
         .files
         .iter()
-        .map(|f| {
-            let checksum: Sha1Checksum = f
-                .sha1_checksum
-                .clone()
-                .try_into()
-                .expect("Failed to convert to Sha1Checksum");
-            (
-                f.archive_file_name.clone(),
-                OutputFile {
-                    output_file_name: f.file_name.clone(),
-                    checksum,
-                },
-            )
+        .filter_map(|f| {
+            f.archive_file_name.clone().map(|name| {
+                (
+                    name,
+                    OutputFile {
+                        output_file_name: f.file_name.clone(),
+                        checksum: f.sha1_checksum,
+                    },
+                )
+            })
         })
         .collect::<HashMap<String, OutputFile>>();
 

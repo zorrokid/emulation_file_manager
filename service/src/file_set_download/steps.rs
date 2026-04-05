@@ -94,9 +94,16 @@ impl PipelineStep<DownloadContext> for PrepareFileForDownloadStep {
     async fn execute(&self, context: &mut DownloadContext) -> StepAction {
         if let Some(file_set) = &context.file_set {
             for file in context.files_in_set.iter() {
+                let Some(archive_name) = &file.archive_file_name else {
+                    tracing::warn!(
+                        file_info_id = file.file_info_id,
+                        "File info is missing archive file name, skipping"
+                    );
+                    continue;
+                };
                 let file_path = context
                     .settings
-                    .get_file_path(&file_set.file_type, &file.archive_file_name);
+                    .get_file_path(&file_set.file_type, archive_name);
 
                 if !context.fs_ops.exists(&file_path) {
                     context.files_to_download.push(file.into());
@@ -133,11 +140,25 @@ impl PipelineStep<DownloadContext> for DownloadFilesStep {
         );
 
         for file_info in context.files_to_download.iter() {
-            let cloud_key = &file_info.generate_cloud_key();
+            let Some(cloud_key) = file_info.generate_cloud_key() else {
+                tracing::warn!(
+                    file_info_id = file_info.id,
+                    "Failed to generate cloud key for file, skipping download"
+                );
+                continue;
+            };
+
+            let Some(archive_file_name) = &file_info.archive_file_name else {
+                tracing::warn!(
+                    file_info_id = file_info.id,
+                    "File info is missing archive file name, skipping download"
+                );
+                continue;
+            };
 
             tracing::debug!(
                 cloud_key = %cloud_key,
-                archive_file_name = %file_info.archive_file_name,
+                archive_file_name = ?file_info.archive_file_name,
                 "Downloading file"
             );
 
@@ -154,14 +175,14 @@ impl PipelineStep<DownloadContext> for DownloadFilesStep {
                     .as_ref()
                     .expect("This step should only execute if file_set is Some")
                     .file_type,
-                &file_info.archive_file_name,
+                archive_file_name,
             );
             let download_res = context
                 .cloud_ops
                 .as_ref()
                 .expect("This step should only execute if cloud_ops is Some")
                 .download_file(
-                    cloud_key,
+                    &cloud_key,
                     target_path.as_path(),
                     context.progress_tx.as_ref(),
                 )
@@ -192,7 +213,7 @@ impl PipelineStep<DownloadContext> for DownloadFilesStep {
                     tracing::error!(
                         error = %e,
                         cloud_key = %cloud_key,
-                        archive_file_name = %file_info.archive_file_name,
+                        archive_file_name = ?file_info.archive_file_name,
                         "File download failed"
                     );
 
@@ -275,14 +296,16 @@ impl PipelineStep<DownloadContext> for ExportFilesStep {
         let output_mapping = context
             .files_in_set
             .iter()
-            .map(|f| {
-                (
-                    f.archive_file_name.clone(),
-                    OutputFile {
-                        output_file_name: f.file_name.clone(),
-                        checksum: f.sha1_checksum,
-                    },
-                )
+            .filter_map(|f| {
+                f.archive_file_name.clone().map(|name| {
+                    (
+                        name,
+                        OutputFile {
+                            output_file_name: f.file_name.clone(),
+                            checksum: f.sha1_checksum,
+                        },
+                    )
+                })
             })
             .collect::<HashMap<String, OutputFile>>();
 
@@ -532,7 +555,7 @@ mod tests {
         assert_eq!(context.files_to_download.len(), 1);
         assert_eq!(
             context.files_to_download[0].archive_file_name,
-            archive_file_name
+            Some(archive_file_name.to_string())
         );
     }
 
@@ -572,7 +595,7 @@ mod tests {
             .cloud_ops
             .clone()
             .unwrap()
-            .upload_file(&file_path, &key, None)
+            .upload_file(&file_path, key.as_deref().unwrap(), None)
             .await
             .unwrap();
 
@@ -585,7 +608,7 @@ mod tests {
         assert_eq!(context.failed_downloads(), 0);
         assert_eq!(
             context.file_download_results.first().unwrap().cloud_key,
-            key
+            key.unwrap()
         );
     }
 
@@ -626,7 +649,7 @@ mod tests {
         assert_eq!(context.successful_downloads(), 0);
         assert_eq!(context.failed_downloads(), 1);
         let download_result = context.file_download_results.first().unwrap();
-        assert_eq!(download_result.cloud_key, key);
+        assert_eq!(download_result.cloud_key, key.unwrap());
         assert!(!download_result.cloud_operation_success);
         assert!(!download_result.file_write_success);
     }
@@ -876,7 +899,7 @@ mod tests {
 
         let file = ImportedFile {
             original_file_name: archive_file_name.to_string(),
-            archive_file_name: archive_file_name.to_string(),
+            archive_file_name: Some(archive_file_name.to_string()),
             sha1_checksum: Sha1Checksum::from([1; 20]),
             file_size: 5678,
             is_available: true,

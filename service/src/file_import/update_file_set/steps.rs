@@ -137,13 +137,13 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileInfoToDatabaseStep {
                     .deps
                     .repository_manager
                     .get_file_info_repository()
-                    .update_is_available(existing_id, &imported_file.archive_file_name)
+                    .update_is_available(existing_id, imported_file.archive_file_name.as_deref())
                     .await;
                 match result {
                     Ok(_) => {
                         tracing::info!(
                             file_info_id = existing_id,
-                            archive_file_name = %imported_file.archive_file_name,
+                            archive_file_name = ?imported_file.archive_file_name,
                             "Restored previously unavailable file info record",
                         );
                         context.state.new_files.push(FileInfo {
@@ -172,7 +172,7 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileInfoToDatabaseStep {
                     .add_file_info(
                         &imported_file.sha1_checksum,
                         imported_file.file_size as i64,
-                        &imported_file.archive_file_name,
+                        imported_file.archive_file_name.as_deref(),
                         file_type,
                     )
                     .await;
@@ -180,7 +180,7 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileInfoToDatabaseStep {
                     Ok(id) => {
                         tracing::info!(
                             file_info_id = id,
-                            archive_file_name = %imported_file.archive_file_name,
+                            archive_file_name = ?imported_file.archive_file_name,
                             "Added new file info record to database",
                         );
                         context.state.new_files.push(FileInfo {
@@ -195,7 +195,7 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileInfoToDatabaseStep {
                     Err(err) => {
                         tracing::error!(
                             error = %err,
-                            archive_file_name = %imported_file.archive_file_name,
+                            archive_file_name = ?imported_file.archive_file_name,
                             "Error adding file info record to database",
                         );
                         // TODO: collect failed
@@ -272,9 +272,9 @@ impl PipelineStep<UpdateFileSetContext> for CollectDeletionCandidatesStep {
     }
 
     async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
-        println!(
-            "Collecting files unlinked from file set with id {} for deletion candidates",
-            context.input.file_set_id
+        tracing::info!(
+            file_set_id = %context.input.file_set_id,
+            "Starting to collect files unlinked from file set for deletion candidates"
         );
         let removed_files = context
             .get_removed_files()
@@ -436,7 +436,7 @@ impl PipelineStep<UpdateFileSetContext> for MarkNewFilesForCloudSyncStep {
             .state
             .new_files
             .iter()
-            .map(|file| (file.id, file.generate_cloud_key()))
+            .filter_map(|file| file.generate_cloud_key().map(|key| (file.id, key)))
             .collect();
 
         let result = context
@@ -583,7 +583,12 @@ mod tests {
         let repository_manager = context.deps.repository_manager.clone();
         let _file_info_1_id = repository_manager
             .get_file_info_repository()
-            .add_file_info(&file_1_checksum, 1024, "test_archive_name_1", FileType::Rom)
+            .add_file_info(
+                &file_1_checksum,
+                1024,
+                Some("test_archive_name_1"),
+                FileType::Rom,
+            )
             .await
             .unwrap();
 
@@ -595,7 +600,7 @@ mod tests {
 
         let files_in_file_set = vec![ImportedFile {
             original_file_name: "original file name".to_string(),
-            archive_file_name: "archive_file_name".to_string(),
+            archive_file_name: Some("archive_file_name".to_string()),
             sha1_checksum: file_1_checksum,
             file_size: 1024,
             is_available: true,
@@ -673,7 +678,7 @@ mod tests {
                 original_file_name: "game1.rom".to_string(),
                 sha1_checksum: file_1_checksum,
                 file_size: 1024,
-                archive_file_name: "archive123.zst".to_string(),
+                archive_file_name: Some("archive123.zst".to_string()),
                 is_available: true,
             },
         );
@@ -707,15 +712,20 @@ mod tests {
             .deps
             .repository_manager
             .get_file_info_repository()
-            .add_file_info(&file_2_checksum, 2048, "test_archive_name_2", FileType::Rom)
+            .add_file_info(
+                &file_2_checksum,
+                2048,
+                Some("test_archive_name_2"),
+                FileType::Rom,
+            )
             .await
             .unwrap();
 
         context.state.new_files.push(database::models::FileInfo {
             id: file_2_id,
-            sha1_checksum: file_2_checksum.into(),
+            sha1_checksum: file_2_checksum,
             file_size: 2048,
-            archive_file_name: "test_archive_name_2".to_string(),
+            archive_file_name: Some("test_archive_name_2".to_string()),
             file_type: FileType::Rom,
             is_available: true,
         });
@@ -915,14 +925,14 @@ mod tests {
         // Create file_info as unavailable
         let file_info_id = repo
             .get_file_info_repository()
-            .add_file_info(&sha1_a, 1024, "placeholder.zst", FileType::Rom)
+            .add_file_info(&sha1_a, 1024, Some("placeholder.zst"), FileType::Rom)
             .await
             .unwrap();
 
         // Create file set with file_info A already linked (but unavailable)
         let files_in_file_set = vec![core_types::ImportedFile {
             original_file_name: "game.rom".to_string(),
-            archive_file_name: "placeholder.zst".to_string(),
+            archive_file_name: Some("placeholder.zst".to_string()),
             sha1_checksum: sha1_a,
             file_size: 1024,
             is_available: false,
@@ -954,7 +964,7 @@ mod tests {
             id: file_info_id,
             sha1_checksum: sha1_a,
             file_type: FileType::Rom,
-            archive_file_name: "placeholder.zst".to_string(),
+            archive_file_name: Some("placeholder.zst".to_string()),
             file_size: 1024,
             is_available: false,
         }];
@@ -964,7 +974,7 @@ mod tests {
             sha1_a,
             ImportedFile {
                 original_file_name: "game.rom".to_string(),
-                archive_file_name: "placeholder.zst".to_string(),
+                archive_file_name: Some("placeholder.zst".to_string()),
                 sha1_checksum: sha1_a,
                 file_size: 1024,
                 is_available: true,

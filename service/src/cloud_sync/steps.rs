@@ -44,7 +44,13 @@ impl PipelineStep<SyncContext> for PrepareFilesForUploadStep {
                     }
                     offset += file_infos.len() as i64;
                     for file_info in &file_infos {
-                        let cloud_key = file_info.generate_cloud_key();
+                        let Some(cloud_key) = file_info.generate_cloud_key() else {
+                            tracing::warn!(
+                                file_info_id = file_info.id,
+                                "File is marked as available but has no archive file name, skipping cloud sync log entry"
+                            );
+                            continue;
+                        };
                         tracing::debug!(
                             file_info_id = file_info.id,
                             cloud_key = %cloud_key,
@@ -57,7 +63,7 @@ impl PipelineStep<SyncContext> for PrepareFilesForUploadStep {
                                 file_info.id,
                                 FileSyncStatus::UploadPending,
                                 "",
-                                cloud_key.as_str(),
+                                &cloud_key,
                             )
                             .await;
                         if let Err(e) = update_res {
@@ -264,9 +270,12 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                             continue;
                         }
 
+                        let Some(archive_name) = &file.archive_file_name else {
+                            continue;
+                        };
                         let local_path = context
                             .settings
-                            .get_file_path(&file.file_type, &file.archive_file_name);
+                            .get_file_path(&file.file_type, archive_name);
 
                         tracing::debug!(
                             file_info_id = file.file_info_id,
@@ -666,7 +675,7 @@ mod tests {
             .add_file_info(
                 &Sha1Checksum::from([0; 20]),
                 1234,
-                "file1.zst",
+                Some("file1.zst"),
                 FileType::Rom,
             )
             .await
@@ -689,7 +698,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(file_infos_res.len(), 1);
-        assert_eq!(file_infos_res[0].archive_file_name, "file1.zst");
+        assert_eq!(file_infos_res[0].archive_file_name, Some("file1.zst".to_string()));
 
         let step = PrepareFilesForUploadStep;
         let action = step.execute(&mut context).await;
@@ -712,7 +721,7 @@ mod tests {
 
         assert_eq!(
             pending_files_to_upload_result[0].archive_file_name,
-            "file1.zst"
+            Some("file1.zst".to_string())
         );
 
         assert_eq!(file_infos_res.len(), 0);
@@ -746,7 +755,7 @@ mod tests {
     async fn add_file_info(repo_manager: &RepositoryManager, checksum: [u8; 20], file_name: &str, file_type: FileType) -> i64 {
         repo_manager
             .get_file_info_repository()
-            .add_file_info(&Sha1Checksum::from(checksum), 1234, file_name, file_type)
+            .add_file_info(&Sha1Checksum::from(checksum), 1234, Some(file_name), file_type)
             .await
             .unwrap()
     }
@@ -769,7 +778,7 @@ mod tests {
             .add_file_info(
                 &Sha1Checksum::from([0; 20]),
                 1234,
-                "file1.zst",
+                Some("file1.zst"),
                 FileType::Rom,
             )
             .await
@@ -838,7 +847,7 @@ mod tests {
              .add_file_info(
                  &Sha1Checksum::from(*checksum),
                  1234,
-                 file_name,
+                 Some(file_name),
                  FileType::Rom,
              )
              .await
@@ -891,7 +900,7 @@ mod tests {
             .add_file_info(
                 &Sha1Checksum::from([0; 20]),
                 1234,
-                "file1.zst",
+                Some("file1.zst"),
                 FileType::Rom,
             )
             .await
@@ -950,7 +959,7 @@ mod tests {
              .add_file_info(
                  &Sha1Checksum::from(*checksum),
                  1234,
-                 file_name,
+                 Some(file_name),
                  FileType::Rom,
              )
              .await
@@ -1049,7 +1058,7 @@ mod tests {
          let file_info_id = context
              .repository_manager
              .get_file_info_repository()
-             .add_file_info(&Sha1Checksum::from([0; 20]), 1234, "file1.zst", FileType::Rom)
+             .add_file_info(&Sha1Checksum::from([0; 20]), 1234, Some("file1.zst"), FileType::Rom)
              .await
              .unwrap();
      

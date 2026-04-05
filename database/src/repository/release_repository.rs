@@ -636,7 +636,7 @@ mod tests {
                 "",
                 &[ImportedFile {
                     original_file_name: "File1.bin".to_string(),
-                    archive_file_name: "File1.zst".to_string(),
+                    archive_file_name: Some("File1.zst".to_string()),
                     file_size: 1024,
                     sha1_checksum: [0; 20],
                     is_available: true,
@@ -654,7 +654,7 @@ mod tests {
                 "",
                 &[ImportedFile {
                     original_file_name: "File2.bin".to_string(),
-                    archive_file_name: "File1.zst".to_string(),
+                    archive_file_name: Some("File1.zst".to_string()),
                     file_size: 1024,
                     sha1_checksum: [1; 20],
                     is_available: true,
@@ -672,7 +672,7 @@ mod tests {
                 "",
                 &[ImportedFile {
                     original_file_name: "File3.bin".to_string(),
-                    archive_file_name: "File1.zst".to_string(),
+                    archive_file_name: Some("File1.zst".to_string()),
                     file_size: 1024,
                     sha1_checksum: [2; 20],
                     is_available: true,
@@ -1015,7 +1015,7 @@ mod tests {
                 "",
                 &[ImportedFile {
                     original_file_name: "File1.bin".to_string(),
-                    archive_file_name: "File1.zst".to_string(),
+                    archive_file_name: Some("File1.zst".to_string()),
                     file_size: 1024,
                     sha1_checksum: file_1_sha,
                     is_available: true,

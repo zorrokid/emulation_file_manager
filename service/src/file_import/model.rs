@@ -268,7 +268,7 @@ mod tests {
             sha1_checksum: checksum2,
             file_size: 2048,
             file_type: FileType::Rom,
-            archive_file_name: "archive_file_name".to_string(),
+            archive_file_name: Some("archive_file_name".to_string()),
             is_available: true,
         }];
 
@@ -339,7 +339,7 @@ mod tests {
             sha1_checksum: checksum,
             file_size: 1024,
             file_type: FileType::Rom,
-            archive_file_name: "archive_file_name".to_string(),
+            archive_file_name: Some("archive_file_name".to_string()),
             is_available: true,
         }];
         let model: FileImportModel = file_import_data.get_file_import_model(&existing_files);

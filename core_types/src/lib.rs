@@ -72,7 +72,7 @@ impl std::fmt::Display for DocumentType {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ImportedFile {
     pub original_file_name: String,
-    pub archive_file_name: String,
+    pub archive_file_name: Option<String>,
     pub sha1_checksum: Sha1Checksum,
     pub file_size: FileSize,
     /// When importing with DAT files, some of the files described in the DAT may not be available

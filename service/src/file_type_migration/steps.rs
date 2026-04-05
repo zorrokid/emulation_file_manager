@@ -126,7 +126,7 @@ impl PipelineStep<FileTypeMigrationContext> for MoveLocalFilesStep {
 
             match files {
                 Ok(files) => {
-                    for file in files.iter() {
+                    for file in files.iter().filter(|f| f.is_available) {
                         if context.moved_local_file_ids.contains(&file.id) {
                             continue;
                         }
@@ -137,10 +137,17 @@ impl PipelineStep<FileTypeMigrationContext> for MoveLocalFilesStep {
                             "Moving local file to new location based on new file type"
                         );
 
-                        let old_path = context.settings.get_file_path(
-                            &file_type_migration.old_file_type,
-                            &file.archive_file_name,
-                        );
+                        let Some(archive_name) = &file.archive_file_name else {
+                            tracing::warn!(
+                                file_id = file.id,
+                                "File is marked as available but has no archive file name, skipping local file move"
+                            );
+                            context.non_existing_local_file_ids.insert(file.id);
+                            continue;
+                        };
+                        let old_path = context
+                            .settings
+                            .get_file_path(&file_type_migration.old_file_type, archive_name);
 
                         if !context.fs_ops.exists(&old_path) {
                             tracing::warn!(
@@ -152,10 +159,9 @@ impl PipelineStep<FileTypeMigrationContext> for MoveLocalFilesStep {
                             continue;
                         }
 
-                        let new_path = context.settings.get_file_path(
-                            &file_type_migration.new_file_type,
-                            &file.archive_file_name,
-                        );
+                        let new_path = context
+                            .settings
+                            .get_file_path(&file_type_migration.new_file_type, archive_name);
 
                         if context.is_dry_run {
                             tracing::info!(
@@ -282,6 +288,16 @@ impl PipelineStep<FileTypeMigrationContext> for MoveCloudFilesStep {
                         };
 
                         let new_cloud_key = new_file.generate_cloud_key();
+
+                        let (Some(old_cloud_key), Some(new_cloud_key)) =
+                            (old_cloud_key, new_cloud_key)
+                        else {
+                            tracing::warn!(
+                                file_id = file.id,
+                                "Missing archive file name, cannot generate cloud key, skipping move"
+                            );
+                            continue;
+                        };
 
                         if context.is_dry_run {
                             tracing::info!(
@@ -613,7 +629,7 @@ mod tests {
         repository_manager: &RepositoryManager,
         file_type: &FileType,
         file_sha1: Sha1Checksum,
-        archive_file_name: String,
+        archive_file_name: Option<String>,
     ) -> i64 {
         let system_id = insert_test_system(repository_manager, "Test System").await;
 
@@ -659,7 +675,7 @@ mod tests {
             &repository_manager,
             &FileType::ManualScan, // this will be migrated to FileType::Scan
             file_1_checksum,
-            "123123.zst".to_string(),
+            Some("123123.zst".to_string()),
         )
         .await;
 
@@ -668,7 +684,7 @@ mod tests {
             &repository_manager,
             &FileType::Rom, // this will NOT be migrated
             file_2_checksum,
-            "456456.zst".to_string(),
+            Some("456456.zst".to_string()),
         )
         .await;
 
@@ -719,7 +735,7 @@ mod tests {
             &repository_manager,
             &FileType::ManualScan,
             file_checksum,
-            file_archive_name.clone(),
+            Some(file_archive_name.clone()),
         )
         .await;
 
@@ -736,7 +752,7 @@ mod tests {
             &repository_manager,
             &FileType::Rom, // this will NOT be migrated
             file_checksum_2,
-            "456456.zst".to_string(),
+            Some("456456.zst".to_string()),
         )
         .await;
 
@@ -769,7 +785,7 @@ mod tests {
         let repository_manager = context.repository_manager.clone();
 
         // create file set with file with file type to be migrated
-        let archive_file_name = "123123.zst".to_string();
+        let archive_file_name = Some("123123.zst".to_string());
         let sha1_checksum = Sha1Checksum::from([0; 20]);
         let file_info = FileInfo {
             id: 1,
@@ -801,9 +817,9 @@ mod tests {
         // "upload" the file to mock cloud storage
         let file_path = context
             .settings
-            .get_file_path(&FileType::ManualScan, &archive_file_name);
+            .get_file_path(&FileType::ManualScan, archive_file_name.as_deref().unwrap());
         let cloud_ops = Arc::new(MockCloudStorage::new());
-        let cloud_key = file_info.generate_cloud_key();
+        let cloud_key = file_info.generate_cloud_key().unwrap();
 
         cloud_ops
             .upload_file(&file_path, &cloud_key, None)
@@ -833,7 +849,7 @@ mod tests {
             is_available: file_info.is_available,
         };
 
-        let new_cloud_key = new_file.generate_cloud_key();
+        let new_cloud_key = new_file.generate_cloud_key().unwrap();
         let exists = cloud_ops.file_exists(&new_cloud_key).await.unwrap_or(false);
         assert!(exists, "New cloud key should exist after move");
     }
@@ -845,7 +861,7 @@ mod tests {
 
         // add file set with file to be migrated
         let file_checksum = Sha1Checksum::from([0; 20]);
-        let archive_file_name = "123123.zst".to_string();
+        let archive_file_name = Some("123123.zst".to_string());
         let file_set_id = insert_test_file_set(
             &repository_manager,
             &FileType::ManualScan,
@@ -890,7 +906,7 @@ mod tests {
         let repository_manager = context.repository_manager.clone();
         // add file set to be migrated
         let file_checksum = Sha1Checksum::from([0; 20]);
-        let archive_file_name = "123123.zst".to_string();
+        let archive_file_name = Some("123123.zst".to_string());
         let file_set_id = insert_test_file_set(
             &repository_manager,
             &FileType::ManualScan,
@@ -926,7 +942,7 @@ mod tests {
         let repository_manager = context.repository_manager.clone();
         // add file set to be migrated
         let file_checksum = Sha1Checksum::from([0; 20]);
-        let archive_file_name = "123123.zst".to_string();
+        let archive_file_name = Some("123123.zst".to_string());
         let file_set_id = insert_test_file_set(
             &repository_manager,
             &FileType::ManualScan,

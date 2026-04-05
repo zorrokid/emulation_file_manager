@@ -67,23 +67,35 @@ impl PipelineStep<AddFileSetContext> for CreateFileSetToDatabaseStep {
                     err
                 );
 
-                for imported_file in context.state.imported_files.values() {
-                    let file_path = context
-                        .deps
-                        .settings
-                        .get_file_path(&file_type, &imported_file.archive_file_name);
-                    if let Err(e) = context.ops.fs_ops.remove_file(&file_path) {
-                        tracing::error!(
-                            "Error deleting imported file '{}' after database failure: {}",
-                            file_path.display(),
-                            e
-                        );
+                for imported_file in context
+                    .state
+                    .imported_files
+                    .values()
+                    .filter(|f| f.is_available)
+                {
+                    if let Some(archive_name) = &imported_file.archive_file_name {
+                        let file_path = context
+                            .deps
+                            .settings
+                            .get_file_path(&file_type, archive_name);
+                        if let Err(e) = context.ops.fs_ops.remove_file(&file_path) {
+                            tracing::error!(
+                                "Error deleting imported file '{}' after database failure: {}",
+                                file_path.display(),
+                                e
+                            );
 
-                        return StepAction::Abort(Error::FileImportError(format!(
-                            "Error deleting imported file '{}' after database failure: {}",
-                            file_path.display(),
-                            e
-                        )));
+                            return StepAction::Abort(Error::FileImportError(format!(
+                                "Error deleting imported file '{}' after database failure: {}",
+                                file_path.display(),
+                                e
+                            )));
+                        }
+                    } else {
+                        tracing::warn!(
+                            file_name = %imported_file.original_file_name,
+                            "Imported file does not have an archive name although marked as available, skipping deletion after database failure",
+                        );
                     }
                 }
 
@@ -255,7 +267,7 @@ mod tests {
                 original_file_name: "game.rom".to_string(),
                 sha1_checksum: checksum,
                 file_size: 1024,
-                archive_file_name: "archive123.zst".to_string(),
+                archive_file_name: Some("archive123.zst".to_string()),
                 is_available: true,
             },
         );
@@ -313,7 +325,7 @@ mod tests {
                 original_file_name: "new_game.rom".to_string(),
                 sha1_checksum: checksum1,
                 file_size: 1024,
-                archive_file_name: "new_archive.zst".to_string(),
+                archive_file_name: Some("new_archive.zst".to_string()),
                 is_available: true,
             },
         );
@@ -371,7 +383,12 @@ mod tests {
 
         let existing_id = repo
             .get_file_info_repository()
-            .add_file_info(&sha1_shared, 2048, "archive_from_set_a.zst", FileType::Rom)
+            .add_file_info(
+                &sha1_shared,
+                2048,
+                Some("archive_from_set_a.zst"),
+                FileType::Rom,
+            )
             .await
             .unwrap();
 
@@ -407,7 +424,10 @@ mod tests {
 
         // Assert: no new import needed — the SHA1 is already in the DB
         assert!(
-            !context.input.file_import_data.is_new_files_to_be_imported(&context.state.existing_files),
+            !context
+                .input
+                .file_import_data
+                .is_new_files_to_be_imported(&context.state.existing_files),
             "Expected no new files to import since SHA1 already exists in DB"
         );
 
@@ -418,7 +438,8 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(
-            infos.len(), 1,
+            infos.len(),
+            1,
             "Expected exactly one file_info row for SHA1 — no duplicates should be created"
         );
     }

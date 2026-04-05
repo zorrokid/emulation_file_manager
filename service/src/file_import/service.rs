@@ -274,7 +274,7 @@ mod tests {
                 original_file_name: file_name.clone(),
                 sha1_checksum,
                 file_size,
-                archive_file_name: "archive_file_name".to_string(),
+                archive_file_name: Some("archive_file_name".to_string()),
                 is_available: true,
             },
         );
@@ -364,7 +364,7 @@ mod tests {
                     original_file_name: existing_file_name,
                     sha1_checksum: existing_file_checksum,
                     file_size: existing_file_size,
-                    archive_file_name: "archive_file_name".to_string(),
+                    archive_file_name: Some("archive_file_name".to_string()),
                     is_available: true,
                 }],
                 &[system_id],
@@ -385,7 +385,7 @@ mod tests {
                 original_file_name: new_file_name.clone(),
                 sha1_checksum: new_file_sha1_checksum,
                 file_size: new_file_size,
-                archive_file_name: "archive_file_name".to_string(),
+                archive_file_name: Some("archive_file_name".to_string()),
                 is_available: true,
             },
         );
@@ -486,7 +486,7 @@ mod tests {
                     original_file_name: existing_file_name,
                     sha1_checksum: existing_file_checksum,
                     file_size: existing_file_size,
-                    archive_file_name: "archive_file_name".to_string(),
+                    archive_file_name: Some("archive_file_name".to_string()),
                     is_available: true,
                 }],
                 &[system_id],
@@ -509,7 +509,7 @@ mod tests {
                 file_info.id,
                 FileSyncStatus::UploadCompleted,
                 "",
-                file_info.generate_cloud_key().as_str(),
+                file_info.generate_cloud_key().as_deref().unwrap(),
             )
             .await
             .unwrap();
@@ -597,7 +597,7 @@ mod tests {
                     original_file_name: existing_file_name.clone(),
                     sha1_checksum: existing_file_checksum,
                     file_size: existing_file_size,
-                    archive_file_name: "archive_file_name".to_string(),
+                    archive_file_name: Some("archive_file_name".to_string()),
                     is_available: true,
                 }],
                 &[system_id],
@@ -617,7 +617,7 @@ mod tests {
                     original_file_name: existing_file_name.clone(),
                     sha1_checksum: existing_file_checksum,
                     file_size: existing_file_size,
-                    archive_file_name: "archive_file_name".to_string(),
+                    archive_file_name: Some("archive_file_name".to_string()),
                     is_available: true,
                 }],
                 &[system_id],
@@ -640,7 +640,7 @@ mod tests {
                 file_info.id,
                 FileSyncStatus::UploadCompleted,
                 "",
-                file_info.generate_cloud_key().as_str(),
+                file_info.generate_cloud_key().as_deref().unwrap(),
             )
             .await
             .unwrap();
