@@ -84,12 +84,10 @@ The project uses **async-std** as its primary runtime. A migration to Tokio is i
 
 ### Database
 
-- Repository pattern: each entity has a struct holding `Arc<Pool<Sqlite>>`
-- All repositories are aggregated in `RepositoryManager`
-- Test databases use `database::setup_test_db()` + `setup_test_repository_manager()` — in-memory SQLite, migrations run automatically
-- Table naming: `snake_case`; junction tables: `table1_table2`; foreign keys: `{table}_id`
+- Repository pattern: one struct per entity holding `Arc<Pool<Sqlite>>`, all aggregated in `RepositoryManager`
 - Use `query!` / `query_as!` macros for static queries; `QueryBuilder` for dynamic IN clauses
-- Custom type conversions: `FileType` ↔ `u8` via `to_db_int()` / `from_db_int()`; `Sha1Checksum` ↔ `Vec<u8>`
+- Test databases: `database::setup_test_repository_manager().await` — in-memory SQLite, all migrations run automatically
+- See the `database` skill for schema conventions, type conversions, and the full migration workflow
 
 ### Service Layer: Pipeline Pattern
 
@@ -113,24 +111,20 @@ Complex multi-step operations use a pipeline with `should_execute` / `execute` s
 
 Data flow: `User action → AppMsg → AppModel → AppServices → RepositoryManager → SQLite`
 
-**Entry field update loop** — never combine `#[watch]` + `connect_changed` on the same entry. Use `update_with_view` with manual widget updates, or `#[block_signal]`. Prefer manual updates because `set_text` with `#[watch]` causes a cursor jump.
-
-**Always call `self.update_view(widgets, sender)`** at the end of `update_with_view` — omitting it leaves `#[watch]` attributes stale.
-
-**Window reuse** — use `root.hide()`, never `root.close()`. Close requests should send a `Hide` message, not close the window directly.
-
-**Async commands** — use `sender.oneshot_command(async move { … })`. `update_cmd` has no access to `root` or `widgets`; send a message back to self for any UI updates.
-
-**Lists** — use `TypedListView` (not raw `gtk::ListView`). It supports filtering, sorting, and typed access.
-
-**Error display** — use `show_error_dialog` / `show_info_dialog` from `crate::utils::dialog_utils` inside `update_with_view`.
+Critical gotchas (see the `relm4-gui` skill for full patterns):
+- **Entry fields** — never combine `#[watch]` + `connect_changed`; use `update_with_view` with manual `widget.set_text()` to avoid cursor jump
+- **Window close** — use `root.hide()`, never `root.close()`; close requests should send a `Hide` message
+- **`update_with_view`** — always call `self.update_view(widgets, sender)` at the end or `#[watch]` attributes go stale
+- **Async** — `update_cmd` has no access to `root` or `widgets`; route UI changes back via `sender.input`
+- **Lists** — use `TypedListView`, not raw `gtk::ListView`
+- **Errors** — use `show_error_dialog` / `show_info_dialog` from `crate::utils::dialog_utils`
 
 ### Testing: Mock Pattern
 
-- Real `RepositoryManager` with in-memory SQLite — never mock the database layer
-- Mock service traits (`FileSetServiceOps`, `CloudStorageOps`, etc.) using a single `Arc<Mutex<MockState>>` struct — not one `Arc<Mutex<>>` per field
-- Reference examples: `cloud_storage/src/mock.rs`, `service/src/file_set/mock_file_set_service.rs`
-- Use `BTreeSet` (not `Vec` or `HashSet`) as HashMap keys for order-independent collections in mock state
+- Never mock `RepositoryManager` — use `database::setup_test_repository_manager().await` (real in-memory SQLite)
+- Mock service traits using a single `Arc<Mutex<MockState>>` struct — not one `Arc<Mutex<>>` per field
+- Reference implementations: `cloud_storage/src/mock.rs`, `service/src/file_set/mock_file_set_service.rs`
+- See the `qa` skill for full mock structure, coverage expectations, and test naming conventions
 
 ### Spec-Driven Development
 
@@ -209,11 +203,13 @@ After any code change:
 - [ ] No layer boundary violations
 - [ ] Changes committed in small increments to keep diffs focused and reviewable
 
-## Detailed Pattern References
+## Skills
 
-| Doc | Covers |
+Invoke the appropriate skill for domain-specific work:
+
+| Skill | Invoke for |
 |---|---|
-| `docs/patterns/architect.md` | Domain model, layer placement decisions |
-| `docs/patterns/database.md` | Migrations, repository pattern, SQLx offline mode |
-| `docs/patterns/gui.md` | relm4 components, async commands, shutdown coordination |
-| `docs/patterns/test.md` | Mock structure, test DB setup, coverage expectations |
+| `architect` | Feature planning, design decisions, architecture review, code review |
+| `database` | Migrations, new repositories, SQLx queries, schema changes |
+| `relm4-gui` | GTK4 components, dialogs, forms, list views |
+| `qa` | Test coverage analysis, writing tests, mock design |
