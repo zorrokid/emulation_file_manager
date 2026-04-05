@@ -271,56 +271,6 @@
       "def": "CREATE TABLE release (\n    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,\n    name TEXT NOT NULL\n, thumbnail_filename TEXT)"
     },
     {
-      "name": "file_info",
-      "type": "table",
-      "comment": "Metadata about files including checksums and sizes",
-      "columns": [
-        {
-          "name": "id",
-          "type": "INTEGER",
-          "nullable": false
-        },
-        {
-          "name": "sha1_checksum",
-          "type": "BLOB",
-          "nullable": false
-        },
-        {
-          "name": "file_size",
-          "type": "INTEGER",
-          "nullable": false
-        },
-        {
-          "name": "archive_file_name",
-          "type": "TEXT",
-          "nullable": false
-        },
-        {
-          "name": "file_type",
-          "type": "INTEGER",
-          "nullable": true
-        },
-        {
-          "name": "is_available",
-          "type": "INTEGER",
-          "nullable": false,
-          "default": "1"
-        }
-      ],
-      "constraints": [
-        {
-          "name": "id",
-          "type": "PRIMARY KEY",
-          "def": "PRIMARY KEY (id)",
-          "table": "file_info",
-          "columns": [
-            "id"
-          ]
-        }
-      ],
-      "def": "CREATE TABLE file_info (\n    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,\n    sha1_checksum BLOB NOT NULL,\n    file_size INTEGER NOT NULL,\n    archive_file_name TEXT NOT NULL\n, file_type INTEGER, is_available INTEGER NOT NULL DEFAULT 1)"
-    },
-    {
       "name": "file_set",
       "type": "table",
       "comment": "Collections of files that belong together",
@@ -1599,6 +1549,56 @@
         }
       ],
       "def": "CREATE TABLE \"system_libretro_core\" (\n    id        INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,\n    system_id INTEGER NOT NULL REFERENCES system(id) ON DELETE CASCADE,\n    core_name TEXT NOT NULL,\n    UNIQUE(system_id, core_name)\n)"
+    },
+    {
+      "name": "file_info",
+      "type": "table",
+      "comment": "Metadata about files including checksums and sizes",
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "sha1_checksum",
+          "type": "BLOB",
+          "nullable": false
+        },
+        {
+          "name": "file_size",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "archive_file_name",
+          "type": "TEXT",
+          "nullable": true
+        },
+        {
+          "name": "file_type",
+          "type": "INTEGER",
+          "nullable": true
+        },
+        {
+          "name": "is_available",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "0"
+        }
+      ],
+      "constraints": [
+        {
+          "name": "id",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (id)",
+          "table": "file_info",
+          "columns": [
+            "id"
+          ]
+        }
+      ],
+      "def": "CREATE TABLE \"file_info\" (\n    id                INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,\n    sha1_checksum     BLOB    NOT NULL,\n    file_size         INTEGER NOT NULL,\n    archive_file_name TEXT,\n    file_type         INTEGER,\n    is_available      INTEGER NOT NULL DEFAULT 0\n)"
     }
   ],
   "relations": [
