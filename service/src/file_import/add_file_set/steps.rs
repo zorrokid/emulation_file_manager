@@ -443,4 +443,49 @@ mod tests {
             "Expected exactly one file_info row for SHA1 — no duplicates should be created"
         );
     }
+
+    #[async_std::test]
+    async fn test_create_file_set_database_step_cleanup_skips_when_archive_file_name_missing() {
+        // Arrange: trigger a real DB failure via a non-existent system_id (FK constraint violation).
+        // The imported file has is_available=true with archive_file_name=None — an invariant
+        // violation. The cleanup path should warn and skip it rather than attempt FS deletion.
+        let fs_ops = Arc::new(MockFileSystemOps::new());
+        let checksum: Sha1Checksum = [1u8; 20];
+
+        let mut context = create_test_context(Some(create_file_import_data(
+            vec![checksum],
+            vec![],
+        )))
+        .await;
+
+        // Wire in the fs_ops we can inspect, and point to a non-existent system (FK failure)
+        context.ops.fs_ops = fs_ops.clone();
+        context.input.system_ids = vec![999];
+        context.state.imported_files.insert(
+            checksum,
+            ImportedFile {
+                original_file_name: "missing.rom".to_string(),
+                sha1_checksum: checksum,
+                file_size: 0,
+                archive_file_name: None,
+                is_available: true,
+            },
+        );
+
+        // Act
+        let step = CreateFileSetToDatabaseStep;
+        let result = step.execute(&mut context).await;
+
+        // Assert: step aborts (DB failed) but no FS deletion was attempted
+        assert!(
+            matches!(result, StepAction::Abort(_)),
+            "Expected Abort due to DB failure, got: {:?}",
+            result
+        );
+        assert_eq!(
+            fs_ops.get_deleted_files(),
+            vec![] as Vec<String>,
+            "No files should be deleted when archive_file_name is None"
+        );
+    }
 }

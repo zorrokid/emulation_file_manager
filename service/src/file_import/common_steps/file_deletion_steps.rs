@@ -880,6 +880,63 @@ mod tests {
     }
 
     #[async_std::test]
+    async fn test_delete_local_files_step_skips_when_archive_file_name_is_none() {
+        let TestSetup {
+            settings,
+            repo_manager,
+            fs_ops,
+            system_id,
+            ..
+        } = prepare_test().await;
+
+        let unavailable_file = ImportedFile {
+            original_file_name: "missing.rom".to_string(),
+            archive_file_name: None,
+            sha1_checksum: Sha1Checksum::from([1; 20]),
+            file_size: 0,
+            is_available: false,
+        };
+
+        let file_set_id =
+            prepare_file_set_with_files(&repo_manager, system_id, &[unavailable_file]).await;
+        let file_infos = repo_manager
+            .get_file_info_repository()
+            .get_file_infos_by_file_set(file_set_id)
+            .await
+            .unwrap();
+        let file_info = file_infos.first().unwrap();
+        assert!(file_info.archive_file_name.is_none());
+
+        let mut file_deletion_result = FileDeletionResult::new(file_info.clone());
+        file_deletion_result.is_deletable = true;
+        let checksum = file_info.sha1_checksum.clone();
+
+        let mut context = TestContext {
+            file_set_id,
+            repository_manager: repo_manager.clone(),
+            settings: settings.clone(),
+            fs_ops: fs_ops.clone(),
+            deletion_results: HashMap::from([(checksum.clone(), file_deletion_result)]),
+        };
+
+        let step = DeleteLocalFilesStep::<TestContext>::new();
+        let res = step.execute(&mut context).await;
+
+        // No FS delete should have been attempted
+        assert_eq!(fs_ops.get_deleted_files(), vec![] as Vec<String>);
+        // file_deletion_success stays None — we neither succeeded nor failed
+        assert!(
+            context
+                .deletion_results
+                .get(&checksum)
+                .unwrap()
+                .file_deletion_success
+                .is_none()
+        );
+        assert_eq!(res, StepAction::Continue);
+    }
+
+    #[async_std::test]
     async fn test_delete_file_infos_step() {
         let TestSetup {
             settings,

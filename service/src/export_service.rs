@@ -125,15 +125,21 @@ fn prepare_fileset_for_export(
         .files
         .iter()
         .filter_map(|f| {
-            f.archive_file_name.clone().map(|name| {
-                (
+            if let Some(name) = f.archive_file_name.clone() {
+                Some((
                     name,
                     OutputFile {
                         output_file_name: f.file_name.clone(),
                         checksum: f.sha1_checksum,
                     },
-                )
-            })
+                ))
+            } else {
+                tracing::warn!(
+                    file_info_id = f.file_info_id,
+                    "Skipping unavailable file in export output mapping"
+                );
+                None
+            }
         })
         .collect::<HashMap<String, OutputFile>>();
 

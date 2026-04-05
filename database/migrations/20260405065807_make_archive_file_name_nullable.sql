@@ -8,7 +8,7 @@ CREATE TABLE file_info_new (
     sha1_checksum BLOB NOT NULL,
     file_size INTEGER NOT NULL,
     archive_file_name TEXT,
-    file_type INTEGER,
+    file_type INTEGER,  -- was already nullable (added via ALTER TABLE ADD COLUMN in a prior migration)
     is_available INTEGER NOT NULL DEFAULT 1
 );
 
