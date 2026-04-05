@@ -40,12 +40,25 @@ For non-trivial features:
 
 ## Critical Non-Negotiables
 
-### SQLx Offline Mode
-**ALWAYS** regenerate after query or schema changes:
+### After Any Database Schema or Query Change
+
+Run these steps **in order** every time a migration is added or a SQL query changes:
+
 ```bash
+# 1. Apply migrations to the live database (required before tbls doc)
+cargo sqlx migrate run --source database/migrations --database-url sqlite://database/data/db.sqlite
+
+# 2. Regenerate .sqlx offline metadata (CI will fail without this)
 cargo sqlx prepare --workspace -- --all-targets
+
+# 3. Update ER diagrams from the now-migrated live database
+tbls doc --force
 ```
-CI will fail without up-to-date `.sqlx/` metadata.
+
+Commit the migration file, `.sqlx/` metadata, and `database/docs/schema/` together.
+
+> **Note:** `tbls doc` reads the live database at `database/data/db.sqlite`. If migrations
+> have not been applied to it first, the docs will silently reflect the old schema.
 
 ### Layer Boundaries
 **NEVER:**
@@ -127,7 +140,7 @@ After making changes:
 - [ ] `cargo test` passes
 - [ ] `cargo check` succeeds (use `cargo check` instead of `cargo build` to verify compilation)
 - [ ] Regenerated `.sqlx/` if queries changed
-- [ ] Ran `tbls doc` if schema changed
+- [ ] Applied migration to live DB + ran `tbls doc --force` if schema changed
 - [ ] No layer boundary violations
 - [ ] Changes committed in small increments to keep diffs focused and reviewable
 
