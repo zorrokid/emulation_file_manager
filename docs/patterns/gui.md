@@ -349,7 +349,7 @@ show_info_dialog("Item saved successfully", root);
 
 ### List with Selection
 
-Use `TypedListView` — not raw `gtk::ListView`. `TypedListView` supports filtering, sorting, and typed access and is the project standard. See `docs/patterns/gui.md` or the relm4 documentation for the full pattern.
+Use `TypedListView` — not raw `gtk::ListView`. `TypedListView` supports filtering, sorting, and typed access and is the project standard. See the `relm4-gui` skill or `docs/patterns/gui.md` for the full `RelmListItem` implementation pattern.
 
 ## View Macro Syntax
 
