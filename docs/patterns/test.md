@@ -30,16 +30,15 @@ Reference guide for writing tests in the **Emulation File Manager** — covering
 
 **RepositoryManager**: Always use real instance with test database
 ```rust
-use database::{setup_test_db, setup_test_repository_manager};
+use database::setup_test_repository_manager;
 
 async fn create_test_repo_manager() -> Arc<RepositoryManager> {
-    let db = setup_test_db().await;
-    Arc::new(setup_test_repository_manager(&db).await)
+    setup_test_repository_manager().await
 }
 ```
 
 **Why?**
-- `setup_test_db()` creates fast in-memory SQLite database
+- `setup_test_repository_manager()` creates a fast in-memory SQLite database internally
 - Runs real migrations ensuring schema is correct
 - Tests actual SQL queries, not mock behavior
 - No need to maintain parallel mock implementations
@@ -187,9 +186,9 @@ impl SomethingOps for MockSomething {
         // Acquire lock once for entire operation
         let mut state = self.state.lock().unwrap();
         
-        // 1. Check failure conditions FIRST
+        // 1. Check failure conditions FIRST — use the crate's own error type, never invent MockFailure
         if state.fail_for.contains(&input.key) {
-            return Err(Error::MockFailure("...".to_string()));
+            return Err(Error::DatabaseError(format!("mock: forced failure for '{:?}'", input.key)));
         }
         
         // 2. Generate or retrieve result

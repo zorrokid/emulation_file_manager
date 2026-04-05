@@ -107,11 +107,12 @@ sqlx migrate add <descriptive_name>
 
 ### After Creating a Migration
 
-Migrations run automatically on app start and in tests — no manual `sqlx migrate run` needed. After writing the SQL file:
+Migrations run automatically in tests and on app start. However, `tbls doc` reads the **live database file**, so migrations must be applied to it manually before regenerating docs:
 
-1. Regenerate offline data: `cargo sqlx prepare --workspace -- --all-targets` (from workspace root)
-2. Update schema docs: `tbls doc` (from workspace root)
-3. **Commit all three together**: migration file, `.sqlx/` metadata, `docs/schema/`
+1. Apply migration to live DB: `cargo sqlx migrate run --source database/migrations --database-url sqlite://database/data/db.sqlite`
+2. Regenerate offline data: `cargo sqlx prepare --workspace -- --all-targets` (from workspace root)
+3. Update schema docs: `tbls doc --force` (from workspace root)
+4. **Commit all three together**: migration file, `.sqlx/` metadata, `database/docs/schema/`
 
 ## SQLx Offline Mode (Critical for CI)
 
@@ -183,8 +184,7 @@ Use `setup_test_repository_manager` — do not construct repositories directly i
 ```rust
 #[async_std::test]
 async fn test_example() {
-    let db = database::setup_test_db().await;
-    let repo_manager = database::setup_test_repository_manager(&db).await;
+    let repo_manager = database::setup_test_repository_manager().await;
     // use repo_manager.file_info_repository(), etc.
 }
 ```

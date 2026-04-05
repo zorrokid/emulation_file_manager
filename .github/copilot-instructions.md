@@ -34,7 +34,7 @@ cargo sqlx prepare --workspace -- --all-targets
 After schema migrations, also update ER diagrams:
 
 ```bash
-tbls doc
+tbls doc --force
 ```
 
 Commit the migration file, `.sqlx/` metadata, and `docs/schema/` together.
@@ -80,7 +80,7 @@ Core Crates  →  Database  →  Service  →  GUI (relm4-ui)
 
 ### Async Runtime
 
-Use **async-std** throughout — not tokio. Tests use `#[async_std::test]`.
+The project uses **async-std** as its primary runtime. A migration to Tokio is in progress — when modifying a crate, follow the convention already established in that crate. New crates and new tests default to async-std until explicitly migrated.
 
 ### Database
 
