@@ -131,6 +131,12 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileInfoToDatabaseStep {
                 .iter()
                 .find(|f| f.sha1_checksum == imported_file.sha1_checksum && !f.is_available)
             {
+                // File is still unavailable in this import — the existing DB record is
+                // already correct (is_available=false, archive_file_name=NULL). Skip to
+                // avoid writing is_available=1 with a NULL archive_file_name.
+                if !imported_file.is_available {
+                    continue;
+                }
                 let existing_id = existing.id;
                 let existing_file_size = existing.file_size;
                 let result = context
@@ -1024,5 +1030,105 @@ mod tests {
             1,
             "Expected exactly one junction entry for (file_set_id, file_info_id) — no PK violation"
         );
+    }
+
+    #[async_std::test]
+    async fn test_update_file_info_to_database_step_skips_update_when_file_still_unavailable() {
+        // Regression test for: re-importing when file is still missing must NOT write
+        // is_available=1 with archive_file_name=NULL, which would violate the invariant
+        // that is_available=true <=> archive_file_name=Some.
+        let sha1_a: Sha1Checksum = [8u8; 20];
+        let mut context = create_test_context(None).await;
+        let repo = context.deps.repository_manager.clone();
+
+        let system_id = repo
+            .get_system_repository()
+            .add_system("Test System")
+            .await
+            .unwrap();
+
+        // Use add_file_set with is_available=false so the DB record has is_available=0
+        let file_set_id = repo
+            .get_file_set_repository()
+            .add_file_set(
+                "Test Game",
+                "test_game",
+                &FileType::Rom,
+                "test_src",
+                &[core_types::ImportedFile {
+                    original_file_name: "game.rom".to_string(),
+                    archive_file_name: None,
+                    sha1_checksum: sha1_a,
+                    file_size: 1024,
+                    is_available: false,
+                }],
+                &[system_id],
+            )
+            .await
+            .unwrap();
+
+        let file_info_id = repo
+            .get_file_info_repository()
+            .get_file_infos_by_sha1_checksums(&[sha1_a], FileType::Rom)
+            .await
+            .unwrap()[0]
+            .id;
+
+        context.input.file_set_id = file_set_id;
+        context.state.file_set = Some(FileSet {
+            id: file_set_id,
+            name: "Test Game".to_string(),
+            file_name: "test_game".to_string(),
+            file_type: FileType::Rom,
+            source: "test_src".to_string(),
+        });
+
+        context.state.files_in_file_set = vec![database::models::FileInfo {
+            id: file_info_id,
+            sha1_checksum: sha1_a,
+            file_type: FileType::Rom,
+            archive_file_name: None,
+            file_size: 1024,
+            is_available: false,
+        }];
+
+        // Re-import: file is still missing
+        context.state.imported_files.insert(
+            sha1_a,
+            ImportedFile {
+                original_file_name: "game.rom".to_string(),
+                archive_file_name: None,
+                sha1_checksum: sha1_a,
+                file_size: 1024,
+                is_available: false,
+            },
+        );
+
+        let step = super::UpdateFileInfoToDatabaseStep;
+        let action = step.execute(&mut context).await;
+        assert!(matches!(action, StepAction::Continue));
+
+        // DB record must remain is_available=false with archive_file_name=None
+        let record = repo
+            .get_file_info_repository()
+            .get_file_info(file_info_id)
+            .await
+            .unwrap();
+        assert!(
+            !record.is_available,
+            "is_available must remain false when file is still missing"
+        );
+        assert!(
+            record.archive_file_name.is_none(),
+            "archive_file_name must remain None when file is still missing"
+        );
+
+        // No duplicate record should have been inserted
+        let all_infos = repo
+            .get_file_info_repository()
+            .get_file_infos_by_sha1_checksums(&[sha1_a], FileType::Rom)
+            .await
+            .unwrap();
+        assert_eq!(all_infos.len(), 1, "Must not insert a duplicate file_info row");
     }
 }

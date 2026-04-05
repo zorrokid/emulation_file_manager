@@ -44,17 +44,20 @@ impl FileInfoRepository {
     ) -> Result<i64, Error> {
         let file_type = file_type.to_db_int();
         let sha1_checksum = sha1_checksum.to_vec();
+        let is_available = archive_file_name.is_some();
         let result = sqlx::query!(
             "INSERT INTO file_info (
                 sha1_checksum, 
                 file_size, 
                 archive_file_name,
-                file_type
-                ) VALUES (?, ?, ?, ?)",
+                file_type,
+                is_available
+                ) VALUES (?, ?, ?, ?, ?)",
             sha1_checksum,
             file_size,
             archive_file_name,
-            file_type
+            file_type,
+            is_available
         )
         .execute(&*self.pool)
         .await?;

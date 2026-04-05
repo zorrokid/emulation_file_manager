@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO file_sync_log (file_info_id, status, cloud_key) VALUES (?, 1, 'rom/game.zst')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "ad6ff8bc45fa505c21a6d7d2cadedc3fdbcb3702d229d52f309412b9cae6046a"
+}

@@ -271,6 +271,22 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                         }
 
                         let Some(archive_name) = &file.archive_file_name else {
+                            tracing::warn!(
+                                file_info_id = file.file_info_id,
+                                cloud_key = %file.cloud_key,
+                                "File is marked as available but has no archive file name; \
+                                 writing UploadFailed to avoid leaving UploadInProgress as terminal state"
+                            );
+                            let _ = context
+                                .repository_manager
+                                .get_file_sync_log_repository()
+                                .add_log_entry(
+                                    file.file_info_id,
+                                    FileSyncStatus::UploadFailed,
+                                    "missing archive_file_name",
+                                    &file.cloud_key,
+                                )
+                                .await;
                             continue;
                         };
                         let local_path = context
