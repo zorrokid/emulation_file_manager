@@ -89,6 +89,20 @@ The project uses **async-std** as its primary runtime. A migration to Tokio is i
 - Test databases: `database::setup_test_repository_manager().await` — in-memory SQLite, all migrations run automatically
 - See the `database` skill for schema conventions, type conversions, and the full migration workflow
 
+#### Migration Rules (non-negotiable)
+
+- **Never modify a migration that has already been run** — create a new migration instead
+- **Never use `--ignore-missing`** when running migrations — it masks problems and is forbidden
+- **Always run `sqlx migrate run` immediately after creating a migration** to verify it applies cleanly
+- **If the dev DB has migration problems** (history mismatch, failed migration, etc.), reset it — never work around it:
+  ```bash
+  rm database/data/db.sqlite
+  sqlx database create
+  sqlx migrate run   # from database/ crate
+  ```
+- Dev DB connection: run from `database/` crate (`sqlx migrate run`), or from workspace root:
+  `sqlx migrate run --source database/migrations --database-url sqlite://database/data/db.sqlite`
+
 ### Service Layer: Pipeline Pattern
 
 Complex multi-step operations use a pipeline with `should_execute` / `execute` steps. Pipeline steps may use `.expect()` (not `.unwrap()`) — the `should_execute` guard is tested first and guarantees the value is present. This is the one exception to the no-panic rule.

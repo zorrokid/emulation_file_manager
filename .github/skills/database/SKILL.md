@@ -33,6 +33,27 @@ Commit migration file + `.sqlx/` metadata + `database/docs/schema/` **together**
 
 ---
 
+## Migration Rules (non-negotiable)
+
+- **Never modify a migration that has already been run** — if a mistake is found, create a new migration to correct it
+- **Never use `--ignore-missing`** — this flag is forbidden; it masks history mismatches and hides real problems
+- **Always run `sqlx migrate run` immediately after creating a migration** to confirm it applies cleanly before touching anything else
+- **If the dev DB has migration problems** (history mismatch, failed migration, checksum error), reset it — do not work around it:
+
+  ```bash
+  rm database/data/db.sqlite
+  sqlx database create
+  sqlx migrate run   # from database/ crate, picks up DATABASE_URL from .env
+  ```
+
+  Or from workspace root:
+
+  ```bash
+  sqlx migrate run --source database/migrations --database-url sqlite://database/data/db.sqlite
+  ```
+
+---
+
 ## Project Structure
 
 ```
@@ -195,7 +216,7 @@ async fn test_example() {
 After any database change:
 
 - [ ] Migration SQL file created with descriptive name
-- [ ] `cargo sqlx migrate run --source database/migrations --database-url sqlite://database/data/db.sqlite`
+- [ ] Migration runs cleanly: `cargo sqlx migrate run --source database/migrations --database-url sqlite://database/data/db.sqlite`
 - [ ] `cargo sqlx prepare --workspace -- --all-targets`
 - [ ] `tbls doc --force`
 - [ ] `cargo test -p database` passes
