@@ -117,7 +117,7 @@ pub fn import_file(
     })?;
     let imported_file = ImportedFile {
         original_file_name: file_name.to_string(),
-        archive_file_name: archive_file_name.to_string(),
+        archive_file_name: Some(archive_file_name.to_string()),
         sha1_checksum,
         file_size,
         is_available: true,
@@ -184,7 +184,7 @@ pub fn import_files_from_zip(
             })?;
             let imported_file = ImportedFile {
                 original_file_name: file.name().to_string(),
-                archive_file_name: archive_file_name.to_string(),
+                archive_file_name: Some(archive_file_name.to_string()),
                 sha1_checksum,
                 file_size,
                 is_available: true,
@@ -244,7 +244,7 @@ mod tests {
 
         let imported_file = hash_map.get(&checksum).unwrap();
         assert_eq!(TEST_FILE_NAME, imported_file.original_file_name);
-        assert!(!imported_file.archive_file_name.is_empty());
+        assert!(imported_file.archive_file_name.is_some());
         assert_eq!(imported_file.sha1_checksum, checksum);
         assert_eq!(imported_file.file_size, size);
     }

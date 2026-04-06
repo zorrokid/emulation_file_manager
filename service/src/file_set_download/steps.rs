@@ -94,9 +94,16 @@ impl PipelineStep<DownloadContext> for PrepareFileForDownloadStep {
     async fn execute(&self, context: &mut DownloadContext) -> StepAction {
         if let Some(file_set) = &context.file_set {
             for file in context.files_in_set.iter() {
+                let Some(archive_name) = &file.archive_file_name else {
+                    tracing::warn!(
+                        file_info_id = file.file_info_id,
+                        "File info is missing archive file name, skipping"
+                    );
+                    continue;
+                };
                 let file_path = context
                     .settings
-                    .get_file_path(&file_set.file_type, &file.archive_file_name);
+                    .get_file_path(&file_set.file_type, archive_name);
 
                 if !context.fs_ops.exists(&file_path) {
                     context.files_to_download.push(file.into());
@@ -133,11 +140,25 @@ impl PipelineStep<DownloadContext> for DownloadFilesStep {
         );
 
         for file_info in context.files_to_download.iter() {
-            let cloud_key = &file_info.generate_cloud_key();
+            let Some(cloud_key) = file_info.generate_cloud_key() else {
+                tracing::warn!(
+                    file_info_id = file_info.id,
+                    "Failed to generate cloud key for file, skipping download"
+                );
+                continue;
+            };
+
+            let Some(archive_file_name) = &file_info.archive_file_name else {
+                tracing::warn!(
+                    file_info_id = file_info.id,
+                    "File info is missing archive file name, skipping download"
+                );
+                continue;
+            };
 
             tracing::debug!(
                 cloud_key = %cloud_key,
-                archive_file_name = %file_info.archive_file_name,
+                archive_file_name = ?file_info.archive_file_name,
                 "Downloading file"
             );
 
@@ -154,14 +175,14 @@ impl PipelineStep<DownloadContext> for DownloadFilesStep {
                     .as_ref()
                     .expect("This step should only execute if file_set is Some")
                     .file_type,
-                &file_info.archive_file_name,
+                archive_file_name,
             );
             let download_res = context
                 .cloud_ops
                 .as_ref()
                 .expect("This step should only execute if cloud_ops is Some")
                 .download_file(
-                    cloud_key,
+                    &cloud_key,
                     target_path.as_path(),
                     context.progress_tx.as_ref(),
                 )
@@ -192,7 +213,7 @@ impl PipelineStep<DownloadContext> for DownloadFilesStep {
                     tracing::error!(
                         error = %e,
                         cloud_key = %cloud_key,
-                        archive_file_name = %file_info.archive_file_name,
+                        archive_file_name = ?file_info.archive_file_name,
                         "File download failed"
                     );
 
@@ -275,14 +296,22 @@ impl PipelineStep<DownloadContext> for ExportFilesStep {
         let output_mapping = context
             .files_in_set
             .iter()
-            .map(|f| {
-                (
-                    f.archive_file_name.clone(),
-                    OutputFile {
-                        output_file_name: f.file_name.clone(),
-                        checksum: f.sha1_checksum,
-                    },
-                )
+            .filter_map(|f| {
+                if let Some(name) = f.archive_file_name.clone() {
+                    Some((
+                        name,
+                        OutputFile {
+                            output_file_name: f.file_name.clone(),
+                            checksum: f.sha1_checksum,
+                        },
+                    ))
+                } else {
+                    tracing::warn!(
+                        file_info_id = f.file_info_id,
+                        "Skipping unavailable file in export output mapping"
+                    );
+                    None
+                }
             })
             .collect::<HashMap<String, OutputFile>>();
 
@@ -532,8 +561,39 @@ mod tests {
         assert_eq!(context.files_to_download.len(), 1);
         assert_eq!(
             context.files_to_download[0].archive_file_name,
-            archive_file_name
+            Some(archive_file_name.to_string())
         );
+    }
+
+    #[async_std::test]
+    async fn test_prepare_file_for_download_step_skips_missing_archive_file_name() {
+        // Arrange: file set with invariant-violating file_info (is_available=true, archive_file_name=None)
+        let (mut context, _) = initialize_context(false).await;
+        setup_invariant_violating_file_set(&mut context, "original.zst", &FileType::Rom).await;
+
+        // Act
+        let step = PrepareFileForDownloadStep;
+        let action = step.execute(&mut context).await;
+
+        // Assert: step continues and no files queued for download
+        assert!(matches!(action, StepAction::Continue));
+        assert!(context.files_to_download.is_empty(),
+            "file with missing archive_file_name should not be queued for download");
+    }
+
+    #[async_std::test]
+    async fn test_download_files_step_skips_missing_archive_file_name() {
+        // Arrange: file with archive_file_name=None should be excluded from the download pipeline
+        let (mut context, _) = initialize_context(false).await;
+        setup_invariant_violating_file_set(&mut context, "original.zst", &FileType::Rom).await;
+
+        // PrepareFileForDownloadStep skips the file, leaving files_to_download empty
+        PrepareFileForDownloadStep.execute(&mut context).await;
+        assert!(context.files_to_download.is_empty());
+
+        // DownloadFilesStep should_execute guard confirms the file is fully excluded
+        assert!(!DownloadFilesStep.should_execute(&context),
+            "DownloadFilesStep should not execute when files_to_download is empty");
     }
 
     #[async_std::test]
@@ -572,7 +632,7 @@ mod tests {
             .cloud_ops
             .clone()
             .unwrap()
-            .upload_file(&file_path, &key, None)
+            .upload_file(&file_path, key.as_deref().unwrap(), None)
             .await
             .unwrap();
 
@@ -585,7 +645,7 @@ mod tests {
         assert_eq!(context.failed_downloads(), 0);
         assert_eq!(
             context.file_download_results.first().unwrap().cloud_key,
-            key
+            key.unwrap()
         );
     }
 
@@ -626,7 +686,7 @@ mod tests {
         assert_eq!(context.successful_downloads(), 0);
         assert_eq!(context.failed_downloads(), 1);
         let download_result = context.file_download_results.first().unwrap();
-        assert_eq!(download_result.cloud_key, key);
+        assert_eq!(download_result.cloud_key, key.unwrap());
         assert!(!download_result.cloud_operation_success);
         assert!(!download_result.file_write_success);
     }
@@ -865,8 +925,6 @@ mod tests {
         repo_manager: &RepositoryManager,
         archive_file_name: &str,
         file_type: &FileType,
-        //system_id: i64,
-        //files: &[ImportedFile],
     ) -> i64 {
         let system_id = repo_manager
             .get_system_repository()
@@ -876,7 +934,7 @@ mod tests {
 
         let file = ImportedFile {
             original_file_name: archive_file_name.to_string(),
-            archive_file_name: archive_file_name.to_string(),
+            archive_file_name: Some(archive_file_name.to_string()),
             sha1_checksum: Sha1Checksum::from([1; 20]),
             file_size: 5678,
             is_available: true,
@@ -894,5 +952,44 @@ mod tests {
             )
             .await
             .unwrap()
+    }
+
+    /// Creates a file set with one file, forces the invariant violation (is_available=true,
+    /// archive_file_name=NULL), then loads the file set and its files into `context`.
+    /// Returns the `file_info_id` of the affected file.
+    async fn setup_invariant_violating_file_set(
+        context: &mut DownloadContext,
+        archive_file_name: &str,
+        file_type: &FileType,
+    ) -> i64 {
+        let repo = context.repository_manager.clone();
+        let file_set_id = prepare_file_set_with_files(&repo, archive_file_name, file_type).await;
+
+        let file_infos = repo
+            .get_file_set_repository()
+            .get_file_set_file_info(file_set_id)
+            .await
+            .unwrap();
+        let file_info_id = file_infos[0].file_info_id;
+        repo.get_file_info_repository()
+            .update_is_available(file_info_id, None)
+            .await
+            .unwrap();
+
+        context.file_set_id = file_set_id;
+        context.file_set = Some(
+            repo.get_file_set_repository()
+                .get_file_set(file_set_id)
+                .await
+                .unwrap(),
+        );
+        // Reload so archive_file_name reflects the updated None value
+        context.files_in_set = repo
+            .get_file_set_repository()
+            .get_file_set_file_info(file_set_id)
+            .await
+            .unwrap();
+
+        file_info_id
     }
 }

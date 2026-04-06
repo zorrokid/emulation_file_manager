@@ -64,13 +64,9 @@ impl<T: FileDeletionStepsContext + Send + Sync> PipelineStep<T> for FilterDeleta
     }
 
     async fn execute(&self, context: &mut T) -> StepAction {
-        println!(
-            "Filtering deletable files for file set {}",
-            context.file_set_id()
-        );
         tracing::info!(
-            "Filtering deletable files for file set {}",
-            context.file_set_id()
+            file_set_id = context.file_set_id(),
+            "Filtering deletable files for file set",
         );
         let file_set_id = context.file_set_id();
         let repository_manager = context.repository_manager();
@@ -151,13 +147,9 @@ impl<T: FileDeletionStepsContext + Send + Sync> PipelineStep<T> for DeleteLocalF
     }
 
     async fn execute(&self, context: &mut T) -> StepAction {
-        println!(
-            "Deleting local files for file set with id {}",
-            context.file_set_id()
-        );
         tracing::info!(
-            "Deleting local files for file set with id {}",
-            context.file_set_id()
+            file_set_id = context.file_set_id(),
+            "Deleting local files for file set"
         );
 
         let settings = context.settings();
@@ -168,47 +160,51 @@ impl<T: FileDeletionStepsContext + Send + Sync> PipelineStep<T> for DeleteLocalF
             .values_mut()
             .filter(|f| f.is_deletable)
         {
-            println!(
-                "Processing file info with id {} and name {} for local deletion",
-                deletion_result.file_info.id, deletion_result.file_info.archive_file_name
-            );
             tracing::info!(
-                "Processing file info with id {} for local deletion",
-                deletion_result.file_info.id
+                file_info_id = deletion_result.file_info.id,
+                "Processing file info for local deletion"
             );
-            let file_path = settings.get_file_path(
-                &deletion_result.file_info.file_type,
-                &deletion_result.file_info.archive_file_name,
-            );
+            let Some(archive_name) = &deletion_result.file_info.archive_file_name else {
+                tracing::warn!(
+                    file_info_id = deletion_result.file_info.id,
+                    "File info does not have an archive file name, skipping local deletion.",
+                );
+                continue;
+            };
+            let file_path =
+                settings.get_file_path(&deletion_result.file_info.file_type, archive_name);
 
             let path_str = file_path.to_string_lossy().to_string();
-            println!("Resolved file path: {}", path_str);
             tracing::info!(
-                "Resolved file path for file info id {}: {}",
-                deletion_result.file_info.id,
-                path_str
+                file_info_id = deletion_result.file_info.id,
+                path = path_str.as_str(),
+                "Resolved file path for file info",
             );
             deletion_result.file_path = Some(path_str.clone());
 
-            tracing::info!("Attempting to delete local file: {}", path_str);
+            tracing::info!(path = path_str.as_str(), "Attempting to delete local file");
 
             if fs_ops.exists(&file_path) {
-                println!("File exists, proceeding with deletion: {}", path_str);
-                tracing::info!("File exists, proceeding with deletion: {}", path_str);
+                tracing::info!(
+                    path = path_str.as_str(),
+                    "File exists, proceeding with deletion"
+                );
                 match fs_ops.remove_file(&file_path) {
                     Ok(_) => {
-                        tracing::info!("Deleted local file: {}", path_str);
+                        tracing::info!(path = path_str.as_str(), "Deleted local file");
                         deletion_result.file_deletion_success = Some(true);
                     }
                     Err(e) => {
-                        tracing::error!("Failed to delete local file {}: {}", path_str, e);
+                        tracing::error!( path = path_str.as_str(), error = %e, "Failed to delete local file");
                         deletion_result.file_deletion_success = Some(false);
                         deletion_result.error_messages.push(e.to_string());
                     }
                 }
             } else {
-                println!("File {} does not exist, skipping deletion.", path_str);
-                tracing::info!("File {} does not exist, skipping deletion.", path_str);
+                tracing::info!(
+                    path = path_str.as_str(),
+                    "File does not exist, skipping deletion."
+                );
                 deletion_result.file_deletion_success = Some(true); // consider non-existing file as "deleted" (user might have done it manually)
             }
         }
@@ -474,7 +470,7 @@ mod tests {
 
         let file1 = ImportedFile {
             original_file_name: "file1.zst".to_string(),
-            archive_file_name: "file1.zst".to_string(),
+            archive_file_name: Some("file1.zst".to_string()),
             sha1_checksum: Sha1Checksum::from([0; 20]),
             file_size: 1234,
             is_available: true,
@@ -482,7 +478,7 @@ mod tests {
 
         let file2 = ImportedFile {
             original_file_name: "file2.zst".to_string(),
-            archive_file_name: "file2.zst".to_string(),
+            archive_file_name: Some("file2.zst".to_string()),
             sha1_checksum: Sha1Checksum::from([1; 20]),
             file_size: 5678,
             is_available: true,
@@ -506,11 +502,11 @@ mod tests {
         assert_eq!(file_infos.len(), 2);
         let file_info_1 = file_infos
             .iter()
-            .find(|fi| fi.archive_file_name == "file1.zst")
+            .find(|fi| fi.archive_file_name == Some("file1.zst".to_string()))
             .unwrap();
         let file_info_2 = file_infos
             .iter()
-            .find(|fi| fi.archive_file_name == "file2.zst")
+            .find(|fi| fi.archive_file_name == Some("file2.zst".to_string()))
             .unwrap();
 
         let mut context = TestContext {
@@ -547,7 +543,10 @@ mod tests {
             .values()
             .find(|f| f.is_deletable)
             .unwrap();
-        assert_eq!(deletable_file.file_info.archive_file_name, "file1.zst");
+        assert_eq!(
+            deletable_file.file_info.archive_file_name,
+            Some("file1.zst".to_string())
+        );
     }
 
     #[async_std::test]
@@ -774,7 +773,11 @@ mod tests {
             .await
             .unwrap();
         let file_info = file_infos.first().unwrap();
-        let file_path = settings.get_file_path(&file_info.file_type, &file_info.archive_file_name);
+        let file_path = settings.get_file_path(
+            &file_info.file_type,
+            file_info.archive_file_name.as_deref().unwrap(),
+        );
+
         println!(
             "Adding file to mock FS ops: {}",
             file_path.to_string_lossy()
@@ -783,6 +786,7 @@ mod tests {
 
         let mut file_deletion_result = FileDeletionResult::new(file_info.clone());
         file_deletion_result.is_deletable = true;
+
         let mut context = TestContext {
             file_set_id,
             repository_manager: repo_manager.clone(),
@@ -825,7 +829,10 @@ mod tests {
             .await
             .unwrap();
         let file_info = file_infos.first().unwrap();
-        let file_path = settings.get_file_path(&file_info.file_type, &file_info.archive_file_name);
+        let file_path = settings.get_file_path(
+            &file_info.file_type,
+            file_info.archive_file_name.as_deref().unwrap(),
+        );
 
         println!(
             "Adding file to mock FS ops: {}",
@@ -848,7 +855,10 @@ mod tests {
         };
         let step = DeleteLocalFilesStep::<TestContext>::new();
         let res = step.execute(&mut context).await;
-        let fp = settings.get_file_path(&file_info.file_type, &file_info.archive_file_name);
+        let fp = settings.get_file_path(
+            &file_info.file_type,
+            file_info.archive_file_name.as_deref().unwrap(),
+        );
         println!("Checking if file was deleted: {}", fp.to_string_lossy());
         assert!(fs_ops.was_deleted(fp.to_string_lossy().as_ref()));
 
@@ -866,6 +876,63 @@ mod tests {
                 .unwrap()
         );
 
+        assert_eq!(res, StepAction::Continue);
+    }
+
+    #[async_std::test]
+    async fn test_delete_local_files_step_skips_when_archive_file_name_is_none() {
+        let TestSetup {
+            settings,
+            repo_manager,
+            fs_ops,
+            system_id,
+            ..
+        } = prepare_test().await;
+
+        let unavailable_file = ImportedFile {
+            original_file_name: "missing.rom".to_string(),
+            archive_file_name: None,
+            sha1_checksum: Sha1Checksum::from([1; 20]),
+            file_size: 0,
+            is_available: false,
+        };
+
+        let file_set_id =
+            prepare_file_set_with_files(&repo_manager, system_id, &[unavailable_file]).await;
+        let file_infos = repo_manager
+            .get_file_info_repository()
+            .get_file_infos_by_file_set(file_set_id)
+            .await
+            .unwrap();
+        let file_info = file_infos.first().unwrap();
+        assert!(file_info.archive_file_name.is_none());
+
+        let mut file_deletion_result = FileDeletionResult::new(file_info.clone());
+        file_deletion_result.is_deletable = true;
+        let checksum = file_info.sha1_checksum.clone();
+
+        let mut context = TestContext {
+            file_set_id,
+            repository_manager: repo_manager.clone(),
+            settings: settings.clone(),
+            fs_ops: fs_ops.clone(),
+            deletion_results: HashMap::from([(checksum.clone(), file_deletion_result)]),
+        };
+
+        let step = DeleteLocalFilesStep::<TestContext>::new();
+        let res = step.execute(&mut context).await;
+
+        // No FS delete should have been attempted
+        assert_eq!(fs_ops.get_deleted_files(), vec![] as Vec<String>);
+        // file_deletion_success stays None — we neither succeeded nor failed
+        assert!(
+            context
+                .deletion_results
+                .get(&checksum)
+                .unwrap()
+                .file_deletion_success
+                .is_none()
+        );
         assert_eq!(res, StepAction::Continue);
     }
 
@@ -1049,7 +1116,7 @@ mod tests {
 
         let file1 = ImportedFile {
             original_file_name: "file1.zst".to_string(),
-            archive_file_name: "file1.zst".to_string(),
+            archive_file_name: Some("file1.zst".to_string()),
             sha1_checksum: Sha1Checksum::from([0; 20]),
             file_size: 1234,
             is_available: true,

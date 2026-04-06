@@ -331,7 +331,7 @@ mod tests {
             id: 1,
             sha1_checksum: file_1_checksum,
             file_type: FileType::Rom,
-            archive_file_name: "archive_file_name_1".to_string(),
+            archive_file_name: Some("archive_file_name_1".to_string()),
             file_size: 1024,
             is_available: true,
         });
@@ -339,7 +339,7 @@ mod tests {
             id: 2,
             sha1_checksum: file_2_checksum,
             file_type: FileType::Rom,
-            archive_file_name: "archive_file_name_2".to_string(),
+            archive_file_name: Some("archive_file_name_2".to_string()),
             file_size: 4096,
             is_available: true,
         });
@@ -377,7 +377,7 @@ mod tests {
             id: 1,
             sha1_checksum: file_1_checksum,
             file_type: FileType::Rom,
-            archive_file_name: "archive_file_name_1".to_string(),
+            archive_file_name: Some("archive_file_name_1".to_string()),
             file_size: 1024,
             is_available: true,
         });

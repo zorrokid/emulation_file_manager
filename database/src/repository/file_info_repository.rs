@@ -39,22 +39,25 @@ impl FileInfoRepository {
         &self,
         sha1_checksum: &Sha1Checksum,
         file_size: i64,
-        archive_file_name: &str,
+        archive_file_name: Option<&str>,
         file_type: FileType,
     ) -> Result<i64, Error> {
         let file_type = file_type.to_db_int();
         let sha1_checksum = sha1_checksum.to_vec();
+        let is_available = archive_file_name.is_some();
         let result = sqlx::query!(
             "INSERT INTO file_info (
                 sha1_checksum, 
                 file_size, 
                 archive_file_name,
-                file_type
-                ) VALUES (?, ?, ?, ?)",
+                file_type,
+                is_available
+                ) VALUES (?, ?, ?, ?, ?)",
             sha1_checksum,
             file_size,
             archive_file_name,
-            file_type
+            file_type,
+            is_available
         )
         .execute(&*self.pool)
         .await?;
@@ -117,7 +120,7 @@ impl FileInfoRepository {
             "SELECT fi.id, fi.sha1_checksum, fi.file_size, fi.archive_file_name, fi.file_type, fi.is_available
              FROM file_info fi
              LEFT JOIN file_sync_log fsl ON fi.id = fsl.file_info_id
-             WHERE fsl.file_info_id IS NULL 
+             WHERE fsl.file_info_id IS NULL AND fi.is_available = 1 
              LIMIT ? OFFSET ?",
         )
         .bind(limit)
@@ -143,7 +146,7 @@ impl FileInfoRepository {
     pub async fn update_is_available(
         &self,
         id: i64,
-        archive_file_name: &str,
+        archive_file_name: Option<&str>,
     ) -> Result<(), Error> {
         sqlx::query!(
             "UPDATE file_info SET is_available = 1, archive_file_name = ? WHERE id = ?",
@@ -210,6 +213,83 @@ mod tests {
             .unwrap();
 
         assert_eq!(file_infos.len(), 2);
+    }
+
+    async fn insert_file_info(pool: &Pool<Sqlite>, archive_file_name: Option<&str>, is_available: bool) -> i64 {
+        let file_type = FileType::Rom.to_db_int();
+        let checksum = vec![0u8; 20];
+        let is_available_int = if is_available { 1i64 } else { 0i64 };
+        let result = query!(
+            "INSERT INTO file_info (sha1_checksum, file_size, archive_file_name, file_type, is_available)
+             VALUES (?, ?, ?, ?, ?)",
+            checksum,
+            1234,
+            archive_file_name,
+            file_type,
+            is_available_int
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+        result.last_insert_rowid()
+    }
+
+    #[async_std::test]
+    async fn test_get_file_infos_without_sync_log_returns_available_files_with_no_log() {
+        let pool = setup_test_db().await;
+        let repo = FileInfoRepository::new(Arc::new(pool.clone()));
+
+        let id = insert_file_info(&pool, Some("game.zst"), true).await;
+        let results = repo.get_file_infos_without_sync_log(100, 0).await.unwrap();
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, id);
+    }
+
+    #[async_std::test]
+    async fn test_get_file_infos_without_sync_log_excludes_files_with_sync_log() {
+        let pool = setup_test_db().await;
+        let repo = FileInfoRepository::new(Arc::new(pool.clone()));
+
+        let id = insert_file_info(&pool, Some("game.zst"), true).await;
+        query!(
+            "INSERT INTO file_sync_log (file_info_id, status, cloud_key) VALUES (?, 1, 'rom/game.zst')",
+            id
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let results = repo.get_file_infos_without_sync_log(100, 0).await.unwrap();
+        assert!(results.is_empty());
+    }
+
+    #[async_std::test]
+    async fn test_get_file_infos_without_sync_log_excludes_unavailable_files() {
+        let pool = setup_test_db().await;
+        let repo = FileInfoRepository::new(Arc::new(pool.clone()));
+
+        insert_file_info(&pool, None, false).await;
+
+        let results = repo.get_file_infos_without_sync_log(100, 0).await.unwrap();
+        assert!(results.is_empty());
+    }
+
+    #[async_std::test]
+    async fn test_get_file_infos_without_sync_log_respects_limit_and_offset() {
+        let pool = setup_test_db().await;
+        let repo = FileInfoRepository::new(Arc::new(pool.clone()));
+
+        insert_file_info(&pool, Some("a.zst"), true).await;
+        insert_file_info(&pool, Some("b.zst"), true).await;
+        insert_file_info(&pool, Some("c.zst"), true).await;
+
+        let page1 = repo.get_file_infos_without_sync_log(2, 0).await.unwrap();
+        let page2 = repo.get_file_infos_without_sync_log(2, 2).await.unwrap();
+
+        assert_eq!(page1.len(), 2);
+        assert_eq!(page2.len(), 1);
+        assert_ne!(page1[0].id, page2[0].id);
     }
 
     #[async_std::test]

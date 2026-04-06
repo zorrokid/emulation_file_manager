@@ -187,7 +187,7 @@ mod tests {
         let file_sha1: Sha1Checksum = [0; 20];
         let file = ImportedFile {
             original_file_name: "test.rom".to_string(),
-            archive_file_name: "test.rom".to_string(),
+            archive_file_name: Some("test.rom".to_string()),
             file_size: 1024,
             sha1_checksum: file_sha1,
             is_available: true,

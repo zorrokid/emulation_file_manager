@@ -12,8 +12,7 @@ pub struct FileInfo {
     pub id: i64,
     pub sha1_checksum: Sha1Checksum,
     pub file_size: u64,
-    // TODO: make optional? Since now FileInfo stores meta data for both available files and missing files
-    pub archive_file_name: String,
+    pub archive_file_name: Option<String>,
     pub file_type: FileType,
     pub is_available: bool,
 }
@@ -32,12 +31,10 @@ impl From<&FileSetFileInfo> for FileInfo {
 }
 
 impl FileInfo {
-    pub fn generate_cloud_key(&self) -> String {
-        format!(
-            "{}/{}",
-            self.file_type.to_string().to_lowercase(),
-            self.archive_file_name
-        )
+    pub fn generate_cloud_key(&self) -> Option<String> {
+        self.archive_file_name.as_ref().map(|name| {
+            format!("{}/{}", self.file_type.to_string().to_lowercase(), name)
+        })
     }
 }
 
@@ -67,7 +64,7 @@ pub struct FileSetFileInfo {
     pub file_name: String,
     pub sha1_checksum: Sha1Checksum,
     pub file_size: i64,
-    pub archive_file_name: String,
+    pub archive_file_name: Option<String>,
     pub file_type: FileType,
     pub sort_order: i64,
     pub is_available: bool,
@@ -169,7 +166,7 @@ pub struct FileSyncLogWithFileInfo {
     pub cloud_key: String,
     pub sha1_checksum: Vec<u8>,
     pub file_size: i64,
-    pub archive_file_name: String,
+    pub archive_file_name: Option<String>,
     pub file_type: FileType,
 }
 

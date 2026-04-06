@@ -291,7 +291,7 @@ mod tests {
                     .iter()
                     .map(|file| ImportedFile {
                         original_file_name: file.file_name.clone(),
-                        archive_file_name: "1234abcd".to_string(),
+                        archive_file_name: Some("1234abcd".to_string()),
                         sha1_checksum: file.sha1_checksum,
                         file_size: file.file_size,
                         is_available: true,

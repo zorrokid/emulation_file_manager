@@ -97,7 +97,7 @@ mod tests {
         repository_manager: &RepositoryManager,
         file_type: &FileType,
         file_sha1: Sha1Checksum,
-        archive_file_name: String,
+        archive_file_name: Option<String>,
     ) -> i64 {
         let system_id = insert_test_system(repository_manager, "Test System").await;
 
@@ -134,7 +134,7 @@ mod tests {
 
         // add file set to be migrated
         let file_checksum = Sha1Checksum::from([0; 20]);
-        let archive_file_name = "123123.zst".to_string();
+        let archive_file_name = Some("123123.zst".to_string());
         let file_set_id = insert_test_file_set(
             &repository_manager,
             &FileType::ManualScan, // should be migrated to Scan

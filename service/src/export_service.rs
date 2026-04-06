@@ -124,19 +124,22 @@ fn prepare_fileset_for_export(
     let output_mapping = file_set
         .files
         .iter()
-        .map(|f| {
-            let checksum: Sha1Checksum = f
-                .sha1_checksum
-                .clone()
-                .try_into()
-                .expect("Failed to convert to Sha1Checksum");
-            (
-                f.archive_file_name.clone(),
-                OutputFile {
-                    output_file_name: f.file_name.clone(),
-                    checksum,
-                },
-            )
+        .filter_map(|f| {
+            if let Some(name) = f.archive_file_name.clone() {
+                Some((
+                    name,
+                    OutputFile {
+                        output_file_name: f.file_name.clone(),
+                        checksum: f.sha1_checksum,
+                    },
+                ))
+            } else {
+                tracing::warn!(
+                    file_info_id = f.file_info_id,
+                    "Skipping unavailable file in export output mapping"
+                );
+                None
+            }
         })
         .collect::<HashMap<String, OutputFile>>();
 

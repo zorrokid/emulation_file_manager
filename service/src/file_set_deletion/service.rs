@@ -91,14 +91,14 @@ mod tests {
 
         let file1 = ImportedFile {
             original_file_name: "file1.zst".to_string(),
-            archive_file_name: "file1.zst".to_string(),
+            archive_file_name: Some("file1.zst".to_string()),
             sha1_checksum: Sha1Checksum::from([0; 20]),
             file_size: 1234,
             is_available: true,
         };
 
         let mock_fs = Arc::new(MockFileSystemOps::new());
-        let file_path = settings.get_file_path(&FileType::Rom, &file1.archive_file_name);
+        let file_path = settings.get_file_path(&FileType::Rom, file1.archive_file_name.as_deref().unwrap());
         mock_fs.add_file(file_path.to_string_lossy().as_ref());
 
         let file_set_id = repo_manager

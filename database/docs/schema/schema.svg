@@ -143,35 +143,8 @@
 <text text-anchor="start" x="2163.59" y="-275" font-family="Arial" font-size="14.00">thumbnail_filename </text>
 <text text-anchor="start" x="2288.89" y="-275" font-family="Arial" font-size="14.00" fill="#666666">[TEXT]</text>
 </g>
-<!-- file_info -->
-<g id="node7" class="node">
-<title>file_info</title>
-<polygon fill="#efefef" stroke="none" points="1481.49,-790.4 1481.49,-826 1656.55,-826 1656.55,-790.4 1481.49,-790.4"/>
-<polygon fill="none" stroke="black" points="1481.49,-790.4 1481.49,-826 1656.55,-826 1656.55,-790.4 1481.49,-790.4"/>
-<text text-anchor="start" x="1503.4" y="-803.8" font-family="Arial Bold" font-size="18.00">file_info</text>
-<text text-anchor="start" x="1565.38" y="-803.8" font-family="Arial" font-size="14.00">    </text>
-<text text-anchor="start" x="1596.5" y="-803.8" font-family="Arial" font-size="14.00" fill="#666666">[table]</text>
-<polygon fill="none" stroke="black" points="1481.49,-759.6 1481.49,-790.4 1656.55,-790.4 1656.55,-759.6 1481.49,-759.6"/>
-<text text-anchor="start" x="1488.49" y="-771.8" font-family="Arial" font-size="14.00">id </text>
-<text text-anchor="start" x="1503.27" y="-771.8" font-family="Arial" font-size="14.00" fill="#666666">[INTEGER]</text>
-<polygon fill="none" stroke="black" points="1481.49,-728.8 1481.49,-759.6 1656.55,-759.6 1656.55,-728.8 1481.49,-728.8"/>
-<text text-anchor="start" x="1488.49" y="-741" font-family="Arial" font-size="14.00">sha1_checksum </text>
-<text text-anchor="start" x="1593.54" y="-741" font-family="Arial" font-size="14.00" fill="#666666">[BLOB]</text>
-<polygon fill="none" stroke="black" points="1481.49,-698 1481.49,-728.8 1656.55,-728.8 1656.55,-698 1481.49,-698"/>
-<text text-anchor="start" x="1488.49" y="-710.2" font-family="Arial" font-size="14.00">file_size </text>
-<text text-anchor="start" x="1542.96" y="-710.2" font-family="Arial" font-size="14.00" fill="#666666">[INTEGER]</text>
-<polygon fill="none" stroke="black" points="1481.49,-667.2 1481.49,-698 1656.55,-698 1656.55,-667.2 1481.49,-667.2"/>
-<text text-anchor="start" x="1488.49" y="-679.4" font-family="Arial" font-size="14.00">archive_file_name </text>
-<text text-anchor="start" x="1606" y="-679.4" font-family="Arial" font-size="14.00" fill="#666666">[TEXT]</text>
-<polygon fill="none" stroke="black" points="1481.49,-636.4 1481.49,-667.2 1656.55,-667.2 1656.55,-636.4 1481.49,-636.4"/>
-<text text-anchor="start" x="1488.49" y="-648.6" font-family="Arial" font-size="14.00">file_type </text>
-<text text-anchor="start" x="1544.52" y="-648.6" font-family="Arial" font-size="14.00" fill="#666666">[INTEGER]</text>
-<polygon fill="none" stroke="black" points="1481.49,-605.6 1481.49,-636.4 1656.55,-636.4 1656.55,-605.6 1481.49,-605.6"/>
-<text text-anchor="start" x="1488.49" y="-617.8" font-family="Arial" font-size="14.00">is_available </text>
-<text text-anchor="start" x="1565.53" y="-617.8" font-family="Arial" font-size="14.00" fill="#666666">[INTEGER]</text>
-</g>
 <!-- file_set -->
-<g id="node8" class="node">
+<g id="node7" class="node">
 <title>file_set</title>
 <polygon fill="#efefef" stroke="none" points="1788,-775 1788,-810.6 1928.04,-810.6 1928.04,-775 1788,-775"/>
 <polygon fill="none" stroke="black" points="1788,-775 1788,-810.6 1928.04,-810.6 1928.04,-775 1788,-775"/>
@@ -195,7 +168,7 @@
 <text text-anchor="start" x="1840.91" y="-633.2" font-family="Arial" font-size="14.00" fill="#666666">[TEXT]</text>
 </g>
 <!-- release_file_set -->
-<g id="node9" class="node">
+<g id="node8" class="node">
 <title>release_file_set</title>
 <polygon fill="#efefef" stroke="none" points="2071.42,-1179.4 2071.42,-1215 2266.62,-1215 2266.62,-1179.4 2071.42,-1179.4"/>
 <polygon fill="none" stroke="black" points="2071.42,-1179.4 2071.42,-1215 2266.62,-1215 2266.62,-1179.4 2071.42,-1179.4"/>
@@ -224,7 +197,7 @@
 <text text-anchor="start" x="2077.42" y="-1143.2" font-family="Arial" font-size="10.00">FOREIGN KEY (file_set_id) REFERENCES file_set (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE</text>
 </g>
 <!-- setting -->
-<g id="node10" class="node">
+<g id="node9" class="node">
 <title>setting</title>
 <polygon fill="#efefef" stroke="none" points="794.39,-1614.6 794.39,-1650.2 925.65,-1650.2 925.65,-1614.6 794.39,-1614.6"/>
 <polygon fill="none" stroke="black" points="794.39,-1614.6 794.39,-1650.2 925.65,-1650.2 925.65,-1614.6 794.39,-1614.6"/>
@@ -239,7 +212,7 @@
 <text text-anchor="start" x="838.75" y="-1565.2" font-family="Arial" font-size="14.00" fill="#666666">[TEXT]</text>
 </g>
 <!-- document_viewer -->
-<g id="node11" class="node">
+<g id="node10" class="node">
 <title>document_viewer</title>
 <polygon fill="#efefef" stroke="none" points="1030.02,-1676.2 1030.02,-1711.8 1244.02,-1711.8 1244.02,-1676.2 1030.02,-1676.2"/>
 <polygon fill="none" stroke="black" points="1030.02,-1676.2 1030.02,-1711.8 1244.02,-1711.8 1244.02,-1676.2 1030.02,-1676.2"/>
@@ -266,7 +239,7 @@
 <text text-anchor="start" x="1161.55" y="-1503.6" font-family="Arial" font-size="14.00" fill="#666666">[BOOLEAN]</text>
 </g>
 <!-- release_system -->
-<g id="node12" class="node">
+<g id="node11" class="node">
 <title>release_system</title>
 <polygon fill="#efefef" stroke="none" points="1184.91,-728.8 1184.91,-764.4 1377.13,-764.4 1377.13,-728.8 1184.91,-728.8"/>
 <polygon fill="none" stroke="black" points="1184.91,-728.8 1184.91,-764.4 1377.13,-764.4 1377.13,-728.8 1184.91,-728.8"/>
@@ -295,7 +268,7 @@
 <text text-anchor="start" x="823.25" y="-723.4" font-family="Arial" font-size="10.00">FOREIGN KEY (release_id) REFERENCES release (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE</text>
 </g>
 <!-- release_software_title -->
-<g id="node13" class="node">
+<g id="node12" class="node">
 <title>release_software_title</title>
 <polygon fill="#efefef" stroke="none" points="2518.43,-728.8 2518.43,-764.4 2759.61,-764.4 2759.61,-728.8 2518.43,-728.8"/>
 <polygon fill="none" stroke="black" points="2518.43,-728.8 2518.43,-764.4 2759.61,-764.4 2759.61,-728.8 2518.43,-728.8"/>
@@ -324,7 +297,7 @@
 <text text-anchor="start" x="2524.43" y="-723.4" font-family="Arial" font-size="10.00">FOREIGN KEY (release_id) REFERENCES release (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE</text>
 </g>
 <!-- file_info_system -->
-<g id="node14" class="node">
+<g id="node13" class="node">
 <title>file_info_system</title>
 <polygon fill="#efefef" stroke="none" points="786.9,-1179.4 786.9,-1215 991.14,-1215 991.14,-1179.4 786.9,-1179.4"/>
 <polygon fill="none" stroke="black" points="786.9,-1179.4 786.9,-1215 991.14,-1215 991.14,-1179.4 786.9,-1179.4"/>
@@ -345,6 +318,33 @@
 <polygon fill="black" stroke="black" points="775.62,-1132.17 785.12,-1137.64 780.93,-1132.7 785.24,-1133.13 785.24,-1133.13 785.24,-1133.13 780.93,-1132.7 786.02,-1128.69 775.62,-1132.17"/>
 <text text-anchor="start" x="226.07" y="-1143.2" font-family="Arial" font-size="10.00">FOREIGN KEY (system_id) REFERENCES system (id) ON UPDATE NO ACTION ON DELETE NO ACTION MATCH NONE</text>
 </g>
+<!-- file_info -->
+<g id="node24" class="node">
+<title>file_info</title>
+<polygon fill="#efefef" stroke="none" points="1481.49,-790.4 1481.49,-826 1656.55,-826 1656.55,-790.4 1481.49,-790.4"/>
+<polygon fill="none" stroke="black" points="1481.49,-790.4 1481.49,-826 1656.55,-826 1656.55,-790.4 1481.49,-790.4"/>
+<text text-anchor="start" x="1503.4" y="-803.8" font-family="Arial Bold" font-size="18.00">file_info</text>
+<text text-anchor="start" x="1565.38" y="-803.8" font-family="Arial" font-size="14.00">    </text>
+<text text-anchor="start" x="1596.5" y="-803.8" font-family="Arial" font-size="14.00" fill="#666666">[table]</text>
+<polygon fill="none" stroke="black" points="1481.49,-759.6 1481.49,-790.4 1656.55,-790.4 1656.55,-759.6 1481.49,-759.6"/>
+<text text-anchor="start" x="1488.49" y="-771.8" font-family="Arial" font-size="14.00">id </text>
+<text text-anchor="start" x="1503.27" y="-771.8" font-family="Arial" font-size="14.00" fill="#666666">[INTEGER]</text>
+<polygon fill="none" stroke="black" points="1481.49,-728.8 1481.49,-759.6 1656.55,-759.6 1656.55,-728.8 1481.49,-728.8"/>
+<text text-anchor="start" x="1488.49" y="-741" font-family="Arial" font-size="14.00">sha1_checksum </text>
+<text text-anchor="start" x="1593.54" y="-741" font-family="Arial" font-size="14.00" fill="#666666">[BLOB]</text>
+<polygon fill="none" stroke="black" points="1481.49,-698 1481.49,-728.8 1656.55,-728.8 1656.55,-698 1481.49,-698"/>
+<text text-anchor="start" x="1488.49" y="-710.2" font-family="Arial" font-size="14.00">file_size </text>
+<text text-anchor="start" x="1542.96" y="-710.2" font-family="Arial" font-size="14.00" fill="#666666">[INTEGER]</text>
+<polygon fill="none" stroke="black" points="1481.49,-667.2 1481.49,-698 1656.55,-698 1656.55,-667.2 1481.49,-667.2"/>
+<text text-anchor="start" x="1488.49" y="-679.4" font-family="Arial" font-size="14.00">archive_file_name </text>
+<text text-anchor="start" x="1606" y="-679.4" font-family="Arial" font-size="14.00" fill="#666666">[TEXT]</text>
+<polygon fill="none" stroke="black" points="1481.49,-636.4 1481.49,-667.2 1656.55,-667.2 1656.55,-636.4 1481.49,-636.4"/>
+<text text-anchor="start" x="1488.49" y="-648.6" font-family="Arial" font-size="14.00">file_type </text>
+<text text-anchor="start" x="1544.52" y="-648.6" font-family="Arial" font-size="14.00" fill="#666666">[INTEGER]</text>
+<polygon fill="none" stroke="black" points="1481.49,-605.6 1481.49,-636.4 1656.55,-636.4 1656.55,-605.6 1481.49,-605.6"/>
+<text text-anchor="start" x="1488.49" y="-617.8" font-family="Arial" font-size="14.00">is_available </text>
+<text text-anchor="start" x="1565.53" y="-617.8" font-family="Arial" font-size="14.00" fill="#666666">[INTEGER]</text>
+</g>
 <!-- file_info_system&#45;&gt;file_info -->
 <g id="edge10" class="edge">
 <title>file_info_system:file_info_id&#45;&gt;file_info:id</title>
@@ -353,7 +353,7 @@
 <text text-anchor="start" x="433.92" y="-1174" font-family="Arial" font-size="10.00">FOREIGN KEY (file_info_id) REFERENCES file_info (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE</text>
 </g>
 <!-- file_sync_log -->
-<g id="node15" class="node">
+<g id="node14" class="node">
 <title>file_sync_log</title>
 <polygon fill="#efefef" stroke="none" points="1348.4,-1676.2 1348.4,-1711.8 1529.64,-1711.8 1529.64,-1676.2 1348.4,-1676.2"/>
 <polygon fill="none" stroke="black" points="1348.4,-1676.2 1348.4,-1711.8 1529.64,-1711.8 1529.64,-1676.2 1348.4,-1676.2"/>
@@ -380,7 +380,7 @@
 <text text-anchor="start" x="1422.33" y="-1503.6" font-family="Arial" font-size="14.00" fill="#666666">[TEXT]</text>
 </g>
 <!-- release_item -->
-<g id="node16" class="node">
+<g id="node15" class="node">
 <title>release_item</title>
 <polygon fill="#efefef" stroke="none" points="2239.92,-759.6 2239.92,-795.2 2414.12,-795.2 2414.12,-759.6 2239.92,-759.6"/>
 <polygon fill="none" stroke="black" points="2239.92,-759.6 2239.92,-795.2 2414.12,-795.2 2414.12,-759.6 2239.92,-759.6"/>
@@ -408,7 +408,7 @@
 <text text-anchor="start" x="1824.51" y="-697.4" font-family="Arial" font-size="10.00">FOREIGN KEY (release_id) REFERENCES release (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE</text>
 </g>
 <!-- release_item_file_set -->
-<g id="node17" class="node">
+<g id="node16" class="node">
 <title>release_item_file_set</title>
 <polygon fill="#efefef" stroke="none" points="2370.93,-1179.4 2370.93,-1215 2607.11,-1215 2607.11,-1179.4 2370.93,-1179.4"/>
 <polygon fill="none" stroke="black" points="2370.93,-1179.4 2370.93,-1215 2607.11,-1215 2607.11,-1179.4 2370.93,-1179.4"/>
@@ -437,7 +437,7 @@
 <text text-anchor="start" x="2376.93" y="-1174" font-family="Arial" font-size="10.00">FOREIGN KEY (release_item_id) REFERENCES release_item (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE</text>
 </g>
 <!-- file_set_item_type -->
-<g id="node18" class="node">
+<g id="node17" class="node">
 <title>file_set_item_type</title>
 <polygon fill="#efefef" stroke="none" points="1749.41,-1179.4 1749.41,-1215 1966.63,-1215 1966.63,-1179.4 1749.41,-1179.4"/>
 <polygon fill="none" stroke="black" points="1749.41,-1179.4 1749.41,-1215 1966.63,-1215 1966.63,-1179.4 1749.41,-1179.4"/>
@@ -459,7 +459,7 @@
 <text text-anchor="start" x="1414.98" y="-1148" font-family="Arial" font-size="10.00">FOREIGN KEY (file_set_id) REFERENCES file_set (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE</text>
 </g>
 <!-- dat_file -->
-<g id="node19" class="node">
+<g id="node18" class="node">
 <title>dat_file</title>
 <polygon fill="#efefef" stroke="none" points="929.56,-882.8 929.56,-918.4 1080.48,-918.4 1080.48,-882.8 929.56,-882.8"/>
 <polygon fill="none" stroke="black" points="929.56,-882.8 929.56,-918.4 1080.48,-918.4 1080.48,-882.8 929.56,-882.8"/>
@@ -511,7 +511,7 @@
 <text text-anchor="start" x="375.94" y="-538.6" font-family="Arial" font-size="10.00">FOREIGN KEY (system_id) REFERENCES system (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE</text>
 </g>
 <!-- dat_game -->
-<g id="node20" class="node">
+<g id="node19" class="node">
 <title>dat_game</title>
 <polygon fill="#efefef" stroke="none" points="529.41,-1256.4 529.41,-1292 682.63,-1292 682.63,-1256.4 529.41,-1256.4"/>
 <polygon fill="none" stroke="black" points="529.41,-1256.4 529.41,-1292 682.63,-1292 682.63,-1256.4 529.41,-1256.4"/>
@@ -548,7 +548,7 @@
 <text text-anchor="start" x="129.86" y="-1220.2" font-family="Arial" font-size="10.00">FOREIGN KEY (dat_file_id) REFERENCES dat_file (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE</text>
 </g>
 <!-- dat_rom -->
-<g id="node21" class="node">
+<g id="node20" class="node">
 <title>dat_rom</title>
 <polygon fill="#efefef" stroke="none" points="521.6,-1753.2 521.6,-1788.8 690.44,-1788.8 690.44,-1753.2 521.6,-1753.2"/>
 <polygon fill="none" stroke="black" points="521.6,-1753.2 521.6,-1788.8 690.44,-1788.8 690.44,-1753.2 521.6,-1753.2"/>
@@ -597,7 +597,7 @@
 <text text-anchor="start" x="698.44" y="-1717" font-family="Arial" font-size="10.00">FOREIGN KEY (dat_game_id) REFERENCES dat_game (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE</text>
 </g>
 <!-- file_set_dat_file_link -->
-<g id="node22" class="node">
+<g id="node21" class="node">
 <title>file_set_dat_file_link</title>
 <polygon fill="#efefef" stroke="none" points="1095.41,-1179.4 1095.41,-1215 1332.63,-1215 1332.63,-1179.4 1095.41,-1179.4"/>
 <polygon fill="none" stroke="black" points="1095.41,-1179.4 1095.41,-1215 1332.63,-1215 1332.63,-1179.4 1095.41,-1179.4"/>
@@ -626,7 +626,7 @@
 <text text-anchor="start" x="1101.41" y="-1117.2" font-family="Arial" font-size="10.00">FOREIGN KEY (dat_file_id) REFERENCES dat_file (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE</text>
 </g>
 <!-- file_set_file_info -->
-<g id="node23" class="node">
+<g id="node22" class="node">
 <title>file_set_file_info</title>
 <polygon fill="#efefef" stroke="none" points="1437.41,-1210.2 1437.41,-1245.8 1644.63,-1245.8 1644.63,-1210.2 1437.41,-1210.2"/>
 <polygon fill="none" stroke="black" points="1437.41,-1210.2 1437.41,-1245.8 1644.63,-1245.8 1644.63,-1210.2 1437.41,-1210.2"/>
@@ -646,13 +646,6 @@
 <text text-anchor="start" x="1444.41" y="-1099.2" font-family="Arial" font-size="14.00">sort_order </text>
 <text text-anchor="start" x="1512.11" y="-1099.2" font-family="Arial" font-size="14.00" fill="#666666">[INTEGER]</text>
 </g>
-<!-- file_set_file_info&#45;&gt;file_info -->
-<g id="edge20" class="edge">
-<title>file_set_file_info:file_info_id&#45;&gt;file_info:id</title>
-<path fill="none" stroke="black" d="M1655.63,-1162.98C1694.26,-1154.18 1663.05,-1089.93 1644.63,-1043.8 1605.25,-945.17 1520.98,-967.79 1481.49,-869.2 1465.92,-830.33 1438.62,-775 1480.49,-775"/>
-<polygon fill="black" stroke="black" points="1655.91,-1162.96 1645.51,-1159.49 1650.6,-1163.49 1646.29,-1163.93 1646.29,-1163.93 1646.29,-1163.93 1650.6,-1163.49 1646.42,-1168.44 1655.91,-1162.96"/>
-<text text-anchor="start" x="1087.41" y="-1148" font-family="Arial" font-size="10.00">FOREIGN KEY (file_info_id) REFERENCES file_info (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE</text>
-</g>
 <!-- file_set_file_info&#45;&gt;file_set -->
 <g id="edge21" class="edge">
 <title>file_set_file_info:file_set_id&#45;&gt;file_set:id</title>
@@ -660,8 +653,15 @@
 <polygon fill="black" stroke="black" points="1655.95,-1194.25 1645.72,-1190.29 1650.62,-1194.53 1646.3,-1194.76 1646.3,-1194.76 1646.3,-1194.76 1650.62,-1194.53 1646.2,-1199.28 1655.95,-1194.25"/>
 <text text-anchor="start" x="1092.97" y="-1204.8" font-family="Arial" font-size="10.00">FOREIGN KEY (file_set_id) REFERENCES file_set (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE</text>
 </g>
+<!-- file_set_file_info&#45;&gt;file_info -->
+<g id="edge20" class="edge">
+<title>file_set_file_info:file_info_id&#45;&gt;file_info:id</title>
+<path fill="none" stroke="black" d="M1655.63,-1162.98C1694.26,-1154.18 1663.05,-1089.93 1644.63,-1043.8 1605.25,-945.17 1520.98,-967.79 1481.49,-869.2 1465.92,-830.33 1438.62,-775 1480.49,-775"/>
+<polygon fill="black" stroke="black" points="1655.91,-1162.96 1645.51,-1159.49 1650.6,-1163.49 1646.29,-1163.93 1646.29,-1163.93 1646.29,-1163.93 1650.6,-1163.49 1646.42,-1168.44 1655.91,-1162.96"/>
+<text text-anchor="start" x="1087.41" y="-1148" font-family="Arial" font-size="10.00">FOREIGN KEY (file_info_id) REFERENCES file_info (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE</text>
+</g>
 <!-- system_libretro_core -->
-<g id="node24" class="node">
+<g id="node23" class="node">
 <title>system_libretro_core</title>
 <polygon fill="#efefef" stroke="none" points="323.42,-744.2 323.42,-779.8 558.62,-779.8 558.62,-744.2 323.42,-744.2"/>
 <polygon fill="none" stroke="black" points="323.42,-744.2 323.42,-779.8 558.62,-779.8 558.62,-744.2 323.42,-744.2"/>

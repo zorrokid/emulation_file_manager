@@ -157,7 +157,7 @@ mod tests {
             .add_file_info(
                 &checksum,
                 2048,
-                existing_file_archive_name,
+                Some(existing_file_archive_name),
                 context.file_type,
             )
             .await
@@ -181,7 +181,7 @@ mod tests {
         assert_eq!(context.existing_files[0].file_size, 2048);
         assert_eq!(
             context.existing_files[0].archive_file_name,
-            existing_file_archive_name
+            Some(existing_file_archive_name.to_string())
         );
     }
 }

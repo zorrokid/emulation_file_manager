@@ -8,12 +8,14 @@ Metadata about files including checksums and sizes
 <summary><strong>Table Definition</strong></summary>
 
 ```sql
-CREATE TABLE file_info (
-    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-    sha1_checksum BLOB NOT NULL,
-    file_size INTEGER NOT NULL,
-    archive_file_name TEXT NOT NULL
-, file_type INTEGER, is_available INTEGER NOT NULL DEFAULT 1)
+CREATE TABLE "file_info" (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+    sha1_checksum     BLOB    NOT NULL,
+    file_size         INTEGER NOT NULL,
+    archive_file_name TEXT,
+    file_type         INTEGER,
+    is_available      INTEGER NOT NULL DEFAULT 0
+)
 ```
 
 </details>
@@ -25,9 +27,9 @@ CREATE TABLE file_info (
 | id | INTEGER |  | false | [file_info_system](file_info_system.md) [file_set_file_info](file_set_file_info.md) |  |  |
 | sha1_checksum | BLOB |  | false |  |  |  |
 | file_size | INTEGER |  | false |  |  |  |
-| archive_file_name | TEXT |  | false |  |  |  |
+| archive_file_name | TEXT |  | true |  |  |  |
 | file_type | INTEGER |  | true |  |  |  |
-| is_available | INTEGER | 1 | false |  |  |  |
+| is_available | INTEGER | 0 | false |  |  |  |
 
 ## Constraints
 
