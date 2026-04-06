@@ -81,17 +81,17 @@ impl PipelineStep<FileTypeMigrationContext> for CollectCloudFileSetsStep {
         // NOTE: at this point there are not so many file sets, so loading all into memory is
         let files = context
             .repository_manager
-            .get_file_sync_log_repository()
-            .get_all_synced_file_set_ids()
+            .get_file_info_repository()
+            .get_synced_file_info_ids()
             .await;
         match files {
-            Ok(file_set_ids) => {
-                context.file_ids_synced_to_cloud = file_set_ids;
+            Ok(file_info_ids) => {
+                context.file_ids_synced_to_cloud = file_info_ids.into_iter().collect();
             }
             Err(err) => {
                 tracing::error!(
                     error = ?err,
-                    "Error fetching synced file set ids");
+                    "Error fetching synced file info ids");
                 return StepAction::Abort(Error::DbError(format!(
                     "Error fetching synced file set ids: {}",
                     err
@@ -285,6 +285,7 @@ impl PipelineStep<FileTypeMigrationContext> for MoveCloudFilesStep {
                             archive_file_name: file.archive_file_name.clone(),
                             file_type: file_type_migration.new_file_type,
                             is_available: file.is_available,
+                            cloud_sync_status: file.cloud_sync_status,
                         };
 
                         let new_cloud_key = new_file.generate_cloud_key();
@@ -589,7 +590,7 @@ mod tests {
     use std::sync::Arc;
 
     use cloud_storage::{CloudStorageOps, mock::MockCloudStorage};
-    use core_types::{FileSyncStatus, FileType, ImportedFile, Sha1Checksum};
+    use core_types::{CloudSyncStatus, FileType, ImportedFile, Sha1Checksum};
     use database::{repository_manager::RepositoryManager, setup_test_db};
 
     use crate::{
@@ -720,24 +721,53 @@ mod tests {
         let mut context = setup_test_context(None).await;
         let repository_manager = context.repository_manager.clone();
 
-        let file_info_id_1 = 1;
-        let file_info_id_2 = 2;
-        let _ = repository_manager
-            .get_file_sync_log_repository()
-            .add_log_entry(file_info_id_1, FileSyncStatus::UploadCompleted, "", "")
+        // Insert two file_info records via file sets
+        let file_set_id_1 = insert_test_file_set(
+            &repository_manager,
+            &FileType::Rom,
+            Sha1Checksum::from([1; 20]),
+            Some("file1.zst".to_string()),
+        )
+        .await;
+        let file_set_id_2 = insert_test_file_set(
+            &repository_manager,
+            &FileType::Rom,
+            Sha1Checksum::from([2; 20]),
+            Some("file2.zst".to_string()),
+        )
+        .await;
+
+        let file_info_1 = repository_manager
+            .get_file_info_repository()
+            .get_file_infos_by_file_set(file_set_id_1)
+            .await
+            .unwrap()
+            .into_iter()
+            .next()
+            .unwrap();
+        let file_info_2 = repository_manager
+            .get_file_info_repository()
+            .get_file_infos_by_file_set(file_set_id_2)
+            .await
+            .unwrap()
+            .into_iter()
+            .next()
+            .unwrap();
+
+        // Mark only file_info_1 as Synced
+        repository_manager
+            .get_file_info_repository()
+            .update_cloud_sync_status(file_info_1.id, CloudSyncStatus::Synced)
             .await
             .unwrap();
-        let _ = repository_manager
-            .get_file_sync_log_repository()
-            .add_log_entry(file_info_id_2, FileSyncStatus::UploadPending, "", "")
-            .await
-            .unwrap();
+        // file_info_2 remains NotSynced
 
         let step = CollectCloudFileSetsStep;
         let action = step.execute(&mut context).await;
         assert!(matches!(action, StepAction::Continue));
         assert_eq!(context.file_ids_synced_to_cloud.len(), 1);
-        assert!(context.file_ids_synced_to_cloud.contains(&file_info_id_1));
+        assert!(context.file_ids_synced_to_cloud.contains(&file_info_1.id));
+        assert!(!context.file_ids_synced_to_cloud.contains(&file_info_2.id));
     }
 
     #[async_std::test]
@@ -921,6 +951,7 @@ mod tests {
             archive_file_name: archive_file_name.clone(),
             file_type: FileType::ManualScan, // to be migrated to FileType::Scan
             is_available: true,
+            cloud_sync_status: Default::default(),
         };
 
         let file_set_id = insert_test_file_set(
@@ -974,6 +1005,7 @@ mod tests {
             archive_file_name: file_info.archive_file_name.clone(),
             file_type: FileType::Scan,
             is_available: file_info.is_available,
+            cloud_sync_status: file_info.cloud_sync_status,
         };
 
         let new_cloud_key = new_file.generate_cloud_key().unwrap();

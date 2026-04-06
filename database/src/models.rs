@@ -1,6 +1,6 @@
 use chrono::NaiveDateTime;
 use core::fmt;
-use core_types::{DocumentType, FileSyncStatus, FileType, Sha1Checksum, item_type::ItemType};
+use core_types::{CloudSyncStatus, DocumentType, FileSyncStatus, FileType, Sha1Checksum, item_type::ItemType};
 use std::fmt::{Display, Formatter};
 
 use sqlx::FromRow;
@@ -15,6 +15,7 @@ pub struct FileInfo {
     pub archive_file_name: Option<String>,
     pub file_type: FileType,
     pub is_available: bool,
+    pub cloud_sync_status: CloudSyncStatus,
 }
 
 impl From<&FileSetFileInfo> for FileInfo {
@@ -26,6 +27,7 @@ impl From<&FileSetFileInfo> for FileInfo {
             archive_file_name: file_set_file_info.archive_file_name.clone(),
             file_type: file_set_file_info.file_type,
             is_available: file_set_file_info.is_available,
+            cloud_sync_status: file_set_file_info.cloud_sync_status,
         }
     }
 }
@@ -68,6 +70,7 @@ pub struct FileSetFileInfo {
     pub file_type: FileType,
     pub sort_order: i64,
     pub is_available: bool,
+    pub cloud_sync_status: CloudSyncStatus,
 }
 
 impl Display for FileSetFileInfo {

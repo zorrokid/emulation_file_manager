@@ -27,7 +27,7 @@
 | [file_set_dat_file_link](file_set_dat_file_link.md) | 2 |  | table |
 | [file_set_file_info](file_set_file_info.md) | 4 |  | table |
 | [system_libretro_core](system_libretro_core.md) | 3 |  | table |
-| [file_info](file_info.md) | 6 | Metadata about files including checksums and sizes | table |
+| [file_info](file_info.md) | 7 | Metadata about files including checksums and sizes | table |
 
 ## Relations
 

@@ -1,96 +1,22 @@
-
+use core_types::{CloudSyncStatus, FileSyncStatus, events::SyncEvent};
 use flume::Sender;
-use core_types::{events::SyncEvent, FileSyncStatus};
 
 use crate::{
     cloud_sync::context::{FileSyncResult, SyncContext},
-    error::Error, pipeline::pipeline_step::{StepAction, PipelineStep},
+    error::Error,
+    pipeline::pipeline_step::{PipelineStep, StepAction},
 };
 
 // TODO move to utils module?
 async fn send_progress_event(event: SyncEvent, progress_tx: &Sender<SyncEvent>) {
-    let res = progress_tx
-        .send(event);
+    let res = progress_tx.send(event);
 
     if let Err(e) = res {
         tracing::error!("Sending sync event failed {}", e);
     }
 }
 
-/// Step 1: Prepare files for upload. This involves marking files as pending upload in the
-/// database and collecting total number of files to be uploaded.
-pub struct PrepareFilesForUploadStep;
-
-#[async_trait::async_trait]
-impl PipelineStep<SyncContext> for PrepareFilesForUploadStep {
-    fn name(&self) -> &'static str {
-        "prepare_files"
-    }
-
-    async fn execute(&self, context: &mut SyncContext) -> StepAction {
-        tracing::debug!("Preparing files for upload");
-        let mut offset = 0;
-        loop {
-            let file_infos_res = context
-                .repository_manager
-                .get_file_info_repository()
-                .get_file_infos_without_sync_log(100, offset)
-                .await;
-
-            match file_infos_res {
-                Ok(file_infos) => {
-                    if file_infos.is_empty() {
-                        break;
-                    }
-                    offset += file_infos.len() as i64;
-                    for file_info in &file_infos {
-                        let Some(cloud_key) = file_info.generate_cloud_key() else {
-                            tracing::warn!(
-                                file_info_id = file_info.id,
-                                "File is marked as available but has no archive file name, skipping cloud sync log entry"
-                            );
-                            continue;
-                        };
-                        tracing::debug!(
-                            file_info_id = file_info.id,
-                            cloud_key = %cloud_key,
-                            "Preparing file for sync"
-                        );
-                       let update_res = context
-                            .repository_manager
-                            .get_file_sync_log_repository()
-                            .add_log_entry(
-                                file_info.id,
-                                FileSyncStatus::UploadPending,
-                                "",
-                                &cloud_key,
-                            )
-                            .await;
-                        if let Err(e) = update_res {
-                            tracing::error!(
-                                file_info_id = file_info.id,
-                                error = %e,
-                                "Error updating sync log for file"
-                            );
-                            return StepAction::Abort(Error::DbError(e.to_string()));
-                        }
-                    }
-                }
-                Err(e) => {
-                    tracing::error!(error = %e, 
-                        "Error fetching file infos");
-                    return StepAction::Abort(Error::DbError(e.to_string()));
-                }
-            }
-        }
-
-        tracing::debug!("File preparation completed");
-        StepAction::Continue
-    }
-}
-
-
-/// Step 2: Get counts of files prepared for upload and deletion
+/// Step 1: Get counts of files to upload and delete from `file_info.cloud_sync_status`.
 pub struct GetSyncFileCountsStep;
 
 #[async_trait::async_trait]
@@ -103,37 +29,33 @@ impl PipelineStep<SyncContext> for GetSyncFileCountsStep {
 
         let files_to_delete_res = context
             .repository_manager
-            .get_file_sync_log_repository()
-            .count_logs_by_latest_statuses(&[FileSyncStatus::DeletionPending, FileSyncStatus::DeletionFailed])
+            .get_file_info_repository()
+            .count_files_pending_deletion()
             .await;
 
         match files_to_delete_res {
             Ok(count) => {
                 context.files_prepared_for_deletion = count;
-                tracing::debug!(count, 
-                    "Files prepared for deletion");
+                tracing::debug!(count, "Files prepared for deletion");
             }
             Err(e) => {
-                tracing::error!(error = %e, 
-                    "Error counting files for deletion");
+                tracing::error!(error = %e, "Error counting files for deletion");
                 return StepAction::Abort(Error::DbError(e.to_string()));
             }
         }
 
         let files_pending_upload_res = context
             .repository_manager
-            .get_file_sync_log_repository()
-            .count_logs_by_latest_statuses(&[FileSyncStatus::UploadPending, FileSyncStatus::UploadFailed])
+            .get_file_info_repository()
+            .count_files_pending_upload()
             .await;
         match files_pending_upload_res {
             Ok(count) => {
                 context.files_prepared_for_upload = count;
-                tracing::debug!(count, 
-                    "Files prepared for upload");
+                tracing::debug!(count, "Files prepared for upload");
             }
             Err(e) => {
-                tracing::error!(error = %e, 
-                    "Error counting files for upload");
+                tracing::error!(error = %e, "Error counting files for upload");
                 return StepAction::Abort(Error::DbError(e.to_string()));
             }
         }
@@ -143,7 +65,10 @@ impl PipelineStep<SyncContext> for GetSyncFileCountsStep {
     }
 }
 
-/// Step 4: Upload pending files to cloud storage
+/// Step 2: Upload files with `cloud_sync_status = NotSynced` to cloud storage.
+/// On success, sets `cloud_sync_status = Synced` and writes an `UploadCompleted` log entry.
+/// On failure, leaves `cloud_sync_status = NotSynced` (auto-retried next sync) and writes
+/// an `UploadFailed` log entry for diagnosis.
 pub struct UploadPendingFilesStep;
 
 #[async_trait::async_trait]
@@ -164,141 +89,90 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
             SyncEvent::SyncStarted {
                 total_files_count: context.files_prepared_for_upload,
             },
-            &context.progress_tx
-        ).await;
-
-        let mut offset = 0;
+            &context.progress_tx,
+        )
+        .await;
 
         loop {
-            let pending_files_to_upload_result = context
+            let pending_files_result = context
                 .repository_manager
-                .get_file_sync_log_repository()
-                .get_logs_and_file_info_by_sync_status(
-                    &[FileSyncStatus::UploadPending, FileSyncStatus::UploadFailed],
-                    10, // Let's fetch next 10 pending / failed files to upload
-
-                    0, // No need to update the offset since we update the records from this round
-                       // with new status, so they won't be fetched again in the next loop
-                       // iteration
+                .get_file_info_repository()
+                .get_files_pending_upload(
+                    10,
+                    0, // always offset 0: each uploaded file is updated to Synced so it
+                       // won't appear in the next fetch
                 )
                 .await;
 
-            match pending_files_to_upload_result {
+            match pending_files_result {
                 Err(e) => {
-                    tracing::error!(error = %e, 
-                        "Error fetching pending files for upload");
+                    tracing::error!(error = %e, "Error fetching pending files for upload");
                     return StepAction::Abort(Error::DbError(e.to_string()));
                 }
                 Ok(pending_files) => {
                     tracing::debug!(
                         pending_file_count = pending_files.len(),
-                        offset,
                         "Found pending files for upload"
                     );
                     if pending_files.is_empty() {
                         break;
                     }
 
-                    offset += pending_files.len() as u32;
-
+                    // TODO: remove this by removing is_available and only relying on
+                    // archive_file_name presence for upload eligibility.
+                    let mut batch_uploaded = 0;
                     for file in pending_files {
-                        // check for cancellation
                         if context.cancel_rx.try_recv().is_ok() {
                             tracing::info!("Cloud sync cancelled by user");
-                            send_progress_event(SyncEvent::SyncCancelled {}, &context.progress_tx).await;
+                            send_progress_event(SyncEvent::SyncCancelled {}, &context.progress_tx)
+                                .await;
                             return StepAction::Abort(Error::OperationCancelled);
                         }
 
+                        let Some(cloud_key) = file.generate_cloud_key() else {
+                            // Invariant violation: is_available=true but archive_file_name=None.
+                            // Status stays NotSynced so the file can be retried in a future sync
+                            // once the data is corrected.
+                            tracing::warn!(
+                                file_info_id = file.id,
+                                "File is available but has no archive_file_name; skipping upload"
+                            );
+                            continue;
+                        };
+
                         tracing::debug!(
-                            file_info_id = file.file_info_id,
-                            cloud_key = %file.cloud_key,
+                            file_info_id = file.id,
+                            cloud_key = %cloud_key,
                             "Uploading file"
                         );
                         file_count += 1;
 
                         send_progress_event(
                             SyncEvent::FileUploadStarted {
-                                key: file.cloud_key.clone(),
+                                key: cloud_key.clone(),
                                 file_number: file_count,
                                 total_files: context.files_prepared_for_upload,
                             },
-                            &context.progress_tx
-                        ).await;
+                            &context.progress_tx,
+                        )
+                        .await;
 
                         let mut file_sync_result = FileSyncResult {
-                            file_info_id: file.file_info_id,
-                            cloud_key: file.cloud_key.clone(),
+                            file_info_id: file.id,
+                            cloud_key: cloud_key.clone(),
                             cloud_operation_success: false,
                             cloud_error: None,
                             db_update_success: false,
                             db_error: None,
                         };
 
-                        let update_res = context
-                            .repository_manager
-                            .get_file_sync_log_repository()
-                            .add_log_entry(
-                                file.file_info_id,
-                                FileSyncStatus::UploadInProgress,
-                                "",
-                                &file.cloud_key,
-                            )
-                            .await;
-
-                        if let Err(e) = update_res {
-                            tracing::error!(
-                                file_info_id = file.file_info_id,
-                                error = %e,
-                                "Error updating sync log for file"
-                            );
-                            file_sync_result.db_error = Some(format!("{}", e));
-                            context
-                                .upload_results
-                                .insert(file.cloud_key.clone(), file_sync_result);
-                            send_progress_event(
-                                SyncEvent::FileUploadFailed {
-                                    key: file.cloud_key.clone(),
-                                    error: format!("{}", e),
-                                    file_number: file_count,
-                                    total_files: context.files_prepared_for_upload,
-                                },
-                                &context.progress_tx
-                            ).await;
-
-                            // Skip this file and continue with the next one, since status update
-                            // failed this will be retried in the next sync run
-                            continue;
-                        }
-
-                        let Some(archive_name) = &file.archive_file_name else {
-                            // Invariant violation: is_available=true but archive_file_name=None.
-                            // Write UploadSkipped (not UploadFailed) — UploadFailed is in the
-                            // [UploadPending, UploadFailed] retry query with offset=0, which
-                            // would cause an infinite loop.
-                            tracing::warn!(
-                                file_info_id = file.file_info_id,
-                                cloud_key = %file.cloud_key,
-                                "File is marked as available but has no archive file name; \
-                                 writing UploadSkipped to avoid leaving UploadInProgress as terminal state"
-                            );
-                            let _ = context
-                                .repository_manager
-                                .get_file_sync_log_repository()
-                                .add_log_entry(
-                                    file.file_info_id,
-                                    FileSyncStatus::UploadSkipped,
-                                    "missing archive_file_name",
-                                    &file.cloud_key,
-                                )
-                                .await;
-                            continue;
-                        };
-                        let local_path = context
-                            .settings
-                            .get_file_path(&file.file_type, archive_name);
+                        let local_path = context.settings.get_file_path(
+                            &file.file_type,
+                            file.archive_file_name.as_deref().expect("checked above"),
+                        );
 
                         tracing::debug!(
-                            file_info_id = file.file_info_id,
+                            file_info_id = file.id,
                             local_path = %local_path.display(),
                             "Uploading file to cloud"
                         );
@@ -309,7 +183,7 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                             .unwrap()
                             .upload_file(
                                 local_path.as_path(),
-                                &file.cloud_key,
+                                &cloud_key,
                                 Some(&context.progress_tx),
                             )
                             .await;
@@ -317,32 +191,50 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                         match upload_res {
                             Ok(_) => {
                                 tracing::info!(
-                                    file_info_id = file.file_info_id,
-                                    cloud_key = %file.cloud_key,
+                                    file_info_id = file.id,
+                                    cloud_key = %cloud_key,
                                     "Upload succeeded"
                                 );
-                               file_sync_result.cloud_operation_success = true;
+                                file_sync_result.cloud_operation_success = true;
+                                batch_uploaded += 1;
 
-                                let update_res = context
+                                // Update cloud_sync_status to Synced
+                                let status_res = context
+                                    .repository_manager
+                                    .get_file_info_repository()
+                                    .update_cloud_sync_status(file.id, CloudSyncStatus::Synced)
+                                    .await;
+
+                                // Record audit log entry
+                                let log_res = context
                                     .repository_manager
                                     .get_file_sync_log_repository()
                                     .add_log_entry(
-                                        file.file_info_id,
+                                        file.id,
                                         FileSyncStatus::UploadCompleted,
                                         "",
-                                        &file.cloud_key,
+                                        &cloud_key,
                                     )
                                     .await;
 
-                                match update_res {
-                                    Ok(_) => {
+                                match (status_res, log_res) {
+                                    (Ok(_), Ok(_)) => {
                                         file_sync_result.db_update_success = true;
                                     }
-                                    Err(e) => {
+                                    (Err(e), _) => {
                                         tracing::error!(
-                                            file_info_id = file.file_info_id,
+                                            file_info_id = file.id,
                                             error = %e,
-                                            "Error updating sync log after upload"
+                                            "Error updating cloud_sync_status after upload"
+                                        );
+                                        file_sync_result.db_update_success = false;
+                                        file_sync_result.db_error = Some(format!("{}", e));
+                                    }
+                                    (_, Err(e)) => {
+                                        tracing::error!(
+                                            file_info_id = file.id,
+                                            error = %e,
+                                            "Error writing upload log entry"
                                         );
                                         file_sync_result.db_update_success = false;
                                         file_sync_result.db_error = Some(format!("{}", e));
@@ -351,42 +243,45 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
 
                                 send_progress_event(
                                     SyncEvent::FileUploadCompleted {
-                                        key: file.cloud_key.clone(),
+                                        key: cloud_key.clone(),
                                         file_number: file_count,
                                         total_files: context.files_prepared_for_upload,
                                     },
-                                    &context.progress_tx
-                                ).await;
+                                    &context.progress_tx,
+                                )
+                                .await;
                             }
                             Err(e) => {
                                 tracing::error!(
-                                    file_info_id = file.file_info_id,
+                                    file_info_id = file.id,
                                     error = %e,
                                     "Upload failed"
                                 );
                                 file_sync_result.cloud_operation_success = false;
                                 file_sync_result.cloud_error = Some(format!("{}", e));
 
-                                let update_res = context
+                                // Leave cloud_sync_status = NotSynced so it is retried next sync.
+                                // Write audit log entry for diagnosis.
+                                let log_res = context
                                     .repository_manager
                                     .get_file_sync_log_repository()
                                     .add_log_entry(
-                                        file.file_info_id,
+                                        file.id,
                                         FileSyncStatus::UploadFailed,
                                         &format!("{}", e),
-                                        &file.cloud_key,
+                                        &cloud_key,
                                     )
                                     .await;
 
-                                match update_res {
+                                match log_res {
                                     Ok(_) => {
                                         file_sync_result.db_update_success = true;
                                     }
                                     Err(e) => {
                                         tracing::error!(
-                                            file_info_id = file.file_info_id,
+                                            file_info_id = file.id,
                                             error = %e,
-                                            "Error updating sync log after failed upload"
+                                            "Error writing failure log after failed upload"
                                         );
                                         file_sync_result.db_update_success = false;
                                         file_sync_result.db_error = Some(format!("{}", e));
@@ -395,18 +290,22 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
 
                                 send_progress_event(
                                     SyncEvent::FileUploadFailed {
-                                        key: file.cloud_key.clone(),
-                                        error: format!("{}", e),
+                                        key: cloud_key.clone(),
+                                        error: format!("{e}"),
                                         file_number: file_count,
                                         total_files: context.files_prepared_for_upload,
                                     },
-                                    &context.progress_tx
-                                ).await;
-                           }
+                                    &context.progress_tx,
+                                )
+                                .await;
+                            }
                         }
-                        context
-                            .upload_results
-                            .insert(file.cloud_key.clone(), file_sync_result);
+                        context.upload_results.insert(cloud_key, file_sync_result);
+                    }
+                    // Break if no progress was made (e.g., all files lack archive_file_name)
+                    // to avoid an infinite loop within a single sync session.
+                    if batch_uploaded == 0 {
+                        break;
                     }
                 }
             }
@@ -417,7 +316,9 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
     }
 }
 
-/// Step 5: Delete the files marked for deletion from cloud storage
+/// Step 3: Delete files with `cloud_sync_status = DeletionPending` from cloud storage.
+/// On success, deletes the `file_info` record entirely (the tombstone is no longer needed).
+/// On failure, leaves `cloud_sync_status = DeletionPending` for retry on next sync.
 pub struct DeleteMarkedFilesStep;
 
 #[async_trait::async_trait]
@@ -425,31 +326,28 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
     fn name(&self) -> &'static str {
         "delete_marked_files"
     }
+
+    fn should_execute(&self, context: &SyncContext) -> bool {
+        context.cloud_ops.is_some() && context.files_prepared_for_deletion > 0
+    }
+
     async fn execute(&self, context: &mut SyncContext) -> StepAction {
         tracing::debug!("Deleting marked files from cloud storage");
         let mut file_count = 0;
-        let mut offset = 0;
 
         loop {
-            // TODO: why did count step get 287 files for upload (Pending or Failed) and this step
-            // only 147 (difference is 140)
             let pending_files_res = context
                 .repository_manager
-                .get_file_sync_log_repository()
-                .get_logs_and_file_info_by_sync_status(
-                    &[
-                        FileSyncStatus::DeletionPending,
-                        FileSyncStatus::DeletionFailed,
-                    ],
-                    10, // let's fetch next 10 pending / failed
-                    0, // No need to update the offset since we update the records from this round 
+                .get_file_info_repository()
+                .get_files_pending_deletion(
+                    10,
+                    0, // always offset 0: successfully deleted files are removed from file_info
                 )
                 .await;
 
             match pending_files_res {
                 Err(e) => {
-                    tracing::error!(error = %e, 
-                        "Error fetching pending files for deletion");
+                    tracing::error!(error = %e, "Error fetching pending files for deletion");
                     return StepAction::Abort(Error::DbError(e.to_string()));
                 }
                 Ok(pending_files) => {
@@ -459,107 +357,101 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
 
                     tracing::debug!(
                         pending_file_count = pending_files.len(),
-                        offset,
                         "Found pending files for deletion"
                     );
 
-                    offset += pending_files.len() as u32;
-
+                    let mut batch_deleted = 0;
                     for file in pending_files {
-                        // check for cancellation
                         if context.cancel_rx.try_recv().is_ok() {
                             tracing::info!("Cloud sync cancelled by user");
-                            send_progress_event(SyncEvent::SyncCancelled, &context.progress_tx).await;
-
+                            send_progress_event(SyncEvent::SyncCancelled, &context.progress_tx)
+                                .await;
                             return StepAction::Abort(Error::OperationCancelled);
                         }
 
+                        let Some(cloud_key) = file.generate_cloud_key() else {
+                            tracing::warn!(
+                                file_info_id = file.id,
+                                "DeletionPending file has no archive_file_name; skipping"
+                            );
+                            continue;
+                        };
+
                         send_progress_event(
                             SyncEvent::FileDeletionStarted {
-                                key: file.cloud_key.clone(),
+                                key: cloud_key.clone(),
                                 file_number: file_count,
                                 total_files: context.files_prepared_for_deletion,
                             },
-                            &context.progress_tx
-                        ).await;
+                            &context.progress_tx,
+                        )
+                        .await;
 
                         let mut file_deletion_result = FileSyncResult {
                             file_info_id: file.id,
-                            cloud_key: file.cloud_key.clone(),
+                            cloud_key: cloud_key.clone(),
                             cloud_operation_success: false,
                             cloud_error: None,
                             db_update_success: false,
                             db_error: None,
                         };
 
-                        let update_res = context
-                            .repository_manager
-                            .get_file_sync_log_repository()
-                            .add_log_entry(
-                                file.id,
-                                FileSyncStatus::DeletionInProgress,
-                                "",
-                                &file.cloud_key,
-                            )
-                            .await
-                            .map_err(|e| Error::DbError(e.to_string()));
-
-                        if let Err(e) = update_res {
-                            tracing::error!(
-                                file_info_id = file.id,
-                                error = %e,
-                                "Error updating sync log for file deletion"
-                            );
-                            file_deletion_result.db_error = Some(format!("{}", e));
-                            context
-                                .deletion_results
-                                .insert(file.cloud_key.clone(), file_deletion_result);
-                            send_progress_event(
-                                SyncEvent::FileDeletionFailed {
-                                    key: file.cloud_key.clone(),
-                                    error: format!("{}", e),
-                                    file_number: file_count,
-                                    total_files: context.files_prepared_for_deletion,
-                                },
-                                &context.progress_tx
-                            ).await;
-
-                            // Skip this file and continue with the next one, since status update
-                            // failed this will be retried in the next sync run
-                            continue;
-                        }
-
                         file_count += 1;
                         let deletion_res = context
                             .cloud_ops
                             .as_ref()
                             .unwrap()
-                            .delete_file(&file.cloud_key)
+                            .delete_file(&cloud_key)
                             .await;
 
                         match deletion_res {
                             Ok(_) => {
                                 file_deletion_result.cloud_operation_success = true;
-                                let update_res = context
+
+                                // Write audit log entry (no FK constraint — safe even after
+                                // file_info is deleted).
+                                let log_res = context
                                     .repository_manager
                                     .get_file_sync_log_repository()
                                     .add_log_entry(
                                         file.id,
                                         FileSyncStatus::DeletionCompleted,
                                         "",
-                                        &file.cloud_key,
+                                        &cloud_key,
                                     )
                                     .await;
 
-                                match update_res {
-                                    Ok(_) => {
+                                // Cloud deletion succeeded: remove the tombstone file_info record.
+                                let delete_res = context
+                                    .repository_manager
+                                    .get_file_info_repository()
+                                    .delete_file_info(file.id)
+                                    .await;
+
+                                match (log_res, delete_res) {
+                                    (Ok(_), Ok(_)) => {
                                         file_deletion_result.db_update_success = true;
+                                        batch_deleted += 1;
+                                        tracing::info!(
+                                            file_info_id = file.id,
+                                            cloud_key = %cloud_key,
+                                            "Cloud deletion succeeded; file_info record removed"
+                                        );
                                     }
-                                    Err(e) => {
+                                    (Err(e), _) => {
                                         tracing::error!(
                                             file_info_id = file.id,
                                             error = %e,
-                                            "Error updating sync log after deletion"
+                                            "Cloud deletion succeeded but could not write audit log"
+                                        );
+                                        file_deletion_result.db_update_success = false;
+                                        file_deletion_result.db_error = Some(format!("{}", e));
+                                    }
+                                    (_, Err(e)) => {
+                                        tracing::error!(
+                                            file_info_id = file.id,
+                                            error = %e,
+                                            "Cloud deletion succeeded but could not remove file_info record"
                                         );
                                         file_deletion_result.db_update_success = false;
                                         file_deletion_result.db_error = Some(format!("{}", e));
@@ -568,13 +460,14 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
 
                                 send_progress_event(
                                     SyncEvent::FileDeletionCompleted {
-                                        key: file.cloud_key.clone(),
+                                        key: cloud_key.clone(),
                                         file_number: file_count,
                                         total_files: context.files_prepared_for_deletion,
                                     },
-                                    &context.progress_tx
-                                ).await;
-                           }
+                                    &context.progress_tx,
+                                )
+                                .await;
+                            }
                             Err(e) => {
                                 tracing::error!(
                                     file_info_id = file.id,
@@ -583,18 +476,21 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
                                 );
                                 file_deletion_result.cloud_operation_success = false;
                                 file_deletion_result.cloud_error = Some(format!("{}", e));
-                                let update_res = context
+
+                                // Leave cloud_sync_status = DeletionPending for retry.
+                                // Write audit log entry for diagnosis.
+                                let log_res = context
                                     .repository_manager
                                     .get_file_sync_log_repository()
                                     .add_log_entry(
                                         file.id,
                                         FileSyncStatus::DeletionFailed,
                                         &format!("{}", e),
-                                        &file.cloud_key,
+                                        &cloud_key,
                                     )
                                     .await;
 
-                                match update_res {
+                                match log_res {
                                     Ok(_) => {
                                         file_deletion_result.db_update_success = true;
                                     }
@@ -606,18 +502,24 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
 
                                 send_progress_event(
                                     SyncEvent::FileDeletionFailed {
-                                        key: file.cloud_key.clone(),
-                                        error: format!("{}", e),
+                                        key: cloud_key.clone(),
+                                        error: format!("{e}"),
                                         file_number: file_count,
                                         total_files: context.files_prepared_for_deletion,
                                     },
-                                    &context.progress_tx
-                                ).await;
+                                    &context.progress_tx,
+                                )
+                                .await;
                             }
                         }
                         context
                             .deletion_results
-                            .insert(file.cloud_key.clone(), file_deletion_result);
+                            .insert(cloud_key, file_deletion_result);
+                    }
+                    // Break if no progress was made to avoid infinite loop
+                    // (e.g., all cloud deletions failed, files stay DeletionPending).
+                    if batch_deleted == 0 {
+                        break;
                     }
                 }
             }
@@ -628,164 +530,94 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
     }
 }
 
-/// Step 6: Clean up sync log entries for deleted file_info records
-pub struct CleanupOrphanedSyncLogsStep;
-
-#[async_trait::async_trait]
-impl PipelineStep<SyncContext> for CleanupOrphanedSyncLogsStep {
-    fn name(&self) -> &'static str {
-        "cleanup_orphaned_sync_logs"
-    }
-
-    async fn execute(&self, context: &mut SyncContext) -> StepAction {
-        tracing::debug!("Cleaning up orphaned sync log entries");
-
-        let cleanup_res = context
-            .repository_manager
-            .get_file_sync_log_repository()
-            .cleanup_orphaned_logs()
-            .await;
-
-        match cleanup_res {
-            Ok(rows_deleted) => {
-                if rows_deleted > 0 {
-                    tracing::info!(
-                        "Cleaned up {} orphaned sync log entries",
-                        rows_deleted
-                    );
-                }
-            }
-            Err(e) => {
-                tracing::error!(
-                    error = %e,
-                    "Failed to cleanup orphaned sync log entries"
-                );
-                // Don't abort - this is a cleanup operation
-            }
-        }
-
-        StepAction::Continue
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
-    use cloud_storage::{mock::MockCloudStorage};
-    use core_types::{events::SyncEvent, FileSyncStatus, FileType, Sha1Checksum};
+    use cloud_storage::mock::MockCloudStorage;
+    use core_types::{CloudSyncStatus, FileSyncStatus, FileType, Sha1Checksum, events::SyncEvent};
     use database::{repository_manager::RepositoryManager, setup_test_db};
 
     use crate::{
         cloud_sync::{
             context::SyncContext,
-            steps::{
-                GetSyncFileCountsStep, PrepareFilesForUploadStep, UploadPendingFilesStep,
-            },
-        }, pipeline::pipeline_step::{StepAction, PipelineStep}, settings_service::SettingsService, view_models::Settings
+            steps::{DeleteMarkedFilesStep, GetSyncFileCountsStep, UploadPendingFilesStep},
+        },
+        pipeline::pipeline_step::{PipelineStep, StepAction},
+        settings_service::SettingsService,
+        view_models::Settings,
     };
-
-    #[async_std::test]
-    async fn test_prepare_files_for_upload_step() {
-        let mut context = initialize_sync_context().await;
-
-        let _file_info_id = context
-            .repository_manager
-            .get_file_info_repository()
-            .add_file_info(
-                &Sha1Checksum::from([0; 20]),
-                1234,
-                Some("file1.zst"),
-                FileType::Rom,
-            )
-            .await
-            .unwrap();
-
-        let pending_files_to_upload_result = context
-            .repository_manager
-            .get_file_sync_log_repository()
-            .get_logs_and_file_info_by_sync_status(&[FileSyncStatus::UploadPending], 10, 0)
-            .await
-            .unwrap();
-
-        assert_eq!(pending_files_to_upload_result.len(), 0);
-
-        let file_infos_res = context
-            .repository_manager
-            .get_file_info_repository()
-            .get_file_infos_without_sync_log(100, 0)
-            .await
-            .unwrap();
-
-        assert_eq!(file_infos_res.len(), 1);
-        assert_eq!(file_infos_res[0].archive_file_name, Some("file1.zst".to_string()));
-
-        let step = PrepareFilesForUploadStep;
-        let action = step.execute(&mut context).await;
-
-        assert_eq!(action, StepAction::Continue);
-
-        let file_infos_res = context
-            .repository_manager
-            .get_file_info_repository()
-            .get_file_infos_without_sync_log(100, 0)
-            .await
-            .unwrap();
-
-        let pending_files_to_upload_result = context
-            .repository_manager
-            .get_file_sync_log_repository()
-            .get_logs_and_file_info_by_sync_status(&[FileSyncStatus::UploadPending], 10, 0)
-            .await
-            .unwrap();
-
-        assert_eq!(
-            pending_files_to_upload_result[0].archive_file_name,
-            Some("file1.zst".to_string())
-        );
-
-        assert_eq!(file_infos_res.len(), 0);
-    }
 
     #[async_std::test]
     async fn test_get_sync_file_counts_step() {
         let mut context = initialize_sync_context().await;
 
-        let file_info_id_1 = add_file_info(&context.repository_manager, [0; 20], "file1.zst", FileType::Rom).await;
-        let file_info_id_2 = add_file_info(&context.repository_manager, [1; 20], "file2.zst", FileType::Rom).await;
-        let file_info_id_3 = add_file_info(&context.repository_manager, [2; 20], "file3.zst", FileType::Rom).await;
-        let file_info_id_4 = add_file_info(&context.repository_manager, [3; 20], "file4.zst", FileType::Rom).await;
-        let file_info_id_5 = add_file_info(&context.repository_manager, [4; 20], "file5.zst", FileType::Rom).await;
+        let file_info_id_1 = add_file_info(
+            &context.repository_manager,
+            [0; 20],
+            "file1.zst",
+            FileType::Rom,
+        )
+        .await;
+        let file_info_id_2 = add_file_info(
+            &context.repository_manager,
+            [1; 20],
+            "file2.zst",
+            FileType::Rom,
+        )
+        .await;
+        let file_info_id_3 = add_file_info(
+            &context.repository_manager,
+            [2; 20],
+            "file3.zst",
+            FileType::Rom,
+        )
+        .await;
+        let file_info_id_4 = add_file_info(
+            &context.repository_manager,
+            [3; 20],
+            "file4.zst",
+            FileType::Rom,
+        )
+        .await;
+        let file_info_id_5 = add_file_info(
+            &context.repository_manager,
+            [4; 20],
+            "file5.zst",
+            FileType::Rom,
+        )
+        .await;
 
-        add_log_entry(&context.repository_manager, file_info_id_1, FileSyncStatus::UploadPending, "rom/file1.zst").await;
-        add_log_entry(&context.repository_manager, file_info_id_2, FileSyncStatus::UploadFailed, "rom/file2.zst").await;
-        add_log_entry(&context.repository_manager, file_info_id_3, FileSyncStatus::DeletionPending, "rom/file3.zst").await;
-        add_log_entry(&context.repository_manager, file_info_id_4, FileSyncStatus::DeletionFailed, "rom/file4.zst").await;
-        add_log_entry(&context.repository_manager, file_info_id_5, FileSyncStatus::UploadPending, "rom/file5.zst").await;
-        add_log_entry(&context.repository_manager, file_info_id_5, FileSyncStatus::UploadCompleted, "rom/file5.zst").await;
-        
+        // file1, file2: NotSynced (default) → counted for upload
+        // file3, file4: DeletionPending → counted for deletion
+        set_sync_status(
+            &context.repository_manager,
+            file_info_id_3,
+            CloudSyncStatus::DeletionPending,
+        )
+        .await;
+        set_sync_status(
+            &context.repository_manager,
+            file_info_id_4,
+            CloudSyncStatus::DeletionPending,
+        )
+        .await;
+        // file5: Synced → not counted for either
+        set_sync_status(
+            &context.repository_manager,
+            file_info_id_5,
+            CloudSyncStatus::Synced,
+        )
+        .await;
+
+        let _ = (file_info_id_1, file_info_id_2); // referenced for clarity
+
         let step = GetSyncFileCountsStep;
         let action = step.execute(&mut context).await;
 
         assert_eq!(action, StepAction::Continue);
         assert_eq!(context.files_prepared_for_deletion, 2);
         assert_eq!(context.files_prepared_for_upload, 2);
-    }
-
-    async fn add_file_info(repo_manager: &RepositoryManager, checksum: [u8; 20], file_name: &str, file_type: FileType) -> i64 {
-        repo_manager
-            .get_file_info_repository()
-            .add_file_info(&Sha1Checksum::from(checksum), 1234, Some(file_name), file_type)
-            .await
-            .unwrap()
-    }
-
-    async fn add_log_entry(repo_manager: &RepositoryManager, file_info_id: i64, status: FileSyncStatus, cloud_key: &str) {
-        repo_manager
-            .get_file_sync_log_repository()
-            .add_log_entry(file_info_id, status, "", cloud_key)
-            .await
-            .unwrap();
     }
 
     #[async_std::test]
@@ -804,37 +636,33 @@ mod tests {
             .await
             .unwrap();
 
-        context
-            .repository_manager
-            .get_file_sync_log_repository()
-            .add_log_entry(
-                file_info_id,
-                FileSyncStatus::UploadPending,
-                "",
-                "rom/file1.zst",
-            )
-            .await
-            .unwrap();
-
         context.files_prepared_for_upload = 1;
 
-        let step = crate::cloud_sync::steps::UploadPendingFilesStep;
+        let step = UploadPendingFilesStep;
         let action = step.execute(&mut context).await;
 
         assert_eq!(action, StepAction::Continue);
 
         let upload_result = context.upload_results.get("rom/file1.zst").unwrap();
-
         assert!(upload_result.cloud_operation_success);
         assert!(upload_result.db_update_success);
 
+        // cloud_sync_status must now be Synced
+        let file_info = context
+            .repository_manager
+            .get_file_info_repository()
+            .get_file_info(file_info_id)
+            .await
+            .unwrap();
+        assert_eq!(file_info.cloud_sync_status, CloudSyncStatus::Synced);
+
+        // UploadCompleted audit log entry must be written
         let log_entry = context
             .repository_manager
             .get_file_sync_log_repository()
             .get_logs_by_file_info(file_info_id)
             .await
             .unwrap();
-
         assert_eq!(
             log_entry.first().unwrap().status,
             FileSyncStatus::UploadCompleted
@@ -844,7 +672,6 @@ mod tests {
     #[async_std::test]
     async fn test_upload_pending_files_step_more_than_one_batch() {
         let mut context = initialize_sync_context().await;
-        let pending_statuses = &[FileSyncStatus::UploadPending, FileSyncStatus::UploadFailed];
 
         let test_files = [
             ("file1.zst", [0; 20]),
@@ -861,115 +688,62 @@ mod tests {
         ];
 
         for (file_name, checksum) in test_files.iter() {
-             let file_info_id = context
-             .repository_manager
-             .get_file_info_repository()
-             .add_file_info(
-                 &Sha1Checksum::from(*checksum),
-                 1234,
-                 Some(file_name),
-                 FileType::Rom,
-             )
-             .await
-             .unwrap();
-
-            context.repository_manager
-                .get_file_sync_log_repository()
-                .add_log_entry(
-                    file_info_id,
-                    FileSyncStatus::UploadPending,
-                    "",
-                    &format!("rom/{}", file_name),
-                )
-                .await
-                .unwrap();
+            add_file_info(
+                &context.repository_manager,
+                *checksum,
+                file_name,
+                FileType::Rom,
+            )
+            .await;
         }
 
         context.files_prepared_for_upload = 11;
 
-        let log_count = context.repository_manager
-            .get_file_sync_log_repository()
-            .count_logs_by_latest_statuses(pending_statuses).await.unwrap();
+        let not_synced_count = context
+            .repository_manager
+            .get_file_info_repository()
+            .count_files_pending_upload()
+            .await
+            .unwrap();
+        assert_eq!(not_synced_count, 11);
 
-        assert_eq!(log_count, 11);
-
-        let step = crate::cloud_sync::steps::UploadPendingFilesStep;
+        let step = UploadPendingFilesStep;
         let action = step.execute(&mut context).await;
 
         assert_eq!(action, StepAction::Continue);
+        assert!(
+            context
+                .upload_results
+                .get("rom/file1.zst")
+                .unwrap()
+                .cloud_operation_success
+        );
 
-        let upload_result = context.upload_results.get("rom/file1.zst").unwrap();
-
-        assert!(upload_result.cloud_operation_success);
-        assert!(upload_result.db_update_success);
-
-        let log_count = context.repository_manager
-            .get_file_sync_log_repository()
-            .count_logs_by_latest_statuses(pending_statuses).await.unwrap();
-
-        assert_eq!(log_count, 0);
-
+        let not_synced_after = context
+            .repository_manager
+            .get_file_info_repository()
+            .count_files_pending_upload()
+            .await
+            .unwrap();
+        assert_eq!(not_synced_after, 0);
     }
 
     #[async_std::test]
     async fn test_upload_pending_files_step_handles_missing_archive_file_name() {
-        // Arrange: invariant-violating file_info (is_available=true, archive_file_name=None)
-        let mut context = initialize_sync_context().await;
-        let file_info_id =
-            add_invariant_violating_file_info(&context, Sha1Checksum::from([0; 20])).await;
-
-        add_log_entry(
-            &context.repository_manager,
-            file_info_id,
-            FileSyncStatus::UploadPending,
-            "rom/missing_file",
-        )
-        .await;
-        context.files_prepared_for_upload = 1;
-
-        // Act
-        let step = UploadPendingFilesStep;
-        let action = step.execute(&mut context).await;
-
-        // Assert: step does not abort
-        assert_eq!(action, StepAction::Continue);
-
-        // Assert: UploadSkipped was written — not UploadFailed (causes infinite loop since
-        // UploadFailed is in the [UploadPending, UploadFailed] retry query with offset=0)
-        // and not UploadInProgress (stuck terminal state with no recovery path)
-        let logs = context
-            .repository_manager
-            .get_file_sync_log_repository()
-            .get_logs_by_file_info(file_info_id)
-            .await
-            .unwrap();
-        assert_eq!(logs.first().unwrap().status, FileSyncStatus::UploadSkipped);
-
-        // Assert: no actual cloud upload was attempted
-        assert!(context.upload_results.is_empty());
-    }
-
-    #[async_std::test]
-    async fn test_prepare_files_for_upload_step_skips_when_archive_file_name_is_none() {
-        // Arrange: invariant-violating file_info (is_available=true, archive_file_name=None)
+        // Invariant-violating file (is_available=true, archive_file_name=None) must not
+        // cause an infinite loop; the step should break out after one batch with no progress.
         let mut context = initialize_sync_context().await;
         add_invariant_violating_file_info(&context, Sha1Checksum::from([0; 20])).await;
 
-        // Act
-        let step = PrepareFilesForUploadStep;
+        context.files_prepared_for_upload = 1;
+
+        let step = UploadPendingFilesStep;
         let action = step.execute(&mut context).await;
 
-        // Assert: step does not abort
+        // Step must not abort or loop forever
         assert_eq!(action, StepAction::Continue);
-
-        // Assert: no UploadPending log entry was created for the file
-        let pending_files = context
-            .repository_manager
-            .get_file_sync_log_repository()
-            .get_logs_and_file_info_by_sync_status(&[FileSyncStatus::UploadPending], 10, 0)
-            .await
-            .unwrap();
-        assert!(pending_files.is_empty());
+        // No upload was performed
+        assert!(context.upload_results.is_empty());
     }
 
     #[async_std::test]
@@ -986,15 +760,11 @@ mod tests {
             )
             .await
             .unwrap();
+
         context
             .repository_manager
-            .get_file_sync_log_repository()
-            .add_log_entry(
-                file_info_id,
-                FileSyncStatus::DeletionPending,
-                "",
-                "rom/file1.zst",
-            )
+            .get_file_info_repository()
+            .update_cloud_sync_status(file_info_id, CloudSyncStatus::DeletionPending)
             .await
             .unwrap();
 
@@ -1005,6 +775,16 @@ mod tests {
         let deletion_result = context.deletion_results.get("rom/file1.zst").unwrap();
         assert!(deletion_result.cloud_operation_success);
         assert!(deletion_result.db_update_success);
+
+        // file_info must be deleted after successful cloud deletion
+        let res = context
+            .repository_manager
+            .get_file_info_repository()
+            .get_file_info(file_info_id)
+            .await;
+        assert!(res.is_err());
+
+        // DeletionCompleted audit log entry must be written
         let log_entry = context
             .repository_manager
             .get_file_sync_log_repository()
@@ -1033,51 +813,178 @@ mod tests {
             ("file10.zst", [9; 20]),
             ("file11.zst", [10; 20]),
         ];
-        for(file_name, checksum) in test_files.iter() {
-             let file_info_id = context
-             .repository_manager
-             .get_file_info_repository()
-             .add_file_info(
-                 &Sha1Checksum::from(*checksum),
-                 1234,
-                 Some(file_name),
-                 FileType::Rom,
-             )
-             .await
-             .unwrap();
-
-            context.repository_manager
-                .get_file_sync_log_repository()
-                .add_log_entry(
-                    file_info_id,
-                    FileSyncStatus::DeletionPending,
-                    "",
-                    &format!("rom/{}", file_name),
-                )
-                .await
-                .unwrap();
+        for (file_name, checksum) in test_files.iter() {
+            let id = add_file_info(
+                &context.repository_manager,
+                *checksum,
+                file_name,
+                FileType::Rom,
+            )
+            .await;
+            set_sync_status(
+                &context.repository_manager,
+                id,
+                CloudSyncStatus::DeletionPending,
+            )
+            .await;
         }
 
-         let log_count = context.repository_manager
-            .get_file_sync_log_repository()
-            .count_logs_by_latest_statuses(&[FileSyncStatus::DeletionPending]).await.unwrap();
+        let deletion_pending_count = context
+            .repository_manager
+            .get_file_info_repository()
+            .count_files_pending_deletion()
+            .await
+            .unwrap();
+        assert_eq!(deletion_pending_count, 11);
 
-        assert_eq!(log_count, 11);
-        
         context.files_prepared_for_deletion = 11;
         let step = crate::cloud_sync::steps::DeleteMarkedFilesStep;
         let action = step.execute(&mut context).await;
         assert_eq!(action, StepAction::Continue);
-        let deletion_result = context.deletion_results.get("rom/file1.zst").unwrap();
-        assert!(deletion_result.cloud_operation_success);
-        assert!(deletion_result.db_update_success);
+        assert!(
+            context
+                .deletion_results
+                .get("rom/file1.zst")
+                .unwrap()
+                .cloud_operation_success
+        );
 
-         let log_count = context.repository_manager
+        let deletion_pending_after = context
+            .repository_manager
+            .get_file_info_repository()
+            .count_files_pending_deletion()
+            .await
+            .unwrap();
+        assert_eq!(deletion_pending_after, 0);
+    }
+
+    #[async_std::test]
+    async fn test_upload_pending_files_step_upload_failure() {
+        let cloud_ops = Arc::new(MockCloudStorage::new());
+        cloud_ops.fail_upload_for("rom/file1.zst");
+        let mut context = initialize_sync_context_with_cloud(cloud_ops).await;
+
+        let file_info_id = context
+            .repository_manager
+            .get_file_info_repository()
+            .add_file_info(
+                &Sha1Checksum::from([0; 20]),
+                1234,
+                Some("file1.zst"),
+                FileType::Rom,
+            )
+            .await
+            .unwrap();
+
+        context.files_prepared_for_upload = 1;
+        let step = UploadPendingFilesStep;
+        let action = step.execute(&mut context).await;
+
+        assert_eq!(action, StepAction::Continue);
+
+        let upload_result = context.upload_results.get("rom/file1.zst").unwrap();
+        assert!(!upload_result.cloud_operation_success);
+
+        // cloud_sync_status must remain NotSynced for automatic retry next sync
+        let file_info = context
+            .repository_manager
+            .get_file_info_repository()
+            .get_file_info(file_info_id)
+            .await
+            .unwrap();
+        assert_eq!(file_info.cloud_sync_status, CloudSyncStatus::NotSynced);
+
+        // UploadFailed audit log must be written
+        let log_entries = context
+            .repository_manager
             .get_file_sync_log_repository()
-            .count_logs_by_latest_statuses(&[FileSyncStatus::DeletionPending]).await.unwrap();
+            .get_logs_by_file_info(file_info_id)
+            .await
+            .unwrap();
+        assert_eq!(log_entries.first().unwrap().status, FileSyncStatus::UploadFailed);
+    }
 
-        assert_eq!(log_count, 0);
- 
+    #[async_std::test]
+    async fn test_delete_marked_files_step_deletion_failure() {
+        let cloud_ops = Arc::new(MockCloudStorage::new());
+        cloud_ops.fail_delete_for("rom/file1.zst");
+        let mut context = initialize_sync_context_with_cloud(cloud_ops).await;
+
+        let file_info_id = context
+            .repository_manager
+            .get_file_info_repository()
+            .add_file_info(
+                &Sha1Checksum::from([0; 20]),
+                1234,
+                Some("file1.zst"),
+                FileType::Rom,
+            )
+            .await
+            .unwrap();
+
+        context
+            .repository_manager
+            .get_file_info_repository()
+            .update_cloud_sync_status(file_info_id, CloudSyncStatus::DeletionPending)
+            .await
+            .unwrap();
+
+        context.files_prepared_for_deletion = 1;
+        let step = DeleteMarkedFilesStep;
+        let action = step.execute(&mut context).await;
+
+        assert_eq!(action, StepAction::Continue);
+
+        let deletion_result = context.deletion_results.get("rom/file1.zst").unwrap();
+        assert!(!deletion_result.cloud_operation_success);
+
+        // Tombstone file_info must be retained (DeletionPending) for retry next sync
+        let file_info = context
+            .repository_manager
+            .get_file_info_repository()
+            .get_file_info(file_info_id)
+            .await
+            .unwrap();
+        assert_eq!(file_info.cloud_sync_status, CloudSyncStatus::DeletionPending);
+
+        // DeletionFailed audit log must be written
+        let log_entries = context
+            .repository_manager
+            .get_file_sync_log_repository()
+            .get_logs_by_file_info(file_info_id)
+            .await
+            .unwrap();
+        assert_eq!(log_entries.first().unwrap().status, FileSyncStatus::DeletionFailed);
+    }
+
+    async fn add_file_info(
+        repo_manager: &RepositoryManager,
+        checksum: [u8; 20],
+        file_name: &str,
+        file_type: FileType,
+    ) -> i64 {
+        repo_manager
+            .get_file_info_repository()
+            .add_file_info(
+                &Sha1Checksum::from(checksum),
+                1234,
+                Some(file_name),
+                file_type,
+            )
+            .await
+            .unwrap()
+    }
+
+    async fn set_sync_status(
+        repo_manager: &RepositoryManager,
+        file_info_id: i64,
+        status: CloudSyncStatus,
+    ) {
+        repo_manager
+            .get_file_info_repository()
+            .update_cloud_sync_status(file_info_id, status)
+            .await
+            .unwrap();
     }
 
     /// Creates a `file_info` row with `is_available=true` but `archive_file_name=NULL`,
@@ -1100,6 +1007,10 @@ mod tests {
     }
 
     async fn initialize_sync_context() -> SyncContext {
+        initialize_sync_context_with_cloud(Arc::new(MockCloudStorage::new())).await
+    }
+
+    async fn initialize_sync_context_with_cloud(cloud_ops: Arc<MockCloudStorage>) -> SyncContext {
         let pool = Arc::new(setup_test_db().await);
         let repo_manager = Arc::new(RepositoryManager::new(pool));
         let settings = Arc::new(Settings {
@@ -1107,8 +1018,7 @@ mod tests {
             ..Default::default()
         });
 
-        let settings_service = Arc::new(SettingsService::new(repo_manager.clone())); 
-        let cloud_ops = Arc::new(MockCloudStorage::new());
+        let settings_service = Arc::new(SettingsService::new(repo_manager.clone()));
 
         let (tx, _rx) = flume::unbounded();
         let (_cancel_tx, cancel_rx) = flume::unbounded::<()>();
@@ -1127,90 +1037,88 @@ mod tests {
         }
     }
 
-     #[async_std::test]
-     async fn test_upload_progress_messages() {
-         let pool = Arc::new(setup_test_db().await);
-         let repo_manager = Arc::new(RepositoryManager::new(pool));
-         let settings = Arc::new(Settings {
-             collection_root_dir: PathBuf::from("/"),
+    #[async_std::test]
+    async fn test_upload_progress_messages() {
+        let pool = Arc::new(setup_test_db().await);
+        let repo_manager = Arc::new(RepositoryManager::new(pool));
+        let settings = Arc::new(Settings {
+            collection_root_dir: PathBuf::from("/"),
+            ..Default::default()
+        });
+        let cloud_ops = Arc::new(MockCloudStorage::new());
 
-             ..Default::default()
-         });
-         let cloud_ops = Arc::new(MockCloudStorage::new());
-         
-         let (tx, rx) = flume::unbounded();
-         let settings_service = Arc::new(SettingsService::new(repo_manager.clone())); 
-         let (_cancel_tx, cancel_rx) = flume::unbounded::<()>();
-         
-         let mut context = SyncContext {
-             settings,
-             repository_manager: repo_manager,
-             cloud_ops: Some(cloud_ops),
-             progress_tx: tx,
-             files_prepared_for_upload: 0,
-             files_prepared_for_deletion: 0,
-             upload_results: HashMap::new(),
-             deletion_results: HashMap::new(),
-                settings_service,
-                cancel_rx,
-         };
-     
-         let file_info_id = context
-             .repository_manager
-             .get_file_info_repository()
-             .add_file_info(&Sha1Checksum::from([0; 20]), 1234, Some("file1.zst"), FileType::Rom)
-             .await
-             .unwrap();
-     
-         context
-             .repository_manager
-             .get_file_sync_log_repository()
-             .add_log_entry(file_info_id, FileSyncStatus::UploadPending, "", "rom/file1.zst")
-             .await
-             .unwrap();
-     
-         context.files_prepared_for_upload = 1;
-     
-         // Execute step
-         let step = UploadPendingFilesStep;
-         step.execute(&mut context).await;
-     
-         // Collect all messages from receiver
-         let mut messages = Vec::new();
-         while let Ok(msg) = rx.try_recv() {
-             messages.push(msg);
-         }
-     
-         // Assert expected messages
-         assert_eq!(messages.len(), 7);
+        let (tx, rx) = flume::unbounded();
+        let settings_service = Arc::new(SettingsService::new(repo_manager.clone()));
+        let (_cancel_tx, cancel_rx) = flume::unbounded::<()>();
 
-          assert!(matches!(messages[0], SyncEvent::SyncStarted { 
-             total_files_count: 1 
-         }));
-        
-         assert!(matches!(messages[1], SyncEvent::FileUploadStarted { 
-             ref key, file_number: 1, total_files: 1 
-         } if key == "rom/file1.zst"));
+        let mut context = SyncContext {
+            settings,
+            repository_manager: repo_manager,
+            cloud_ops: Some(cloud_ops),
+            progress_tx: tx,
+            files_prepared_for_upload: 0,
+            files_prepared_for_deletion: 0,
+            upload_results: HashMap::new(),
+            deletion_results: HashMap::new(),
+            settings_service,
+            cancel_rx,
+        };
 
-        // by default the mock simulates uploading in 3 parts 
-        assert!(matches!(messages[2], SyncEvent::PartUploaded { 
-             ref key, part: 1 
-         } if key == "rom/file1.zst"));
+        context
+            .repository_manager
+            .get_file_info_repository()
+            .add_file_info(
+                &Sha1Checksum::from([0; 20]),
+                1234,
+                Some("file1.zst"),
+                FileType::Rom,
+            )
+            .await
+            .unwrap();
 
-        assert!(matches!(messages[3], SyncEvent::PartUploaded { 
-             ref key, part: 2 
-         } if key == "rom/file1.zst"));
+        context.files_prepared_for_upload = 1;
 
-        assert!(matches!(messages[4], SyncEvent::PartUploaded { 
-             ref key, part: 3 
-         } if key == "rom/file1.zst"));
+        // Execute step
+        let step = UploadPendingFilesStep;
+        step.execute(&mut context).await;
 
-         assert!(matches!(messages[5], SyncEvent::FileUploadCompleted{ 
-             ref key, file_number: 1, total_files: 1 
-         } if key == "rom/file1.zst"));
+        // Collect all messages from receiver
+        let mut messages = Vec::new();
+        while let Ok(msg) = rx.try_recv() {
+            messages.push(msg);
+        }
+
+        // Assert expected messages
+        assert_eq!(messages.len(), 7);
+
+        assert!(matches!(
+            messages[0],
+            SyncEvent::SyncStarted {
+                total_files_count: 1
+            }
+        ));
+
+        assert!(matches!(messages[1], SyncEvent::FileUploadStarted {
+            ref key, file_number: 1, total_files: 1
+        } if key == "rom/file1.zst"));
+
+        // by default the mock simulates uploading in 3 parts
+        assert!(matches!(messages[2], SyncEvent::PartUploaded {
+            ref key, part: 1
+        } if key == "rom/file1.zst"));
+
+        assert!(matches!(messages[3], SyncEvent::PartUploaded {
+            ref key, part: 2
+        } if key == "rom/file1.zst"));
+
+        assert!(matches!(messages[4], SyncEvent::PartUploaded {
+            ref key, part: 3
+        } if key == "rom/file1.zst"));
+
+        assert!(matches!(messages[5], SyncEvent::FileUploadCompleted {
+            ref key, file_number: 1, total_files: 1
+        } if key == "rom/file1.zst"));
 
         assert!(matches!(messages[6], SyncEvent::SyncCompleted {}));
-     }
+    }
 }
-
-

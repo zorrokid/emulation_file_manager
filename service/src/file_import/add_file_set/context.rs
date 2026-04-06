@@ -426,6 +426,7 @@ mod tests {
             archive_file_name: Some("existing_archive_file".to_string()),
             file_type: FileType::Rom,
             is_available: true,
+            cloud_sync_status: Default::default(),
         });
 
         let result = context.get_files_in_file_set();
@@ -478,6 +479,7 @@ mod tests {
             archive_file_name: Some("existing_archive_file_name".to_string()),
             file_type: FileType::Rom,
             is_available: true,
+            cloud_sync_status: Default::default(),
         });
         // Add a newly imported file
         context.state.imported_files.insert(

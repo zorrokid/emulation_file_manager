@@ -1,6 +1,6 @@
 use std::{collections::HashSet, sync::Arc};
 
-use core_types::{FileSetEqualitySpecs, FileType, ImportedFile, Sha1Checksum, item_type::ItemType};
+use core_types::{CloudSyncStatus, FileSetEqualitySpecs, FileType, ImportedFile, Sha1Checksum, item_type::ItemType};
 use sqlx::{FromRow, Pool, Row, Sqlite, sqlite::SqliteRow};
 
 use crate::{
@@ -93,6 +93,9 @@ impl FromRow<'_, SqliteRow> for FileSetFileInfo {
             .expect("Invalid SHA1 checksum length in DB");
         let file_type: FileType =
             FileType::from_db_int(file_type_int).expect("Invalid file type in DB");
+        let cloud_sync_status_int: u8 = row.try_get("cloud_sync_status")?;
+        let cloud_sync_status = CloudSyncStatus::from_db_int(cloud_sync_status_int)
+            .expect("Invalid cloud_sync_status in DB");
         Ok(Self {
             file_set_id: row.try_get("file_set_id")?,
             file_info_id: row.try_get("file_info_id")?,
@@ -103,6 +106,7 @@ impl FromRow<'_, SqliteRow> for FileSetFileInfo {
             archive_file_name: row.try_get("archive_file_name")?,
             sort_order: row.try_get("sort_order")?,
             is_available: row.try_get("is_available")?,
+            cloud_sync_status,
         })
     }
 }
@@ -642,7 +646,8 @@ impl FileSetRepository {
                 fi.archive_file_name,
                 fi.file_type,
                 fsfi.sort_order,
-                fi.is_available
+                fi.is_available,
+                fi.cloud_sync_status
              FROM file_set_file_info fsfi
              JOIN file_info fi ON fsfi.file_info_id = fi.id
              WHERE fsfi.file_set_id = ?
