@@ -777,7 +777,7 @@ mod tests {
                 "test source",
                 &[ImportedFile {
                     original_file_name: rom_name.to_string(),
-                    archive_file_name: "archive.bin".to_string(),
+                    archive_file_name: Some("archive.bin".to_string()),
                     sha1_checksum: sha1,
                     file_size: 1024,
                     is_available,

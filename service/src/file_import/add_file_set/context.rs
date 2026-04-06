@@ -105,7 +105,7 @@ impl AddFileSetContext {
                 {
                     tracing::warn!(
                      existing_checksum = ?file_info.sha1_checksum,
-                     archive_file_name = %file_info.archive_file_name,
+                     archive_file_name = ?file_info.archive_file_name,
                      selected_files = ?self.input.file_import_data.selected_files,
 
                         "File with checksum in existing files that was not selected for import!",
@@ -148,7 +148,7 @@ impl AddFileSetContext {
                         None => {
                             tracing::warn!(
                                 existing_checksum = ?file_info.sha1_checksum,
-                                archive_file_name = %file_info.archive_file_name,
+                                archive_file_name = ?file_info.archive_file_name,
                                 import_files_checksums = ?import_files.keys().collect::<Vec<_>>(),
                                 "Checksum in selected_files but not in import_files. Possible data inconsistency."
 
@@ -174,8 +174,7 @@ impl AddFileSetContext {
                         original_file_name: file.file_name.clone(),
                         sha1_checksum: file.sha1_checksum,
                         file_size: file.file_size,
-                        // TODO: this should be optional now
-                        archive_file_name: "".to_string(),
+                        archive_file_name: None,
                         is_available: false,
                     }),
             )
@@ -375,7 +374,7 @@ mod tests {
                 original_file_name: "game.rom".to_string(),
                 sha1_checksum: checksum,
                 file_size: 1024,
-                archive_file_name: "archive123.zst".to_string(),
+                archive_file_name: Some("archive123.zst".to_string()),
                 is_available: true,
             },
         );
@@ -383,7 +382,10 @@ mod tests {
         let result = context.get_files_in_file_set();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].original_file_name, "game.rom");
-        assert_eq!(result[0].archive_file_name, "archive123.zst");
+        assert_eq!(
+            result[0].archive_file_name,
+            Some("archive123.zst".to_string())
+        );
     }
 
     #[test]
@@ -421,7 +423,7 @@ mod tests {
             id: 1,
             sha1_checksum: checksum1,
             file_size: 2048,
-            archive_file_name: "existing_archive_file".to_string(),
+            archive_file_name: Some("existing_archive_file".to_string()),
             file_type: FileType::Rom,
             is_available: true,
         });
@@ -433,7 +435,10 @@ mod tests {
             .iter()
             .find(|f| f.original_file_name == "existing_game.rom")
             .unwrap();
-        assert_eq!(existing_file.archive_file_name, "existing_archive_file");
+        assert_eq!(
+            existing_file.archive_file_name,
+            Some("existing_archive_file".to_string())
+        );
         assert_eq!(existing_file.file_size, 2048);
         assert_eq!(existing_file.sha1_checksum, checksum1);
         let not_selected_file = result
@@ -470,7 +475,7 @@ mod tests {
             id: 1,
             sha1_checksum: checksum2,
             file_size: 2048,
-            archive_file_name: "existing_archive_file_name".to_string(),
+            archive_file_name: Some("existing_archive_file_name".to_string()),
             file_type: FileType::Rom,
             is_available: true,
         });
@@ -481,7 +486,7 @@ mod tests {
                 original_file_name: "new_game.rom".to_string(),
                 sha1_checksum: checksum1,
                 file_size: 1024,
-                archive_file_name: "new_archive_file_name".to_string(),
+                archive_file_name: Some("new_archive_file_name".to_string()),
                 is_available: true,
             },
         );
@@ -493,7 +498,10 @@ mod tests {
             .iter()
             .find(|f| f.original_file_name == "new_game.rom")
             .unwrap();
-        assert_eq!(new_file.archive_file_name, "new_archive_file_name");
+        assert_eq!(
+            new_file.archive_file_name,
+            Some("new_archive_file_name".to_string())
+        );
 
         let existing_file = result
             .iter()
@@ -501,7 +509,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             existing_file.archive_file_name,
-            "existing_archive_file_name"
+            Some("existing_archive_file_name".to_string())
         );
     }
 

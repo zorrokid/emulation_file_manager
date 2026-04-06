@@ -974,14 +974,14 @@ mod tests {
                 sha1_checksum: checksum_1,
                 file_size: 123,
                 original_file_name: "test".to_string(),
-                archive_file_name: archive_file_name_1.to_string(),
+                archive_file_name: Some(archive_file_name_1.to_string()),
                 is_available: true,
             },
             ImportedFile {
                 sha1_checksum: checksum_2,
                 file_size: 123,
                 original_file_name: "test2".to_string(),
-                archive_file_name: archive_file_name_2.to_string(),
+                archive_file_name: Some(archive_file_name_2.to_string()),
                 is_available: true,
             },
         ];
@@ -1032,21 +1032,21 @@ mod tests {
                 sha1_checksum: checksum_1,
                 file_size: 123,
                 original_file_name: "file 1".to_string(),
-                archive_file_name: "file_1.zip".to_string(),
+                archive_file_name: Some("file_1.zip".to_string()),
                 is_available: true,
             },
             ImportedFile {
                 sha1_checksum: checksum_2,
                 file_size: 123,
                 original_file_name: "file 2".to_string(),
-                archive_file_name: "file_2.zip".to_string(),
+                archive_file_name: Some("file_2.zip".to_string()),
                 is_available: true,
             },
             ImportedFile {
                 sha1_checksum: checksum_3,
                 file_size: 123,
                 original_file_name: "file 3".to_string(),
-                archive_file_name: "file_3.zip".to_string(),
+                archive_file_name: Some("file_3.zip".to_string()),
                 is_available: true,
             },
         ];
@@ -1336,7 +1336,7 @@ mod tests {
             sha1_checksum: [0; 20],
             file_size: 123,
             original_file_name: "test.rom".to_string(),
-            archive_file_name: "archive_file_name_1".to_string(),
+            archive_file_name: Some("archive_file_name_1".to_string()),
             is_available: true,
         }];
 
@@ -1363,7 +1363,7 @@ mod tests {
             sha1_checksum: [2; 20],
             file_size: 456,
             original_file_name: "test2.rom".to_string(),
-            archive_file_name: "archive_file_name_2".to_string(),
+            archive_file_name: Some("archive_file_name_2".to_string()),
             is_available: true,
         };
 
@@ -1372,7 +1372,7 @@ mod tests {
             .add_file_info(
                 &new_file_info.sha1_checksum,
                 new_file_info.file_size as i64,
-                &new_file_info.archive_file_name,
+                new_file_info.archive_file_name.as_deref(),
                 file_type,
             )
             .await
@@ -1439,7 +1439,7 @@ mod tests {
             sha1_checksum: [0; 20],
             file_size: 123,
             original_file_name: "test.rom".to_string(),
-            archive_file_name: "archive_file_name_1".to_string(),
+            archive_file_name: Some("archive_file_name_1".to_string()),
             is_available: true,
         }];
 
@@ -1466,7 +1466,7 @@ mod tests {
             sha1_checksum: [2; 20],
             file_size: 456,
             original_file_name: "test2.rom".to_string(),
-            archive_file_name: "archive_file_name_2".to_string(),
+            archive_file_name: Some("archive_file_name_2".to_string()),
             is_available: true,
         };
 
@@ -1475,7 +1475,7 @@ mod tests {
             .add_file_info(
                 &new_file_info.sha1_checksum,
                 new_file_info.file_size as i64,
-                &new_file_info.archive_file_name,
+                new_file_info.archive_file_name.as_deref(),
                 file_type,
             )
             .await
@@ -1569,7 +1569,7 @@ mod tests {
             sha1_checksum: [2; 20],
             file_size: 456,
             original_file_name: "test2.rom".to_string(),
-            archive_file_name: "archive_file_name_2".to_string(),
+            archive_file_name: Some("archive_file_name_2".to_string()),
             is_available: true,
         };
 
@@ -1578,7 +1578,7 @@ mod tests {
             .add_file_info(
                 &new_file_info.sha1_checksum,
                 new_file_info.file_size as i64,
-                &new_file_info.archive_file_name,
+                new_file_info.archive_file_name.as_deref(),
                 FileType::Rom,
             )
             .await
@@ -1605,14 +1605,14 @@ mod tests {
                 sha1_checksum: [0; 20],
                 file_size: 123,
                 original_file_name: "test1.rom".to_string(),
-                archive_file_name: "archive_file_name_1".to_string(),
+                archive_file_name: Some("archive_file_name_1".to_string()),
                 is_available: true,
             },
             ImportedFile {
                 sha1_checksum: [1; 20],
                 file_size: 456,
                 original_file_name: "test2.rom".to_string(),
-                archive_file_name: "archive_file_name_2".to_string(),
+                archive_file_name: Some("archive_file_name_2".to_string()),
                 is_available: true,
             },
         ];
@@ -1926,14 +1926,14 @@ mod tests {
                 sha1_checksum: [0; 20],
                 file_size: 123,
                 original_file_name: "test1.rom".to_string(),
-                archive_file_name: "archive_file_name_1".to_string(),
+                archive_file_name: Some("archive_file_name_1".to_string()),
                 is_available: true,
             },
             ImportedFile {
                 sha1_checksum: [1; 20],
                 file_size: 456,
                 original_file_name: "test2.rom".to_string(),
-                archive_file_name: "archive_file_name_2".to_string(),
+                archive_file_name: Some("archive_file_name_2".to_string()),
                 is_available: true,
             },
         ];
@@ -1995,14 +1995,14 @@ mod tests {
                 sha1_checksum: file_1_sha1,
                 file_size: 123,
                 original_file_name: "test1.rom".to_string(),
-                archive_file_name: "archive_file_name_1".to_string(),
+                archive_file_name: Some("archive_file_name_1".to_string()),
                 is_available: true,
             },
             ImportedFile {
                 sha1_checksum: file_2_sha1,
                 file_size: 456,
                 original_file_name: "test2.rom".to_string(),
-                archive_file_name: "archive_file_name_2".to_string(),
+                archive_file_name: Some("archive_file_name_2".to_string()),
                 is_available: false,
             },
         ];
@@ -2065,14 +2065,14 @@ mod tests {
                 sha1_checksum: [0; 20],
                 file_size: 123,
                 original_file_name: "test1.rom".to_string(),
-                archive_file_name: "archive_file_name_1".to_string(),
+                archive_file_name: Some("archive_file_name_1".to_string()),
                 is_available: true,
             },
             ImportedFile {
                 sha1_checksum: [1; 20],
                 file_size: 456,
                 original_file_name: "test2.rom".to_string(),
-                archive_file_name: "archive_file_name_2".to_string(),
+                archive_file_name: Some("archive_file_name_2".to_string()),
                 is_available: true,
             },
         ];

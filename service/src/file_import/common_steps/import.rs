@@ -167,7 +167,7 @@ mod tests {
                 original_file_name: "game.rom".to_string(),
                 sha1_checksum: checksum,
                 file_size: 1024,
-                archive_file_name: "archive123.zst".to_string(),
+                archive_file_name: Some("archive123.zst".to_string()),
                 is_available: true,
             },
         );
@@ -199,7 +199,7 @@ mod tests {
         assert!(context.imported_files.contains_key(&checksum));
         let imported = context.imported_files.get(&checksum).unwrap();
         assert_eq!(imported.original_file_name, "game.rom");
-        assert_eq!(imported.archive_file_name, "archive123.zst");
+        assert_eq!(imported.archive_file_name, Some("archive123.zst".to_string()));
     }
 
     #[async_std::test]

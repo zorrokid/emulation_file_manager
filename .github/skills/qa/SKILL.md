@@ -23,16 +23,27 @@ Your three modes:
 
 In all modes, **proactively surface testability issues** — code that is hard to test is usually a sign of a design problem.
 
+## Role in Spec-Driven Workflow
+
+This skill is invoked at two phases:
+- **Phase 4 — QA / Test Coverage Review**: Analyse the completed implementation against the acceptance criteria in `specs/<N>-feature.md`. Read the tasks file (`specs/<N>-feature-tasks.md`) to understand what was implemented, then identify missing or insufficient tests. Produce a concrete list of test cases with names and assertions.
+- **Phase 5 — Test Implementation**: Write the tests identified in Phase 4. Always show the full test code for user review before writing any files.
+
 ---
 
 ## Test Infrastructure
 
 ### Runtime
 
-Tests currently use **async-std**. A migration to Tokio is in progress; until it is complete, new tests follow the existing convention in the crate being modified:
+The project uses **async-std** as its primary runtime. A migration to Tokio is in progress — when writing tests, follow the convention already established in the crate being modified:
 
 ```rust
+// async-std crates (default)
 #[async_std::test]
+async fn test_something() { ... }
+
+// tokio crates (if the crate has already migrated)
+#[tokio::test]
 async fn test_something() { ... }
 ```
 
@@ -41,13 +52,12 @@ async fn test_something() { ... }
 Always use the real in-memory SQLite database — never mock the database layer:
 
 ```rust
-use database::{setup_test_db, setup_test_repository_manager};
+use database::setup_test_repository_manager;
 
-let db = setup_test_db().await;
-let repo_manager = Arc::new(setup_test_repository_manager(&db).await);
+let repo_manager = setup_test_repository_manager().await;
 ```
 
-`setup_test_db()` runs all migrations automatically. Tests are fast (<100 ms) because SQLite runs in-memory.
+`setup_test_repository_manager()` internally calls `setup_test_db()`, runs all migrations automatically, and returns an `Arc<RepositoryManager>`. Tests are fast (<100 ms) because SQLite runs in-memory.
 
 ### Running Tests
 
@@ -193,8 +203,7 @@ Study these mocks before writing new ones:
 #[async_std::test]
 async fn test_create_file_set_success() {
     // Arrange
-    let db = setup_test_db().await;
-    let repos = Arc::new(setup_test_repository_manager(&db).await);
+    let repos = setup_test_repository_manager().await;
     let mock_import = Arc::new(MockFileImportOps::new());
     let params = CreateFileSetParams { ... };
 

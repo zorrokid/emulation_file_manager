@@ -120,7 +120,7 @@ impl FileImportServiceOps for MockFileImportServiceOps {
                     .flat_map(|f| {
                         f.content.values().map(|c| ImportedFile {
                             original_file_name: c.file_name.clone(),
-                            archive_file_name: generate_random_uuid(),
+                            archive_file_name: Some(generate_random_uuid()),
                             sha1_checksum: c.sha1_checksum,
                             file_size: c.file_size,
                             is_available: true,
@@ -159,7 +159,7 @@ impl FileImportServiceOps for MockFileImportServiceOps {
                     .flat_map(|f| {
                         f.content.values().map(|c| ImportedFile {
                             original_file_name: c.file_name.clone(),
-                            archive_file_name: generate_random_uuid(),
+                            archive_file_name: Some(generate_random_uuid()),
                             sha1_checksum: c.sha1_checksum,
                             file_size: c.file_size,
                             is_available: true,

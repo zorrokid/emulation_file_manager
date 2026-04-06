@@ -265,7 +265,7 @@ mod tests {
                 &source,
                 &[ImportedFile {
                     original_file_name: "test_rom.bin".to_string(),
-                    archive_file_name: "test_rom.bin".to_string(),
+                    archive_file_name: Some("test_rom.bin".to_string()),
                     file_size: 1024,
                     sha1_checksum: sha1_from_hex_string(&game.roms[0].sha1).unwrap(),
                     is_available: true,
@@ -362,7 +362,7 @@ mod tests {
                 &source,
                 &[ImportedFile {
                     original_file_name: "test_rom.bin".to_string(),
-                    archive_file_name: "test_rom.bin".to_string(),
+                    archive_file_name: Some("test_rom.bin".to_string()),
                     file_size: 1024,
                     sha1_checksum: sha1_from_hex_string(&game.roms[0].sha1).unwrap(),
                     is_available: true,

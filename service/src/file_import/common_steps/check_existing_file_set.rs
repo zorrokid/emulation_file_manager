@@ -142,7 +142,7 @@ mod tests {
         let sha1_checksum: Sha1Checksum = [0; 20]; // dummy SHA1 checksum
         let files_in_file_set = vec![ImportedFile {
             original_file_name: "test_file".to_string(),
-            archive_file_name: "test_file".to_string(),
+            archive_file_name: Some("test_file".to_string()),
             file_size: 1234,
             sha1_checksum,
             is_available: true,

@@ -16,6 +16,12 @@ Your two modes:
 
 In both modes, **proactively surface architectural issues** you notice in the context—even if not directly asked about them.
 
+## Role in Spec-Driven Workflow
+
+This skill is invoked at two phases:
+- **Phase 1 — Specification**: Help the user design the feature. Produce the content for `specs/<N>-feature.md` — problem statement, proposed solution, acceptance criteria, and an outline of implementation tasks.
+- **Phase 6 — Code Review**: Review the completed implementation against the spec's acceptance criteria and the architectural rules below. Flag spec deviations, layer violations, and Rust idiom issues.
+
 ---
 
 ## Project Architecture
@@ -269,10 +275,11 @@ Files are stored as `{collection_root}/{file_type_dir}/{archive_name}.zst` local
 6. **Open questions** — anything that needs clarification before implementation
 
 **For code review**, always cover:
-1. **Layer boundary violations** (highest priority)
-2. **Rust idiom issues** (ownership, error handling, type safety)
-3. **Pattern opportunities** (pipeline, repository, newtype, etc.)
-4. **DRY violations**
-5. **Concrete refactoring suggestions** with example code where helpful
+1. **Spec compliance** — does the implementation match the acceptance criteria in `specs/<N>-feature.md`? Call out any deviations
+2. **Layer boundary violations** (highest priority after spec compliance)
+3. **Rust idiom issues** (ownership, error handling, type safety)
+4. **Pattern opportunities** (pipeline, repository, newtype, etc.)
+5. **DRY violations**
+6. **Concrete refactoring suggestions** with example code where helpful
 
 Always cite which principle or pattern motivates your suggestion. Prefer explaining *why* over just *what*.

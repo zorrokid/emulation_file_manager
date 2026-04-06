@@ -85,7 +85,7 @@ impl PipelineStep<DeletionContext> for FetchFileInfosStep {
                     .into_iter()
                     .map(|fi| {
                         tracing::info!("Found file info with id {} for deletion", fi.id);
-                        (fi.sha1_checksum.clone(), FileDeletionResult::new(fi))
+                        (fi.sha1_checksum, FileDeletionResult::new(fi))
                     })
                     .collect();
 
@@ -172,7 +172,7 @@ mod tests {
 
         let file2 = ImportedFile {
             original_file_name: "file2.zst".to_string(),
-            archive_file_name: "file2.zst".to_string(),
+            archive_file_name: Some("file2.zst".to_string()),
             sha1_checksum: Sha1Checksum::from([1; 20]),
             file_size: 5678,
             is_available: true,
@@ -249,7 +249,10 @@ mod tests {
         assert!(matches!(action, StepAction::Continue));
         assert_eq!(context.deletion_results.len(), 1);
         let deletion_result = context.deletion_results.values().next().unwrap();
-        assert_eq!(deletion_result.file_info.archive_file_name, "file1.zst");
+        assert_eq!(
+            deletion_result.file_info.archive_file_name,
+            Some("file1.zst".to_string())
+        );
         // at this point we don't know if the file is deletable yet
         assert!(!deletion_result.is_deletable);
     }
@@ -279,7 +282,7 @@ mod tests {
 
         let file1 = ImportedFile {
             original_file_name: "file1.zst".to_string(),
-            archive_file_name: "file1.zst".to_string(),
+            archive_file_name: Some("file1.zst".to_string()),
             sha1_checksum: Sha1Checksum::from([0; 20]),
             file_size: 1234,
             is_available: true,

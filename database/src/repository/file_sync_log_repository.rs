@@ -376,8 +376,8 @@ mod tests {
 
         repository
             .mark_files_for_cloud_sync(&[
-                (file_info_id_1, file_info_1.generate_cloud_key()),
-                (file_info_id_2, file_info_2.generate_cloud_key()),
+                (file_info_id_1, file_info_1.generate_cloud_key().unwrap()),
+                (file_info_id_2, file_info_2.generate_cloud_key().unwrap()),
             ])
             .await
             .unwrap();

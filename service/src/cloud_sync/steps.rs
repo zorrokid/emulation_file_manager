@@ -44,7 +44,13 @@ impl PipelineStep<SyncContext> for PrepareFilesForUploadStep {
                     }
                     offset += file_infos.len() as i64;
                     for file_info in &file_infos {
-                        let cloud_key = file_info.generate_cloud_key();
+                        let Some(cloud_key) = file_info.generate_cloud_key() else {
+                            tracing::warn!(
+                                file_info_id = file_info.id,
+                                "File is marked as available but has no archive file name, skipping cloud sync log entry"
+                            );
+                            continue;
+                        };
                         tracing::debug!(
                             file_info_id = file_info.id,
                             cloud_key = %cloud_key,
@@ -57,7 +63,7 @@ impl PipelineStep<SyncContext> for PrepareFilesForUploadStep {
                                 file_info.id,
                                 FileSyncStatus::UploadPending,
                                 "",
-                                cloud_key.as_str(),
+                                &cloud_key,
                             )
                             .await;
                         if let Err(e) = update_res {
@@ -264,9 +270,32 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                             continue;
                         }
 
+                        let Some(archive_name) = &file.archive_file_name else {
+                            // Invariant violation: is_available=true but archive_file_name=None.
+                            // Write UploadSkipped (not UploadFailed) — UploadFailed is in the
+                            // [UploadPending, UploadFailed] retry query with offset=0, which
+                            // would cause an infinite loop.
+                            tracing::warn!(
+                                file_info_id = file.file_info_id,
+                                cloud_key = %file.cloud_key,
+                                "File is marked as available but has no archive file name; \
+                                 writing UploadSkipped to avoid leaving UploadInProgress as terminal state"
+                            );
+                            let _ = context
+                                .repository_manager
+                                .get_file_sync_log_repository()
+                                .add_log_entry(
+                                    file.file_info_id,
+                                    FileSyncStatus::UploadSkipped,
+                                    "missing archive_file_name",
+                                    &file.cloud_key,
+                                )
+                                .await;
+                            continue;
+                        };
                         let local_path = context
                             .settings
-                            .get_file_path(&file.file_type, &file.archive_file_name);
+                            .get_file_path(&file.file_type, archive_name);
 
                         tracing::debug!(
                             file_info_id = file.file_info_id,
@@ -666,7 +695,7 @@ mod tests {
             .add_file_info(
                 &Sha1Checksum::from([0; 20]),
                 1234,
-                "file1.zst",
+                Some("file1.zst"),
                 FileType::Rom,
             )
             .await
@@ -689,7 +718,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(file_infos_res.len(), 1);
-        assert_eq!(file_infos_res[0].archive_file_name, "file1.zst");
+        assert_eq!(file_infos_res[0].archive_file_name, Some("file1.zst".to_string()));
 
         let step = PrepareFilesForUploadStep;
         let action = step.execute(&mut context).await;
@@ -712,7 +741,7 @@ mod tests {
 
         assert_eq!(
             pending_files_to_upload_result[0].archive_file_name,
-            "file1.zst"
+            Some("file1.zst".to_string())
         );
 
         assert_eq!(file_infos_res.len(), 0);
@@ -746,7 +775,7 @@ mod tests {
     async fn add_file_info(repo_manager: &RepositoryManager, checksum: [u8; 20], file_name: &str, file_type: FileType) -> i64 {
         repo_manager
             .get_file_info_repository()
-            .add_file_info(&Sha1Checksum::from(checksum), 1234, file_name, file_type)
+            .add_file_info(&Sha1Checksum::from(checksum), 1234, Some(file_name), file_type)
             .await
             .unwrap()
     }
@@ -769,7 +798,7 @@ mod tests {
             .add_file_info(
                 &Sha1Checksum::from([0; 20]),
                 1234,
-                "file1.zst",
+                Some("file1.zst"),
                 FileType::Rom,
             )
             .await
@@ -838,7 +867,7 @@ mod tests {
              .add_file_info(
                  &Sha1Checksum::from(*checksum),
                  1234,
-                 file_name,
+                 Some(file_name),
                  FileType::Rom,
              )
              .await
@@ -883,6 +912,67 @@ mod tests {
     }
 
     #[async_std::test]
+    async fn test_upload_pending_files_step_handles_missing_archive_file_name() {
+        // Arrange: invariant-violating file_info (is_available=true, archive_file_name=None)
+        let mut context = initialize_sync_context().await;
+        let file_info_id =
+            add_invariant_violating_file_info(&context, Sha1Checksum::from([0; 20])).await;
+
+        add_log_entry(
+            &context.repository_manager,
+            file_info_id,
+            FileSyncStatus::UploadPending,
+            "rom/missing_file",
+        )
+        .await;
+        context.files_prepared_for_upload = 1;
+
+        // Act
+        let step = UploadPendingFilesStep;
+        let action = step.execute(&mut context).await;
+
+        // Assert: step does not abort
+        assert_eq!(action, StepAction::Continue);
+
+        // Assert: UploadSkipped was written — not UploadFailed (causes infinite loop since
+        // UploadFailed is in the [UploadPending, UploadFailed] retry query with offset=0)
+        // and not UploadInProgress (stuck terminal state with no recovery path)
+        let logs = context
+            .repository_manager
+            .get_file_sync_log_repository()
+            .get_logs_by_file_info(file_info_id)
+            .await
+            .unwrap();
+        assert_eq!(logs.first().unwrap().status, FileSyncStatus::UploadSkipped);
+
+        // Assert: no actual cloud upload was attempted
+        assert!(context.upload_results.is_empty());
+    }
+
+    #[async_std::test]
+    async fn test_prepare_files_for_upload_step_skips_when_archive_file_name_is_none() {
+        // Arrange: invariant-violating file_info (is_available=true, archive_file_name=None)
+        let mut context = initialize_sync_context().await;
+        add_invariant_violating_file_info(&context, Sha1Checksum::from([0; 20])).await;
+
+        // Act
+        let step = PrepareFilesForUploadStep;
+        let action = step.execute(&mut context).await;
+
+        // Assert: step does not abort
+        assert_eq!(action, StepAction::Continue);
+
+        // Assert: no UploadPending log entry was created for the file
+        let pending_files = context
+            .repository_manager
+            .get_file_sync_log_repository()
+            .get_logs_and_file_info_by_sync_status(&[FileSyncStatus::UploadPending], 10, 0)
+            .await
+            .unwrap();
+        assert!(pending_files.is_empty());
+    }
+
+    #[async_std::test]
     async fn test_delete_marked_files_step() {
         let mut context = initialize_sync_context().await;
         let file_info_id = context
@@ -891,7 +981,7 @@ mod tests {
             .add_file_info(
                 &Sha1Checksum::from([0; 20]),
                 1234,
-                "file1.zst",
+                Some("file1.zst"),
                 FileType::Rom,
             )
             .await
@@ -950,7 +1040,7 @@ mod tests {
              .add_file_info(
                  &Sha1Checksum::from(*checksum),
                  1234,
-                 file_name,
+                 Some(file_name),
                  FileType::Rom,
              )
              .await
@@ -988,6 +1078,25 @@ mod tests {
 
         assert_eq!(log_count, 0);
  
+    }
+
+    /// Creates a `file_info` row with `is_available=true` but `archive_file_name=NULL`,
+    /// which is the invariant violation exercised by several guard branches.
+    async fn add_invariant_violating_file_info(
+        context: &SyncContext,
+        checksum: Sha1Checksum,
+    ) -> i64 {
+        let repo = &context.repository_manager;
+        let id = repo
+            .get_file_info_repository()
+            .add_file_info(&checksum, 1234, None, FileType::Rom)
+            .await
+            .unwrap();
+        repo.get_file_info_repository()
+            .update_is_available(id, None)
+            .await
+            .unwrap();
+        id
     }
 
     async fn initialize_sync_context() -> SyncContext {
@@ -1049,7 +1158,7 @@ mod tests {
          let file_info_id = context
              .repository_manager
              .get_file_info_repository()
-             .add_file_info(&Sha1Checksum::from([0; 20]), 1234, "file1.zst", FileType::Rom)
+             .add_file_info(&Sha1Checksum::from([0; 20]), 1234, Some("file1.zst"), FileType::Rom)
              .await
              .unwrap();
      

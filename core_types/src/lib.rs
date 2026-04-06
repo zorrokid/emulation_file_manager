@@ -72,7 +72,7 @@ impl std::fmt::Display for DocumentType {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ImportedFile {
     pub original_file_name: String,
-    pub archive_file_name: String,
+    pub archive_file_name: Option<String>,
     pub sha1_checksum: Sha1Checksum,
     pub file_size: FileSize,
     /// When importing with DAT files, some of the files described in the DAT may not be available
@@ -299,7 +299,6 @@ impl SettingName {
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
-#[repr(u8)]
 pub enum FileSyncStatus {
     UploadPending,
     UploadInProgress,
@@ -309,11 +308,26 @@ pub enum FileSyncStatus {
     DeletionInProgress,
     DeletionCompleted,
     DeletionFailed,
+    /// Written when a file passes the `is_available` filter but has no `archive_file_name`,
+    /// violating the invariant `is_available = true ↔ archive_file_name = Some(...)`.
+    /// Using a dedicated status (rather than `UploadFailed`) avoids an infinite retry loop,
+    /// since `UploadFailed` is included in the `[UploadPending, UploadFailed]` retry query.
+    UploadSkipped,
 }
 
 impl FileSyncStatus {
     pub fn to_db_int(&self) -> u8 {
-        *self as u8
+        match self {
+            FileSyncStatus::UploadPending => 0,
+            FileSyncStatus::UploadInProgress => 1,
+            FileSyncStatus::UploadCompleted => 2,
+            FileSyncStatus::UploadFailed => 3,
+            FileSyncStatus::DeletionPending => 4,
+            FileSyncStatus::DeletionInProgress => 5,
+            FileSyncStatus::DeletionCompleted => 6,
+            FileSyncStatus::DeletionFailed => 7,
+            FileSyncStatus::UploadSkipped => 8,
+        }
     }
 
     pub fn from_db_int(value: u8) -> Result<Self, CoreTypeError> {
@@ -326,6 +340,7 @@ impl FileSyncStatus {
             5 => Ok(FileSyncStatus::DeletionInProgress),
             6 => Ok(FileSyncStatus::DeletionCompleted),
             7 => Ok(FileSyncStatus::DeletionFailed),
+            8 => Ok(FileSyncStatus::UploadSkipped),
             _ => Err(CoreTypeError::ConversionError(
                 "Failed convert to FileSyncStatus".to_string(),
             )),

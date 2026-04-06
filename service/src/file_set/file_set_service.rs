@@ -179,14 +179,14 @@ mod tests {
         let files_in_fileset: Vec<ImportedFile> = vec![
             ImportedFile {
                 original_file_name: "test_file_1.rom".to_string(),
-                archive_file_name: "archive_file_name".to_string(),
+                archive_file_name: Some("archive_file_name".to_string()),
                 sha1_checksum: file_1_sha1,
                 file_size: 1024,
                 is_available: true,
             },
             ImportedFile {
                 original_file_name: "test_file_2.rom".to_string(),
-                archive_file_name: "archive_file_name_2".to_string(),
+                archive_file_name: Some("archive_file_name_2".to_string()),
                 sha1_checksum: file_2_sha1,
                 file_size: 2048,
                 is_available: true,
@@ -245,7 +245,7 @@ mod tests {
         let file_1_sha1: Sha1Checksum = [0u8; 20];
         let files_in_fileset: Vec<ImportedFile> = vec![ImportedFile {
             original_file_name: "test_file_1.rom".to_string(),
-            archive_file_name: "archive_file_name".to_string(),
+            archive_file_name: Some("archive_file_name".to_string()),
             sha1_checksum: file_1_sha1,
             file_size: 1024,
             is_available: true,

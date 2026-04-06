@@ -234,7 +234,7 @@ pub struct FileSetFileInfoViewModel {
     pub file_name: String,
     pub sha1_checksum: Sha1Checksum,
     pub file_size: FileSize,
-    pub archive_file_name: String,
+    pub archive_file_name: Option<String>,
     pub file_type: FileType,
 }
 
@@ -270,7 +270,7 @@ pub struct FileInfoViewModel {
     pub id: i64,
     pub sha1_checksum: Sha1Checksum,
     pub file_size: u64,
-    pub archive_file_name: String,
+    pub archive_file_name: Option<String>,
     pub belongs_to_file_sets: Vec<FileSetListModel>,
 }
 
