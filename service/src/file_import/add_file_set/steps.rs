@@ -445,8 +445,8 @@ mod tests {
     #[async_std::test]
     async fn test_create_file_set_database_step_cleanup_skips_when_archive_file_name_missing() {
         // Arrange: trigger a real DB failure via a non-existent system_id (FK constraint violation).
-        // The imported file has is_available=true with archive_file_name=None — an invariant
-        // violation. The cleanup path should warn and skip it rather than attempt FS deletion.
+        // The imported file has archive_file_name = None — simulates a file without archive content.
+        // The cleanup path should warn and skip it rather than attempt FS deletion.
         let fs_ops = Arc::new(MockFileSystemOps::new());
         let checksum: Sha1Checksum = [1u8; 20];
 

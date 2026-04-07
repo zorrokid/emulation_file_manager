@@ -567,9 +567,9 @@ mod tests {
 
     #[async_std::test]
     async fn test_prepare_file_for_download_step_skips_missing_archive_file_name() {
-        // Arrange: file set with invariant-violating file_info (is_available=true, archive_file_name=None)
+        // Arrange: file set where archive_file_name has been cleared (unavailable file)
         let (mut context, _) = initialize_context(false).await;
-        setup_invariant_violating_file_set(&mut context, "original.zst", &FileType::Rom).await;
+        setup_file_set_with_missing_archive(&mut context, "original.zst", &FileType::Rom).await;
 
         // Act
         let step = PrepareFileForDownloadStep;
@@ -585,7 +585,7 @@ mod tests {
     async fn test_download_files_step_skips_missing_archive_file_name() {
         // Arrange: file with archive_file_name=None should be excluded from the download pipeline
         let (mut context, _) = initialize_context(false).await;
-        setup_invariant_violating_file_set(&mut context, "original.zst", &FileType::Rom).await;
+        setup_file_set_with_missing_archive(&mut context, "original.zst", &FileType::Rom).await;
 
         // PrepareFileForDownloadStep skips the file, leaving files_to_download empty
         PrepareFileForDownloadStep.execute(&mut context).await;
@@ -953,10 +953,10 @@ mod tests {
             .unwrap()
     }
 
-    /// Creates a file set with one file, forces the invariant violation (is_available=true,
-    /// archive_file_name=NULL), then loads the file set and its files into `context`.
+    /// Creates a file set with one file, clears its `archive_file_name` (making it unavailable),
+    /// then loads the file set and its files into `context`.
     /// Returns the `file_info_id` of the affected file.
-    async fn setup_invariant_violating_file_set(
+    async fn setup_file_set_with_missing_archive(
         context: &mut DownloadContext,
         archive_file_name: &str,
         file_type: &FileType,

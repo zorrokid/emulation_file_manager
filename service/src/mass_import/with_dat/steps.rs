@@ -231,7 +231,7 @@ impl PipelineStep<DatFileMassImportContext> for CategorizeFileSetsForImportStep 
         // DAT file must be parsed and stored before we can categorise games.
         // file_metadata is intentionally NOT required here: even when the source
         // directory is empty (no local files), we still categorise all DAT games
-        // so that placeholder file sets with is_available=false can be created.
+        // so that placeholder file sets with no archive file (`archive_file_name = NULL`) can be created.
         context.state.dat_file.is_some() && context.state.dat_file_id.is_some()
     }
 
@@ -945,7 +945,7 @@ mod tests {
     async fn test_categorize_file_sets_for_import_step_executes_when_file_metadata_empty() {
         // Verifies that empty file_metadata does NOT skip categorisation — this is intentional:
         // even with no local files we still need to categorise DAT games so that placeholder
-        // file sets with is_available=false can be created.
+        // file sets with no archive file (`archive_file_name = NULL`) can be created.
         let deps = get_deps().await;
         let (system_id, dat_file_db_id) =
             setup_system_and_dat_file(&deps.repository_manager, 10).await;
