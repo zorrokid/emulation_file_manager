@@ -126,7 +126,7 @@ impl PipelineStep<FileTypeMigrationContext> for MoveLocalFilesStep {
 
             match files {
                 Ok(files) => {
-                    for file in files.iter().filter(|f| f.is_available) {
+                    for file in files.iter().filter(|f| f.is_available()) {
                         if context.moved_local_file_ids.contains(&file.id) {
                             continue;
                         }
@@ -137,14 +137,8 @@ impl PipelineStep<FileTypeMigrationContext> for MoveLocalFilesStep {
                             "Moving local file to new location based on new file type"
                         );
 
-                        let Some(archive_name) = &file.archive_file_name else {
-                            tracing::warn!(
-                                file_id = file.id,
-                                "File is marked as available but has no archive file name, skipping local file move"
-                            );
-                            context.non_existing_local_file_ids.insert(file.id);
-                            continue;
-                        };
+                        let archive_name = file.archive_file_name.as_ref()
+                            .expect("archive_file_name must be present when is_available() is true");
                         let old_path = context
                             .settings
                             .get_file_path(&file_type_migration.old_file_type, archive_name);
@@ -284,7 +278,6 @@ impl PipelineStep<FileTypeMigrationContext> for MoveCloudFilesStep {
                             file_size: file.file_size,
                             archive_file_name: file.archive_file_name.clone(),
                             file_type: file_type_migration.new_file_type,
-                            is_available: file.is_available,
                             cloud_sync_status: file.cloud_sync_status,
                         };
 
@@ -626,9 +619,9 @@ mod tests {
             .unwrap()
     }
 
-    /// Forces the invariant violation `is_available=true, archive_file_name=NULL` on the first
-    /// file_info of the given file set. Returns the `file_info_id`.
-    async fn force_invariant_violation(
+    /// Clears the `archive_file_name` on the first file_info of the given file set.
+    /// Returns the `file_info_id`.
+    async fn clear_archive_file_name(
         repository_manager: &RepositoryManager,
         file_set_id: i64,
     ) -> i64 {
@@ -640,7 +633,7 @@ mod tests {
             .id;
         repository_manager
             .get_file_info_repository()
-            .update_is_available(file_info_id, None)
+            .set_archive_file_name(file_info_id, None)
             .await
             .unwrap();
         file_info_id
@@ -659,7 +652,6 @@ mod tests {
             file_size: 1234,
             archive_file_name,
             original_file_name: "original_test_file.rom".to_string(),
-            is_available: true,
         };
 
         repository_manager
@@ -853,14 +845,12 @@ mod tests {
                         file_size: 1234,
                         archive_file_name: Some(available_archive_name.clone()),
                         original_file_name: "available.rom".to_string(),
-                        is_available: true,
                     },
                     ImportedFile {
                         sha1_checksum: Sha1Checksum::from([1; 20]),
                         file_size: 1234,
                         archive_file_name: None,
                         original_file_name: "missing.rom".to_string(),
-                        is_available: false,
                     },
                 ],
                 &[system_id],
@@ -873,8 +863,8 @@ mod tests {
             .get_file_infos_by_file_set(file_set_id)
             .await
             .unwrap();
-        let available_id = file_infos.iter().find(|f| f.is_available).unwrap().id;
-        let unavailable_id = file_infos.iter().find(|f| !f.is_available).unwrap().id;
+        let available_id = file_infos.iter().find(|f| f.is_available()).unwrap().id;
+        let unavailable_id = file_infos.iter().find(|f| !f.is_available()).unwrap().id;
 
         context.file_sets_to_migrate.insert(
             file_set_id,
@@ -900,43 +890,6 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn test_move_local_files_step_warns_when_archive_file_name_is_none() {
-        // Arrange: invariant-violating file (is_available=true, archive_file_name=None)
-        let mut context = setup_test_context(None).await;
-        let repository_manager = context.repository_manager.clone();
-
-        let file_set_id = insert_test_file_set(
-            &repository_manager,
-            &FileType::ManualScan,
-            Sha1Checksum::from([0; 20]),
-            Some("original.zst".to_string()),
-        )
-        .await;
-
-        let file_info_id = force_invariant_violation(&repository_manager, file_set_id).await;
-
-        context.file_sets_to_migrate.insert(
-            file_set_id,
-            FileTypeMigration {
-                old_file_type: FileType::ManualScan,
-                new_file_type: FileType::Scan,
-                item_type: None,
-            },
-        );
-
-        // Act
-        let step = MoveLocalFilesStep;
-        let action = step.execute(&mut context).await;
-
-        // Assert: step continues, file recorded as non-existing (not moved)
-        assert!(matches!(action, StepAction::Continue));
-        assert!(context.non_existing_local_file_ids.contains(&file_info_id),
-            "file with missing archive_file_name should be in non_existing_local_file_ids");
-        assert!(!context.moved_local_file_ids.contains(&file_info_id),
-            "file with missing archive_file_name should not be moved");
-    }
-
-    #[async_std::test]
     async fn test_move_cloud_files_step() {
         let mut context = setup_test_context(None).await;
         let repository_manager = context.repository_manager.clone();
@@ -950,7 +903,6 @@ mod tests {
             file_size: 1234,
             archive_file_name: archive_file_name.clone(),
             file_type: FileType::ManualScan, // to be migrated to FileType::Scan
-            is_available: true,
             cloud_sync_status: Default::default(),
         };
 
@@ -1004,7 +956,6 @@ mod tests {
             file_size: file_info.file_size,
             archive_file_name: file_info.archive_file_name.clone(),
             file_type: FileType::Scan,
-            is_available: file_info.is_available,
             cloud_sync_status: file_info.cloud_sync_status,
         };
 
@@ -1015,7 +966,7 @@ mod tests {
 
     #[async_std::test]
     async fn test_move_cloud_files_step_skips_when_archive_file_name_is_none() {
-        // Arrange: invariant-violating file (is_available=true, archive_file_name=None)
+        // Arrange: file with no archive_file_name (unavailable file in cloud sync context)
         let mut context = setup_test_context(None).await;
         let repository_manager = context.repository_manager.clone();
 
@@ -1027,7 +978,7 @@ mod tests {
         )
         .await;
 
-        let file_info_id = force_invariant_violation(&repository_manager, file_set_id).await;
+        let file_info_id = clear_archive_file_name(&repository_manager, file_set_id).await;
 
         let cloud_ops = Arc::new(MockCloudStorage::new());
         context.cloud_ops = Some(cloud_ops.clone());

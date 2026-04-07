@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE file_info SET archive_file_name = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "7a71eebf47bf9721a9d5d588bcf6513a383c1a5ca351f0163353f9c1e274a8cf"
+}

@@ -937,7 +937,6 @@ mod tests {
             archive_file_name: Some(archive_file_name.to_string()),
             sha1_checksum: Sha1Checksum::from([1; 20]),
             file_size: 5678,
-            is_available: true,
         };
 
         repo_manager
@@ -972,7 +971,7 @@ mod tests {
             .unwrap();
         let file_info_id = file_infos[0].file_info_id;
         repo.get_file_info_repository()
-            .update_is_available(file_info_id, None)
+            .set_archive_file_name(file_info_id, None)
             .await
             .unwrap();
 

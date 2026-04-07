@@ -128,7 +128,7 @@ impl FileImportData {
                         if self.selected_files.contains(sha1_checksum)
                             && !existing_files
                                 .iter()
-                                .any(|f| f.sha1_checksum == *sha1_checksum && f.is_available)
+                                .any(|f| f.sha1_checksum == *sha1_checksum && f.is_available())
                         {
                             Some(import_content.file_name.clone())
                         } else {
@@ -269,7 +269,6 @@ mod tests {
             file_size: 2048,
             file_type: FileType::Rom,
             archive_file_name: Some("archive_file_name".to_string()),
-            is_available: true,
             cloud_sync_status: Default::default(),
         }];
 
@@ -341,7 +340,6 @@ mod tests {
             file_size: 1024,
             file_type: FileType::Rom,
             archive_file_name: Some("archive_file_name".to_string()),
-            is_available: true,
             cloud_sync_status: Default::default(),
         }];
         let model: FileImportModel = file_import_data.get_file_import_model(&existing_files);

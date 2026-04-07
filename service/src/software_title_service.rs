@@ -190,7 +190,6 @@ mod tests {
             archive_file_name: Some("test.rom".to_string()),
             file_size: 1024,
             sha1_checksum: file_sha1,
-            is_available: true,
         };
 
         let file_set_id = repository_manager
