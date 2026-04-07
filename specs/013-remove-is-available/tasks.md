@@ -69,6 +69,17 @@
 
 ---
 
+## Phase 5 — Test Implementation (QA findings)
+
+### High
+
+- [x] T18 — Add tests for `set_archive_file_name` (no existing coverage)
+- [x] T19 — Add unit tests for `is_available()` on `FileInfo` and `ImportedFile`
+- [x] T20 — Add `test_count_files_pending_upload_excludes_unavailable_files`
+- [x] T21 — Add `test_file_sync_status_from_db_int_8_returns_error`
+
+---
+
 ## Manual Verification Checklist
 
 - [ ] Import a file set — verify in DB: `SELECT archive_file_name FROM file_info` shows NULL for missing files, non-null for available files (no `is_available` column present)

@@ -467,4 +467,33 @@ mod tests {
         //assert!(!FileType::PackageScan.is_media_type());
         assert!(!FileType::InlayScan.is_media_type());
     }
+
+    #[test]
+    fn test_imported_file_is_available_returns_true_when_archive_file_name_set() {
+        let file = ImportedFile {
+            original_file_name: "game.rom".to_string(),
+            archive_file_name: Some("game.zst".to_string()),
+            sha1_checksum: [0u8; 20],
+            file_size: 100,
+        };
+        assert!(file.is_available());
+    }
+
+    #[test]
+    fn test_imported_file_is_available_returns_false_when_archive_file_name_none() {
+        let file = ImportedFile {
+            original_file_name: "game.rom".to_string(),
+            archive_file_name: None,
+            sha1_checksum: [0u8; 20],
+            file_size: 100,
+        };
+        assert!(!file.is_available());
+    }
+
+    #[test]
+    fn test_file_sync_status_from_db_int_8_returns_error() {
+        // Value 8 was formerly FileSyncStatus::UploadSkipped, now removed.
+        // Any DB record with this value must produce an error rather than a valid status.
+        assert!(FileSyncStatus::from_db_int(8).is_err());
+    }
 }
