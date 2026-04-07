@@ -1,7 +1,7 @@
 # Spec 011: Make `archive_file_name` Optional
 
 ## Status
-< Planning | In Progress | Complete | Abandoned -->
+<!-- Planning | In Progress | Complete | Abandoned -->
 Complete
 
 ## Affected Crates

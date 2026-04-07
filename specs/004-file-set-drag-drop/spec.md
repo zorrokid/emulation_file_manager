@@ -1,7 +1,7 @@
 # 004 — Drag-and-Drop File Import for File Set Form
 
 ## Status
-< Planning | In Progress | Complete | Abandoned -->
+<!-- Planning | In Progress | Complete | Abandoned -->
 In Progress
 
 ## Affected Crates

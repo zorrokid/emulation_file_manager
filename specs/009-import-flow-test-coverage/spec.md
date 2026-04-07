@@ -1,7 +1,7 @@
 # Spec 009: Improve Test Coverage for Import Flow
 
 ## Status
-< Planning | In Progress | Complete | Abandoned -->
+<!-- Planning | In Progress | Complete | Abandoned -->
 Planning
 
 ## Affected Crates

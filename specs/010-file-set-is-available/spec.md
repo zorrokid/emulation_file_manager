@@ -1,7 +1,7 @@
 # Spec 010: File Set `is_available` — Missing Files Support in DAT Import
 
 ## Status
-< Planning | In Progress | Complete | Abandoned -->
+<!-- Planning | In Progress | Complete | Abandoned -->
 Complete
 
 ## Affected Crates
