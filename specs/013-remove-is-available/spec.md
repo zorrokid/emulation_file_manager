@@ -1,7 +1,7 @@
 # Spec 013: Remove `is_available` from `file_info`
 
 ## Status
-< Planning | In Progress | Complete | Abandoned -->
+<!-- Planning | In Progress | Complete | Abandoned -->
 Planning
 
 ## Affected Crates

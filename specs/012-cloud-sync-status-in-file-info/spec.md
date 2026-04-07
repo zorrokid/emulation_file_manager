@@ -1,7 +1,7 @@
 # Spec 012 – Cloud Sync Status in `file_info`
 
 ## Status
-< Planning | In Progress | Complete | Abandoned -->
+<!-- Planning | In Progress | Complete | Abandoned -->
 In Progress
 
 ## Affected Crates

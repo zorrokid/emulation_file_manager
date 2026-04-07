@@ -1,7 +1,7 @@
 # 006: Libretro Core-to-System Mapping
 
 ## Status
-< Planning | In Progress | Complete | Abandoned -->
+<!-- Planning | In Progress | Complete | Abandoned -->
 In Progress
 
 ## Affected Crates

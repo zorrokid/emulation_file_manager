@@ -1,7 +1,7 @@
 # Spec 005 — Libretro Core Runner
 
 ## Status
-< Planning | In Progress | Complete | Abandoned -->
+<!-- Planning | In Progress | Complete | Abandoned -->
 In Progress
 
 ## Affected Crates

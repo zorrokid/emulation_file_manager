@@ -4,7 +4,7 @@
 **Created**: 2026-02-23
 
 ## Status
-< Planning | In Progress | Complete | Abandoned -->
+<!-- Planning | In Progress | Complete | Abandoned -->
 Planning
 
 ## Affected Crates
