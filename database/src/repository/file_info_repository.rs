@@ -580,4 +580,41 @@ mod tests {
         assert_eq!(file_infos[1].sha1_checksum, checksum_2);
         assert_eq!(file_infos[1].file_size, 5678);
     }
+
+    #[async_std::test]
+    async fn test_set_archive_file_name_sets_value() {
+        let pool = setup_test_db().await;
+        let repo = FileInfoRepository::new(Arc::new(pool.clone()));
+
+        let id = insert_file_info(&pool, None).await;
+        repo.set_archive_file_name(id, Some("new.zst")).await.unwrap();
+
+        let file_info = repo.get_file_info(id).await.unwrap();
+        assert_eq!(file_info.archive_file_name.as_deref(), Some("new.zst"));
+        assert!(file_info.is_available());
+    }
+
+    #[async_std::test]
+    async fn test_set_archive_file_name_clears_to_none() {
+        let pool = setup_test_db().await;
+        let repo = FileInfoRepository::new(Arc::new(pool.clone()));
+
+        let id = insert_file_info(&pool, Some("original.zst")).await;
+        repo.set_archive_file_name(id, None).await.unwrap();
+
+        let file_info = repo.get_file_info(id).await.unwrap();
+        assert_eq!(file_info.archive_file_name, None);
+        assert!(!file_info.is_available());
+    }
+
+    #[async_std::test]
+    async fn test_count_files_pending_upload_excludes_unavailable_files() {
+        let pool = setup_test_db().await;
+        let repo = FileInfoRepository::new(Arc::new(pool.clone()));
+
+        insert_file_info(&pool, None).await;
+
+        let count = repo.count_files_pending_upload().await.unwrap();
+        assert_eq!(count, 0);
+    }
 }

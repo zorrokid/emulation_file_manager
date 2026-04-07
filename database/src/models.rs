@@ -242,3 +242,30 @@ pub struct DatRom {
     pub serial: Option<String>,
     pub header: Option<String>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use core_types::{CloudSyncStatus, FileType};
+
+    fn make_file_info(archive_file_name: Option<&str>) -> FileInfo {
+        FileInfo {
+            id: 1,
+            sha1_checksum: [0u8; 20],
+            file_size: 100,
+            archive_file_name: archive_file_name.map(str::to_string),
+            file_type: FileType::Rom,
+            cloud_sync_status: CloudSyncStatus::NotSynced,
+        }
+    }
+
+    #[test]
+    fn test_file_info_is_available_returns_true_when_archive_file_name_set() {
+        assert!(make_file_info(Some("game.zst")).is_available());
+    }
+
+    #[test]
+    fn test_file_info_is_available_returns_false_when_archive_file_name_none() {
+        assert!(!make_file_info(None).is_available());
+    }
+}
