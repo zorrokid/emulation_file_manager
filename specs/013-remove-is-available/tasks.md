@@ -1,87 +1,82 @@
 # Spec 013 Tasks: Remove `is_available` from `file_info`
 
-## Status
+## Completed Tasks
 
-Planning.
+- [x] T1 — DB migration: drop `is_available` column
+  **File:** `database/migrations/20260407104000_remove_is_available_from_file_info.sql`
 
-## Tasks
-
-- [ ] T1 — DB migration: drop `is_available` column
-  Recreate `file_info` table without `is_available`. Copy all other columns.
-  Run `sqlx migrate run` to verify it applies cleanly.
-  **File:** `database/migrations/<new timestamp>_remove_is_available_from_file_info.sql`
-
-- [ ] T2 — Remove `FileSyncStatus::UploadSkipped` from `core_types`
-  Remove the variant, its `to_db_int` arm (value 8), and its `from_db_int` arm.
-  Update the doc comment on `FileSyncStatus` to remove the `UploadSkipped` reference.
+- [x] T2 — Remove `FileSyncStatus::UploadSkipped` from `core_types`
   **File:** `core_types/src/lib.rs`
 
-- [ ] T3 — Remove `is_available` field from `ImportedFile`; add `is_available()` method
-  Replace `pub is_available: bool` with `pub fn is_available(&self) -> bool { self.archive_file_name.is_some() }`.
+- [x] T3 — Remove `is_available` field from `ImportedFile`; add `is_available()` method
   **File:** `core_types/src/lib.rs`
 
-- [ ] T4 — Remove `is_available` field from `FileInfo` and `FileSetFileInfo`; add methods
-  Remove `pub is_available: bool` from both structs.
-  Add `pub fn is_available(&self) -> bool { self.archive_file_name.is_some() }` to both.
-  Update `From<&FileSetFileInfo> for FileInfo` — remove the `is_available` field copy.
+- [x] T4 — Remove `is_available` field from `FileInfo` and `FileSetFileInfo`; add methods
   **File:** `database/src/models.rs`
 
-- [ ] T5 — Update `FileInfoRepository`: queries, INSERT, `FromRow`, rename method, add `_with_tx` variant
-  - `FromRow` impl: remove `is_available: row.try_get("is_available")?` — `is_available()` is now computed.
-  - `add_file_info` INSERT: remove `is_available` from column list and values.
-  - `get_files_pending_upload` / `count_files_pending_upload`: replace `AND is_available = 1` with `AND archive_file_name IS NOT NULL`.
-  - All SELECT column lists: remove `is_available`.
-  - Rename `update_is_available(id, archive_file_name)` → `set_archive_file_name(id, archive_file_name)`; update SQL to only set `archive_file_name` (no longer sets `is_available`).
-  - Add `set_archive_file_name_with_tx(&self, tx: &mut Transaction<'_, Sqlite>, id: i64, archive_file_name: Option<&str>)` — same SQL as `set_archive_file_name` but accepts a transaction executor. This is required by `FileSetRepository` which calls this operation inside a transaction.
-  - Update test helper `insert_file_info` to remove `is_available` parameter and the explicit `is_available` column from raw INSERT.
-  - Update test assertions that checked `file_info.is_available` to call `file_info.is_available()`.
+- [x] T5 — Update `FileInfoRepository`: queries, INSERT, `FromRow`, rename method, add `_with_tx` variant
   **File:** `database/src/repository/file_info_repository.rs`
 
-- [ ] T6 — Update `FileSetRepository`: queries, mapping, and inline `file_info` SQL
-  - Remove `is_available` from all SELECT column lists and JOIN queries.
-  - Remove `is_available: row.try_get("is_available")?` from `FileSetFileInfo` mapping.
-  - **`Some(id)` match arm** (existing file_info found by SHA1): replace
-    `sqlx::query!("UPDATE file_info SET is_available = 1 WHERE id = ?", id)` with
-    `file_info_repository.set_archive_file_name_with_tx(&mut *tx, id, file.archive_file_name.as_deref()).await?`.
-    This ensures a previously-missing record (archive_file_name IS NULL) is correctly updated
-    when the file is now available, keeping it visible to the `archive_file_name IS NOT NULL` query filter.
-  - **`None` arm inline INSERT**: remove `is_available` from the column list and values in the
-    raw `INSERT INTO file_info (...)` statement.
-  - Update any `.filter(|f| !f.is_available)` → `.filter(|f| f.archive_file_name.is_none())`.
-  - Update any `if file.is_available { ... }` → `if file.is_available() { ... }`.
-  - Remove `is_available` from all test fixture struct initialisers.
+- [x] T6 — Update `FileSetRepository`: queries, mapping, and inline `file_info` SQL
   **File:** `database/src/repository/file_set_repository.rs`
 
-- [ ] T7 — Update service layer: remove `is_available` struct fields, rename method calls
-  - Before starting: grep for all `FileSyncStatus::UploadSkipped` and bare `UploadSkipped`
-    references across all crates to confirm every write and match site is identified.
-  - Remove all `is_available: true` / `is_available: false` from struct initialisers across the service crate (file_import, file_set, cloud_sync, file_type_migration, file_set_download, etc.).
-  - Replace all `file.is_available` field accesses with `file.is_available()` method calls.
-  - Replace all `update_is_available(...)` call sites with `set_archive_file_name(...)`.
-  - Remove the `UploadSkipped` guard in `UploadPendingFilesStep` (cloud sync) — it was added
-    solely to handle the invariant violation that is now structurally impossible.
-  - Remove all remaining `FileSyncStatus::UploadSkipped` references in service code.
-  - Remove/update tests that forced invariant violations (`update_is_available(id, None)` /
-    `set_archive_file_name(id, None)` used in test helpers to create `is_available=true,
-    archive_file_name=NULL`) — these violations are now impossible; remove the tests entirely
-    or replace with simpler equivalents that test remaining behaviour.
+- [x] T7 — Update service layer: remove `is_available` struct fields, rename method calls
   **Files:** `service/src/cloud_sync/steps.rs`, `service/src/file_import/**`, `service/src/file_set/**`, `service/src/file_type_migration/steps.rs`, `service/src/file_set_download/steps.rs`, and others
 
-- [ ] T8 — Update `file_import` crate
-  Remove `is_available: true` from all `ImportedFile` struct initialisers.
+- [x] T8 — Update `file_import` crate
   **File:** `file_import/src/lib.rs`
 
-- [ ] T9 — Regenerate `.sqlx/` metadata
-  Run: `cargo sqlx prepare --workspace -- --all-targets`
-  Commit the updated `.sqlx/` directory.
+- [x] T9 — Regenerate `.sqlx/` metadata
 
-- [ ] T10 — Update ER diagrams
-  Run: `tbls doc --force`
-  Commit the updated `docs/schema/` files.
+- [x] T10 — Update ER diagrams
 
-- [ ] T11 — Full verification
-  Run `cargo test --workspace` — all tests must pass.
-  Run `cargo clippy --all-targets` — no new warnings.
+- [x] T11 — Full verification
+
+---
+
+## Phase 6 — Review Fixes (Round 1)
+
+### Major
+
+- [x] T12 — Remove `set_archive_file_name_with_tx` dead API or use it in `FileSetRepository`
+  **File:** `database/src/repository/file_info_repository.rs:249–263`  
+  `set_archive_file_name_with_tx` was added for `FileSetRepository` to call inside a transaction,
+  but `FileSetRepository.add_file_set_with_tx` uses identical inline SQL instead. The method is
+  never called — it is a dead `pub` API that also creates a DRY violation (the same
+  `UPDATE file_info SET archive_file_name = ? WHERE id = ?` SQL exists in two places).  
+  Option A (simpler): remove `set_archive_file_name_with_tx` entirely and add a comment in
+  `file_set_repository.rs` explaining why `file_info` SQL is inlined there.  
+  Option B: use `FileInfoRepository::new(self.pool.clone()).set_archive_file_name_with_tx(...)` in
+  `add_file_set_with_tx`, removing the inline SQL.
+
+### Minor
+
+- [x] T13 — Update stale `is_available` doc comments in `file_import/model.rs`
+  **File:** `service/src/file_import/model.rs:32, 80`  
+  Two `///` doc comments say "stored as `file_info` records with `is_available = false`". The
+  field no longer exists; replace both with `archive_file_name = NULL (unavailable)`.
+
+- [x] T14 — Update stale `is_available` references in `update_file_set/steps.rs` test comments
+  **File:** `service/src/file_import/update_file_set/steps.rs:985–986, 997, 1056`  
+  Three inline comments reference the removed `is_available` field
+  (`is_available=1 with archive_file_name=NULL`, `add_file_set with is_available=false`,
+  `remain is_available=false with archive_file_name=None`). Rewrite to use
+  `archive_file_name = NULL` terminology.
+
+- [x] T15 — Update stale `is_available` reference in `add_file_set/steps.rs` test comment
+- [x] T16 — Rename `setup_invariant_violating_file_set` and update its doc comment
+- [x] T17 — Update stale `is_available=false` comments in `mass_import/with_dat/steps.rs`
+
+---
+
+## Phase 5 — Test Implementation (QA findings)
+
+### High
+
+- [x] T18 — Add tests for `set_archive_file_name` (no existing coverage)
+- [x] T19 — Add unit tests for `is_available()` on `FileInfo` and `ImportedFile`
+- [x] T20 — Add `test_count_files_pending_upload_excludes_unavailable_files`
+- [x] T21 — Add `test_file_sync_status_from_db_int_8_returns_error`
 
 ---
 

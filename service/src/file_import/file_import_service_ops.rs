@@ -123,7 +123,6 @@ impl FileImportServiceOps for MockFileImportServiceOps {
                             archive_file_name: Some(generate_random_uuid()),
                             sha1_checksum: c.sha1_checksum,
                             file_size: c.file_size,
-                            is_available: true,
                         })
                     })
                     .collect();
@@ -162,7 +161,6 @@ impl FileImportServiceOps for MockFileImportServiceOps {
                             archive_file_name: Some(generate_random_uuid()),
                             sha1_checksum: c.sha1_checksum,
                             file_size: c.file_size,
-                            is_available: true,
                         })
                     })
                     .collect();

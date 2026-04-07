@@ -28,7 +28,6 @@ impl FromRow<'_, SqliteRow> for FileInfo {
             sha1_checksum,
             file_size: row.try_get("file_size")?,
             archive_file_name: row.try_get("archive_file_name")?,
-            is_available: row.try_get("is_available")?,
             cloud_sync_status,
         })
     }
@@ -48,20 +47,17 @@ impl FileInfoRepository {
     ) -> Result<i64, Error> {
         let file_type = file_type.to_db_int();
         let sha1_checksum = sha1_checksum.to_vec();
-        let is_available = archive_file_name.is_some();
         let result = sqlx::query!(
             "INSERT INTO file_info (
                 sha1_checksum, 
                 file_size, 
                 archive_file_name,
-                file_type,
-                is_available
-                ) VALUES (?, ?, ?, ?, ?)",
+                file_type
+                ) VALUES (?, ?, ?, ?)",
             sha1_checksum,
             file_size,
             archive_file_name,
-            file_type,
-            is_available
+            file_type
         )
         .execute(&*self.pool)
         .await?;
@@ -70,7 +66,7 @@ impl FileInfoRepository {
 
     pub async fn get_file_info(&self, id: i64) -> Result<FileInfo, Error> {
         let result = sqlx::query_as::<_, FileInfo>(
-            "SELECT id, sha1_checksum, file_size, archive_file_name, file_type, is_available, cloud_sync_status
+            "SELECT id, sha1_checksum, file_size, archive_file_name, file_type, cloud_sync_status
              FROM file_info WHERE id = ?",
         )
         .bind(id)
@@ -85,7 +81,7 @@ impl FileInfoRepository {
         file_type: FileType,
     ) -> Result<Vec<FileInfo>, Error> {
         let mut query_builder = QueryBuilder::<Sqlite>::new(
-            "SELECT id, sha1_checksum, file_size, archive_file_name, file_type, is_available, cloud_sync_status
+            "SELECT id, sha1_checksum, file_size, archive_file_name, file_type, cloud_sync_status
              FROM file_info WHERE file_type = ",
         );
         query_builder.push_bind(file_type.to_db_int());
@@ -105,7 +101,7 @@ impl FileInfoRepository {
         file_set_id: i64,
     ) -> Result<Vec<FileInfo>, Error> {
         let query = sqlx::query_as::<_, FileInfo>(
-            "SELECT id, sha1_checksum, file_size, archive_file_name, file_type, is_available, cloud_sync_status
+            "SELECT id, sha1_checksum, file_size, archive_file_name, file_type, cloud_sync_status
              FROM file_info fi
              JOIN file_set_file_info fsfi ON fi.id = fsfi.file_info_id
              WHERE fsfi.file_set_id = ?",
@@ -115,7 +111,7 @@ impl FileInfoRepository {
         Ok(file_infos)
     }
 
-    /// Returns available files ready for upload (NotSynced + is_available), paginated.
+    /// Returns available files ready for upload (NotSynced + archive_file_name IS NOT NULL), paginated.
     pub async fn get_files_pending_upload(
         &self,
         limit: i64,
@@ -123,9 +119,9 @@ impl FileInfoRepository {
     ) -> Result<Vec<FileInfo>, Error> {
         let status_int = CloudSyncStatus::NotSynced.to_db_int();
         let query = sqlx::query_as::<_, FileInfo>(
-            "SELECT id, sha1_checksum, file_size, archive_file_name, file_type, is_available, cloud_sync_status
+            "SELECT id, sha1_checksum, file_size, archive_file_name, file_type, cloud_sync_status
              FROM file_info
-             WHERE cloud_sync_status = ? AND is_available = 1
+             WHERE cloud_sync_status = ? AND archive_file_name IS NOT NULL
              LIMIT ? OFFSET ?",
         )
         .bind(status_int)
@@ -135,11 +131,11 @@ impl FileInfoRepository {
         Ok(file_infos)
     }
 
-    /// Counts available files ready for upload (NotSynced + is_available).
+    /// Counts available files ready for upload (NotSynced + archive_file_name IS NOT NULL).
     pub async fn count_files_pending_upload(&self) -> Result<i64, Error> {
         let status_int = CloudSyncStatus::NotSynced.to_db_int();
         let row = sqlx::query!(
-            "SELECT COUNT(*) as count FROM file_info WHERE cloud_sync_status = ? AND is_available = 1",
+            "SELECT COUNT(*) as count FROM file_info WHERE cloud_sync_status = ? AND archive_file_name IS NOT NULL",
             status_int
         )
         .fetch_one(&*self.pool)
@@ -148,7 +144,7 @@ impl FileInfoRepository {
     }
 
     /// Returns tombstone file_infos awaiting cloud deletion (DeletionPending), paginated.
-    /// Does not filter by is_available — all DeletionPending tombstones must be processed.
+    /// All DeletionPending tombstones are processed regardless of archive_file_name.
     pub async fn get_files_pending_deletion(
         &self,
         limit: i64,
@@ -156,7 +152,7 @@ impl FileInfoRepository {
     ) -> Result<Vec<FileInfo>, Error> {
         let status_int = CloudSyncStatus::DeletionPending.to_db_int();
         let query = sqlx::query_as::<_, FileInfo>(
-            "SELECT id, sha1_checksum, file_size, archive_file_name, file_type, is_available, cloud_sync_status
+            "SELECT id, sha1_checksum, file_size, archive_file_name, file_type, cloud_sync_status
              FROM file_info
              WHERE cloud_sync_status = ?
              LIMIT ? OFFSET ?",
@@ -231,13 +227,15 @@ impl FileInfoRepository {
         Ok(())
     }
 
-    pub async fn update_is_available(
+    /// Sets `archive_file_name` on an existing `file_info` record.
+    /// Pass `Some(name)` to mark the file as available; `None` to clear it.
+    pub async fn set_archive_file_name(
         &self,
         id: i64,
         archive_file_name: Option<&str>,
     ) -> Result<(), Error> {
         sqlx::query!(
-            "UPDATE file_info SET is_available = 1, archive_file_name = ? WHERE id = ?",
+            "UPDATE file_info SET archive_file_name = ? WHERE id = ?",
             archive_file_name,
             id
         )
@@ -245,6 +243,7 @@ impl FileInfoRepository {
         .await?;
         Ok(())
     }
+
 }
 #[cfg(test)]
 mod tests {
@@ -303,18 +302,16 @@ mod tests {
         assert_eq!(file_infos.len(), 2);
     }
 
-    async fn insert_file_info(pool: &Pool<Sqlite>, archive_file_name: Option<&str>, is_available: bool) -> i64 {
+    async fn insert_file_info(pool: &Pool<Sqlite>, archive_file_name: Option<&str>) -> i64 {
         let file_type = FileType::Rom.to_db_int();
         let checksum = vec![0u8; 20];
-        let is_available_int = if is_available { 1i64 } else { 0i64 };
         let result = query!(
-            "INSERT INTO file_info (sha1_checksum, file_size, archive_file_name, file_type, is_available)
-             VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO file_info (sha1_checksum, file_size, archive_file_name, file_type)
+             VALUES (?, ?, ?, ?)",
             checksum,
             1234,
             archive_file_name,
-            file_type,
-            is_available_int
+            file_type
         )
         .execute(pool)
         .await
@@ -327,7 +324,7 @@ mod tests {
         let pool = setup_test_db().await;
         let repo = FileInfoRepository::new(Arc::new(pool.clone()));
 
-        let id = insert_file_info(&pool, Some("game.zst"), true).await;
+        let id = insert_file_info(&pool, Some("game.zst")).await;
         let results = repo
             .get_files_pending_upload(100, 0)
             .await
@@ -342,7 +339,7 @@ mod tests {
         let pool = setup_test_db().await;
         let repo = FileInfoRepository::new(Arc::new(pool.clone()));
 
-        let id = insert_file_info(&pool, Some("game.zst"), true).await;
+        let id = insert_file_info(&pool, Some("game.zst")).await;
         repo.update_cloud_sync_status(id, CloudSyncStatus::Synced)
             .await
             .unwrap();
@@ -363,7 +360,7 @@ mod tests {
         let pool = setup_test_db().await;
         let repo = FileInfoRepository::new(Arc::new(pool.clone()));
 
-        insert_file_info(&pool, None, false).await;
+        insert_file_info(&pool, None).await;
 
         let results = repo
             .get_files_pending_upload(100, 0)
@@ -377,9 +374,9 @@ mod tests {
         let pool = setup_test_db().await;
         let repo = FileInfoRepository::new(Arc::new(pool.clone()));
 
-        insert_file_info(&pool, Some("a.zst"), true).await;
-        insert_file_info(&pool, Some("b.zst"), true).await;
-        insert_file_info(&pool, Some("c.zst"), true).await;
+        insert_file_info(&pool, Some("a.zst")).await;
+        insert_file_info(&pool, Some("b.zst")).await;
+        insert_file_info(&pool, Some("c.zst")).await;
 
         let page1 = repo
             .get_files_pending_upload(2, 0)
@@ -400,7 +397,7 @@ mod tests {
         let pool = setup_test_db().await;
         let repo = FileInfoRepository::new(Arc::new(pool.clone()));
 
-        let id = insert_file_info(&pool, Some("game.zst"), true).await;
+        let id = insert_file_info(&pool, Some("game.zst")).await;
 
         repo.update_cloud_sync_status(id, CloudSyncStatus::Synced)
             .await
@@ -422,9 +419,9 @@ mod tests {
         let pool = setup_test_db().await;
         let repo = FileInfoRepository::new(Arc::new(pool.clone()));
 
-        let id1 = insert_file_info(&pool, Some("a.zst"), true).await;
-        let id2 = insert_file_info(&pool, Some("b.zst"), true).await;
-        let _id3 = insert_file_info(&pool, Some("c.zst"), true).await;
+        let id1 = insert_file_info(&pool, Some("a.zst")).await;
+        let id2 = insert_file_info(&pool, Some("b.zst")).await;
+        let _id3 = insert_file_info(&pool, Some("c.zst")).await;
 
         repo.update_cloud_sync_status(id1, CloudSyncStatus::Synced).await.unwrap();
         repo.update_cloud_sync_status(id2, CloudSyncStatus::DeletionPending).await.unwrap();
@@ -441,7 +438,7 @@ mod tests {
         let pool = setup_test_db().await;
         let repo = FileInfoRepository::new(Arc::new(pool.clone()));
 
-        let id = insert_file_info(&pool, Some("game.zst"), true).await;
+        let id = insert_file_info(&pool, Some("game.zst")).await;
         repo.update_cloud_sync_status(id, CloudSyncStatus::DeletionPending)
             .await
             .unwrap();
@@ -456,8 +453,8 @@ mod tests {
         let pool = setup_test_db().await;
         let repo = FileInfoRepository::new(Arc::new(pool.clone()));
 
-        let id_not_synced = insert_file_info(&pool, Some("a.zst"), true).await;
-        let id_synced = insert_file_info(&pool, Some("b.zst"), true).await;
+        let id_not_synced = insert_file_info(&pool, Some("a.zst")).await;
+        let id_synced = insert_file_info(&pool, Some("b.zst")).await;
         repo.update_cloud_sync_status(id_synced, CloudSyncStatus::Synced)
             .await
             .unwrap();
@@ -468,13 +465,13 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn test_get_files_pending_deletion_includes_unavailable_tombstones() {
-        // DeletionPending tombstones must be returned even if is_available = 0,
+    async fn test_get_files_pending_deletion_includes_tombstones_without_archive_name() {
+        // DeletionPending tombstones must be returned even without an archive_file_name,
         // because the deletion must be processed regardless.
         let pool = setup_test_db().await;
         let repo = FileInfoRepository::new(Arc::new(pool.clone()));
 
-        let id = insert_file_info(&pool, Some("game.zst"), false).await;
+        let id = insert_file_info(&pool, None).await;
         repo.update_cloud_sync_status(id, CloudSyncStatus::DeletionPending)
             .await
             .unwrap();
@@ -582,5 +579,42 @@ mod tests {
         assert_eq!(file_infos[0].file_size, 1234);
         assert_eq!(file_infos[1].sha1_checksum, checksum_2);
         assert_eq!(file_infos[1].file_size, 5678);
+    }
+
+    #[async_std::test]
+    async fn test_set_archive_file_name_sets_value() {
+        let pool = setup_test_db().await;
+        let repo = FileInfoRepository::new(Arc::new(pool.clone()));
+
+        let id = insert_file_info(&pool, None).await;
+        repo.set_archive_file_name(id, Some("new.zst")).await.unwrap();
+
+        let file_info = repo.get_file_info(id).await.unwrap();
+        assert_eq!(file_info.archive_file_name.as_deref(), Some("new.zst"));
+        assert!(file_info.is_available());
+    }
+
+    #[async_std::test]
+    async fn test_set_archive_file_name_clears_to_none() {
+        let pool = setup_test_db().await;
+        let repo = FileInfoRepository::new(Arc::new(pool.clone()));
+
+        let id = insert_file_info(&pool, Some("original.zst")).await;
+        repo.set_archive_file_name(id, None).await.unwrap();
+
+        let file_info = repo.get_file_info(id).await.unwrap();
+        assert_eq!(file_info.archive_file_name, None);
+        assert!(!file_info.is_available());
+    }
+
+    #[async_std::test]
+    async fn test_count_files_pending_upload_excludes_unavailable_files() {
+        let pool = setup_test_db().await;
+        let repo = FileInfoRepository::new(Arc::new(pool.clone()));
+
+        insert_file_info(&pool, None).await;
+
+        let count = repo.count_files_pending_upload().await.unwrap();
+        assert_eq!(count, 0);
     }
 }

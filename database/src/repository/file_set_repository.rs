@@ -105,7 +105,6 @@ impl FromRow<'_, SqliteRow> for FileSetFileInfo {
             file_size: row.try_get("file_size")?,
             archive_file_name: row.try_get("archive_file_name")?,
             sort_order: row.try_get("sort_order")?,
-            is_available: row.try_get("is_available")?,
             cloud_sync_status,
         })
     }
@@ -268,7 +267,7 @@ impl FileSetRepository {
 
             let missing_files = file_set_file_infos
                 .iter()
-                .filter(|file_info| !file_info.is_available)
+                .filter(|file_info| !file_info.is_available())
                 .map(|file_info| file_info.sha1_checksum)
                 .collect::<Vec<_>>();
 
@@ -377,10 +376,17 @@ impl FileSetRepository {
 
             let file_info_id = match existing_file_info {
                 Some(id) => {
-                    if file.is_available {
-                        sqlx::query!("UPDATE file_info SET is_available = 1 WHERE id = ?", id)
-                            .execute(&mut *tx)
-                            .await?;
+                    if let Some(name) = &file.archive_file_name {
+                        // FileSetRepository operates inside a single transaction and does not
+                        // hold a FileInfoRepository instance, so this UPDATE is inlined rather
+                        // than delegating to FileInfoRepository::set_archive_file_name.
+                        sqlx::query!(
+                            "UPDATE file_info SET archive_file_name = ? WHERE id = ?",
+                            name,
+                            id
+                        )
+                        .execute(&mut *tx)
+                        .await?;
                     }
                     id
                 }
@@ -391,14 +397,12 @@ impl FileSetRepository {
                             sha1_checksum, 
                             file_size, 
                             archive_file_name,
-                            file_type,
-                            is_available
-                        ) VALUES (?, ?, ?, ?, ?)",
+                            file_type
+                        ) VALUES (?, ?, ?, ?)",
                         checksum,
                         file_size,
                         archive_file_name,
-                        file_type,
-                        file.is_available
+                        file_type
                     )
                     .execute(&mut *tx)
                     .await?;
@@ -646,7 +650,6 @@ impl FileSetRepository {
                 fi.archive_file_name,
                 fi.file_type,
                 fsfi.sort_order,
-                fi.is_available,
                 fi.cloud_sync_status
              FROM file_set_file_info fsfi
              JOIN file_info fi ON fsfi.file_info_id = fi.id
@@ -980,14 +983,12 @@ mod tests {
                 file_size: 123,
                 original_file_name: "test".to_string(),
                 archive_file_name: Some(archive_file_name_1.to_string()),
-                is_available: true,
             },
             ImportedFile {
                 sha1_checksum: checksum_2,
                 file_size: 123,
                 original_file_name: "test2".to_string(),
                 archive_file_name: Some(archive_file_name_2.to_string()),
-                is_available: true,
             },
         ];
 
@@ -1038,21 +1039,18 @@ mod tests {
                 file_size: 123,
                 original_file_name: "file 1".to_string(),
                 archive_file_name: Some("file_1.zip".to_string()),
-                is_available: true,
             },
             ImportedFile {
                 sha1_checksum: checksum_2,
                 file_size: 123,
                 original_file_name: "file 2".to_string(),
                 archive_file_name: Some("file_2.zip".to_string()),
-                is_available: true,
             },
             ImportedFile {
                 sha1_checksum: checksum_3,
                 file_size: 123,
                 original_file_name: "file 3".to_string(),
                 archive_file_name: Some("file_3.zip".to_string()),
-                is_available: true,
             },
         ];
 
@@ -1342,7 +1340,6 @@ mod tests {
             file_size: 123,
             original_file_name: "test.rom".to_string(),
             archive_file_name: Some("archive_file_name_1".to_string()),
-            is_available: true,
         }];
 
         let system_id = SystemRepository::new(pool.clone())
@@ -1369,7 +1366,6 @@ mod tests {
             file_size: 456,
             original_file_name: "test2.rom".to_string(),
             archive_file_name: Some("archive_file_name_2".to_string()),
-            is_available: true,
         };
 
         let file_info_repo = FileInfoRepository::new(pool.clone());
@@ -1445,7 +1441,6 @@ mod tests {
             file_size: 123,
             original_file_name: "test.rom".to_string(),
             archive_file_name: Some("archive_file_name_1".to_string()),
-            is_available: true,
         }];
 
         let system_id = SystemRepository::new(pool.clone())
@@ -1472,7 +1467,6 @@ mod tests {
             file_size: 456,
             original_file_name: "test2.rom".to_string(),
             archive_file_name: Some("archive_file_name_2".to_string()),
-            is_available: true,
         };
 
         let file_info_repo = FileInfoRepository::new(pool.clone());
@@ -1575,7 +1569,6 @@ mod tests {
             file_size: 456,
             original_file_name: "test2.rom".to_string(),
             archive_file_name: Some("archive_file_name_2".to_string()),
-            is_available: true,
         };
 
         let file_info_repo = FileInfoRepository::new(pool.clone());
@@ -1611,14 +1604,12 @@ mod tests {
                 file_size: 123,
                 original_file_name: "test1.rom".to_string(),
                 archive_file_name: Some("archive_file_name_1".to_string()),
-                is_available: true,
             },
             ImportedFile {
                 sha1_checksum: [1; 20],
                 file_size: 456,
                 original_file_name: "test2.rom".to_string(),
                 archive_file_name: Some("archive_file_name_2".to_string()),
-                is_available: true,
             },
         ];
 
@@ -1932,14 +1923,12 @@ mod tests {
                 file_size: 123,
                 original_file_name: "test1.rom".to_string(),
                 archive_file_name: Some("archive_file_name_1".to_string()),
-                is_available: true,
             },
             ImportedFile {
                 sha1_checksum: [1; 20],
                 file_size: 456,
                 original_file_name: "test2.rom".to_string(),
                 archive_file_name: Some("archive_file_name_2".to_string()),
-                is_available: true,
             },
         ];
 
@@ -2001,14 +1990,12 @@ mod tests {
                 file_size: 123,
                 original_file_name: "test1.rom".to_string(),
                 archive_file_name: Some("archive_file_name_1".to_string()),
-                is_available: true,
             },
             ImportedFile {
                 sha1_checksum: file_2_sha1,
                 file_size: 456,
                 original_file_name: "test2.rom".to_string(),
-                archive_file_name: Some("archive_file_name_2".to_string()),
-                is_available: false,
+                archive_file_name: None,
             },
         ];
 
@@ -2071,14 +2058,12 @@ mod tests {
                 file_size: 123,
                 original_file_name: "test1.rom".to_string(),
                 archive_file_name: Some("archive_file_name_1".to_string()),
-                is_available: true,
             },
             ImportedFile {
                 sha1_checksum: [1; 20],
                 file_size: 456,
                 original_file_name: "test2.rom".to_string(),
                 archive_file_name: Some("archive_file_name_2".to_string()),
-                is_available: true,
             },
         ];
 

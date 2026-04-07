@@ -275,7 +275,6 @@ mod tests {
                 sha1_checksum,
                 file_size,
                 archive_file_name: Some("archive_file_name".to_string()),
-                is_available: true,
             },
         );
 
@@ -365,7 +364,6 @@ mod tests {
                     sha1_checksum: existing_file_checksum,
                     file_size: existing_file_size,
                     archive_file_name: Some("archive_file_name".to_string()),
-                    is_available: true,
                 }],
                 &[system_id],
             )
@@ -386,7 +384,6 @@ mod tests {
                 sha1_checksum: new_file_sha1_checksum,
                 file_size: new_file_size,
                 archive_file_name: Some("archive_file_name".to_string()),
-                is_available: true,
             },
         );
 
@@ -488,7 +485,6 @@ mod tests {
                     sha1_checksum: existing_file_checksum,
                     file_size: existing_file_size,
                     archive_file_name: Some("archive_file_name".to_string()),
-                    is_available: true,
                 }],
                 &[system_id],
             )
@@ -590,7 +586,6 @@ mod tests {
                     sha1_checksum: existing_file_checksum,
                     file_size: existing_file_size,
                     archive_file_name: Some("archive_file_name".to_string()),
-                    is_available: true,
                 }],
                 &[system_id],
             )
@@ -610,7 +605,6 @@ mod tests {
                     sha1_checksum: existing_file_checksum,
                     file_size: existing_file_size,
                     archive_file_name: Some("archive_file_name".to_string()),
-                    is_available: true,
                 }],
                 &[system_id],
             )
