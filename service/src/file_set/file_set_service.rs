@@ -182,14 +182,12 @@ mod tests {
                 archive_file_name: Some("archive_file_name".to_string()),
                 sha1_checksum: file_1_sha1,
                 file_size: 1024,
-                is_available: true,
             },
             ImportedFile {
                 original_file_name: "test_file_2.rom".to_string(),
                 archive_file_name: Some("archive_file_name_2".to_string()),
                 sha1_checksum: file_2_sha1,
                 file_size: 2048,
-                is_available: true,
             },
         ];
         let create_params = CreateFileSetParams {
@@ -248,7 +246,6 @@ mod tests {
             archive_file_name: Some("archive_file_name".to_string()),
             sha1_checksum: file_1_sha1,
             file_size: 1024,
-            is_available: true,
         }];
         let create_params = CreateFileSetParams {
             file_set_name: "Test File Set".to_string(),

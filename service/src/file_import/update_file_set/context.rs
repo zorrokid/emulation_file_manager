@@ -213,7 +213,7 @@ impl AddFileSetContextOps for UpdateFileSetContext {
                     .state
                     .existing_files
                     .iter()
-                    .any(|file_info| file_info.sha1_checksum == *sha1_checksum && file_info.is_available)
+                    .any(|file_info| file_info.sha1_checksum == *sha1_checksum && file_info.is_available())
             })
     }
 }
@@ -333,7 +333,6 @@ mod tests {
             file_type: FileType::Rom,
             archive_file_name: Some("archive_file_name_1".to_string()),
             file_size: 1024,
-            is_available: true,
             cloud_sync_status: Default::default(),
         });
         context.state.new_files.push(FileInfo {
@@ -342,7 +341,6 @@ mod tests {
             file_type: FileType::Rom,
             archive_file_name: Some("archive_file_name_2".to_string()),
             file_size: 4096,
-            is_available: true,
             cloud_sync_status: Default::default(),
         });
 
@@ -381,7 +379,6 @@ mod tests {
             file_type: FileType::Rom,
             archive_file_name: Some("archive_file_name_1".to_string()),
             file_size: 1024,
-            is_available: true,
             cloud_sync_status: Default::default(),
         });
 

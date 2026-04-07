@@ -162,7 +162,6 @@ impl AddFileSetContext {
                     sha1_checksum: file_info.sha1_checksum,
                     file_size: file_info.file_size,
                     archive_file_name: file_info.archive_file_name.clone(),
-                    is_available: file_info.is_available,
                 })
             }))
             .chain(
@@ -175,7 +174,6 @@ impl AddFileSetContext {
                         sha1_checksum: file.sha1_checksum,
                         file_size: file.file_size,
                         archive_file_name: None,
-                        is_available: false,
                     }),
             )
             .collect()
@@ -375,7 +373,6 @@ mod tests {
                 sha1_checksum: checksum,
                 file_size: 1024,
                 archive_file_name: Some("archive123.zst".to_string()),
-                is_available: true,
             },
         );
 
@@ -425,7 +422,6 @@ mod tests {
             file_size: 2048,
             archive_file_name: Some("existing_archive_file".to_string()),
             file_type: FileType::Rom,
-            is_available: true,
             cloud_sync_status: Default::default(),
         });
 
@@ -478,7 +474,6 @@ mod tests {
             file_size: 2048,
             archive_file_name: Some("existing_archive_file_name".to_string()),
             file_type: FileType::Rom,
-            is_available: true,
             cloud_sync_status: Default::default(),
         });
         // Add a newly imported file
@@ -489,7 +484,6 @@ mod tests {
                 sha1_checksum: checksum1,
                 file_size: 1024,
                 archive_file_name: Some("new_archive_file_name".to_string()),
-                is_available: true,
             },
         );
 

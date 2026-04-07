@@ -5,7 +5,7 @@ use std::fmt::{Display, Formatter};
 
 use sqlx::FromRow;
 
-/// File metadata for both availble and missing files. File set can contain both available and
+/// File metadata for both available and missing files. File set can contain both available and
 /// missing files that are presented by FileInfo.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FileInfo {
@@ -14,7 +14,6 @@ pub struct FileInfo {
     pub file_size: u64,
     pub archive_file_name: Option<String>,
     pub file_type: FileType,
-    pub is_available: bool,
     pub cloud_sync_status: CloudSyncStatus,
 }
 
@@ -26,13 +25,17 @@ impl From<&FileSetFileInfo> for FileInfo {
             file_size: file_set_file_info.file_size as u64,
             archive_file_name: file_set_file_info.archive_file_name.clone(),
             file_type: file_set_file_info.file_type,
-            is_available: file_set_file_info.is_available,
             cloud_sync_status: file_set_file_info.cloud_sync_status,
         }
     }
 }
 
 impl FileInfo {
+    /// Returns `true` when the file has been archived and is ready for use.
+    pub fn is_available(&self) -> bool {
+        self.archive_file_name.is_some()
+    }
+
     pub fn generate_cloud_key(&self) -> Option<String> {
         self.archive_file_name.as_ref().map(|name| {
             format!("{}/{}", self.file_type.to_string().to_lowercase(), name)
@@ -69,8 +72,14 @@ pub struct FileSetFileInfo {
     pub archive_file_name: Option<String>,
     pub file_type: FileType,
     pub sort_order: i64,
-    pub is_available: bool,
     pub cloud_sync_status: CloudSyncStatus,
+}
+
+impl FileSetFileInfo {
+    /// Returns `true` when the file has been archived and is ready for use.
+    pub fn is_available(&self) -> bool {
+        self.archive_file_name.is_some()
+    }
 }
 
 impl Display for FileSetFileInfo {
@@ -232,4 +241,31 @@ pub struct DatRom {
     pub status: Option<String>,
     pub serial: Option<String>,
     pub header: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use core_types::{CloudSyncStatus, FileType};
+
+    fn make_file_info(archive_file_name: Option<&str>) -> FileInfo {
+        FileInfo {
+            id: 1,
+            sha1_checksum: [0u8; 20],
+            file_size: 100,
+            archive_file_name: archive_file_name.map(str::to_string),
+            file_type: FileType::Rom,
+            cloud_sync_status: CloudSyncStatus::NotSynced,
+        }
+    }
+
+    #[test]
+    fn test_file_info_is_available_returns_true_when_archive_file_name_set() {
+        assert!(make_file_info(Some("game.zst")).is_available());
+    }
+
+    #[test]
+    fn test_file_info_is_available_returns_false_when_archive_file_name_none() {
+        assert!(!make_file_info(None).is_available());
+    }
 }

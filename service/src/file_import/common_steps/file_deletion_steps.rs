@@ -306,7 +306,10 @@ impl<T: FileDeletionStepsContext + Send + Sync> PipelineStep<T> for MarkForCloud
     }
 }
 
-/// Delete file_info entries for deleted files from database
+/// Delete file_info entries for deleted files from database for files that were never synced to
+/// cloud. For files that were synced to cloud we keep the file_info as a tombstone until the cloud
+/// deletion step runs and deletes it. Once cloud deletion step deletes the file_info, it will also
+/// remove the tombstone.
 pub struct DeleteFileInfosStep<T: FileDeletionStepsContext> {
     _phantom: std::marker::PhantomData<T>,
 }
@@ -341,15 +344,15 @@ impl<T: FileDeletionStepsContext + Send + Sync> PipelineStep<T> for DeleteFileIn
             context.file_set_id()
         );
         let repository_manager = context.repository_manager();
-        for dr in context
-            .deletion_results_mut()
-            .values_mut()
-            .filter(|f| {
-                f.is_deletable
+        for dr in context.deletion_results_mut().values_mut().filter(|f| {
+            f.is_deletable
                     && f.file_deletion_success.is_some_and(|s| s)
+                    // We delete here only files that are not synced to cloud — for synced files we
+                    // keep the file_info as a tombstone until the cloud deletion step runs and
+                    // deletes it. Once cloud deletion step deletes the file_info, it will also
+                    // remove the tombstone. 
                     && f.file_info.cloud_sync_status == CloudSyncStatus::NotSynced
-            })
-        {
+        }) {
             tracing::info!(
                 "Processing file_info with id {} for deletion",
                 dr.file_info.id
@@ -449,7 +452,6 @@ mod tests {
             archive_file_name: Some("file1.zst".to_string()),
             sha1_checksum: Sha1Checksum::from([0; 20]),
             file_size: 1234,
-            is_available: true,
         };
 
         let file2 = ImportedFile {
@@ -457,7 +459,6 @@ mod tests {
             archive_file_name: Some("file2.zst".to_string()),
             sha1_checksum: Sha1Checksum::from([1; 20]),
             file_size: 5678,
-            is_available: true,
         };
 
         let file2_clone = file2.clone();
@@ -816,7 +817,6 @@ mod tests {
         );
         assert!(fs_ops.was_deleted(fp.to_string_lossy().as_ref()));
 
-
         assert!(
             context
                 .deletion_results
@@ -844,7 +844,6 @@ mod tests {
             archive_file_name: None,
             sha1_checksum: Sha1Checksum::from([1; 20]),
             file_size: 0,
-            is_available: false,
         };
 
         let file_set_id =
@@ -1142,7 +1141,6 @@ mod tests {
             archive_file_name: Some("file1.zst".to_string()),
             sha1_checksum: Sha1Checksum::from([0; 20]),
             file_size: 1234,
-            is_available: true,
         };
 
         TestSetup {

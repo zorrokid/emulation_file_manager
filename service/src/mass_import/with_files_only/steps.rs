@@ -294,7 +294,6 @@ mod tests {
                         archive_file_name: Some("1234abcd".to_string()),
                         sha1_checksum: file.sha1_checksum,
                         file_size: file.file_size,
-                        is_available: true,
                     })
                     .collect::<Vec<_>>(),
                 &[context.input.system_id],

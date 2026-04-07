@@ -29,7 +29,7 @@ pub struct ImportFileContent {
 #[derive(Debug, Clone, Default)]
 pub struct DatImportExtras {
     /// ROMs declared in the DAT that could not be matched to a source file.
-    /// These are stored as `file_info` records with `is_available = false`.
+    /// These are stored as `file_info` records with `archive_file_name = NULL` (unavailable).
     pub missing_files: Vec<ImportFileContent>,
     /// ID of the DAT file this file set should be linked to.
     pub dat_file_id: Option<i64>,
@@ -77,8 +77,8 @@ pub struct FileImportData {
     pub import_files: Vec<FileImportSource>,
 
     /// When importing with DAT file, some files from the DAT file can be missing. Obviously we
-    /// cannot import the actual files but we record them to file_info with is_available = false,
-    /// and link them also to the file set. So file set can have both available and missing files.
+    /// cannot import the actual files but we record them to file_info with `archive_file_name = NULL`
+    /// (unavailable), and link them also to the file set. So file set can have both available and missing files.
     pub missing_files: Vec<ImportFileContent>,
 }
 
@@ -128,7 +128,7 @@ impl FileImportData {
                         if self.selected_files.contains(sha1_checksum)
                             && !existing_files
                                 .iter()
-                                .any(|f| f.sha1_checksum == *sha1_checksum && f.is_available)
+                                .any(|f| f.sha1_checksum == *sha1_checksum && f.is_available())
                         {
                             Some(import_content.file_name.clone())
                         } else {
@@ -269,7 +269,6 @@ mod tests {
             file_size: 2048,
             file_type: FileType::Rom,
             archive_file_name: Some("archive_file_name".to_string()),
-            is_available: true,
             cloud_sync_status: Default::default(),
         }];
 
@@ -341,7 +340,6 @@ mod tests {
             file_size: 1024,
             file_type: FileType::Rom,
             archive_file_name: Some("archive_file_name".to_string()),
-            is_available: true,
             cloud_sync_status: Default::default(),
         }];
         let model: FileImportModel = file_import_data.get_file_import_model(&existing_files);
