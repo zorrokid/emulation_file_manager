@@ -1,4 +1,4 @@
-use std::{collections::HashSet, sync::Arc};
+use std::sync::Arc;
 
 use core_types::FileSyncStatus;
 use sqlx::{Pool, Row, Sqlite, prelude::FromRow, sqlite::SqliteRow};
@@ -95,7 +95,7 @@ impl FileSyncLogRepository {
             separated.push_bind(status.to_db_int());
         }
         separated.push_unseparated(
-            ") ORDER BY log.sync_time DESC
+            ") ORDER BY log.id ASC
              LIMIT ? OFFSET ?",
         );
 
@@ -155,26 +155,6 @@ impl FileSyncLogRepository {
         Ok(result.last_insert_rowid())
     }
 
-    pub async fn mark_files_for_cloud_sync(
-        &self,
-        file_info_ids: &[(i64, String)],
-    ) -> Result<(), sqlx::Error> {
-        if file_info_ids.is_empty() {
-            return Ok(());
-        }
-        let mut query_builder = sqlx::QueryBuilder::<Sqlite>::new(
-            "INSERT INTO file_sync_log (file_info_id, status, cloud_key) ",
-        );
-        query_builder.push_values(file_info_ids.iter(), |mut b, (file_info_id, cloud_key)| {
-            b.push_bind(file_info_id)
-                .push_bind(FileSyncStatus::UploadPending.to_db_int())
-                .push_bind(cloud_key);
-        });
-        let query = query_builder.build();
-        query.execute(&*self.pool).await?;
-        Ok(())
-    }
-
     /// Clean up sync log entries for file_info records that no longer exist
     pub async fn cleanup_orphaned_logs(&self) -> Result<u64, sqlx::Error> {
         let result = sqlx::query!(
@@ -185,27 +165,6 @@ impl FileSyncLogRepository {
         .await?;
         Ok(result.rows_affected())
     }
-
-    pub async fn get_all_synced_file_set_ids(&self) -> Result<HashSet<i64>, sqlx::Error> {
-        let upload_completed_status = FileSyncStatus::UploadCompleted.to_db_int();
-        // include only file_info_ids where the latest log entry indicates upload completed
-        let rows = sqlx::query!(
-            "SELECT log.file_info_id 
-             FROM file_sync_log log
-             INNER JOIN (
-                SELECT file_info_id, MAX(id) AS max_id
-                FROM file_sync_log
-                GROUP BY file_info_id
-             ) latest ON log.file_info_id = latest.file_info_id AND log.id = latest.max_id
-             WHERE log.status = ?",
-            upload_completed_status
-        )
-        .fetch_all(&*self.pool)
-        .await?;
-
-        let file_set_ids = rows.into_iter().map(|row| row.file_info_id).collect();
-        Ok(file_set_ids)
-    }
 }
 
 #[cfg(test)]
@@ -213,7 +172,7 @@ mod tests {
     use core_types::Sha1Checksum;
 
     use super::*;
-    use crate::{repository::file_info_repository::FileInfoRepository, setup_test_db};
+    use crate::setup_test_db;
 
     #[async_std::test]
     async fn test_get_logs_and_file_info_by_sync_status() {
@@ -221,7 +180,7 @@ mod tests {
         let repository = FileSyncLogRepository::new(Arc::clone(&pool));
         let file_info_id = insert_file_info(&pool).await;
         repository
-            .add_log_entry(file_info_id, FileSyncStatus::UploadPending, "", "")
+            .add_log_entry(file_info_id, FileSyncStatus::UploadInProgress, "", "")
             .await
             .unwrap();
         repository
@@ -237,7 +196,7 @@ mod tests {
         // add another file_info and log entries for it
         let file_info_id_2 = insert_file_info(&pool).await;
         repository
-            .add_log_entry(file_info_id_2, FileSyncStatus::UploadPending, "", "")
+            .add_log_entry(file_info_id_2, FileSyncStatus::UploadInProgress, "", "")
             .await
             .unwrap();
         repository
@@ -261,19 +220,18 @@ mod tests {
         let first = res.first().unwrap();
         assert_eq!(first.file_info_id, file_info_id_2);
 
-        // add one more log entry
+        // add one more log entry with a different status
         repository
-            .add_log_entry(file_info_id, FileSyncStatus::DeletionPending, "", "")
+            .add_log_entry(file_info_id, FileSyncStatus::UploadCompleted, "", "")
             .await
             .unwrap();
         repository
-            .add_log_entry(file_info_id_2, FileSyncStatus::DeletionPending, "", "")
+            .add_log_entry(file_info_id_2, FileSyncStatus::UploadCompleted, "", "")
             .await
             .unwrap();
 
         // now UploadFailed status shouldn't return anything since there is more recent log entry
         // for both files with different status
-        //
         let res = repository
             .get_logs_and_file_info_by_sync_status(&[FileSyncStatus::UploadFailed], 10, 0)
             .await
@@ -287,7 +245,7 @@ mod tests {
         let repository = FileSyncLogRepository::new(Arc::clone(&pool));
         let file_info_id = insert_file_info(&pool).await;
         repository
-            .add_log_entry(file_info_id, FileSyncStatus::UploadPending, "", "")
+            .add_log_entry(file_info_id, FileSyncStatus::UploadInProgress, "", "")
             .await
             .unwrap();
         repository
@@ -302,7 +260,7 @@ mod tests {
         assert_eq!(count, 1);
 
         let count = repository
-            .count_logs_by_latest_statuses(&[FileSyncStatus::UploadPending])
+            .count_logs_by_latest_statuses(&[FileSyncStatus::UploadInProgress])
             .await
             .unwrap();
         assert_eq!(count, 0);
@@ -310,7 +268,7 @@ mod tests {
         // add another file_info and log entries for it
         let file_info_id_2 = insert_file_info(&pool).await;
         repository
-            .add_log_entry(file_info_id_2, FileSyncStatus::UploadPending, "", "")
+            .add_log_entry(file_info_id_2, FileSyncStatus::UploadInProgress, "", "")
             .await
             .unwrap();
         repository
@@ -325,7 +283,7 @@ mod tests {
 
         // add one more log entry with different status for first file_info
         repository
-            .add_log_entry(file_info_id, FileSyncStatus::DeletionPending, "", "")
+            .add_log_entry(file_info_id, FileSyncStatus::UploadCompleted, "", "")
             .await
             .unwrap();
 
@@ -356,47 +314,6 @@ mod tests {
         assert_eq!(deleted_count, 1);
     }
 
-    #[async_std::test]
-    async fn test_mark_files_for_cloud_sync() {
-        let pool = Arc::new(setup_test_db().await);
-        let repository = FileSyncLogRepository::new(Arc::clone(&pool));
-        let file_info_id_1 = insert_file_info(&pool).await;
-        let file_info_id_2 = insert_file_info(&pool).await;
-
-        let file_info_repository = FileInfoRepository::new(Arc::clone(&pool));
-        let file_info_1 = file_info_repository
-            .get_file_info(file_info_id_1)
-            .await
-            .unwrap();
-
-        let file_info_2 = file_info_repository
-            .get_file_info(file_info_id_2)
-            .await
-            .unwrap();
-
-        repository
-            .mark_files_for_cloud_sync(&[
-                (file_info_id_1, file_info_1.generate_cloud_key().unwrap()),
-                (file_info_id_2, file_info_2.generate_cloud_key().unwrap()),
-            ])
-            .await
-            .unwrap();
-
-        let logs_1 = repository
-            .get_logs_by_file_info(file_info_id_1)
-            .await
-            .unwrap();
-        assert_eq!(logs_1.len(), 1);
-        assert_eq!(logs_1[0].status, FileSyncStatus::UploadPending);
-
-        let logs_2 = repository
-            .get_logs_by_file_info(file_info_id_2)
-            .await
-            .unwrap();
-        assert_eq!(logs_2.len(), 1);
-        assert_eq!(logs_2[0].status, FileSyncStatus::UploadPending);
-    }
-
     async fn insert_file_info(pool: &Pool<Sqlite>) -> i64 {
         let sha1_checksum: Sha1Checksum = [0u8; 20];
         let sha1_checksum_bytes = sha1_checksum.to_vec();
@@ -417,78 +334,5 @@ mod tests {
         .unwrap();
 
         result.last_insert_rowid()
-    }
-
-    #[async_std::test]
-    async fn test_get_all_synced_file_set_ids() {
-        let pool = Arc::new(setup_test_db().await);
-        let repository = FileSyncLogRepository::new(Arc::clone(&pool));
-        let file_info_id_1 = insert_file_info(&pool).await;
-        let file_info_id_2 = insert_file_info(&pool).await;
-
-        // Add log entries
-        repository
-            .add_log_entry(
-                file_info_id_1,
-                FileSyncStatus::UploadPending,
-                "",
-                "cloud_key_1",
-            )
-            .await
-            .unwrap();
-
-        repository
-            .add_log_entry(
-                file_info_id_1,
-                FileSyncStatus::UploadInProgress,
-                "",
-                "cloud_key_1",
-            )
-            .await
-            .unwrap();
-
-        repository
-            .add_log_entry(
-                file_info_id_1,
-                FileSyncStatus::UploadCompleted,
-                "",
-                "cloud_key_1",
-            )
-            .await
-            .unwrap();
-
-        repository
-            .add_log_entry(
-                file_info_id_2,
-                FileSyncStatus::UploadPending,
-                "",
-                "cloud_key_2",
-            )
-            .await
-            .unwrap();
-
-        repository
-            .add_log_entry(
-                file_info_id_2,
-                FileSyncStatus::UploadInProgress,
-                "",
-                "cloud_key_2",
-            )
-            .await
-            .unwrap();
-
-        repository
-            .add_log_entry(
-                file_info_id_2,
-                FileSyncStatus::UploadFailed,
-                "",
-                "cloud_key_2",
-            )
-            .await
-            .unwrap();
-
-        let synced_file_set_ids = repository.get_all_synced_file_set_ids().await.unwrap();
-        assert_eq!(synced_file_set_ids.len(), 1);
-        assert!(synced_file_set_ids.contains(&file_info_id_1));
     }
 }

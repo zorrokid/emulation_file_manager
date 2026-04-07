@@ -12,9 +12,8 @@ use crate::{
             context::UpdateFileSetContext,
             steps::{
                 CollectDeletionCandidatesStep, FetchFileSetStep, FetchFilesInFileSetStep,
-                MarkNewFilesForCloudSyncStep, UnlinkFilesFromFileSetStep,
-                UpdateFileInfoToDatabaseStep, UpdateFileSetFilesStep, UpdateFileSetItemTypesStep,
-                UpdateFileSetStep,
+                UnlinkFilesFromFileSetStep, UpdateFileInfoToDatabaseStep, UpdateFileSetFilesStep,
+                UpdateFileSetItemTypesStep, UpdateFileSetStep,
             },
         },
     },
@@ -40,7 +39,6 @@ impl Pipeline<UpdateFileSetContext> {
             Box::new(UpdateFileInfoToDatabaseStep),
             Box::new(UpdateFileSetFilesStep),
             Box::new(UpdateFileSetStep),
-            Box::new(MarkNewFilesForCloudSyncStep),
             Box::new(UpdateFileSetItemTypesStep),
         ])
     }

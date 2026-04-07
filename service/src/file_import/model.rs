@@ -270,6 +270,7 @@ mod tests {
             file_type: FileType::Rom,
             archive_file_name: Some("archive_file_name".to_string()),
             is_available: true,
+            cloud_sync_status: Default::default(),
         }];
 
         let result = file_import_data.get_new_selected_file_names(&existing_files);
@@ -341,6 +342,7 @@ mod tests {
             file_type: FileType::Rom,
             archive_file_name: Some("archive_file_name".to_string()),
             is_available: true,
+            cloud_sync_status: Default::default(),
         }];
         let model: FileImportModel = file_import_data.get_file_import_model(&existing_files);
         assert_eq!(model.file_type, FileType::Rom);

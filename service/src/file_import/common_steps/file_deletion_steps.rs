@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use core_types::{FileSyncStatus, Sha1Checksum};
+use core_types::{CloudSyncStatus, Sha1Checksum};
 use database::repository_manager::RepositoryManager;
 
 use crate::{
@@ -252,13 +252,9 @@ impl<T: FileDeletionStepsContext + Send + Sync> PipelineStep<T> for MarkForCloud
     }
 
     async fn execute(&self, context: &mut T) -> StepAction {
-        println!(
-            "Marking files for cloud deletion for file set with id {}",
-            context.file_set_id()
-        );
         tracing::info!(
-            "Marking files for cloud deletion for file set with id {}",
-            context.file_set_id()
+            file_set_id = context.file_set_id(),
+            "Marking files for cloud deletion",
         );
         let repository_manager = context.repository_manager();
         for deletion_result in context
@@ -266,62 +262,42 @@ impl<T: FileDeletionStepsContext + Send + Sync> PipelineStep<T> for MarkForCloud
             .values_mut()
             .filter(|f| f.is_deletable && f.file_deletion_success.is_some_and(|s| s))
         {
-            let sync_logs_res = repository_manager
-                .get_file_sync_log_repository()
-                .get_logs_by_file_info(deletion_result.file_info.id)
-                .await;
-
-            match sync_logs_res {
-                Err(e) => {
-                    tracing::error!(
-                        "Failed to fetch sync logs for file info with id {}: {}",
-                        deletion_result.file_info.id,
-                        e
-                    );
-                    return StepAction::Abort(Error::DbError(format!(
-                        "Failed to fetch sync logs for file info with id {}: {}",
-                        deletion_result.file_info.id, e
-                    )));
-                }
-                Ok(sync_logs) => {
-                    tracing::info!(
-                        "Fetched sync logs for file info with id {}",
-                        deletion_result.file_info.id
-                    );
-
-                    // TODO: maybe check that there is at least one successful upload before
-                    // marking for deletion instead of just checking the last log entry?
-                    if let Some(entry) = sync_logs.last() {
-                        tracing::info!(
-                            "File info with id {} has last sync log with status {:?}, marking for cloud deletion",
+            match deletion_result.file_info.cloud_sync_status {
+                CloudSyncStatus::Synced => {
+                    let update_res = repository_manager
+                        .get_file_info_repository()
+                        .update_cloud_sync_status(
                             deletion_result.file_info.id,
-                            entry.status
-                        );
-
-                        let update_res = repository_manager
-                            .get_file_sync_log_repository()
-                            .add_log_entry(
-                                deletion_result.file_info.id,
-                                FileSyncStatus::DeletionPending,
-                                "",
-                                entry.cloud_key.as_str(),
-                            )
-                            .await;
-                        if let Err(e) = update_res {
-                            // TODO: should this abort?
+                            CloudSyncStatus::DeletionPending,
+                        )
+                        .await;
+                    match update_res {
+                        Ok(_) => {
+                            // Update in-memory status so DeleteFileInfosStep skips this tombstone
+                            deletion_result.file_info.cloud_sync_status =
+                                CloudSyncStatus::DeletionPending;
+                            deletion_result.cloud_delete_marked_successfully = Some(true);
+                            tracing::info!(
+                                file_info_id = deletion_result.file_info.id,
+                                "Marked file_info for cloud deletion",
+                            );
+                        }
+                        Err(e) => {
                             deletion_result.cloud_delete_marked_successfully = Some(false);
                             tracing::error!(
-                                "Failed to mark file info with id {} for cloud deletion: {}",
-                                deletion_result.file_info.id,
-                                e
+                                file_info_id = deletion_result.file_info.id,
+                                error = %e,
+                                "Failed to mark file_info for cloud deletion",
                             );
                             return StepAction::Abort(Error::DbError(format!(
-                                "Failed to mark file info with id {} for cloud deletion: {}",
+                                "Failed to mark file_info with id {} for cloud deletion: {}",
                                 deletion_result.file_info.id, e
                             )));
                         }
-                        deletion_result.cloud_delete_marked_successfully = Some(true);
                     }
+                }
+                CloudSyncStatus::NotSynced | CloudSyncStatus::DeletionPending => {
+                    // Nothing to do: file was never synced or already marked for deletion
                 }
             }
         }
@@ -360,10 +336,6 @@ impl<T: FileDeletionStepsContext + Send + Sync> PipelineStep<T> for DeleteFileIn
     }
 
     async fn execute(&self, context: &mut T) -> StepAction {
-        println!(
-            "Deleting file_info entries for file set {}",
-            context.file_set_id()
-        );
         tracing::info!(
             "Deleting file_info entries for file set {}",
             context.file_set_id()
@@ -372,7 +344,11 @@ impl<T: FileDeletionStepsContext + Send + Sync> PipelineStep<T> for DeleteFileIn
         for dr in context
             .deletion_results_mut()
             .values_mut()
-            .filter(|f| f.is_deletable && f.file_deletion_success.is_some_and(|s| s))
+            .filter(|f| {
+                f.is_deletable
+                    && f.file_deletion_success.is_some_and(|s| s)
+                    && f.file_info.cloud_sync_status == CloudSyncStatus::NotSynced
+            })
         {
             tracing::info!(
                 "Processing file_info with id {} for deletion",
@@ -410,7 +386,7 @@ impl<T: FileDeletionStepsContext + Send + Sync> PipelineStep<T> for DeleteFileIn
 mod tests {
     use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
-    use core_types::{FileSyncStatus, FileType, ImportedFile, Sha1Checksum};
+    use core_types::{CloudSyncStatus, FileType, ImportedFile, Sha1Checksum};
     use database::{repository_manager::RepositoryManager, setup_test_db};
 
     use crate::{
@@ -569,38 +545,62 @@ mod tests {
 
         let file_info = file_infos.first().unwrap();
 
-        let file_info_id = file_info.id;
+        // Mark as synced so the step has something to act on
+        repo_manager
+            .get_file_info_repository()
+            .update_cloud_sync_status(file_info.id, CloudSyncStatus::Synced)
+            .await
+            .unwrap();
 
-        repo_manager
-            .get_file_sync_log_repository()
-            .add_log_entry(
-                file_info_id,
-                FileSyncStatus::UploadPending,
-                "",
-                "cloud/key/file.zst",
-            )
+        let mut file_info_synced = file_info.clone();
+        file_info_synced.cloud_sync_status = CloudSyncStatus::Synced;
+
+        let mut file_deletion_result = FileDeletionResult::new(file_info_synced);
+        file_deletion_result.is_deletable = true;
+        file_deletion_result.file_deletion_success = Some(true);
+
+        let mut context = TestContext {
+            file_set_id,
+            repository_manager: repo_manager.clone(),
+            settings: settings.clone(),
+            fs_ops: fs_ops.clone(),
+            deletion_results: HashMap::from([(
+                file_info.sha1_checksum.clone(),
+                file_deletion_result,
+            )]),
+        };
+        let step = MarkForCloudDeletionStep::<TestContext>::new();
+        step.execute(&mut context).await;
+
+        let updated = repo_manager
+            .get_file_info_repository()
+            .get_file_info(file_info.id)
             .await
             .unwrap();
-        repo_manager
-            .get_file_sync_log_repository()
-            .add_log_entry(
-                file_info_id,
-                FileSyncStatus::UploadInProgress,
-                "",
-                "cloud/key/file.zst",
-            )
+        assert_eq!(updated.cloud_sync_status, CloudSyncStatus::DeletionPending);
+    }
+
+    #[async_std::test]
+    async fn test_mark_for_cloud_deletion_step_not_synced_file_is_not_marked() {
+        // Files that were never synced should not be marked for deletion
+        let TestSetup {
+            settings,
+            repo_manager,
+            fs_ops,
+            system_id,
+            file1,
+        } = prepare_test().await;
+
+        let file_set_id = prepare_file_set_with_files(&repo_manager, system_id, &[file1]).await;
+
+        let file_infos = repo_manager
+            .get_file_info_repository()
+            .get_file_infos_by_file_set(file_set_id)
             .await
             .unwrap();
-        repo_manager
-            .get_file_sync_log_repository()
-            .add_log_entry(
-                file_info_id,
-                FileSyncStatus::UploadCompleted,
-                "",
-                "cloud/key/file.zst",
-            )
-            .await
-            .unwrap();
+
+        let file_info = file_infos.first().unwrap();
+        // cloud_sync_status defaults to NotSynced
 
         let mut file_deletion_result = FileDeletionResult::new(file_info.clone());
         file_deletion_result.is_deletable = true;
@@ -618,13 +618,14 @@ mod tests {
         };
         let step = MarkForCloudDeletionStep::<TestContext>::new();
         step.execute(&mut context).await;
-        let logs = repo_manager
-            .get_file_sync_log_repository()
-            .get_logs_by_file_info(file_info_id)
+
+        let updated = repo_manager
+            .get_file_info_repository()
+            .get_file_info(file_info.id)
             .await
             .unwrap();
-        assert_eq!(logs.len(), 4);
-        assert_eq!(logs[0].status, FileSyncStatus::DeletionPending);
+        // Status should remain NotSynced
+        assert_eq!(updated.cloud_sync_status, CloudSyncStatus::NotSynced);
     }
 
     #[async_std::test]
@@ -646,39 +647,6 @@ mod tests {
             .unwrap();
 
         let file_info = file_infos.first().unwrap();
-
-        let file_info_id = file_info.id;
-
-        repo_manager
-            .get_file_sync_log_repository()
-            .add_log_entry(
-                file_info_id,
-                FileSyncStatus::UploadPending,
-                "",
-                "cloud/key/file.zst",
-            )
-            .await
-            .unwrap();
-        repo_manager
-            .get_file_sync_log_repository()
-            .add_log_entry(
-                file_info_id,
-                FileSyncStatus::UploadInProgress,
-                "",
-                "cloud/key/file.zst",
-            )
-            .await
-            .unwrap();
-        repo_manager
-            .get_file_sync_log_repository()
-            .add_log_entry(
-                file_info_id,
-                FileSyncStatus::UploadCompleted,
-                "",
-                "cloud/key/file.zst",
-            )
-            .await
-            .unwrap();
 
         let mut file_deletion_result = FileDeletionResult::new(file_info.clone());
         file_deletion_result.is_deletable = true;
@@ -736,11 +704,6 @@ mod tests {
         let step = DeleteLocalFilesStep::<TestContext>::new();
         let res = step.execute(&mut context).await;
 
-        println!(
-            "Deletion result: {:?}",
-            context.deletion_results.get(&file_info.sha1_checksum)
-        );
-
         assert!(
             context
                 .deletion_results
@@ -778,10 +741,6 @@ mod tests {
             file_info.archive_file_name.as_deref().unwrap(),
         );
 
-        println!(
-            "Adding file to mock FS ops: {}",
-            file_path.to_string_lossy()
-        );
         fs_ops.add_file(file_path.to_string_lossy().as_ref());
 
         let mut file_deletion_result = FileDeletionResult::new(file_info.clone());
@@ -834,10 +793,6 @@ mod tests {
             file_info.archive_file_name.as_deref().unwrap(),
         );
 
-        println!(
-            "Adding file to mock FS ops: {}",
-            file_path.to_string_lossy()
-        );
         fs_ops.add_file(file_path.to_string_lossy().as_ref());
 
         let mut file_deletion_result = FileDeletionResult::new(file_info.clone());
@@ -859,13 +814,8 @@ mod tests {
             &file_info.file_type,
             file_info.archive_file_name.as_deref().unwrap(),
         );
-        println!("Checking if file was deleted: {}", fp.to_string_lossy());
         assert!(fs_ops.was_deleted(fp.to_string_lossy().as_ref()));
 
-        println!(
-            "Deletion result: {:?}",
-            context.deletion_results.get(&file_info.sha1_checksum)
-        );
 
         assert!(
             context
@@ -997,6 +947,79 @@ mod tests {
             .get_file_info(file_info.id)
             .await;
         assert!(res.is_err());
+    }
+
+    #[async_std::test]
+    async fn test_delete_file_infos_step_skips_deletion_pending() {
+        // DeletionPending file_infos are tombstones kept until the cloud deletion runs.
+        // DeleteFileInfosStep must not remove them — they would be missed by DeleteMarkedFilesStep.
+        let TestSetup {
+            settings,
+            repo_manager,
+            fs_ops,
+            system_id,
+            file1,
+        } = prepare_test().await;
+
+        let file_set_id = prepare_file_set_with_files(&repo_manager, system_id, &[file1]).await;
+
+        let file_infos = repo_manager
+            .get_file_info_repository()
+            .get_file_infos_by_file_set(file_set_id)
+            .await
+            .unwrap();
+
+        let file_info = file_infos.first().unwrap();
+
+        // Simulate that MarkForCloudDeletionStep already set this to DeletionPending
+        repo_manager
+            .get_file_info_repository()
+            .update_cloud_sync_status(file_info.id, CloudSyncStatus::DeletionPending)
+            .await
+            .unwrap();
+
+        let mut file_info_pending = file_info.clone();
+        file_info_pending.cloud_sync_status = CloudSyncStatus::DeletionPending;
+
+        let mut file_deletion_result = FileDeletionResult::new(file_info_pending);
+        file_deletion_result.is_deletable = true;
+        file_deletion_result.file_deletion_success = Some(true);
+
+        // Remove file_set link so FK wouldn't prevent a delete if the step tried
+        repo_manager
+            .get_file_set_repository()
+            .delete_file_set(file_set_id)
+            .await
+            .unwrap();
+
+        let mut context = TestContext {
+            file_set_id,
+            repository_manager: repo_manager.clone(),
+            settings: settings.clone(),
+            fs_ops: fs_ops.clone(),
+            deletion_results: HashMap::from([(
+                file_info.sha1_checksum.clone(),
+                file_deletion_result,
+            )]),
+        };
+
+        let step = DeleteFileInfosStep::<TestContext>::new();
+        let action = step.execute(&mut context).await;
+        assert_eq!(action, StepAction::Continue);
+
+        // file_info must still exist — it's a tombstone for cloud deletion
+        let res = repo_manager
+            .get_file_info_repository()
+            .get_file_info(file_info.id)
+            .await;
+        assert!(res.is_ok());
+
+        // db_deletion_success remains None because the step skipped this record
+        let dr = context
+            .deletion_results
+            .get(&file_info.sha1_checksum)
+            .unwrap();
+        assert!(dr.db_deletion_success.is_none());
     }
 
     #[async_std::test]

@@ -180,7 +180,7 @@ Each phase requires explicit user confirmation before moving to the next.
 - ✋ User confirms all tests pass and are satisfactory
 
 **Phase 6 — Code Review**
-- Invoke the `architect` skill for a code review
+- Invoke the `code-review` skill for a code review
 - Fix each finding; add fix tasks to the tasks file and mark them done
 - Re-request review; repeat until only minor/acceptable findings remain
 - ✋ User decides when the review cycle ends
@@ -223,7 +223,8 @@ Invoke the appropriate skill for domain-specific work:
 
 | Skill | Invoke for |
 |---|---|
-| `architect` | Feature planning, design decisions, architecture review, code review |
+| `architect` | Feature planning, design decisions, architecture review |
+| `code-review` | Code review of completed implementations |
 | `database` | Migrations, new repositories, SQLx queries, schema changes |
 | `relm4-gui` | GTK4 components, dialogs, forms, list views |
 | `qa` | Test coverage analysis, writing tests, mock design |

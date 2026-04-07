@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE file_info SET cloud_sync_status = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "850d44ce30ee67fd1c6f2d6cebda239b1d55acc967e070f98d4d324483398a00"
+}

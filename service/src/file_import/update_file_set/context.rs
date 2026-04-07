@@ -334,6 +334,7 @@ mod tests {
             archive_file_name: Some("archive_file_name_1".to_string()),
             file_size: 1024,
             is_available: true,
+            cloud_sync_status: Default::default(),
         });
         context.state.new_files.push(FileInfo {
             id: 2,
@@ -342,6 +343,7 @@ mod tests {
             archive_file_name: Some("archive_file_name_2".to_string()),
             file_size: 4096,
             is_available: true,
+            cloud_sync_status: Default::default(),
         });
 
         let result = context.get_file_info_ids_with_file_names();
@@ -380,6 +382,7 @@ mod tests {
             archive_file_name: Some("archive_file_name_1".to_string()),
             file_size: 1024,
             is_available: true,
+            cloud_sync_status: Default::default(),
         });
 
         let result = context.get_file_info_ids_with_file_names();
