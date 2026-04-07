@@ -321,37 +321,34 @@
 <!-- file_info -->
 <g id="node24" class="node">
 <title>file_info</title>
-<polygon fill="#efefef" stroke="none" points="1481.48,-805.8 1481.48,-841.4 1684.56,-841.4 1684.56,-805.8 1481.48,-805.8"/>
-<polygon fill="none" stroke="black" points="1481.48,-805.8 1481.48,-841.4 1684.56,-841.4 1684.56,-805.8 1481.48,-805.8"/>
-<text text-anchor="start" x="1517.4" y="-819.2" font-family="Arial Bold" font-size="18.00">file_info</text>
-<text text-anchor="start" x="1579.38" y="-819.2" font-family="Arial" font-size="14.00">    </text>
-<text text-anchor="start" x="1610.5" y="-819.2" font-family="Arial" font-size="14.00" fill="#666666">[table]</text>
-<polygon fill="none" stroke="black" points="1481.48,-775 1481.48,-805.8 1684.56,-805.8 1684.56,-775 1481.48,-775"/>
-<text text-anchor="start" x="1488.48" y="-787.2" font-family="Arial" font-size="14.00">id </text>
-<text text-anchor="start" x="1503.27" y="-787.2" font-family="Arial" font-size="14.00" fill="#666666">[INTEGER]</text>
-<polygon fill="none" stroke="black" points="1481.48,-744.2 1481.48,-775 1684.56,-775 1684.56,-744.2 1481.48,-744.2"/>
-<text text-anchor="start" x="1488.48" y="-756.4" font-family="Arial" font-size="14.00">sha1_checksum </text>
-<text text-anchor="start" x="1593.54" y="-756.4" font-family="Arial" font-size="14.00" fill="#666666">[BLOB]</text>
-<polygon fill="none" stroke="black" points="1481.48,-713.4 1481.48,-744.2 1684.56,-744.2 1684.56,-713.4 1481.48,-713.4"/>
-<text text-anchor="start" x="1488.48" y="-725.6" font-family="Arial" font-size="14.00">file_size </text>
-<text text-anchor="start" x="1542.95" y="-725.6" font-family="Arial" font-size="14.00" fill="#666666">[INTEGER]</text>
-<polygon fill="none" stroke="black" points="1481.48,-682.6 1481.48,-713.4 1684.56,-713.4 1684.56,-682.6 1481.48,-682.6"/>
-<text text-anchor="start" x="1488.48" y="-694.8" font-family="Arial" font-size="14.00">archive_file_name </text>
-<text text-anchor="start" x="1605.99" y="-694.8" font-family="Arial" font-size="14.00" fill="#666666">[TEXT]</text>
-<polygon fill="none" stroke="black" points="1481.48,-651.8 1481.48,-682.6 1684.56,-682.6 1684.56,-651.8 1481.48,-651.8"/>
-<text text-anchor="start" x="1488.48" y="-664" font-family="Arial" font-size="14.00">file_type </text>
-<text text-anchor="start" x="1544.52" y="-664" font-family="Arial" font-size="14.00" fill="#666666">[INTEGER]</text>
-<polygon fill="none" stroke="black" points="1481.48,-621 1481.48,-651.8 1684.56,-651.8 1684.56,-621 1481.48,-621"/>
-<text text-anchor="start" x="1488.48" y="-633.2" font-family="Arial" font-size="14.00">is_available </text>
-<text text-anchor="start" x="1565.53" y="-633.2" font-family="Arial" font-size="14.00" fill="#666666">[INTEGER]</text>
-<polygon fill="none" stroke="black" points="1481.48,-590.2 1481.48,-621 1684.56,-621 1684.56,-590.2 1481.48,-590.2"/>
-<text text-anchor="start" x="1488.48" y="-602.4" font-family="Arial" font-size="14.00">cloud_sync_status </text>
-<text text-anchor="start" x="1607.55" y="-602.4" font-family="Arial" font-size="14.00" fill="#666666">[INTEGER]</text>
+<polygon fill="#efefef" stroke="none" points="1481.48,-790.4 1481.48,-826 1684.56,-826 1684.56,-790.4 1481.48,-790.4"/>
+<polygon fill="none" stroke="black" points="1481.48,-790.4 1481.48,-826 1684.56,-826 1684.56,-790.4 1481.48,-790.4"/>
+<text text-anchor="start" x="1517.4" y="-803.8" font-family="Arial Bold" font-size="18.00">file_info</text>
+<text text-anchor="start" x="1579.38" y="-803.8" font-family="Arial" font-size="14.00">    </text>
+<text text-anchor="start" x="1610.5" y="-803.8" font-family="Arial" font-size="14.00" fill="#666666">[table]</text>
+<polygon fill="none" stroke="black" points="1481.48,-759.6 1481.48,-790.4 1684.56,-790.4 1684.56,-759.6 1481.48,-759.6"/>
+<text text-anchor="start" x="1488.48" y="-771.8" font-family="Arial" font-size="14.00">id </text>
+<text text-anchor="start" x="1503.27" y="-771.8" font-family="Arial" font-size="14.00" fill="#666666">[INTEGER]</text>
+<polygon fill="none" stroke="black" points="1481.48,-728.8 1481.48,-759.6 1684.56,-759.6 1684.56,-728.8 1481.48,-728.8"/>
+<text text-anchor="start" x="1488.48" y="-741" font-family="Arial" font-size="14.00">sha1_checksum </text>
+<text text-anchor="start" x="1593.54" y="-741" font-family="Arial" font-size="14.00" fill="#666666">[BLOB]</text>
+<polygon fill="none" stroke="black" points="1481.48,-698 1481.48,-728.8 1684.56,-728.8 1684.56,-698 1481.48,-698"/>
+<text text-anchor="start" x="1488.48" y="-710.2" font-family="Arial" font-size="14.00">file_size </text>
+<text text-anchor="start" x="1542.95" y="-710.2" font-family="Arial" font-size="14.00" fill="#666666">[INTEGER]</text>
+<polygon fill="none" stroke="black" points="1481.48,-667.2 1481.48,-698 1684.56,-698 1684.56,-667.2 1481.48,-667.2"/>
+<text text-anchor="start" x="1488.48" y="-679.4" font-family="Arial" font-size="14.00">archive_file_name </text>
+<text text-anchor="start" x="1605.99" y="-679.4" font-family="Arial" font-size="14.00" fill="#666666">[TEXT]</text>
+<polygon fill="none" stroke="black" points="1481.48,-636.4 1481.48,-667.2 1684.56,-667.2 1684.56,-636.4 1481.48,-636.4"/>
+<text text-anchor="start" x="1488.48" y="-648.6" font-family="Arial" font-size="14.00">file_type </text>
+<text text-anchor="start" x="1544.52" y="-648.6" font-family="Arial" font-size="14.00" fill="#666666">[INTEGER]</text>
+<polygon fill="none" stroke="black" points="1481.48,-605.6 1481.48,-636.4 1684.56,-636.4 1684.56,-605.6 1481.48,-605.6"/>
+<text text-anchor="start" x="1488.48" y="-617.8" font-family="Arial" font-size="14.00">cloud_sync_status </text>
+<text text-anchor="start" x="1607.55" y="-617.8" font-family="Arial" font-size="14.00" fill="#666666">[INTEGER]</text>
 </g>
 <!-- file_info_system&#45;&gt;file_info -->
 <g id="edge10" class="edge">
 <title>file_info_system:file_info_id&#45;&gt;file_info:id</title>
-<path fill="none" stroke="black" d="M1023.33,-1163.18C1082.4,-1152.7 1007.11,-1044.21 1064.02,-997.6 1190.14,-894.32 1303.15,-1065.18 1429.02,-961.6 1490.37,-911.11 1401.03,-790.4 1480.48,-790.4"/>
+<path fill="none" stroke="black" d="M1023.33,-1163.18C1082.4,-1152.7 1007.11,-1044.21 1064.02,-997.6 1190.14,-894.32 1304.34,-1066.61 1429.02,-961.6 1494.82,-906.18 1394.45,-775 1480.48,-775"/>
 <polygon fill="black" stroke="black" points="1023.44,-1163.17 1013.11,-1159.49 1018.12,-1163.6 1013.81,-1163.95 1013.81,-1163.95 1013.81,-1163.95 1018.12,-1163.6 1013.83,-1168.46 1023.44,-1163.17"/>
 <text text-anchor="start" x="454.92" y="-1174" font-family="Arial" font-size="10.00">FOREIGN KEY (file_info_id) REFERENCES file_info (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE</text>
 </g>
@@ -659,8 +656,8 @@
 <!-- file_set_file_info&#45;&gt;file_info -->
 <g id="edge20" class="edge">
 <title>file_set_file_info:file_info_id&#45;&gt;file_info:id</title>
-<path fill="none" stroke="black" d="M1676.66,-1162.97C1715.6,-1154.03 1686.47,-1088.88 1665.63,-1043.8 1620.22,-945.6 1527,-982.75 1481.48,-884.6 1463.87,-846.62 1438.61,-790.4 1480.48,-790.4"/>
-<polygon fill="black" stroke="black" points="1676.91,-1162.94 1666.5,-1159.49 1671.6,-1163.49 1667.29,-1163.93 1667.29,-1163.93 1667.29,-1163.93 1671.6,-1163.49 1667.42,-1168.44 1676.91,-1162.94"/>
+<path fill="none" stroke="black" d="M1676.65,-1162.98C1715.45,-1154.1 1685.43,-1089.35 1665.63,-1043.8 1620.66,-940.37 1526.57,-972.58 1481.48,-869.2 1464.74,-830.82 1438.61,-775 1480.48,-775"/>
+<polygon fill="black" stroke="black" points="1676.91,-1162.95 1666.5,-1159.49 1671.6,-1163.49 1667.29,-1163.93 1667.29,-1163.93 1667.29,-1163.93 1671.6,-1163.49 1667.42,-1168.44 1676.91,-1162.95"/>
 <text text-anchor="start" x="1108.41" y="-1148" font-family="Arial" font-size="10.00">FOREIGN KEY (file_info_id) REFERENCES file_info (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE</text>
 </g>
 <!-- system_libretro_core -->

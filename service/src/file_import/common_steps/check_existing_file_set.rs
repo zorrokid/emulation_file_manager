@@ -145,7 +145,6 @@ mod tests {
             archive_file_name: Some("test_file".to_string()),
             file_size: 1234,
             sha1_checksum,
-            is_available: true,
         }];
 
         let file_set_id = file_set_repository

@@ -71,7 +71,7 @@ impl PipelineStep<AddFileSetContext> for CreateFileSetToDatabaseStep {
                     .state
                     .imported_files
                     .values()
-                    .filter(|f| f.is_available)
+                    .filter(|f| f.is_available())
                 {
                     if let Some(archive_name) = &imported_file.archive_file_name {
                         let file_path = context
@@ -268,7 +268,6 @@ mod tests {
                 sha1_checksum: checksum,
                 file_size: 1024,
                 archive_file_name: Some("archive123.zst".to_string()),
-                is_available: true,
             },
         );
 
@@ -326,7 +325,6 @@ mod tests {
                 sha1_checksum: checksum1,
                 file_size: 1024,
                 archive_file_name: Some("new_archive.zst".to_string()),
-                is_available: true,
             },
         );
 
@@ -468,7 +466,6 @@ mod tests {
                 sha1_checksum: checksum,
                 file_size: 0,
                 archive_file_name: None,
-                is_available: true,
             },
         );
 

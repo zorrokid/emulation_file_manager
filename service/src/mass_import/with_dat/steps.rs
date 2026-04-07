@@ -764,7 +764,7 @@ mod tests {
         rom_name: &str,
         rom_sha1_hex: &str,
         system_id: i64,
-        is_available: bool,
+        archive_file_name: Option<&str>,
     ) -> i64 {
         use core_types::{FileType, ImportedFile};
         let sha1 = sha1_from_hex_string(rom_sha1_hex).expect("Invalid SHA1 hex");
@@ -777,10 +777,9 @@ mod tests {
                 "test source",
                 &[ImportedFile {
                     original_file_name: rom_name.to_string(),
-                    archive_file_name: Some("archive.bin".to_string()),
+                    archive_file_name: archive_file_name.map(str::to_string),
                     sha1_checksum: sha1,
                     file_size: 1024,
-                    is_available,
                 }],
                 &[system_id],
             )
@@ -847,7 +846,7 @@ mod tests {
             ROM_NAME,
             ROM_SHA1,
             system_id,
-            true,
+            Some("archive.bin"),
         )
         .await;
         deps.repository_manager
@@ -886,7 +885,7 @@ mod tests {
             ROM_NAME,
             ROM_SHA1,
             system_id,
-            false, // unavailable
+            None, // unavailable — no archive file yet
         )
         .await;
         deps.repository_manager
@@ -924,7 +923,7 @@ mod tests {
             ROM_NAME,
             ROM_SHA1,
             system_id,
-            true,
+            Some("archive.bin"),
         )
         .await;
 

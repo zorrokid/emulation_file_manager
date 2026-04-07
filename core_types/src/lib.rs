@@ -75,9 +75,15 @@ pub struct ImportedFile {
     pub archive_file_name: Option<String>,
     pub sha1_checksum: Sha1Checksum,
     pub file_size: FileSize,
-    /// When importing with DAT files, some of the files described in the DAT may not be available
-    /// in local file system for import operation.
-    pub is_available: bool,
+}
+
+impl ImportedFile {
+    /// Returns `true` when the file has been archived and is ready for use.
+    /// A file with no `archive_file_name` (e.g. a DAT-described ROM that hasn't been
+    /// sourced locally yet) is considered unavailable.
+    pub fn is_available(&self) -> bool {
+        self.archive_file_name.is_some()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -308,11 +314,6 @@ pub enum FileSyncStatus {
     DeletionInProgress,
     DeletionCompleted,
     DeletionFailed,
-    /// Written when a file passes the `is_available` filter but has no `archive_file_name`,
-    /// violating the invariant `is_available = true ↔ archive_file_name = Some(...)`.
-    /// Using a dedicated status (rather than `UploadFailed`) avoids an infinite retry loop,
-    /// since `UploadFailed` is included in the `[UploadPending, UploadFailed]` retry query.
-    UploadSkipped,
 }
 
 impl FileSyncStatus {
@@ -326,7 +327,6 @@ impl FileSyncStatus {
             FileSyncStatus::DeletionInProgress => 5,
             FileSyncStatus::DeletionCompleted => 6,
             FileSyncStatus::DeletionFailed => 7,
-            FileSyncStatus::UploadSkipped => 8,
         }
     }
 
@@ -340,7 +340,6 @@ impl FileSyncStatus {
             5 => Ok(FileSyncStatus::DeletionInProgress),
             6 => Ok(FileSyncStatus::DeletionCompleted),
             7 => Ok(FileSyncStatus::DeletionFailed),
-            8 => Ok(FileSyncStatus::UploadSkipped),
             _ => Err(CoreTypeError::ConversionError(
                 "Failed convert to FileSyncStatus".to_string(),
             )),
