@@ -306,7 +306,10 @@ impl<T: FileDeletionStepsContext + Send + Sync> PipelineStep<T> for MarkForCloud
     }
 }
 
-/// Delete file_info entries for deleted files from database
+/// Delete file_info entries for deleted files from database for files that were never synced to
+/// cloud. For files that were synced to cloud we keep the file_info as a tombstone until the cloud
+/// deletion step runs and deletes it. Once cloud deletion step deletes the file_info, it will also
+/// remove the tombstone.
 pub struct DeleteFileInfosStep<T: FileDeletionStepsContext> {
     _phantom: std::marker::PhantomData<T>,
 }
@@ -341,15 +344,15 @@ impl<T: FileDeletionStepsContext + Send + Sync> PipelineStep<T> for DeleteFileIn
             context.file_set_id()
         );
         let repository_manager = context.repository_manager();
-        for dr in context
-            .deletion_results_mut()
-            .values_mut()
-            .filter(|f| {
-                f.is_deletable
+        for dr in context.deletion_results_mut().values_mut().filter(|f| {
+            f.is_deletable
                     && f.file_deletion_success.is_some_and(|s| s)
+                    // We delete here only files that are not synced to cloud — for synced files we
+                    // keep the file_info as a tombstone until the cloud deletion step runs and
+                    // deletes it. Once cloud deletion step deletes the file_info, it will also
+                    // remove the tombstone. 
                     && f.file_info.cloud_sync_status == CloudSyncStatus::NotSynced
-            })
-        {
+        }) {
             tracing::info!(
                 "Processing file_info with id {} for deletion",
                 dr.file_info.id
@@ -815,7 +818,6 @@ mod tests {
             file_info.archive_file_name.as_deref().unwrap(),
         );
         assert!(fs_ops.was_deleted(fp.to_string_lossy().as_ref()));
-
 
         assert!(
             context

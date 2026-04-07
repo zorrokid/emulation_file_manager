@@ -100,7 +100,7 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                 .get_files_pending_upload(
                     10,
                     0, // always offset 0: each uploaded file is updated to Synced so it
-                       // won't appear in the next fetch
+                      // won't appear in the next fetch
                 )
                 .await;
 
@@ -140,11 +140,25 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                             continue;
                         };
 
+                        let Some(archive_file_name) = file.archive_file_name else {
+                            tracing::warn!(
+                                file_info_id = file.id,
+                                "file_info record without archive_file_name in cloud sync process, this shouldn't happen."
+                            );
+                            continue;
+                        };
+
+                        let local_path = context
+                            .settings
+                            .get_file_path(&file.file_type, &archive_file_name);
+
                         tracing::debug!(
                             file_info_id = file.id,
                             cloud_key = %cloud_key,
+                            local_path = %local_path.display(),
                             "Uploading file"
                         );
+
                         file_count += 1;
 
                         send_progress_event(
@@ -166,17 +180,6 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                             db_error: None,
                         };
 
-                        let local_path = context.settings.get_file_path(
-                            &file.file_type,
-                            file.archive_file_name.as_deref().expect("checked above"),
-                        );
-
-                        tracing::debug!(
-                            file_info_id = file.id,
-                            local_path = %local_path.display(),
-                            "Uploading file to cloud"
-                        );
-
                         let upload_res = context
                             .cloud_ops
                             .as_ref()
@@ -189,7 +192,7 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                             .await;
 
                         match upload_res {
-                            Ok(_) => {
+                            Ok(()) => {
                                 tracing::info!(
                                     file_info_id = file.id,
                                     cloud_key = %cloud_key,
@@ -218,7 +221,7 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                                     .await;
 
                                 match (status_res, log_res) {
-                                    (Ok(_), Ok(_)) => {
+                                    (Ok(()), Ok(_)) => {
                                         file_sync_result.db_update_success = true;
                                     }
                                     (Err(e), _) => {
@@ -254,6 +257,8 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                             Err(e) => {
                                 tracing::error!(
                                     file_info_id = file.id,
+                                    cloud_key = cloud_key,
+                                    local_path = %local_path.display(),
                                     error = %e,
                                     "Upload failed"
                                 );
@@ -901,7 +906,10 @@ mod tests {
             .get_logs_by_file_info(file_info_id)
             .await
             .unwrap();
-        assert_eq!(log_entries.first().unwrap().status, FileSyncStatus::UploadFailed);
+        assert_eq!(
+            log_entries.first().unwrap().status,
+            FileSyncStatus::UploadFailed
+        );
     }
 
     #[async_std::test]
@@ -945,7 +953,10 @@ mod tests {
             .get_file_info(file_info_id)
             .await
             .unwrap();
-        assert_eq!(file_info.cloud_sync_status, CloudSyncStatus::DeletionPending);
+        assert_eq!(
+            file_info.cloud_sync_status,
+            CloudSyncStatus::DeletionPending
+        );
 
         // DeletionFailed audit log must be written
         let log_entries = context
@@ -954,7 +965,10 @@ mod tests {
             .get_logs_by_file_info(file_info_id)
             .await
             .unwrap();
-        assert_eq!(log_entries.first().unwrap().status, FileSyncStatus::DeletionFailed);
+        assert_eq!(
+            log_entries.first().unwrap().status,
+            FileSyncStatus::DeletionFailed
+        );
     }
 
     #[async_std::test]
