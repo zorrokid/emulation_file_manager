@@ -1,5 +1,12 @@
 # 004 — Drag-and-Drop File Import for File Set Form
 
+## Status
+< Planning | In Progress | Complete | Abandoned -->
+In Progress
+
+## Affected Crates
+- `relm4-ui` — `FileSetFormModel`, `FileSetFormMsg`, GTK4 drop target wiring
+
 ## Overview
 
 Users can drag one or more files from their file manager and drop them onto the
@@ -49,3 +56,6 @@ pipeline.
 - Parallel (simultaneous) processing of multiple dropped files.
 - Accepting URLs or text drops (files only).
 - Any changes to the service or database layers.
+
+## As Implemented
+_(Pending)_

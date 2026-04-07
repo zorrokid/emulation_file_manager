@@ -3,6 +3,16 @@
 **Branch**: `001-release-items`  
 **Created**: 2026-01-04
 
+## Status
+<!-- Planning | In Progress | Complete | Abandoned -->
+In Progress
+
+## Affected Crates
+- `core_types` — new `ItemType` enum, `Item` domain type
+- `database` — migration, `ItemRepository`, `ReleaseItemRepository`
+- `service` — import pipeline updates, `ItemService`
+- `relm4-ui` — item management UI, release view updates
+
 ## Overview
 
 Add support for tracking items that are included in software release packaging. Users can track which items they own and attach files to each item.
@@ -232,3 +242,6 @@ The current import pipeline links file_sets to releases via `release_file_set`. 
 - ✅ ReleaseItemRepository implements all CRUD operations
 - ✅ All tests pass
 - ✅ Existing functionality remains unchanged
+
+## As Implemented
+_(Pending)_

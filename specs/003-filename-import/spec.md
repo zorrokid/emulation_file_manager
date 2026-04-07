@@ -3,6 +3,15 @@
 **Branch**: `003-filename-import`
 **Created**: 2026-02-23
 
+## Status
+< Planning | In Progress | Complete | Abandoned -->
+Planning
+
+## Affected Crates
+- `domain` — `get_software_title` used for name derivation (no changes)
+- `service` — new filename-based import pipeline alongside DAT pipeline
+- `relm4-ui` — import UI selector for import mode
+
 ## Overview
 
 Add a second import mode to the mass import service that does not require a DAT file. Instead of matching files against a structured XML catalogue, the import derives SoftwareTitle and Release names directly from the filename of each scanned file. This allows users to quickly import a directory of files without a matching DAT.
@@ -136,3 +145,6 @@ Both functions are currently dead code — this feature is their first productio
 - `release_name` matches the filename stem; `software_title_name` is the normalised canonical form
 - All existing DAT-import tests continue to pass unchanged
 - `cargo clippy --all-targets` produces no new warnings
+
+## As Implemented
+_(Pending)_

@@ -144,12 +144,103 @@ Critical gotchas (see the `relm4-gui` skill for full patterns):
 
 Any new feature or non-trivial behavior change requires a spec **before** implementation. Refactoring does **not** require a spec — green tests are sufficient.
 
-#### Spec Files
+#### Spec File Structure
 
-- `specs/<N>-feature.md` — problem statement, proposed solution, and acceptance criteria
-- `specs/<N>-feature-tasks.md` — task breakdown, test cases, manual verification checklist
+Each spec lives in its own folder:
 
-Every planned code change must have a task in the tasks file. If implementation deviates from the plan, sync both spec files before continuing. Tasks are marked `[x]` as they are completed.
+```
+specs/NNN-feature-name/
+  spec.md      — problem statement, proposed solution, acceptance criteria
+  tasks.md     — task breakdown, test cases, manual verification checklist
+  review-1.md  — code review findings (round 1); created at start of Phase 6
+  review-2.md  — code review findings (round 2), if needed
+```
+
+##### `spec.md` required sections
+
+```markdown
+## Status
+<!-- Planning | In Progress | Complete | Abandoned -->
+Planning
+
+## Affected Crates
+- `crate-name` — brief description of what changes here
+
+## Problem
+...
+
+## Proposed Solution
+...
+
+## Key Decisions
+<!-- Lock in design decisions made during Phase 1–2 so agents don't re-litigate them -->
+| Decision | Rationale |
+|---|---|
+| ... | ... |
+
+## Acceptance Criteria
+...
+
+## As Implemented
+<!-- Filled in at the end of Phase 3. Document any deviations from Proposed Solution. -->
+<!-- Change Status to Complete once all code tasks are done and this section is filled. -->
+_(Pending)_
+```
+
+##### `tasks.md` conventions
+
+Tasks are grouped by phase. Each task includes the affected crate in brackets and an explicit `**File:**` reference pointing to the exact file(s) to change:
+
+```markdown
+## Phase 3 — Implementation
+
+### Core Types
+- [ ] T1 [core_types] — Add `FooStatus` enum
+  **File:** `core_types/src/lib.rs`
+  Add variants `Pending = 0`, `Done = 1` with `TryFrom<i64>`.
+
+## Phase 5 — Tests
+
+- [ ] T10 [service] — Add test for happy-path upload
+  **File:** `service/src/sync/steps.rs`
+  ...
+
+## Phase 6 — Review Fixes (Round 1)
+<!-- Tasks generated from review-1.md findings; reference finding IDs (R1, R2, …) -->
+- [ ] T20 [service] — Fix off-by-one in progress counter → R1
+  **File:** `service/src/sync/steps.rs`
+  ...
+
+## Manual Verification Checklist
+- [ ] Step 1 …
+```
+
+Every planned code change must have a task. Tasks are marked `[x]` as they are completed.
+
+##### `review-N.md` layout
+
+```markdown
+# Review N — [Spec Name]
+
+## Summary
+N findings (X major, Y minor, Z nit). Tasks TN–TM added to tasks.md Phase 6.
+
+## Findings
+
+### Major
+
+#### R1 — Finding title → TN
+**File:** `crate/src/file.rs`
+Description of the problem.
+**Fix:** Description of the fix.
+**Status:** [ ] Open
+
+### Minor
+...
+
+### Nit
+...
+```
 
 #### Development Phases
 
@@ -157,22 +248,24 @@ Each phase requires explicit user confirmation before moving to the next.
 
 **Phase 1 — Specification**
 - Gather requirements through conversation; use the `architect` skill for design decisions
-- Create `specs/<N>-feature.md` with problem statement, proposed solution, and acceptance criteria
+- Create `specs/NNN-name/spec.md` with Status `Planning`, Affected Crates, Problem, Proposed Solution, Key Decisions, and Acceptance Criteria
 - ✋ User confirms spec
 
 **Phase 2 — Task Breakdown**
-- Create `specs/<N>-feature-tasks.md` with all implementation tasks, test cases, and (for GUI changes) a manual verification checklist
+- Create `specs/NNN-name/tasks.md` with all implementation tasks grouped by phase, each with `[crate]` tag and `**File:**` reference; include test cases and (for GUI changes) a manual verification checklist
 - Every planned code change must appear as a task
 - ✋ User confirms task list before any code is written
 
 **Phase 3 — Implementation**
+- Set `spec.md` Status to `In Progress`
 - Work through tasks in order; mark each `[x]` as done
-- If implementation deviates from the plan, update both spec files before continuing
+- If implementation deviates from the plan, update `spec.md → Proposed Solution` before continuing
+- **Completion gate:** Before requesting Phase 4 QA, fill in `spec.md → ## As Implemented` documenting any deviations from Proposed Solution
 - ✋ User confirms implementation is complete
 
 **Phase 4 — QA / Test Coverage Review**
 - Invoke the `qa` skill to analyse coverage against the spec's acceptance criteria
-- QA produces a list of missing or insufficient test cases; add these as tasks to the tasks file
+- QA produces a list of missing or insufficient test cases; add these as tasks under `## Phase 5 — Tests` in `tasks.md`
 - ✋ User confirms the test plan
 
 **Phase 5 — Test Implementation**
@@ -181,8 +274,9 @@ Each phase requires explicit user confirmation before moving to the next.
 
 **Phase 6 — Code Review**
 - Invoke the `code-review` skill for a code review
-- Fix each finding; add fix tasks to the tasks file and mark them done
-- Re-request review; repeat until only minor/acceptable findings remain
+- Create `specs/NNN-name/review-N.md` with all findings; add fix tasks to `tasks.md` under `## Phase 6 — Review Fixes (Round N)`; mark fix tasks `[x]` when done
+- Re-request review; repeat (incrementing N) until only minor/acceptable findings remain
+- Set `spec.md` Status to `Complete` when all code tasks are done and `## As Implemented` is filled
 - ✋ User decides when the review cycle ends
 
 ### Code Change Transparency
