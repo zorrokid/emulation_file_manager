@@ -1,5 +1,14 @@
 # Spec 005 — Libretro Core Runner
 
+## Status
+<!-- Planning | In Progress | Complete | Abandoned -->
+In Progress
+
+## Affected Crates
+- `libretro_runner` — new crate: FFI bindings, core loading, audio/input
+- `service` — `LibretroRunnerService`
+- `relm4-ui` — `LibretroWindow`, `ReleaseModel` wiring
+
 ## Background
 
 The app currently launches emulators as external subprocesses. This feature adds a parallel path: running libretro cores (`.so` shared libraries) in-process, giving full control over video, input, and eventually save states. The existing external launcher is untouched.
@@ -107,3 +116,6 @@ A relm4 `Component` owning its own `gtk::Window` with a `gtk::DrawingArea`.
 4. Keyboard input controls the game.
 5. Closing the window does not crash; temp files are removed.
 6. The existing "Run with Emulator" flow is unaffected.
+
+## As Implemented
+_(Pending)_

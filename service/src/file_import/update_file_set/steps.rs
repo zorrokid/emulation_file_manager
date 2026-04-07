@@ -129,12 +129,12 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileInfoToDatabaseStep {
                 .state
                 .files_in_file_set
                 .iter()
-                .find(|f| f.sha1_checksum == imported_file.sha1_checksum && !f.is_available)
+                .find(|f| f.sha1_checksum == imported_file.sha1_checksum && !f.is_available())
             {
                 // File is still unavailable in this import — the existing DB record is
-                // already correct (is_available=false, archive_file_name=NULL). Skip to
-                // avoid writing is_available=1 with a NULL archive_file_name.
-                if !imported_file.is_available {
+                // already correct (archive_file_name=NULL). Skip to avoid writing a
+                // NULL archive_file_name back when nothing has changed.
+                if !imported_file.is_available() {
                     continue;
                 }
                 let existing_id = existing.id;
@@ -143,7 +143,7 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileInfoToDatabaseStep {
                     .deps
                     .repository_manager
                     .get_file_info_repository()
-                    .update_is_available(existing_id, imported_file.archive_file_name.as_deref())
+                    .set_archive_file_name(existing_id, imported_file.archive_file_name.as_deref())
                     .await;
                 match result {
                     Ok(_) => {
@@ -158,7 +158,6 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileInfoToDatabaseStep {
                             file_size: existing_file_size,
                             archive_file_name: imported_file.archive_file_name.clone(),
                             file_type,
-                            is_available: true,
                             cloud_sync_status: Default::default(),
                         });
                     }
@@ -196,7 +195,6 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileInfoToDatabaseStep {
                             file_size: imported_file.file_size,
                             archive_file_name: imported_file.archive_file_name.clone(),
                             file_type,
-                            is_available: true,
                             cloud_sync_status: Default::default(),
                         });
                     }
@@ -562,7 +560,6 @@ mod tests {
             archive_file_name: Some("archive_file_name".to_string()),
             sha1_checksum: file_1_checksum,
             file_size: 1024,
-            is_available: true,
         }];
 
         let file_set_id = repository_manager
@@ -638,7 +635,6 @@ mod tests {
                 sha1_checksum: file_1_checksum,
                 file_size: 1024,
                 archive_file_name: Some("archive123.zst".to_string()),
-                is_available: true,
             },
         );
 
@@ -686,7 +682,6 @@ mod tests {
             file_size: 2048,
             archive_file_name: Some("test_archive_name_2".to_string()),
             file_type: FileType::Rom,
-            is_available: true,
             cloud_sync_status: Default::default(),
         });
 
@@ -870,8 +865,8 @@ mod tests {
     #[async_std::test]
     async fn test_update_file_info_to_database_step_restores_unavailable_file_without_pk_violation()
     {
-        // Arrange: create a file set with file_info A recorded as is_available = false.
-        // This represents a file that was imported when the ROM wasn't locally present.
+        // Arrange: create a file set with file_info A recorded without an archive_file_name.
+        // This represents a file that was imported as a placeholder when the ROM wasn't locally present.
         let sha1_a: Sha1Checksum = [7u8; 20];
         let mut context = create_test_context(None).await;
         let repo = context.deps.repository_manager.clone();
@@ -882,20 +877,19 @@ mod tests {
             .await
             .unwrap();
 
-        // Create file_info as unavailable
+        // Create file_info as unavailable (no archive_file_name yet)
         let file_info_id = repo
             .get_file_info_repository()
-            .add_file_info(&sha1_a, 1024, Some("placeholder.zst"), FileType::Rom)
+            .add_file_info(&sha1_a, 1024, None, FileType::Rom)
             .await
             .unwrap();
 
         // Create file set with file_info A already linked (but unavailable)
         let files_in_file_set = vec![core_types::ImportedFile {
             original_file_name: "game.rom".to_string(),
-            archive_file_name: Some("placeholder.zst".to_string()),
+            archive_file_name: None,
             sha1_checksum: sha1_a,
             file_size: 1024,
-            is_available: false,
         }];
         let file_set_id = repo
             .get_file_set_repository()
@@ -924,9 +918,8 @@ mod tests {
             id: file_info_id,
             sha1_checksum: sha1_a,
             file_type: FileType::Rom,
-            archive_file_name: Some("placeholder.zst".to_string()),
+            archive_file_name: None,
             file_size: 1024,
-            is_available: false,
             cloud_sync_status: Default::default(),
         }];
 
@@ -938,11 +931,10 @@ mod tests {
                 archive_file_name: Some("placeholder.zst".to_string()),
                 sha1_checksum: sha1_a,
                 file_size: 1024,
-                is_available: true,
             },
         );
 
-        // Act: UpdateFileInfoToDatabaseStep should call update_is_available, NOT add_file_info
+        // Act: UpdateFileInfoToDatabaseStep should call set_archive_file_name, NOT add_file_info
         let step = super::UpdateFileInfoToDatabaseStep;
         let action = step.execute(&mut context).await;
         assert!(matches!(action, StepAction::Continue));
@@ -954,7 +946,7 @@ mod tests {
             .await
             .unwrap();
         assert!(
-            updated.is_available,
+            updated.is_available(),
             "Expected file_info to be marked available after restore"
         );
 
@@ -989,9 +981,8 @@ mod tests {
 
     #[async_std::test]
     async fn test_update_file_info_to_database_step_skips_update_when_file_still_unavailable() {
-        // Regression test for: re-importing when file is still missing must NOT write
-        // is_available=1 with archive_file_name=NULL, which would violate the invariant
-        // that is_available=true <=> archive_file_name=Some.
+        // Regression test for: re-importing when file is still missing must NOT set
+        // archive_file_name to a non-NULL value — the file is still unavailable.
         let sha1_a: Sha1Checksum = [8u8; 20];
         let mut context = create_test_context(None).await;
         let repo = context.deps.repository_manager.clone();
@@ -1002,7 +993,7 @@ mod tests {
             .await
             .unwrap();
 
-        // Use add_file_set with is_available=false so the DB record has is_available=0
+        // Use add_file_set with archive_file_name=None so the DB record has no archive file.
         let file_set_id = repo
             .get_file_set_repository()
             .add_file_set(
@@ -1015,7 +1006,6 @@ mod tests {
                     archive_file_name: None,
                     sha1_checksum: sha1_a,
                     file_size: 1024,
-                    is_available: false,
                 }],
                 &[system_id],
             )
@@ -1044,7 +1034,6 @@ mod tests {
             file_type: FileType::Rom,
             archive_file_name: None,
             file_size: 1024,
-            is_available: false,
             cloud_sync_status: Default::default(),
         }];
 
@@ -1056,7 +1045,6 @@ mod tests {
                 archive_file_name: None,
                 sha1_checksum: sha1_a,
                 file_size: 1024,
-                is_available: false,
             },
         );
 
@@ -1064,15 +1052,15 @@ mod tests {
         let action = step.execute(&mut context).await;
         assert!(matches!(action, StepAction::Continue));
 
-        // DB record must remain is_available=false with archive_file_name=None
+        // DB record must remain unavailable (archive_file_name = None)
         let record = repo
             .get_file_info_repository()
             .get_file_info(file_info_id)
             .await
             .unwrap();
         assert!(
-            !record.is_available,
-            "is_available must remain false when file is still missing"
+            !record.is_available(),
+            "file must remain unavailable when archive_file_name is still missing"
         );
         assert!(
             record.archive_file_name.is_none(),

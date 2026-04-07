@@ -100,7 +100,7 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                 .get_files_pending_upload(
                     10,
                     0, // always offset 0: each uploaded file is updated to Synced so it
-                       // won't appear in the next fetch
+                      // won't appear in the next fetch
                 )
                 .await;
 
@@ -118,8 +118,6 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                         break;
                     }
 
-                    // TODO: remove this by removing is_available and only relying on
-                    // archive_file_name presence for upload eligibility.
                     let mut batch_uploaded = 0;
                     for file in pending_files {
                         if context.cancel_rx.try_recv().is_ok() {
@@ -130,21 +128,32 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                         }
 
                         let Some(cloud_key) = file.generate_cloud_key() else {
-                            // Invariant violation: is_available=true but archive_file_name=None.
-                            // Status stays NotSynced so the file can be retried in a future sync
-                            // once the data is corrected.
                             tracing::warn!(
                                 file_info_id = file.id,
-                                "File is available but has no archive_file_name; skipping upload"
+                                "File has no archive_file_name; skipping upload"
                             );
                             continue;
                         };
 
+                        let Some(archive_file_name) = file.archive_file_name else {
+                            tracing::warn!(
+                                file_info_id = file.id,
+                                "file_info record without archive_file_name in cloud sync process, this shouldn't happen."
+                            );
+                            continue;
+                        };
+
+                        let local_path = context
+                            .settings
+                            .get_file_path(&file.file_type, &archive_file_name);
+
                         tracing::debug!(
                             file_info_id = file.id,
                             cloud_key = %cloud_key,
+                            local_path = %local_path.display(),
                             "Uploading file"
                         );
+
                         file_count += 1;
 
                         send_progress_event(
@@ -166,17 +175,6 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                             db_error: None,
                         };
 
-                        let local_path = context.settings.get_file_path(
-                            &file.file_type,
-                            file.archive_file_name.as_deref().expect("checked above"),
-                        );
-
-                        tracing::debug!(
-                            file_info_id = file.id,
-                            local_path = %local_path.display(),
-                            "Uploading file to cloud"
-                        );
-
                         let upload_res = context
                             .cloud_ops
                             .as_ref()
@@ -189,7 +187,7 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                             .await;
 
                         match upload_res {
-                            Ok(_) => {
+                            Ok(()) => {
                                 tracing::info!(
                                     file_info_id = file.id,
                                     cloud_key = %cloud_key,
@@ -218,7 +216,7 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                                     .await;
 
                                 match (status_res, log_res) {
-                                    (Ok(_), Ok(_)) => {
+                                    (Ok(()), Ok(_)) => {
                                         file_sync_result.db_update_success = true;
                                     }
                                     (Err(e), _) => {
@@ -254,6 +252,8 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                             Err(e) => {
                                 tracing::error!(
                                     file_info_id = file.id,
+                                    cloud_key = cloud_key,
+                                    local_path = %local_path.display(),
                                     error = %e,
                                     "Upload failed"
                                 );
@@ -729,24 +729,6 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn test_upload_pending_files_step_handles_missing_archive_file_name() {
-        // Invariant-violating file (is_available=true, archive_file_name=None) must not
-        // cause an infinite loop; the step should break out after one batch with no progress.
-        let mut context = initialize_sync_context().await;
-        add_invariant_violating_file_info(&context, Sha1Checksum::from([0; 20])).await;
-
-        context.files_prepared_for_upload = 1;
-
-        let step = UploadPendingFilesStep;
-        let action = step.execute(&mut context).await;
-
-        // Step must not abort or loop forever
-        assert_eq!(action, StepAction::Continue);
-        // No upload was performed
-        assert!(context.upload_results.is_empty());
-    }
-
-    #[async_std::test]
     async fn test_delete_marked_files_step() {
         let mut context = initialize_sync_context().await;
         let file_info_id = context
@@ -901,7 +883,10 @@ mod tests {
             .get_logs_by_file_info(file_info_id)
             .await
             .unwrap();
-        assert_eq!(log_entries.first().unwrap().status, FileSyncStatus::UploadFailed);
+        assert_eq!(
+            log_entries.first().unwrap().status,
+            FileSyncStatus::UploadFailed
+        );
     }
 
     #[async_std::test]
@@ -945,7 +930,10 @@ mod tests {
             .get_file_info(file_info_id)
             .await
             .unwrap();
-        assert_eq!(file_info.cloud_sync_status, CloudSyncStatus::DeletionPending);
+        assert_eq!(
+            file_info.cloud_sync_status,
+            CloudSyncStatus::DeletionPending
+        );
 
         // DeletionFailed audit log must be written
         let log_entries = context
@@ -954,7 +942,10 @@ mod tests {
             .get_logs_by_file_info(file_info_id)
             .await
             .unwrap();
-        assert_eq!(log_entries.first().unwrap().status, FileSyncStatus::DeletionFailed);
+        assert_eq!(
+            log_entries.first().unwrap().status,
+            FileSyncStatus::DeletionFailed
+        );
     }
 
     #[async_std::test]
@@ -962,7 +953,7 @@ mod tests {
         // A DeletionPending tombstone with archive_file_name=None must not cause an infinite
         // loop; the step should break out after one batch with no progress.
         let mut context = initialize_sync_context().await;
-        let id = add_invariant_violating_file_info(&context, Sha1Checksum::from([0; 20])).await;
+        let id = add_file_info_without_archive_name(&context, Sha1Checksum::from([0; 20])).await;
         context
             .repository_manager
             .get_file_info_repository()
@@ -1010,23 +1001,16 @@ mod tests {
             .unwrap();
     }
 
-    /// Creates a `file_info` row with `is_available=true` but `archive_file_name=NULL`,
-    /// which is the invariant violation exercised by several guard branches.
-    async fn add_invariant_violating_file_info(
+    /// Creates a `file_info` row with `archive_file_name=NULL`.
+    async fn add_file_info_without_archive_name(
         context: &SyncContext,
         checksum: Sha1Checksum,
     ) -> i64 {
         let repo = &context.repository_manager;
-        let id = repo
-            .get_file_info_repository()
+        repo.get_file_info_repository()
             .add_file_info(&checksum, 1234, None, FileType::Rom)
             .await
-            .unwrap();
-        repo.get_file_info_repository()
-            .update_is_available(id, None)
-            .await
-            .unwrap();
-        id
+            .unwrap()
     }
 
     async fn initialize_sync_context() -> SyncContext {

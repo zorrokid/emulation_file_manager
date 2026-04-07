@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT COUNT(*) as count FROM file_info WHERE cloud_sync_status = ? AND is_available = 1",
+  "query": "SELECT COUNT(*) as count FROM file_info WHERE cloud_sync_status = ? AND archive_file_name IS NOT NULL",
   "describe": {
     "columns": [
       {
@@ -16,5 +16,5 @@
       false
     ]
   },
-  "hash": "959f334d34aa82f79c16e4c9c19fe47117492ffbe2c5a5c69d48e1063fd3441d"
+  "hash": "324044c66d3fcdf96dc94f3018ff852f659aa56e2f17ba2b40feedc5b46a3139"
 }

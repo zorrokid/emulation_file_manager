@@ -1,5 +1,15 @@
 # 006: Libretro Core-to-System Mapping
 
+## Status
+<!-- Planning | In Progress | Complete | Abandoned -->
+In Progress
+
+## Affected Crates
+- `core_types` — `LibretroCore`, `SystemId` types
+- `database` — migration, `LibretroCoreRepository`
+- `service` — `LibretroCoreService`
+- `relm4-ui` — core mapping management UI
+
 ## Overview
 
 Users must be able to map libretro cores (`.so` files stored in the configured cores directory) to emulation systems (NES, SNES, Game Boy, etc.). The mapping is many-to-one: one system can have multiple cores. At launch time, the system determines which core to use based on the mapping.
@@ -162,3 +172,6 @@ Modal dialog shown at launch when multiple cores are mapped to a system.
 - Directory path comes from `Settings.libretro_core_dir` at runtime
 - All core mapping operations are async (database access)
 - Available cores list is scanned fresh each time dialog opens (reflects filesystem changes)
+
+## As Implemented
+_(Pending)_

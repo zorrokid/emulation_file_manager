@@ -14,8 +14,8 @@ CREATE TABLE "file_info" (
     file_size         INTEGER NOT NULL,
     archive_file_name TEXT,
     file_type         INTEGER,
-    is_available      INTEGER NOT NULL DEFAULT 0
-, cloud_sync_status INTEGER NOT NULL DEFAULT 0)
+    cloud_sync_status INTEGER NOT NULL DEFAULT 0
+)
 ```
 
 </details>
@@ -29,7 +29,6 @@ CREATE TABLE "file_info" (
 | file_size | INTEGER |  | false |  |  |  |
 | archive_file_name | TEXT |  | true |  |  |  |
 | file_type | INTEGER |  | true |  |  |  |
-| is_available | INTEGER | 0 | false |  |  |  |
 | cloud_sync_status | INTEGER | 0 | false |  |  |  |
 
 ## Constraints

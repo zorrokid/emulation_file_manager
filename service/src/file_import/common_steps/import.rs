@@ -168,7 +168,6 @@ mod tests {
                 sha1_checksum: checksum,
                 file_size: 1024,
                 archive_file_name: Some("archive123.zst".to_string()),
-                is_available: true,
             },
         );
 
