@@ -180,19 +180,27 @@ impl FileInfoRepository {
         Ok(row.count)
     }
 
+    /// Sets the `cloud_sync_status` for a `file_info` record.
+    /// Returns `Err` if no record with the given `id` exists.
     pub async fn update_cloud_sync_status(
         &self,
         id: i64,
         status: CloudSyncStatus,
     ) -> Result<(), Error> {
         let status_int = status.to_db_int();
-        sqlx::query!(
+        let result = sqlx::query!(
             "UPDATE file_info SET cloud_sync_status = ? WHERE id = ?",
             status_int,
             id
         )
         .execute(&*self.pool)
         .await?;
+        if result.rows_affected() == 0 {
+            return Err(Error::DbError(format!(
+                "file_info id {} not found",
+                id
+            )));
+        }
         Ok(())
     }
 

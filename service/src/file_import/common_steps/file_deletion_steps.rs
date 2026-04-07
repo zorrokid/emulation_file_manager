@@ -336,10 +336,6 @@ impl<T: FileDeletionStepsContext + Send + Sync> PipelineStep<T> for DeleteFileIn
     }
 
     async fn execute(&self, context: &mut T) -> StepAction {
-        println!(
-            "Deleting file_info entries for file set {}",
-            context.file_set_id()
-        );
         tracing::info!(
             "Deleting file_info entries for file set {}",
             context.file_set_id()
@@ -351,7 +347,7 @@ impl<T: FileDeletionStepsContext + Send + Sync> PipelineStep<T> for DeleteFileIn
             .filter(|f| {
                 f.is_deletable
                     && f.file_deletion_success.is_some_and(|s| s)
-                    && f.file_info.cloud_sync_status != CloudSyncStatus::DeletionPending
+                    && f.file_info.cloud_sync_status == CloudSyncStatus::NotSynced
             })
         {
             tracing::info!(
@@ -708,11 +704,6 @@ mod tests {
         let step = DeleteLocalFilesStep::<TestContext>::new();
         let res = step.execute(&mut context).await;
 
-        println!(
-            "Deletion result: {:?}",
-            context.deletion_results.get(&file_info.sha1_checksum)
-        );
-
         assert!(
             context
                 .deletion_results
@@ -750,10 +741,6 @@ mod tests {
             file_info.archive_file_name.as_deref().unwrap(),
         );
 
-        println!(
-            "Adding file to mock FS ops: {}",
-            file_path.to_string_lossy()
-        );
         fs_ops.add_file(file_path.to_string_lossy().as_ref());
 
         let mut file_deletion_result = FileDeletionResult::new(file_info.clone());
@@ -806,10 +793,6 @@ mod tests {
             file_info.archive_file_name.as_deref().unwrap(),
         );
 
-        println!(
-            "Adding file to mock FS ops: {}",
-            file_path.to_string_lossy()
-        );
         fs_ops.add_file(file_path.to_string_lossy().as_ref());
 
         let mut file_deletion_result = FileDeletionResult::new(file_info.clone());
@@ -831,13 +814,8 @@ mod tests {
             &file_info.file_type,
             file_info.archive_file_name.as_deref().unwrap(),
         );
-        println!("Checking if file was deleted: {}", fp.to_string_lossy());
         assert!(fs_ops.was_deleted(fp.to_string_lossy().as_ref()));
 
-        println!(
-            "Deletion result: {:?}",
-            context.deletion_results.get(&file_info.sha1_checksum)
-        );
 
         assert!(
             context

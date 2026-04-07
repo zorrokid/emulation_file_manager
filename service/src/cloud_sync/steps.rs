@@ -124,7 +124,7 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                     for file in pending_files {
                         if context.cancel_rx.try_recv().is_ok() {
                             tracing::info!("Cloud sync cancelled by user");
-                            send_progress_event(SyncEvent::SyncCancelled {}, &context.progress_tx)
+                            send_progress_event(SyncEvent::SyncCancelled, &context.progress_tx)
                                 .await;
                             return StepAction::Abort(Error::OperationCancelled);
                         }
@@ -377,6 +377,7 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
                             continue;
                         };
 
+                        file_count += 1;
                         send_progress_event(
                             SyncEvent::FileDeletionStarted {
                                 key: cloud_key.clone(),
@@ -396,7 +397,6 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
                             db_error: None,
                         };
 
-                        file_count += 1;
                         let deletion_res = context
                             .cloud_ops
                             .as_ref()
@@ -957,6 +957,29 @@ mod tests {
         assert_eq!(log_entries.first().unwrap().status, FileSyncStatus::DeletionFailed);
     }
 
+    #[async_std::test]
+    async fn test_delete_marked_files_step_handles_missing_archive_file_name() {
+        // A DeletionPending tombstone with archive_file_name=None must not cause an infinite
+        // loop; the step should break out after one batch with no progress.
+        let mut context = initialize_sync_context().await;
+        let id = add_invariant_violating_file_info(&context, Sha1Checksum::from([0; 20])).await;
+        context
+            .repository_manager
+            .get_file_info_repository()
+            .update_cloud_sync_status(id, CloudSyncStatus::DeletionPending)
+            .await
+            .unwrap();
+
+        context.files_prepared_for_deletion = 1;
+        let step = DeleteMarkedFilesStep;
+        let action = step.execute(&mut context).await;
+
+        // Step must not abort or loop forever
+        assert_eq!(action, StepAction::Continue);
+        // No deletion was performed
+        assert!(context.deletion_results.is_empty());
+    }
+
     async fn add_file_info(
         repo_manager: &RepositoryManager,
         checksum: [u8; 20],
@@ -1119,6 +1142,6 @@ mod tests {
             ref key, file_number: 1, total_files: 1
         } if key == "rom/file1.zst"));
 
-        assert!(matches!(messages[6], SyncEvent::SyncCompleted {}));
+        assert!(matches!(messages[6], SyncEvent::SyncCompleted));
     }
 }

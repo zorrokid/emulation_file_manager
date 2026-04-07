@@ -86,14 +86,14 @@ impl PipelineStep<FileTypeMigrationContext> for CollectCloudFileSetsStep {
             .await;
         match files {
             Ok(file_info_ids) => {
-                context.file_ids_synced_to_cloud = file_info_ids.into_iter().collect();
+                context.file_ids_synced_to_cloud = file_info_ids;
             }
             Err(err) => {
                 tracing::error!(
                     error = ?err,
                     "Error fetching synced file info ids");
                 return StepAction::Abort(Error::DbError(format!(
-                    "Error fetching synced file set ids: {}",
+                    "Error fetching synced file info ids: {}",
                     err
                 )));
             }
