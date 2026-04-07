@@ -28,6 +28,10 @@ Add migration in database crate: `sqlx migrate add <name>`
 
 Run migrations to development db in database crate: `sqlx migrate run`
 
+Or if not run from database crate:
+`cargo sqlx migrate run --source database/migrations --database-url sqlite://database/data/db.sqlite`
+
+
 Migrations are automatically run at application startup via `sqlx::migrate!().run(&pool)` in `lib.rs`.
 
 ## Reverting migrations

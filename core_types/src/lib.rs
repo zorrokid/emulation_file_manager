@@ -348,6 +348,43 @@ impl FileSyncStatus {
     }
 }
 
+/// Cloud sync lifecycle status stored directly on `file_info`.
+/// This is the single source of truth for where a file stands in the cloud.
+/// The `file_sync_log` table is kept for audit/history only (completed and failed events).
+#[derive(Debug, Clone, PartialEq, Copy, Default)]
+pub enum CloudSyncStatus {
+    /// Default. File has never been successfully uploaded, or a previous upload failed.
+    /// Will be retried on the next sync run.
+    #[default]
+    NotSynced,
+    /// File has been successfully uploaded to cloud storage.
+    Synced,
+    /// Local file has been deleted; the cloud copy still needs to be deleted.
+    /// The `file_info` record is kept as a tombstone until cloud deletion succeeds.
+    DeletionPending,
+}
+
+impl CloudSyncStatus {
+    pub fn to_db_int(&self) -> u8 {
+        match self {
+            CloudSyncStatus::NotSynced => 0,
+            CloudSyncStatus::Synced => 1,
+            CloudSyncStatus::DeletionPending => 2,
+        }
+    }
+
+    pub fn from_db_int(value: u8) -> Result<Self, CoreTypeError> {
+        match value {
+            0 => Ok(CloudSyncStatus::NotSynced),
+            1 => Ok(CloudSyncStatus::Synced),
+            2 => Ok(CloudSyncStatus::DeletionPending),
+            _ => Err(CoreTypeError::ConversionError(
+                "Failed to convert to CloudSyncStatus".to_string(),
+            )),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct FileSetEqualitySpecs {
     pub file_set_name: String,

@@ -159,6 +159,7 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileInfoToDatabaseStep {
                             archive_file_name: imported_file.archive_file_name.clone(),
                             file_type,
                             is_available: true,
+                            cloud_sync_status: Default::default(),
                         });
                     }
                     Err(err) => {
@@ -196,6 +197,7 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileInfoToDatabaseStep {
                             archive_file_name: imported_file.archive_file_name.clone(),
                             file_type,
                             is_available: true,
+                            cloud_sync_status: Default::default(),
                         });
                     }
                     Err(err) => {
@@ -422,55 +424,6 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileSetStep {
                 StepAction::Abort(Error::DbError(format!("Error updating file set: {}", err,)))
             }
         }
-    }
-}
-
-pub struct MarkNewFilesForCloudSyncStep;
-
-#[async_trait::async_trait]
-impl PipelineStep<UpdateFileSetContext> for MarkNewFilesForCloudSyncStep {
-    fn name(&self) -> &'static str {
-        "mark_new_files_for_cloud_sync"
-    }
-
-    fn should_execute(&self, context: &UpdateFileSetContext) -> bool {
-        context.deps.settings.s3_sync_enabled && !context.state.imported_files.is_empty()
-    }
-    async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
-        println!("Marking new files for cloud sync...");
-        let file_info_ids: Vec<(i64, String)> = context
-            .state
-            .new_files
-            .iter()
-            .filter_map(|file| file.generate_cloud_key().map(|key| (file.id, key)))
-            .collect();
-
-        let result = context
-            .deps
-            .repository_manager
-            .get_file_sync_log_repository()
-            .mark_files_for_cloud_sync(&file_info_ids)
-            .await;
-
-        match result {
-            Ok(_) => {
-                tracing::info!(
-                    file_count = file_info_ids.len(),
-                    "Marked files for cloud sync"
-                );
-            }
-            Err(err) => {
-                tracing::error!(
-                    error = %err,
-                    "Error marking files for cloud sync"
-                );
-
-                // No point aborting here, the import was successful and new files are also marked
-                // for syncing when cloud synd is triggered
-            }
-        }
-
-        StepAction::Continue
     }
 }
 
@@ -734,6 +687,7 @@ mod tests {
             archive_file_name: Some("test_archive_name_2".to_string()),
             file_type: FileType::Rom,
             is_available: true,
+            cloud_sync_status: Default::default(),
         });
 
         // Update file_import_data to only include the new file (file_2)
@@ -973,6 +927,7 @@ mod tests {
             archive_file_name: Some("placeholder.zst".to_string()),
             file_size: 1024,
             is_available: false,
+            cloud_sync_status: Default::default(),
         }];
 
         // Simulate the ROM being locally available now — in imported_files
@@ -1090,6 +1045,7 @@ mod tests {
             archive_file_name: None,
             file_size: 1024,
             is_available: false,
+            cloud_sync_status: Default::default(),
         }];
 
         // Re-import: file is still missing

@@ -221,7 +221,7 @@ impl FileImportService {
 mod tests {
     use std::path::PathBuf;
 
-    use core_types::{FileSyncStatus, ImportedFile, ReadFile};
+    use core_types::{CloudSyncStatus, FileSyncStatus, ImportedFile, ReadFile};
     use database::setup_test_db;
     use file_import::mock::MockFileImportOps;
     use file_metadata::file_metadata_ops::mock::MockFileMetadataOps;
@@ -453,15 +453,16 @@ mod tests {
         assert!(new_file.is_some());
         let new_file_info_id = new_file.unwrap().id;
 
-        // assert that file is marked for cloud sync (enabled in settings)
-        let sync_logs = repository_manager
-            .get_file_sync_log_repository()
-            .get_logs_by_file_info(new_file_info_id)
+        // assert that file is not yet synced (cloud sync status = NotSynced by default)
+        let new_file_info = repository_manager
+            .get_file_info_repository()
+            .get_file_infos_by_file_set(file_set_id)
             .await
+            .unwrap()
+            .into_iter()
+            .find(|fi| fi.sha1_checksum == new_file_sha1_checksum)
             .unwrap();
-
-        assert!(!sync_logs.is_empty());
-        assert_eq!(sync_logs[0].status, FileSyncStatus::UploadPending);
+        assert_eq!(new_file_info.cloud_sync_status, CloudSyncStatus::NotSynced);
     }
 
     #[async_std::test]
@@ -504,13 +505,8 @@ mod tests {
 
         // simulate a successful cloud sync for the file in file set
         repository_manager
-            .get_file_sync_log_repository()
-            .add_log_entry(
-                file_info.id,
-                FileSyncStatus::UploadCompleted,
-                "",
-                file_info.generate_cloud_key().as_deref().unwrap(),
-            )
+            .get_file_info_repository()
+            .update_cloud_sync_status(file_info.id, CloudSyncStatus::Synced)
             .await
             .unwrap();
 
@@ -561,18 +557,14 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(file_infos.len(), 0);
+        // Because file was synced to cloud, it is kept as a tombstone with DeletionPending status
+        // rather than being deleted immediately; the cloud file will be deleted on next sync.
+        assert_eq!(file_infos.len(), 1);
+        assert_eq!(
+            file_infos[0].cloud_sync_status,
+            CloudSyncStatus::DeletionPending
+        );
         assert_eq!(file_set_files.len(), 0);
-
-        // assert that file is marked for deletion for cloud sync (enabled in settings)
-        let sync_logs = repository_manager
-            .get_file_sync_log_repository()
-            .get_logs_by_file_info(file_info.id)
-            .await
-            .unwrap();
-
-        assert!(!sync_logs.is_empty());
-        assert_eq!(sync_logs[0].status, FileSyncStatus::DeletionPending);
     }
 
     #[async_std::test]

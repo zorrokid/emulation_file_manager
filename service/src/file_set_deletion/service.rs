@@ -68,7 +68,7 @@ impl FileSetDeletionService {
 mod tests {
     use std::path::PathBuf;
 
-    use core_types::{FileSyncStatus, FileType, ImportedFile, Sha1Checksum};
+    use core_types::{CloudSyncStatus, FileType, ImportedFile, Sha1Checksum};
     use database::setup_test_db;
 
     use super::*;
@@ -123,13 +123,8 @@ mod tests {
 
         // add sync log entry to mark that file has been synced to cloud
         repo_manager
-            .get_file_sync_log_repository()
-            .add_log_entry(
-                file_info_id,
-                FileSyncStatus::UploadCompleted,
-                "",
-                "rom/game.zst",
-            )
+            .get_file_info_repository()
+            .update_cloud_sync_status(file_info_id, CloudSyncStatus::Synced)
             .await
             .unwrap();
 
@@ -142,7 +137,8 @@ mod tests {
         assert_eq!(file_deletion_result.len(), 1);
         let deletion_info = &file_deletion_result[0];
         assert!(deletion_info.file_deletion_success.unwrap());
-        assert!(deletion_info.db_deletion_success.unwrap());
+        // file_info is kept as a DeletionPending tombstone (not deleted from DB yet)
+        assert!(deletion_info.db_deletion_success.is_none());
         assert!(deletion_info.cloud_delete_marked_successfully.unwrap());
     }
 }

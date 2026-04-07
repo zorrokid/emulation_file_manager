@@ -1,10 +1,7 @@
 use crate::{
     cloud_sync::{
         context::SyncContext,
-        steps::{
-            CleanupOrphanedSyncLogsStep, DeleteMarkedFilesStep, GetSyncFileCountsStep,
-            PrepareFilesForUploadStep, UploadPendingFilesStep,
-        },
+        steps::{DeleteMarkedFilesStep, GetSyncFileCountsStep, UploadPendingFilesStep},
     },
     pipeline::{cloud_connection::ConnectToCloudStep, generic_pipeline::Pipeline},
 };
@@ -18,12 +15,10 @@ impl Default for Pipeline<SyncContext> {
 impl Pipeline<SyncContext> {
     pub fn new() -> Self {
         Self::with_steps(vec![
-            Box::new(PrepareFilesForUploadStep),
             Box::new(GetSyncFileCountsStep),
             Box::new(ConnectToCloudStep::<SyncContext>::new()),
             Box::new(UploadPendingFilesStep),
             Box::new(DeleteMarkedFilesStep),
-            Box::new(CleanupOrphanedSyncLogsStep),
         ])
     }
 }
