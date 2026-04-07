@@ -4,6 +4,17 @@
 **Created**: 2026-01-06  
 **Related**: `001-release-items.md`
 
+## Status
+<!-- Planning | In Progress | Complete | Abandoned -->
+Planning
+
+## Affected Crates
+- `core_types` — remove specific scan/document `FileType` variants, consolidate to `Scan`/`Document`
+- `database` — migration, repository updates
+- `service` — `FileMigrationService`, pipeline steps
+- `cloud_storage` — used indirectly for migrating cloud-stored files
+- `relm4-ui` — update file type display
+
 ## Overview
 
 Simplify the FileType enum by replacing specific scan types with generic ones. Use ItemType to provide context about what's being scanned. This makes the system more flexible and reduces FileType proliferation.
@@ -445,3 +456,6 @@ After migration verified (weeks later):
 1. Remove deprecated FileType variants from enum
 2. Delete empty old directories
 3. Update documentation
+
+## As Implemented
+_(Pending)_
