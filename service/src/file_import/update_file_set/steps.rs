@@ -981,9 +981,8 @@ mod tests {
 
     #[async_std::test]
     async fn test_update_file_info_to_database_step_skips_update_when_file_still_unavailable() {
-        // Regression test for: re-importing when file is still missing must NOT write
-        // is_available=1 with archive_file_name=NULL, which would violate the invariant
-        // that is_available=true <=> archive_file_name=Some.
+        // Regression test for: re-importing when file is still missing must NOT set
+        // archive_file_name to a non-NULL value — the file is still unavailable.
         let sha1_a: Sha1Checksum = [8u8; 20];
         let mut context = create_test_context(None).await;
         let repo = context.deps.repository_manager.clone();
@@ -994,7 +993,7 @@ mod tests {
             .await
             .unwrap();
 
-        // Use add_file_set with is_available=false so the DB record has is_available=0
+        // Use add_file_set with archive_file_name=None so the DB record has no archive file.
         let file_set_id = repo
             .get_file_set_repository()
             .add_file_set(
@@ -1053,7 +1052,7 @@ mod tests {
         let action = step.execute(&mut context).await;
         assert!(matches!(action, StepAction::Continue));
 
-        // DB record must remain is_available=false with archive_file_name=None
+        // DB record must remain unavailable (archive_file_name = None)
         let record = repo
             .get_file_info_repository()
             .get_file_info(file_info_id)

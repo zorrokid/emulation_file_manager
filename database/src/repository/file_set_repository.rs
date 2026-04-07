@@ -377,6 +377,9 @@ impl FileSetRepository {
             let file_info_id = match existing_file_info {
                 Some(id) => {
                     if let Some(name) = &file.archive_file_name {
+                        // FileSetRepository operates inside a single transaction and does not
+                        // hold a FileInfoRepository instance, so this UPDATE is inlined rather
+                        // than delegating to FileInfoRepository::set_archive_file_name.
                         sqlx::query!(
                             "UPDATE file_info SET archive_file_name = ? WHERE id = ?",
                             name,

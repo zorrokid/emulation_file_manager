@@ -244,23 +244,6 @@ impl FileInfoRepository {
         Ok(())
     }
 
-    /// Sets `archive_file_name` on an existing `file_info` record within a transaction.
-    /// Pass `Some(name)` to mark the file as available; `None` to clear it.
-    pub async fn set_archive_file_name_with_tx(
-        &self,
-        tx: &mut sqlx::Transaction<'_, Sqlite>,
-        id: i64,
-        archive_file_name: Option<&str>,
-    ) -> Result<(), Error> {
-        sqlx::query!(
-            "UPDATE file_info SET archive_file_name = ? WHERE id = ?",
-            archive_file_name,
-            id
-        )
-        .execute(&mut **tx)
-        .await?;
-        Ok(())
-    }
 }
 #[cfg(test)]
 mod tests {
