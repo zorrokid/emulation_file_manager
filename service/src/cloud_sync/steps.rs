@@ -35,7 +35,7 @@ impl PipelineStep<SyncContext> for GetSyncFileCountsStep {
 
         match files_to_delete_res {
             Ok(count) => {
-                context.files_prepared_for_deletion = count;
+                context.cloud_files_prepared_for_deletion = count;
                 tracing::debug!(count, "Files prepared for deletion");
             }
             Err(e) => {
@@ -319,7 +319,7 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
     }
 
     fn should_execute(&self, context: &SyncContext) -> bool {
-        context.cloud_ops.is_some() && context.files_prepared_for_deletion > 0
+        context.cloud_ops.is_some() && context.cloud_files_prepared_for_deletion > 0
     }
 
     async fn execute(&self, context: &mut SyncContext) -> StepAction {
@@ -373,7 +373,7 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
                             SyncEvent::FileDeletionStarted {
                                 key: cloud_key.clone(),
                                 file_number: file_count,
-                                total_files: context.files_prepared_for_deletion,
+                                total_files: context.cloud_files_prepared_for_deletion,
                             },
                             &context.progress_tx,
                         )
@@ -453,7 +453,7 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
                                     SyncEvent::FileDeletionCompleted {
                                         key: cloud_key.clone(),
                                         file_number: file_count,
-                                        total_files: context.files_prepared_for_deletion,
+                                        total_files: context.cloud_files_prepared_for_deletion,
                                     },
                                     &context.progress_tx,
                                 )
@@ -496,7 +496,7 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
                                         key: cloud_key.clone(),
                                         error: format!("{e}"),
                                         file_number: file_count,
-                                        total_files: context.files_prepared_for_deletion,
+                                        total_files: context.cloud_files_prepared_for_deletion,
                                     },
                                     &context.progress_tx,
                                 )
@@ -607,7 +607,7 @@ mod tests {
         let action = step.execute(&mut context).await;
 
         assert_eq!(action, StepAction::Continue);
-        assert_eq!(context.files_prepared_for_deletion, 2);
+        assert_eq!(context.cloud_files_prepared_for_deletion, 2);
         assert_eq!(context.files_prepared_for_upload, 2);
     }
 
@@ -741,7 +741,7 @@ mod tests {
             .await
             .unwrap();
 
-        context.files_prepared_for_deletion = 1;
+        context.cloud_files_prepared_for_deletion = 1;
         let step = crate::cloud_sync::steps::DeleteMarkedFilesStep;
         let action = step.execute(&mut context).await;
         assert_eq!(action, StepAction::Continue);
@@ -810,7 +810,7 @@ mod tests {
             .unwrap();
         assert_eq!(deletion_pending_count, 11);
 
-        context.files_prepared_for_deletion = 11;
+        context.cloud_files_prepared_for_deletion = 11;
         let step = crate::cloud_sync::steps::DeleteMarkedFilesStep;
         let action = step.execute(&mut context).await;
         assert_eq!(action, StepAction::Continue);
@@ -905,7 +905,7 @@ mod tests {
             .await
             .unwrap();
 
-        context.files_prepared_for_deletion = 1;
+        context.cloud_files_prepared_for_deletion = 1;
         let step = DeleteMarkedFilesStep;
         let action = step.execute(&mut context).await;
 
@@ -952,7 +952,7 @@ mod tests {
             .await
             .unwrap();
 
-        context.files_prepared_for_deletion = 1;
+        context.cloud_files_prepared_for_deletion = 1;
         let step = DeleteMarkedFilesStep;
         let action = step.execute(&mut context).await;
 
@@ -1027,7 +1027,7 @@ mod tests {
             cloud_ops: Some(cloud_ops),
             progress_tx: tx,
             files_prepared_for_upload: 0,
-            files_prepared_for_deletion: 0,
+            cloud_files_prepared_for_deletion: 0,
             upload_results: HashMap::new(),
             deletion_results: HashMap::new(),
             settings_service,
@@ -1055,7 +1055,7 @@ mod tests {
             cloud_ops: Some(cloud_ops),
             progress_tx: tx,
             files_prepared_for_upload: 0,
-            files_prepared_for_deletion: 0,
+            cloud_files_prepared_for_deletion: 0,
             upload_results: HashMap::new(),
             deletion_results: HashMap::new(),
             settings_service,
