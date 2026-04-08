@@ -3,7 +3,7 @@ use std::sync::Arc;
 use core_types::{CloudSyncStatus, FileType, Sha1Checksum};
 use sqlx::{Pool, QueryBuilder, Row, Sqlite, prelude::FromRow, sqlite::SqliteRow};
 
-use crate::{database_error::Error, models::FileInfo};
+use crate::{database_error::Error, models::{CloudSyncableFileInfo, FileInfo}};
 
 #[derive(Debug)]
 pub struct FileInfoRepository {
@@ -116,9 +116,9 @@ impl FileInfoRepository {
         &self,
         limit: i64,
         offset: i64,
-    ) -> Result<Vec<FileInfo>, Error> {
+    ) -> Result<Vec<CloudSyncableFileInfo>, Error> {
         let status_int = CloudSyncStatus::NotSynced.to_db_int();
-        let query = sqlx::query_as::<_, FileInfo>(
+        let rows = sqlx::query_as::<_, FileInfo>(
             "SELECT id, sha1_checksum, file_size, archive_file_name, file_type, cloud_sync_status
              FROM file_info
              WHERE cloud_sync_status = ? AND archive_file_name IS NOT NULL
@@ -126,9 +126,15 @@ impl FileInfoRepository {
         )
         .bind(status_int)
         .bind(limit)
-        .bind(offset);
-        let file_infos = query.fetch_all(&*self.pool).await?;
-        Ok(file_infos)
+        .bind(offset)
+        .fetch_all(&*self.pool)
+        .await?;
+        rows.into_iter()
+            .map(CloudSyncableFileInfo::try_from)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| Error::DecodeError(
+                "Unexpected null archive_file_name in pending upload query".into(),
+            ))
     }
 
     /// Counts available files ready for upload (NotSynced + archive_file_name IS NOT NULL).
@@ -169,6 +175,78 @@ impl FileInfoRepository {
         let status_int = CloudSyncStatus::DeletionPending.to_db_int();
         let row = sqlx::query!(
             "SELECT COUNT(*) as count FROM file_info WHERE cloud_sync_status = ?",
+            status_int
+        )
+        .fetch_one(&*self.pool)
+        .await?;
+        Ok(row.count)
+    }
+
+    /// Returns DeletionPending files that have an archive_file_name (i.e. were uploaded to cloud),
+    /// paginated. These require a cloud delete operation before the record is removed.
+    pub async fn get_cloud_files_pending_deletion(
+        &self,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<CloudSyncableFileInfo>, Error> {
+        let status_int = CloudSyncStatus::DeletionPending.to_db_int();
+        let rows = sqlx::query_as::<_, FileInfo>(
+            "SELECT id, sha1_checksum, file_size, archive_file_name, file_type, cloud_sync_status
+             FROM file_info
+             WHERE cloud_sync_status = ? AND archive_file_name IS NOT NULL
+             LIMIT ? OFFSET ?",
+        )
+        .bind(status_int)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&*self.pool)
+        .await?;
+        rows.into_iter()
+            .map(CloudSyncableFileInfo::try_from)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| Error::DecodeError(
+                "Unexpected null archive_file_name in cloud deletion query".into(),
+            ))
+    }
+
+    /// Counts DeletionPending files that have an archive_file_name.
+    pub async fn count_cloud_files_pending_deletion(&self) -> Result<i64, Error> {
+        let status_int = CloudSyncStatus::DeletionPending.to_db_int();
+        let row = sqlx::query!(
+            "SELECT COUNT(*) as count FROM file_info WHERE cloud_sync_status = ? AND archive_file_name IS NOT NULL",
+            status_int
+        )
+        .fetch_one(&*self.pool)
+        .await?;
+        Ok(row.count)
+    }
+
+    /// Returns DeletionPending tombstones that have no archive_file_name (i.e. were never uploaded),
+    /// paginated. These only require a DB delete — no cloud operation needed.
+    pub async fn get_tombstones_pending_deletion(
+        &self,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<FileInfo>, Error> {
+        let status_int = CloudSyncStatus::DeletionPending.to_db_int();
+        Ok(sqlx::query_as::<_, FileInfo>(
+            "SELECT id, sha1_checksum, file_size, archive_file_name, file_type, cloud_sync_status
+             FROM file_info
+             WHERE cloud_sync_status = ? AND archive_file_name IS NULL
+             LIMIT ? OFFSET ?",
+        )
+        .bind(status_int)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&*self.pool)
+        .await?)
+    }
+
+    /// Counts DeletionPending tombstones that have no archive_file_name.
+    pub async fn count_tombstones_pending_deletion(&self) -> Result<i64, Error> {
+        let status_int = CloudSyncStatus::DeletionPending.to_db_int();
+        let row = sqlx::query!(
+            "SELECT COUNT(*) as count FROM file_info WHERE cloud_sync_status = ? AND archive_file_name IS NULL",
             status_int
         )
         .fetch_one(&*self.pool)

@@ -128,21 +128,11 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                             return StepAction::Abort(Error::OperationCancelled);
                         }
 
-                        let Some(cloud_key) = file.generate_cloud_key() else {
-                            tracing::warn!(
-                                file_info_id = file.id,
-                                "File has no archive_file_name; skipping upload"
-                            );
-                            continue;
-                        };
-
-                        let Some(archive_file_name) = file.archive_file_name else {
-                            tracing::warn!(
-                                file_info_id = file.id,
-                                "file_info record without archive_file_name in cloud sync process, this shouldn't happen."
-                            );
-                            continue;
-                        };
+                        let cloud_key = cloud_storage::cloud_key(
+                            file.file_type,
+                            &file.archive_file_name,
+                        );
+                        let archive_file_name = &file.archive_file_name;
 
                         let local_path = context
                             .settings
