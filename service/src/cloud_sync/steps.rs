@@ -87,7 +87,8 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
 
         send_progress_event(
             SyncEvent::SyncStarted {
-                total_files_count: context.files_prepared_for_upload,
+                total_upload_count: context.files_prepared_for_upload,
+                total_deletion_count: 0,
             },
             &context.progress_tx,
         )
@@ -1101,7 +1102,8 @@ mod tests {
         assert!(matches!(
             messages[0],
             SyncEvent::SyncStarted {
-                total_files_count: 1
+                total_upload_count: 1,
+                total_deletion_count: 0,
             }
         ));
 

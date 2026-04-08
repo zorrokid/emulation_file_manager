@@ -12,7 +12,8 @@ pub enum HttpDownloadEvent {
 pub enum SyncEvent {
     // TODO: use same events for upload and deletion, add process type field
     SyncStarted {
-        total_files_count: i64,
+        total_upload_count: i64,
+        total_deletion_count: i64,
     },
     FileUploadStarted {
         key: String,
@@ -56,6 +57,8 @@ pub enum SyncEvent {
         total_files: i64,
     },
     SyncCancelled,
+    /// Sent when the sync pipeline aborts due to an unrecoverable error.
+    SyncFailed { error: String },
 }
 
 #[derive(Debug, Clone)]
