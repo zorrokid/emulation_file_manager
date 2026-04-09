@@ -84,25 +84,13 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
     async fn execute(&self, context: &mut SyncContext) -> StepAction {
         tracing::debug!("Uploading pending files to cloud storage");
         let mut file_count = 0;
-
-        send_progress_event(
-            SyncEvent::SyncStarted {
-                total_upload_count: context.files_prepared_for_upload,
-                total_deletion_count: 0,
-            },
-            &context.progress_tx,
-        )
-        .await;
+        let mut session_skip: i64 = 0;
 
         loop {
             let pending_files_result = context
                 .repository_manager
                 .get_file_info_repository()
-                .get_files_pending_upload(
-                    10,
-                    0, // always offset 0: each uploaded file is updated to Synced so it
-                      // won't appear in the next fetch
-                )
+                .get_files_pending_upload(10, session_skip)
                 .await;
 
             match pending_files_result {
@@ -119,12 +107,9 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                         break;
                     }
 
-                    let mut batch_uploaded = 0;
                     for file in pending_files {
                         if context.cancel_rx.try_recv().is_ok() {
                             tracing::info!("Cloud sync cancelled by user");
-                            send_progress_event(SyncEvent::SyncCancelled, &context.progress_tx)
-                                .await;
                             return StepAction::Abort(Error::OperationCancelled);
                         }
 
@@ -132,11 +117,10 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                             file.file_type,
                             &file.archive_file_name,
                         );
-                        let archive_file_name = &file.archive_file_name;
 
                         let local_path = context
                             .settings
-                            .get_file_path(&file.file_type, &archive_file_name);
+                            .get_file_path(&file.file_type, &file.archive_file_name);
 
                         tracing::debug!(
                             file_info_id = file.id,
@@ -169,7 +153,7 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                         let upload_res = context
                             .cloud_ops
                             .as_ref()
-                            .unwrap()
+                            .expect("cloud_ops guaranteed by should_execute")
                             .upload_file(
                                 local_path.as_path(),
                                 &cloud_key,
@@ -185,7 +169,6 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                                     "Upload succeeded"
                                 );
                                 file_sync_result.cloud_operation_success = true;
-                                batch_uploaded += 1;
 
                                 // Update cloud_sync_status to Synced
                                 let status_res = context
@@ -289,19 +272,17 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                                     &context.progress_tx,
                                 )
                                 .await;
+
+                                // Failed files stay NotSynced and re-appear at offset 0 on the
+                                // next fetch, so advance the session offset past them.
+                                session_skip += 1;
                             }
                         }
                         context.upload_results.insert(cloud_key, file_sync_result);
                     }
-                    // Break if no progress was made (e.g., all files lack archive_file_name)
-                    // to avoid an infinite loop within a single sync session.
-                    if batch_uploaded == 0 {
-                        break;
-                    }
                 }
             }
         }
-        send_progress_event(SyncEvent::SyncCompleted {}, &context.progress_tx).await;
         tracing::debug!("Pending file uploads completed");
         StepAction::Continue
     }
@@ -1028,6 +1009,8 @@ mod tests {
             progress_tx: tx,
             files_prepared_for_upload: 0,
             cloud_files_prepared_for_deletion: 0,
+            tombstones_prepared_for_cleanup: 0,
+            tombstones_cleaned_up: 0,
             upload_results: HashMap::new(),
             deletion_results: HashMap::new(),
             settings_service,
@@ -1036,7 +1019,8 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn test_upload_progress_messages() {
+    async fn test_upload_step_emits_upload_progress_events() {
+        // Arrange
         let pool = Arc::new(setup_test_db().await);
         let repo_manager = Arc::new(RepositoryManager::new(pool));
         let settings = Arc::new(Settings {
@@ -1044,26 +1028,11 @@ mod tests {
             ..Default::default()
         });
         let cloud_ops = Arc::new(MockCloudStorage::new());
-
         let (tx, rx) = flume::unbounded();
         let settings_service = Arc::new(SettingsService::new(repo_manager.clone()));
         let (_cancel_tx, cancel_rx) = flume::unbounded::<()>();
 
-        let mut context = SyncContext {
-            settings,
-            repository_manager: repo_manager,
-            cloud_ops: Some(cloud_ops),
-            progress_tx: tx,
-            files_prepared_for_upload: 0,
-            cloud_files_prepared_for_deletion: 0,
-            upload_results: HashMap::new(),
-            deletion_results: HashMap::new(),
-            settings_service,
-            cancel_rx,
-        };
-
-        context
-            .repository_manager
+        repo_manager
             .get_file_info_repository()
             .add_file_info(
                 &Sha1Checksum::from([0; 20]),
@@ -1074,50 +1043,47 @@ mod tests {
             .await
             .unwrap();
 
-        context.files_prepared_for_upload = 1;
+        let mut context = SyncContext {
+            settings,
+            repository_manager: repo_manager,
+            cloud_ops: Some(cloud_ops),
+            progress_tx: tx,
+            files_prepared_for_upload: 1,
+            cloud_files_prepared_for_deletion: 0,
+            tombstones_prepared_for_cleanup: 0,
+            tombstones_cleaned_up: 0,
+            upload_results: HashMap::new(),
+            deletion_results: HashMap::new(),
+            settings_service,
+            cancel_rx,
+        };
 
-        // Execute step
+        // Act
         let step = UploadPendingFilesStep;
         step.execute(&mut context).await;
 
-        // Collect all messages from receiver
-        let mut messages = Vec::new();
-        while let Ok(msg) = rx.try_recv() {
-            messages.push(msg);
-        }
+        // Assert — lifecycle events (SyncStarted/SyncCompleted) are no longer emitted by this
+        // step; only the per-file upload progress events should appear.
+        let messages: Vec<_> = std::iter::from_fn(|| rx.try_recv().ok()).collect();
+        assert_eq!(messages.len(), 5);
 
-        // Assert expected messages
-        assert_eq!(messages.len(), 7);
-
-        assert!(matches!(
-            messages[0],
-            SyncEvent::SyncStarted {
-                total_upload_count: 1,
-                total_deletion_count: 0,
-            }
-        ));
-
-        assert!(matches!(messages[1], SyncEvent::FileUploadStarted {
+        assert!(matches!(messages[0], SyncEvent::FileUploadStarted {
             ref key, file_number: 1, total_files: 1
         } if key == "rom/file1.zst"));
 
-        // by default the mock simulates uploading in 3 parts
-        assert!(matches!(messages[2], SyncEvent::PartUploaded {
+        // mock simulates uploading in 3 parts by default
+        assert!(matches!(messages[1], SyncEvent::PartUploaded {
             ref key, part: 1
         } if key == "rom/file1.zst"));
-
-        assert!(matches!(messages[3], SyncEvent::PartUploaded {
+        assert!(matches!(messages[2], SyncEvent::PartUploaded {
             ref key, part: 2
         } if key == "rom/file1.zst"));
-
-        assert!(matches!(messages[4], SyncEvent::PartUploaded {
+        assert!(matches!(messages[3], SyncEvent::PartUploaded {
             ref key, part: 3
         } if key == "rom/file1.zst"));
 
-        assert!(matches!(messages[5], SyncEvent::FileUploadCompleted {
+        assert!(matches!(messages[4], SyncEvent::FileUploadCompleted {
             ref key, file_number: 1, total_files: 1
         } if key == "rom/file1.zst"));
-
-        assert!(matches!(messages[6], SyncEvent::SyncCompleted));
     }
 }
