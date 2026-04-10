@@ -16,55 +16,6 @@ async fn send_progress_event(event: SyncEvent, progress_tx: &Sender<SyncEvent>) 
     }
 }
 
-/// Step 1: Get counts of files to upload and delete from `file_info.cloud_sync_status`.
-pub struct GetSyncFileCountsStep;
-
-#[async_trait::async_trait]
-impl PipelineStep<SyncContext> for GetSyncFileCountsStep {
-    fn name(&self) -> &'static str {
-        "get_sync_file_counts"
-    }
-    async fn execute(&self, context: &mut SyncContext) -> StepAction {
-        tracing::debug!("Getting sync file counts");
-
-        let files_to_delete_res = context
-            .repository_manager
-            .get_file_info_repository()
-            .count_files_pending_deletion()
-            .await;
-
-        match files_to_delete_res {
-            Ok(count) => {
-                context.cloud_files_prepared_for_deletion = count;
-                tracing::debug!(count, "Files prepared for deletion");
-            }
-            Err(e) => {
-                tracing::error!(error = %e, "Error counting files for deletion");
-                return StepAction::Abort(Error::DbError(e.to_string()));
-            }
-        }
-
-        let files_pending_upload_res = context
-            .repository_manager
-            .get_file_info_repository()
-            .count_files_pending_upload()
-            .await;
-        match files_pending_upload_res {
-            Ok(count) => {
-                context.files_prepared_for_upload = count;
-                tracing::debug!(count, "Files prepared for upload");
-            }
-            Err(e) => {
-                tracing::error!(error = %e, "Error counting files for upload");
-                return StepAction::Abort(Error::DbError(e.to_string()));
-            }
-        }
-
-        tracing::debug!("File counts retrieval completed");
-        StepAction::Continue
-    }
-}
-
 /// Step 2: Upload files with `cloud_sync_status = NotSynced` to cloud storage.
 /// On success, sets `cloud_sync_status = Synced` and writes an `UploadCompleted` log entry.
 /// On failure, leaves `cloud_sync_status = NotSynced` (auto-retried next sync) and writes
@@ -288,15 +239,15 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
     }
 }
 
-/// Step 3: Delete files with `cloud_sync_status = DeletionPending` from cloud storage.
-/// On success, deletes the `file_info` record entirely (the tombstone is no longer needed).
+/// Step 3: Delete files with `cloud_sync_status = DeletionPending` AND `archive_file_name IS NOT NULL`
+/// from cloud storage, then remove the tombstone `file_info` record.
 /// On failure, leaves `cloud_sync_status = DeletionPending` for retry on next sync.
-pub struct DeleteMarkedFilesStep;
+pub struct DeleteCloudFilesStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
+impl PipelineStep<SyncContext> for DeleteCloudFilesStep {
     fn name(&self) -> &'static str {
-        "delete_marked_files"
+        "delete_cloud_files"
     }
 
     fn should_execute(&self, context: &SyncContext) -> bool {
@@ -304,17 +255,15 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
     }
 
     async fn execute(&self, context: &mut SyncContext) -> StepAction {
-        tracing::debug!("Deleting marked files from cloud storage");
+        tracing::debug!("Deleting cloud files");
         let mut file_count = 0;
+        let mut session_skip: i64 = 0;
 
         loop {
             let pending_files_res = context
                 .repository_manager
                 .get_file_info_repository()
-                .get_files_pending_deletion(
-                    10,
-                    0, // always offset 0: successfully deleted files are removed from file_info
-                )
+                .get_cloud_files_pending_deletion(10, session_skip)
                 .await;
 
             match pending_files_res {
@@ -332,22 +281,14 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
                         "Found pending files for deletion"
                     );
 
-                    let mut batch_deleted = 0;
                     for file in pending_files {
                         if context.cancel_rx.try_recv().is_ok() {
                             tracing::info!("Cloud sync cancelled by user");
-                            send_progress_event(SyncEvent::SyncCancelled, &context.progress_tx)
-                                .await;
                             return StepAction::Abort(Error::OperationCancelled);
                         }
 
-                        let Some(cloud_key) = file.generate_cloud_key() else {
-                            tracing::warn!(
-                                file_info_id = file.id,
-                                "DeletionPending file has no archive_file_name; skipping"
-                            );
-                            continue;
-                        };
+                        let cloud_key =
+                            cloud_storage::cloud_key(file.file_type, &file.archive_file_name);
 
                         file_count += 1;
                         send_progress_event(
@@ -372,7 +313,7 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
                         let deletion_res = context
                             .cloud_ops
                             .as_ref()
-                            .unwrap()
+                            .expect("cloud_ops guaranteed by should_execute")
                             .delete_file(&cloud_key)
                             .await;
 
@@ -403,7 +344,6 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
                                 match (log_res, delete_res) {
                                     (Ok(_), Ok(_)) => {
                                         file_deletion_result.db_update_success = true;
-                                        batch_deleted += 1;
                                         tracing::info!(
                                             file_info_id = file.id,
                                             cloud_key = %cloud_key,
@@ -443,6 +383,7 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
                             Err(e) => {
                                 tracing::error!(
                                     file_info_id = file.id,
+                                    cloud_key = cloud_key,
                                     error = %e,
                                     "File deletion failed"
                                 );
@@ -450,7 +391,6 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
                                 file_deletion_result.cloud_error = Some(format!("{}", e));
 
                                 // Leave cloud_sync_status = DeletionPending for retry.
-                                // Write audit log entry for diagnosis.
                                 let log_res = context
                                     .repository_manager
                                     .get_file_sync_log_repository()
@@ -482,22 +422,99 @@ impl PipelineStep<SyncContext> for DeleteMarkedFilesStep {
                                     &context.progress_tx,
                                 )
                                 .await;
+
+                                // Failed files stay DeletionPending and re-appear at offset 0 on
+                                // the next fetch, so advance the session offset past them.
+                                session_skip += 1;
                             }
                         }
                         context
                             .deletion_results
                             .insert(cloud_key, file_deletion_result);
                     }
-                    // Break if no progress was made to avoid infinite loop
-                    // (e.g., all cloud deletions failed, files stay DeletionPending).
-                    if batch_deleted == 0 {
+                }
+            }
+        }
+
+        tracing::debug!("Cloud file deletions completed");
+        StepAction::Continue
+    }
+}
+
+/// Step 4: Delete `DeletionPending` tombstones with no `archive_file_name` from the database.
+/// These records were never uploaded to cloud storage, so only a DB delete is needed.
+pub struct CleanupTombstonesStep;
+
+#[async_trait::async_trait]
+impl PipelineStep<SyncContext> for CleanupTombstonesStep {
+    fn name(&self) -> &'static str {
+        "cleanup_tombstones"
+    }
+
+    fn should_execute(&self, context: &SyncContext) -> bool {
+        context.tombstones_prepared_for_cleanup > 0
+    }
+
+    async fn execute(&self, context: &mut SyncContext) -> StepAction {
+        tracing::debug!("Cleaning up tombstones");
+
+        loop {
+            let tombstones_res = context
+                .repository_manager
+                .get_file_info_repository()
+                .get_tombstones_pending_deletion(10, 0)
+                .await;
+
+            match tombstones_res {
+                Err(e) => {
+                    tracing::error!(error = %e, "Error fetching tombstones for cleanup");
+                    return StepAction::Abort(Error::DbError(e.to_string()));
+                }
+                Ok(tombstones) => {
+                    if tombstones.is_empty() {
+                        break;
+                    }
+
+                    let mut batch_cleaned = 0;
+                    for tombstone in tombstones {
+                        if context.cancel_rx.try_recv().is_ok() {
+                            tracing::info!("Cloud sync cancelled by user");
+                            return StepAction::Abort(Error::OperationCancelled);
+                        }
+
+                        match context
+                            .repository_manager
+                            .get_file_info_repository()
+                            .delete_file_info(tombstone.id)
+                            .await
+                        {
+                            Ok(_) => {
+                                tracing::info!(
+                                    file_info_id = tombstone.id,
+                                    "Tombstone cleaned up"
+                                );
+                                batch_cleaned += 1;
+                                context.tombstones_cleaned_up += 1;
+                            }
+                            Err(e) => {
+                                tracing::error!(
+                                    file_info_id = tombstone.id,
+                                    error = %e,
+                                    "Failed to clean up tombstone"
+                                );
+                            }
+                        }
+                    }
+                    // Break if no progress was made to prevent an infinite loop when DB
+                    // deletes consistently fail within a batch.
+                    if batch_cleaned == 0 {
                         break;
                     }
                 }
             }
         }
 
-        tracing::debug!("Marked file deletions completed");
+        tracing::debug!("Tombstone cleanup completed");
         StepAction::Continue
     }
 }
@@ -513,84 +530,12 @@ mod tests {
     use crate::{
         cloud_sync::{
             context::SyncContext,
-            steps::{DeleteMarkedFilesStep, GetSyncFileCountsStep, UploadPendingFilesStep},
+            steps::{CleanupTombstonesStep, DeleteCloudFilesStep, UploadPendingFilesStep},
         },
         pipeline::pipeline_step::{PipelineStep, StepAction},
         settings_service::SettingsService,
         view_models::Settings,
     };
-
-    #[async_std::test]
-    async fn test_get_sync_file_counts_step() {
-        let mut context = initialize_sync_context().await;
-
-        let file_info_id_1 = add_file_info(
-            &context.repository_manager,
-            [0; 20],
-            "file1.zst",
-            FileType::Rom,
-        )
-        .await;
-        let file_info_id_2 = add_file_info(
-            &context.repository_manager,
-            [1; 20],
-            "file2.zst",
-            FileType::Rom,
-        )
-        .await;
-        let file_info_id_3 = add_file_info(
-            &context.repository_manager,
-            [2; 20],
-            "file3.zst",
-            FileType::Rom,
-        )
-        .await;
-        let file_info_id_4 = add_file_info(
-            &context.repository_manager,
-            [3; 20],
-            "file4.zst",
-            FileType::Rom,
-        )
-        .await;
-        let file_info_id_5 = add_file_info(
-            &context.repository_manager,
-            [4; 20],
-            "file5.zst",
-            FileType::Rom,
-        )
-        .await;
-
-        // file1, file2: NotSynced (default) → counted for upload
-        // file3, file4: DeletionPending → counted for deletion
-        set_sync_status(
-            &context.repository_manager,
-            file_info_id_3,
-            CloudSyncStatus::DeletionPending,
-        )
-        .await;
-        set_sync_status(
-            &context.repository_manager,
-            file_info_id_4,
-            CloudSyncStatus::DeletionPending,
-        )
-        .await;
-        // file5: Synced → not counted for either
-        set_sync_status(
-            &context.repository_manager,
-            file_info_id_5,
-            CloudSyncStatus::Synced,
-        )
-        .await;
-
-        let _ = (file_info_id_1, file_info_id_2); // referenced for clarity
-
-        let step = GetSyncFileCountsStep;
-        let action = step.execute(&mut context).await;
-
-        assert_eq!(action, StepAction::Continue);
-        assert_eq!(context.cloud_files_prepared_for_deletion, 2);
-        assert_eq!(context.files_prepared_for_upload, 2);
-    }
 
     #[async_std::test]
     async fn test_upload_pending_files_step() {
@@ -701,7 +646,7 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn test_delete_marked_files_step() {
+    async fn test_delete_cloud_files_step() {
         let mut context = initialize_sync_context().await;
         let file_info_id = context
             .repository_manager
@@ -723,7 +668,7 @@ mod tests {
             .unwrap();
 
         context.cloud_files_prepared_for_deletion = 1;
-        let step = crate::cloud_sync::steps::DeleteMarkedFilesStep;
+        let step = DeleteCloudFilesStep;
         let action = step.execute(&mut context).await;
         assert_eq!(action, StepAction::Continue);
         let deletion_result = context.deletion_results.get("rom/file1.zst").unwrap();
@@ -752,7 +697,7 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn test_delete_marked_files_step_more_than_one_batch() {
+    async fn test_delete_cloud_files_step_more_than_one_batch() {
         let mut context = initialize_sync_context().await;
         let test_files = [
             ("file1.zst", [0; 20]),
@@ -792,7 +737,7 @@ mod tests {
         assert_eq!(deletion_pending_count, 11);
 
         context.cloud_files_prepared_for_deletion = 11;
-        let step = crate::cloud_sync::steps::DeleteMarkedFilesStep;
+        let step = DeleteCloudFilesStep;
         let action = step.execute(&mut context).await;
         assert_eq!(action, StepAction::Continue);
         assert!(
@@ -862,7 +807,7 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn test_delete_marked_files_step_deletion_failure() {
+    async fn test_delete_cloud_files_step_deletion_failure() {
         let cloud_ops = Arc::new(MockCloudStorage::new());
         cloud_ops.fail_delete_for("rom/file1.zst");
         let mut context = initialize_sync_context_with_cloud(cloud_ops).await;
@@ -887,7 +832,7 @@ mod tests {
             .unwrap();
 
         context.cloud_files_prepared_for_deletion = 1;
-        let step = DeleteMarkedFilesStep;
+        let step = DeleteCloudFilesStep;
         let action = step.execute(&mut context).await;
 
         assert_eq!(action, StepAction::Continue);
@@ -920,29 +865,6 @@ mod tests {
         );
     }
 
-    #[async_std::test]
-    async fn test_delete_marked_files_step_handles_missing_archive_file_name() {
-        // A DeletionPending tombstone with archive_file_name=None must not cause an infinite
-        // loop; the step should break out after one batch with no progress.
-        let mut context = initialize_sync_context().await;
-        let id = add_file_info_without_archive_name(&context, Sha1Checksum::from([0; 20])).await;
-        context
-            .repository_manager
-            .get_file_info_repository()
-            .update_cloud_sync_status(id, CloudSyncStatus::DeletionPending)
-            .await
-            .unwrap();
-
-        context.cloud_files_prepared_for_deletion = 1;
-        let step = DeleteMarkedFilesStep;
-        let action = step.execute(&mut context).await;
-
-        // Step must not abort or loop forever
-        assert_eq!(action, StepAction::Continue);
-        // No deletion was performed
-        assert!(context.deletion_results.is_empty());
-    }
-
     async fn add_file_info(
         repo_manager: &RepositoryManager,
         checksum: [u8; 20],
@@ -971,18 +893,6 @@ mod tests {
             .update_cloud_sync_status(file_info_id, status)
             .await
             .unwrap();
-    }
-
-    /// Creates a `file_info` row with `archive_file_name=NULL`.
-    async fn add_file_info_without_archive_name(
-        context: &SyncContext,
-        checksum: Sha1Checksum,
-    ) -> i64 {
-        let repo = &context.repository_manager;
-        repo.get_file_info_repository()
-            .add_file_info(&checksum, 1234, None, FileType::Rom)
-            .await
-            .unwrap()
     }
 
     async fn initialize_sync_context() -> SyncContext {
