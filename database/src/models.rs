@@ -35,13 +35,6 @@ impl FileInfo {
     pub fn is_available(&self) -> bool {
         self.archive_file_name.is_some()
     }
-
-    #[deprecated(note = "Use cloud_storage::cloud_key instead. Will be removed once all callers are migrated (T14).")]
-    pub fn generate_cloud_key(&self) -> Option<String> {
-        self.archive_file_name.as_ref().map(|name| {
-            format!("{}/{}", self.file_type.to_string().to_lowercase(), name)
-        })
-    }
 }
 
 /// A file guaranteed to have been archived and is ready for cloud sync.

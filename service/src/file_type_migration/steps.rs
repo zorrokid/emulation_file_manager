@@ -1,4 +1,5 @@
 use database::models::FileInfo;
+use cloud_storage::cloud_key;
 
 use crate::{
     error::Error,
@@ -270,28 +271,17 @@ impl PipelineStep<FileTypeMigrationContext> for MoveCloudFilesStep {
                             "Moving cloud file to new location based on new file type"
                         );
 
-                        let old_cloud_key = file.generate_cloud_key();
-
-                        let new_file = FileInfo {
-                            id: file.id,
-                            sha1_checksum: file.sha1_checksum,
-                            file_size: file.file_size,
-                            archive_file_name: file.archive_file_name.clone(),
-                            file_type: file_type_migration.new_file_type,
-                            cloud_sync_status: file.cloud_sync_status,
-                        };
-
-                        let new_cloud_key = new_file.generate_cloud_key();
-
-                        let (Some(old_cloud_key), Some(new_cloud_key)) =
-                            (old_cloud_key, new_cloud_key)
-                        else {
+                        let Some(archive_file_name) = &file.archive_file_name else {
                             tracing::warn!(
                                 file_id = file.id,
                                 "Missing archive file name, cannot generate cloud key, skipping move"
                             );
                             continue;
                         };
+
+                        let old_cloud_key = cloud_key(file.file_type, archive_file_name);
+                        let new_cloud_key =
+                            cloud_key(file_type_migration.new_file_type, archive_file_name);
 
                         if context.is_dry_run {
                             tracing::info!(
@@ -929,10 +919,10 @@ mod tests {
             .settings
             .get_file_path(&FileType::ManualScan, archive_file_name.as_deref().unwrap());
         let cloud_ops = Arc::new(MockCloudStorage::new());
-        let cloud_key = file_info.generate_cloud_key().unwrap();
+        let old_cloud_key = cloud_key(file_info.file_type, file_info.archive_file_name.as_deref().unwrap());
 
         cloud_ops
-            .upload_file(&file_path, &cloud_key, None)
+            .upload_file(&file_path, &old_cloud_key, None)
             .await
             .unwrap();
 
@@ -947,7 +937,7 @@ mod tests {
         assert_eq!(context.moved_cloud_file_ids.len(), 1);
         assert!(context.moved_cloud_file_ids.contains(&file_info.id));
 
-        let exists = cloud_ops.file_exists(&cloud_key).await.unwrap_or(false);
+        let exists = cloud_ops.file_exists(&old_cloud_key).await.unwrap_or(false);
         assert!(!exists, "Old cloud key should not exist after move");
 
         let new_file = FileInfo {
@@ -959,7 +949,7 @@ mod tests {
             cloud_sync_status: file_info.cloud_sync_status,
         };
 
-        let new_cloud_key = new_file.generate_cloud_key().unwrap();
+        let new_cloud_key = cloud_key(new_file.file_type, new_file.archive_file_name.as_deref().unwrap());
         let exists = cloud_ops.file_exists(&new_cloud_key).await.unwrap_or(false);
         assert!(exists, "New cloud key should exist after move");
     }
