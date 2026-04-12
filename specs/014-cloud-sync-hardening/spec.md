@@ -1,7 +1,7 @@
 # 014 — Cloud Sync Hardening
 
 ## Status
-Planning
+Complete
 
 ## Affected Crates
 - `core_types` — add `SyncFailed` event variant; update `SyncStarted` fields
@@ -217,4 +217,19 @@ repository calls). Update `SyncEvent::SyncStarted` to carry both counts.
 - [ ] All existing tests pass; new tests cover the fixed/new behaviours.
 
 ## As Implemented
-_(Pending)_
+
+Implemented as proposed with the following notes:
+
+- **H1 (loop termination):** Replaced the `batch_uploaded == 0` / `batch_deleted == 0` break guard with a session-offset algorithm. A `session_skip: i64` counter tracks how many files in the current session have failed (cloud error); the fetch offset advances by `session_skip`, ensuring the loop always makes forward progress and terminates when the offset returns an empty batch.
+
+- **H2 (tombstone split):** `DeleteMarkedFilesStep` was split into two independent steps: `DeleteCloudFilesStep` (processes `DeletionPending` files with `archive_file_name IS NOT NULL` — requires a cloud delete + DB remove) and `CleanupTombstonesStep` (processes `DeletionPending` files with `archive_file_name IS NULL` — DB remove only). `ConnectToCloudStep` skips connection when only tombstones are queued.
+
+- **H3 (pre-pipeline counts):** `sync_to_cloud` in `service.rs` now queries `count_files_pending_upload`, `count_cloud_files_pending_deletion`, and `count_tombstones_pending_deletion` before the pipeline runs, storing them in `SyncContext`. `SyncStarted` is emitted with `total_upload_count` and `total_deletion_count` before the pipeline executes.
+
+- **H4 (lifecycle events):** Terminal events (`SyncCompleted`, `SyncCancelled`, `SyncFailed`) are now emitted exclusively in `service.rs` after the pipeline returns, matching the pipeline result. Per-step `SyncCompleted` emissions were removed.
+
+- **`generate_cloud_key` consolidation:** The method was removed from `FileInfo` and replaced with a free function `cloud_key(file_type, archive_file_name)` in the `cloud_storage` crate. All callers updated.
+
+- **`CloudSyncableFileInfo` model:** New struct in `database::models` guarantees `archive_file_name` is non-optional for upload/deletion paths. `TryFrom<FileInfo>` conversion used in repository methods.
+
+- **Phase 6 review fixes:** DRY violation in repository (duplicate conversion) extracted to private helper; `FileDeletionCompleted` now only emitted when both cloud and DB operations succeed; doc comments added to `SyncResult`.

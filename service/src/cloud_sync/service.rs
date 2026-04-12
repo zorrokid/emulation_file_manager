@@ -299,6 +299,7 @@ mod tests {
     }
 }
 
+/// Summary of a completed cloud sync operation returned by [`CloudStorageSyncService::sync_to_cloud`].
 #[derive(Debug)]
 pub struct SyncResult {
     pub successful_uploads: usize,
@@ -308,5 +309,6 @@ pub struct SyncResult {
     /// Uploads where the cloud operation succeeded but the DB update failed.
     /// These files exist in cloud storage but remain `NotSynced` in the DB.
     pub partial_successful_uploads: usize,
+    /// Tombstone records (`DeletionPending` with no `archive_file_name`) deleted from the DB.
     pub tombstones_cleaned_up: usize,
 }

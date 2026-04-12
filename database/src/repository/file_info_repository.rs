@@ -33,6 +33,19 @@ impl FromRow<'_, SqliteRow> for FileInfo {
     }
 }
 
+/// Converts a batch of `FileInfo` rows into `CloudSyncableFileInfo`, returning a
+/// `DecodeError` if any row has a `NULL` `archive_file_name`.
+/// All callers use SQL queries that include `AND archive_file_name IS NOT NULL`,
+/// so this should never fail in practice.
+fn to_cloud_syncable(rows: Vec<FileInfo>, context: &str) -> Result<Vec<CloudSyncableFileInfo>, Error> {
+    rows.into_iter()
+        .map(CloudSyncableFileInfo::try_from)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| Error::DecodeError(
+            format!("Unexpected null archive_file_name in {context}").into(),
+        ))
+}
+
 impl FileInfoRepository {
     pub fn new(pool: Arc<Pool<Sqlite>>) -> Self {
         Self { pool }
@@ -129,12 +142,7 @@ impl FileInfoRepository {
         .bind(offset)
         .fetch_all(&*self.pool)
         .await?;
-        rows.into_iter()
-            .map(CloudSyncableFileInfo::try_from)
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|_| Error::DecodeError(
-                "Unexpected null archive_file_name in pending upload query".into(),
-            ))
+        to_cloud_syncable(rows, "pending upload query")
     }
 
     /// Counts available files ready for upload (NotSynced + archive_file_name IS NOT NULL).
@@ -201,12 +209,7 @@ impl FileInfoRepository {
         .bind(offset)
         .fetch_all(&*self.pool)
         .await?;
-        rows.into_iter()
-            .map(CloudSyncableFileInfo::try_from)
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|_| Error::DecodeError(
-                "Unexpected null archive_file_name in cloud deletion query".into(),
-            ))
+        to_cloud_syncable(rows, "cloud deletion query")
     }
 
     /// Counts DeletionPending files that have an archive_file_name.

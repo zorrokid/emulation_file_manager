@@ -243,8 +243,24 @@
   Build a `SyncContext` with `cloud_files_prepared_for_deletion = 0`. Call
   `DeleteCloudFilesStep::should_execute`. Assert it returns `false` with no DB calls made.
 
-## Phase 6 — Review Fixes
-_(Populated after code review)_
+## Phase 6 — Review Fixes (Round 1)
+
+<!-- Tasks generated from review-1.md findings -->
+
+- [x] T36 [database] — Extract shared `FileInfo → CloudSyncableFileInfo` conversion to private helper → R1
+  **File:** `database/src/repository/file_info_repository.rs`
+  Add a private `fn to_cloud_syncable(rows: Vec<FileInfo>, context: &str) -> Result<Vec<CloudSyncableFileInfo>, Error>`
+  helper and replace the duplicate 5-line conversion at lines ~132–138 and ~204–210 with a single call each.
+
+- [x] T37 [service] — Only emit `FileDeletionCompleted` when DB cleanup succeeds; emit `FileDeletionFailed` otherwise → R2
+  **File:** `service/src/cloud_sync/steps.rs`
+  After the `match (log_res, delete_res)` block, branch on `file_deletion_result.db_update_success`:
+  - `true` → emit `FileDeletionCompleted` as now
+  - `false` → emit `FileDeletionFailed` with `file_deletion_result.db_error` and increment `session_skip`
+
+- [x] T38 [service] — Add struct-level and field-level doc comments to `SyncResult` → R3
+  **File:** `service/src/cloud_sync/service.rs:L302–312`
+  Add `///` doc comment on the struct and on the `tombstones_cleaned_up` field.
 
 ## Manual Verification Checklist
 

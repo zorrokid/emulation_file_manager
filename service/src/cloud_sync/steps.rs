@@ -370,15 +370,37 @@ impl PipelineStep<SyncContext> for DeleteCloudFilesStep {
                                     }
                                 }
 
-                                send_progress_event(
-                                    SyncEvent::FileDeletionCompleted {
-                                        key: cloud_key.clone(),
-                                        file_number: file_count,
-                                        total_files: context.cloud_files_prepared_for_deletion,
-                                    },
-                                    &context.progress_tx,
-                                )
-                                .await;
+                                // Only report success when both cloud and DB operations completed.
+                                // If the DB cleanup failed, the file_info record remains
+                                // DeletionPending; emit FileDeletionFailed so the UI stays
+                                // consistent and advance session_skip to skip re-fetching it
+                                // in this session.
+                                if file_deletion_result.db_update_success {
+                                    send_progress_event(
+                                        SyncEvent::FileDeletionCompleted {
+                                            key: cloud_key.clone(),
+                                            file_number: file_count,
+                                            total_files: context.cloud_files_prepared_for_deletion,
+                                        },
+                                        &context.progress_tx,
+                                    )
+                                    .await;
+                                } else {
+                                    send_progress_event(
+                                        SyncEvent::FileDeletionFailed {
+                                            key: cloud_key.clone(),
+                                            error: file_deletion_result
+                                                .db_error
+                                                .clone()
+                                                .unwrap_or_default(),
+                                            file_number: file_count,
+                                            total_files: context.cloud_files_prepared_for_deletion,
+                                        },
+                                        &context.progress_tx,
+                                    )
+                                    .await;
+                                    session_skip += 1;
+                                }
                             }
                             Err(e) => {
                                 tracing::error!(
