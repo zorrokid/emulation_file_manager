@@ -186,6 +186,19 @@ pub async fn multipart_upload(
     Ok(())
 }
 
+#[cfg(test)]
+mod key_tests {
+    use super::*;
+    use core_types::FileType;
+
+    #[test]
+    fn test_cloud_key_formats() {
+        assert_eq!(cloud_key(FileType::Rom, "abc.zst"), "rom/abc.zst");
+        // DiskImage must use underscore separator — NOT a space ("disk image/...")
+        assert_eq!(cloud_key(FileType::DiskImage, "def.zst"), "disk_image/def.zst");
+    }
+}
+
 pub async fn delete_file(bucket: &Bucket, key: &str) -> Result<(), CloudStorageError> {
     bucket.delete_object(key).await?;
     Ok(())

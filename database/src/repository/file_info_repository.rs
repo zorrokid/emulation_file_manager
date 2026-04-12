@@ -695,4 +695,42 @@ mod tests {
         let count = repo.count_files_pending_upload().await.unwrap();
         assert_eq!(count, 0);
     }
+
+    #[async_std::test]
+    async fn test_split_deletion_queries_partition_correctly() {
+        let pool = setup_test_db().await;
+        let repo = FileInfoRepository::new(Arc::new(pool.clone()));
+
+        // 2 DeletionPending with archive_file_name — these require a cloud delete
+        let id1 = insert_file_info(&pool, Some("cloud1.zst")).await;
+        let id2 = insert_file_info(&pool, Some("cloud2.zst")).await;
+        repo.update_cloud_sync_status(id1, CloudSyncStatus::DeletionPending).await.unwrap();
+        repo.update_cloud_sync_status(id2, CloudSyncStatus::DeletionPending).await.unwrap();
+
+        // 2 DeletionPending tombstones with no archive_file_name — DB-only cleanup
+        let id3 = insert_file_info(&pool, None).await;
+        let id4 = insert_file_info(&pool, None).await;
+        repo.update_cloud_sync_status(id3, CloudSyncStatus::DeletionPending).await.unwrap();
+        repo.update_cloud_sync_status(id4, CloudSyncStatus::DeletionPending).await.unwrap();
+
+        // 1 NotSynced — must not appear in either deletion query
+        insert_file_info(&pool, Some("pending.zst")).await;
+
+        let cloud_files = repo.get_cloud_files_pending_deletion(100, 0).await.unwrap();
+        let tombstones = repo.get_tombstones_pending_deletion(100, 0).await.unwrap();
+
+        assert_eq!(cloud_files.len(), 2);
+        assert_eq!(tombstones.len(), 2);
+        assert_eq!(repo.count_cloud_files_pending_deletion().await.unwrap(), 2);
+        assert_eq!(repo.count_tombstones_pending_deletion().await.unwrap(), 2);
+
+        // Cloud files must all have archive_file_name (guaranteed by CloudSyncableFileInfo)
+        for f in &cloud_files {
+            assert!(!f.archive_file_name.is_empty());
+        }
+        // Tombstones must all lack archive_file_name
+        for t in &tombstones {
+            assert!(t.archive_file_name.is_none());
+        }
+    }
 }

@@ -529,7 +529,7 @@ mod tests {
 
     use crate::{
         cloud_sync::{
-            context::SyncContext,
+            context::{FileSyncResult, SyncContext},
             steps::{CleanupTombstonesStep, DeleteCloudFilesStep, UploadPendingFilesStep},
         },
         pipeline::pipeline_step::{PipelineStep, StepAction},
@@ -865,6 +865,16 @@ mod tests {
         );
     }
 
+    async fn add_tombstone(repo_manager: &RepositoryManager, checksum: [u8; 20]) -> i64 {
+        let id = repo_manager
+            .get_file_info_repository()
+            .add_file_info(&Sha1Checksum::from(checksum), 1234, None, FileType::Rom)
+            .await
+            .unwrap();
+        set_sync_status(repo_manager, id, CloudSyncStatus::DeletionPending).await;
+        id
+    }
+
     async fn add_file_info(
         repo_manager: &RepositoryManager,
         checksum: [u8; 20],
@@ -995,5 +1005,218 @@ mod tests {
         assert!(matches!(messages[4], SyncEvent::FileUploadCompleted {
             ref key, file_number: 1, total_files: 1
         } if key == "rom/file1.zst"));
+    }
+
+    #[async_std::test]
+    async fn test_cleanup_tombstones_step_should_not_execute_when_no_tombstones() {
+        let context = initialize_sync_context().await;
+        assert!(!CleanupTombstonesStep.should_execute(&context));
+    }
+
+    #[async_std::test]
+    async fn test_delete_cloud_files_step_should_not_execute_when_no_pending_deletions() {
+        // cloud_ops is Some (set by initialize_sync_context) but count is 0
+        let context = initialize_sync_context().await;
+        assert!(!DeleteCloudFilesStep.should_execute(&context));
+    }
+
+    #[async_std::test]
+    async fn test_partial_successful_uploads_counted_correctly() {
+        let mut context = initialize_sync_context().await;
+
+        // Complete success — not partial
+        context.upload_results.insert(
+            "rom/file1.zst".to_string(),
+            FileSyncResult {
+                file_info_id: 1,
+                cloud_key: "rom/file1.zst".to_string(),
+                cloud_operation_success: true,
+                db_update_success: true,
+                cloud_error: None,
+                db_error: None,
+            },
+        );
+
+        // Partial success — cloud upload succeeded but DB update failed
+        context.upload_results.insert(
+            "rom/file2.zst".to_string(),
+            FileSyncResult {
+                file_info_id: 2,
+                cloud_key: "rom/file2.zst".to_string(),
+                cloud_operation_success: true,
+                db_update_success: false,
+                cloud_error: None,
+                db_error: Some("DB error".to_string()),
+            },
+        );
+
+        // Clean failure — cloud upload failed
+        context.upload_results.insert(
+            "rom/file3.zst".to_string(),
+            FileSyncResult {
+                file_info_id: 3,
+                cloud_key: "rom/file3.zst".to_string(),
+                cloud_operation_success: false,
+                db_update_success: false,
+                cloud_error: Some("upload error".to_string()),
+                db_error: None,
+            },
+        );
+
+        assert_eq!(context.partial_successful_uploads(), 1);
+        assert_eq!(context.successful_uploads(), 1);
+        // partial failure + clean failure both count as failed
+        assert_eq!(context.failed_uploads(), 2);
+    }
+
+    #[async_std::test]
+    async fn test_cleanup_tombstones_step_removes_tombstones() {
+        let mut context = initialize_sync_context().await;
+
+        for i in 0u8..3 {
+            add_tombstone(&context.repository_manager, [i; 20]).await;
+        }
+
+        context.tombstones_prepared_for_cleanup = 3;
+        let action = CleanupTombstonesStep.execute(&mut context).await;
+
+        assert_eq!(action, StepAction::Continue);
+        assert_eq!(context.tombstones_cleaned_up, 3);
+        assert_eq!(
+            context
+                .repository_manager
+                .get_file_info_repository()
+                .count_tombstones_pending_deletion()
+                .await
+                .unwrap(),
+            0
+        );
+    }
+
+    #[async_std::test]
+    async fn test_cleanup_tombstones_step_more_than_one_batch() {
+        let mut context = initialize_sync_context().await;
+
+        for i in 0u8..11 {
+            add_tombstone(&context.repository_manager, [i; 20]).await;
+        }
+
+        context.tombstones_prepared_for_cleanup = 11;
+        let action = CleanupTombstonesStep.execute(&mut context).await;
+
+        assert_eq!(action, StepAction::Continue);
+        assert_eq!(context.tombstones_cleaned_up, 11);
+        assert_eq!(
+            context
+                .repository_manager
+                .get_file_info_repository()
+                .count_tombstones_pending_deletion()
+                .await
+                .unwrap(),
+            0
+        );
+    }
+
+    #[async_std::test]
+    async fn test_cleanup_tombstones_step_exits_cleanly_when_no_db_tombstones() {
+        // tombstones_prepared_for_cleanup > 0 but DB has no actual records (e.g. concurrent
+        // deletion between count and step). The step must exit via the empty-batch guard.
+        let mut context = initialize_sync_context().await;
+        context.tombstones_prepared_for_cleanup = 5;
+
+        let action = CleanupTombstonesStep.execute(&mut context).await;
+
+        assert_eq!(action, StepAction::Continue);
+        assert_eq!(context.tombstones_cleaned_up, 0);
+    }
+
+    #[async_std::test]
+    async fn test_upload_loop_continues_when_first_batch_all_fail() {
+        // H1 regression test: when the entire first batch (files 1–10) fails, the
+        // session-offset algorithm must advance past them and still attempt files 11–15.
+        let cloud_ops = Arc::new(MockCloudStorage::new());
+        for i in 1u8..=10 {
+            cloud_ops.fail_upload_for(format!("rom/file{}.zst", i));
+        }
+        let mut context = initialize_sync_context_with_cloud(cloud_ops).await;
+
+        for i in 1u8..=15 {
+            add_file_info(
+                &context.repository_manager,
+                [i; 20],
+                &format!("file{}.zst", i),
+                FileType::Rom,
+            )
+            .await;
+        }
+
+        context.files_prepared_for_upload = 15;
+        let action = UploadPendingFilesStep.execute(&mut context).await;
+
+        assert_eq!(action, StepAction::Continue);
+
+        // Files 11–15 must have been uploaded successfully
+        for i in 11u8..=15 {
+            let key = format!("rom/file{}.zst", i);
+            assert!(
+                context.upload_results.get(&key).unwrap().cloud_operation_success,
+                "file{i} should have been uploaded"
+            );
+        }
+
+        // Files 1–10 remain NotSynced (available for retry on next sync)
+        let remaining = context
+            .repository_manager
+            .get_file_info_repository()
+            .count_files_pending_upload()
+            .await
+            .unwrap();
+        assert_eq!(remaining, 10);
+    }
+
+    #[async_std::test]
+    async fn test_delete_loop_continues_when_first_batch_all_fail() {
+        // Analogous to the upload H1 fix: when cloud deletions for files 1–10 fail, files
+        // 11–15 must still be attempted and successfully deleted.
+        let cloud_ops = Arc::new(MockCloudStorage::new());
+        for i in 1u8..=10 {
+            cloud_ops.fail_delete_for(format!("rom/file{}.zst", i));
+        }
+        let mut context = initialize_sync_context_with_cloud(cloud_ops).await;
+
+        for i in 1u8..=15 {
+            let id = add_file_info(
+                &context.repository_manager,
+                [i; 20],
+                &format!("file{}.zst", i),
+                FileType::Rom,
+            )
+            .await;
+            set_sync_status(&context.repository_manager, id, CloudSyncStatus::DeletionPending)
+                .await;
+        }
+
+        context.cloud_files_prepared_for_deletion = 15;
+        let action = DeleteCloudFilesStep.execute(&mut context).await;
+
+        assert_eq!(action, StepAction::Continue);
+
+        // Files 11–15 must have been deleted from the cloud
+        for i in 11u8..=15 {
+            let key = format!("rom/file{}.zst", i);
+            assert!(
+                context.deletion_results.get(&key).unwrap().cloud_operation_success,
+                "file{i} should have been deleted"
+            );
+        }
+
+        // Files 1–10 remain DeletionPending (retry on next sync)
+        let remaining = context
+            .repository_manager
+            .get_file_info_repository()
+            .count_cloud_files_pending_deletion()
+            .await
+            .unwrap();
+        assert_eq!(remaining, 10);
     }
 }
