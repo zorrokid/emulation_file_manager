@@ -167,9 +167,9 @@ impl SimpleComponent for StatusBarModel {
 impl StatusBarModel {
     fn process_sync_event(&mut self, event: SyncEvent, sender: &ComponentSender<Self>) {
         match event {
-            SyncEvent::SyncStarted { total_files_count } => {
+            SyncEvent::SyncStarted { total_upload_count, total_deletion_count } => {
                 sender.input(StatusBarMsg::StartProgress {
-                    total: total_files_count,
+                    total: total_upload_count + total_deletion_count,
                 });
                 self.message_list_view_wrapper.clear();
                 self.message_list_view_wrapper.append(MessageListItem {

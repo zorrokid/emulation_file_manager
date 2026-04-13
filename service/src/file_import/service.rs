@@ -221,6 +221,7 @@ impl FileImportService {
 mod tests {
     use std::path::PathBuf;
 
+    use cloud_storage::cloud_key;
     use core_types::{CloudSyncStatus, FileSyncStatus, ImportedFile, ReadFile};
     use database::setup_test_db;
     use file_import::mock::MockFileImportOps;
@@ -620,13 +621,15 @@ mod tests {
             .unwrap();
 
         // simulate a successful cloud sync for the file in file set
+        let file_cloud_key =
+            cloud_key(file_info.file_type, file_info.archive_file_name.as_deref().unwrap());
         repository_manager
             .get_file_sync_log_repository()
             .add_log_entry(
                 file_info.id,
                 FileSyncStatus::UploadCompleted,
                 "",
-                file_info.generate_cloud_key().as_deref().unwrap(),
+                &file_cloud_key,
             )
             .await
             .unwrap();
