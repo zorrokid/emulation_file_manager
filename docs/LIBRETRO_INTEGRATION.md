@@ -99,6 +99,7 @@ The crate responsible for all of this is `libretro_runner`. The GTK window that 
 | `libretro_runner/src/frame_buffer.rs` | Converts core pixel formats to Cairo ARgb32 |
 | `libretro_runner/src/audio.rs` | Opens the cpal audio device and keeps the `cpal::Stream` alive (ring buffer lives in `CoreCallbackState`) |
 | `libretro_runner/src/input.rs` | Joypad button constants and `InputState` bitfield |
+| `libretro_runner/src/supported_cores.rs` | Hardcoded list of supported core names exposed to the mapping and launch flow |
 | `relm4-ui/src/libretro/window.rs` | GTK4 game window, glib game loop, Cairo rendering |
 | `relm4-ui/src/libretro/input.rs` | Maps GTK key events to libretro joypad button IDs |
 | `service/src/libretro_runner/service.rs` | Prepares ROM files (download, extract) before launch |
@@ -336,32 +337,29 @@ You do not need to change anything for this.
 
 ### Step 4: Wire the core path into the UI
 
-Currently the core path is hardcoded in `relm4-ui/src/release.rs`:
+The application now resolves core paths through the per-system core mapping flow rather than a hardcoded path.
 
-```rust
-core_path: PathBuf::from("/usr/lib/libretro/fceumm_libretro.so"),
-```
+Current flow:
 
-To add a new core, either:
+1. Supported core names are declared in `libretro_runner/src/supported_cores.rs`.
+2. The user configures the libretro core directory in Settings (`libretro_core_dir`).
+3. The user maps one or more supported cores to a system from **Settings → Map Libretro Cores**.
+4. At launch time, the UI asks the service layer for the mapped cores for the selected system.
+5. `LibretroRunnerService::resolve_core_path()` builds the final path as `<libretro_core_dir>/<core_name>.so`.
 
-**Option A — Change the hardcoded path** (quick, single-core):
-```rust
-core_path: PathBuf::from("/usr/lib/libretro/mgba_libretro.so"),
-```
+To add a new core:
 
-**Option B — Per-system core mapping** (proper solution, future work):
-Add a `libretro_core_path` column to the `systems` table so each system has its own configured core. Then look up the core path from the release's system when launching.
+1. Add its base name (without `.so`) to `SUPPORTED_CORES`.
+2. Put the shared library in the configured libretro core directory.
+3. Map the core to one or more systems from the settings dialog.
 
 ### Step 5: Handle BIOS files (if required)
 
 Some cores need BIOS files (e.g. PlayStation needs `scph1001.bin`). The core requests the system directory via `GET_SYSTEM_DIRECTORY` and looks for BIOS files there.
 
-The system directory is currently set to the OS temp directory in `LibretroRunnerService::prepare_rom()`. Change it to a real directory containing BIOS files:
+The path handed to the core comes from the `system_dir` argument passed into `LibretroCore::load()`. If a core depends on firmware, that directory must contain the files the core expects.
 
-```rust
-// service/src/libretro_runner/service.rs
-let system_dir = PathBuf::from("/home/user/.config/retroarch/system");
-```
+In the current implementation, `LibretroRunnerService::prepare_rom()` passes the app's temp output directory as the libretro system directory. That works for cores with no firmware requirements, but BIOS-dependent cores need a real system directory populated with the required firmware files.
 
 ### Step 6: Test
 
