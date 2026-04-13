@@ -4,6 +4,7 @@ use async_std::io::WriteExt;
 use async_std::stream::StreamExt;
 use async_trait::async_trait;
 use core_types::events::{DownloadEvent, SyncEvent};
+use core_types::FileType;
 use flume::Sender;
 pub use s3::bucket::Bucket;
 use s3::creds::Credentials;
@@ -32,6 +33,16 @@ pub enum CloudStorageError {
 
     #[error("Invalid credentials: {0}")]
     InvalidCredentials(String),
+}
+
+/// Compute the S3 cloud key for a file given its type and archive file name.
+/// Format: `"{file_type_dir}/{archive_file_name}"`.
+///
+/// # Examples
+/// - `(Rom, "abc123.zst")` → `"rom/abc123.zst"`
+/// - `(DiskImage, "def456.zst")` → `"disk_image/def456.zst"`
+pub fn cloud_key(file_type: FileType, archive_file_name: &str) -> String {
+    format!("{}/{}", file_type.dir_name(), archive_file_name)
 }
 
 /// Note, this doesn't actually establish a persistent connection,
@@ -173,6 +184,19 @@ pub async fn multipart_upload(
         .complete_multipart_upload(key, &response.upload_id, parts)
         .await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod key_tests {
+    use super::*;
+    use core_types::FileType;
+
+    #[test]
+    fn test_cloud_key_formats() {
+        assert_eq!(cloud_key(FileType::Rom, "abc.zst"), "rom/abc.zst");
+        // DiskImage must use underscore separator — NOT a space ("disk image/...")
+        assert_eq!(cloud_key(FileType::DiskImage, "def.zst"), "disk_image/def.zst");
+    }
 }
 
 pub async fn delete_file(bucket: &Bucket, key: &str) -> Result<(), CloudStorageError> {

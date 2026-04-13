@@ -3,7 +3,7 @@ use std::sync::Arc;
 use core_types::{CloudSyncStatus, FileType, Sha1Checksum};
 use sqlx::{Pool, QueryBuilder, Row, Sqlite, prelude::FromRow, sqlite::SqliteRow};
 
-use crate::{database_error::Error, models::FileInfo};
+use crate::{database_error::Error, models::{CloudSyncableFileInfo, FileInfo}};
 
 #[derive(Debug)]
 pub struct FileInfoRepository {
@@ -31,6 +31,19 @@ impl FromRow<'_, SqliteRow> for FileInfo {
             cloud_sync_status,
         })
     }
+}
+
+/// Converts a batch of `FileInfo` rows into `CloudSyncableFileInfo`, returning a
+/// `DecodeError` if any row has a `NULL` `archive_file_name`.
+/// All callers use SQL queries that include `AND archive_file_name IS NOT NULL`,
+/// so this should never fail in practice.
+fn to_cloud_syncable(rows: Vec<FileInfo>, context: &str) -> Result<Vec<CloudSyncableFileInfo>, Error> {
+    rows.into_iter()
+        .map(CloudSyncableFileInfo::try_from)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| Error::DecodeError(
+            format!("Unexpected null archive_file_name in {context}").into(),
+        ))
 }
 
 impl FileInfoRepository {
@@ -116,9 +129,9 @@ impl FileInfoRepository {
         &self,
         limit: i64,
         offset: i64,
-    ) -> Result<Vec<FileInfo>, Error> {
+    ) -> Result<Vec<CloudSyncableFileInfo>, Error> {
         let status_int = CloudSyncStatus::NotSynced.to_db_int();
-        let query = sqlx::query_as::<_, FileInfo>(
+        let rows = sqlx::query_as::<_, FileInfo>(
             "SELECT id, sha1_checksum, file_size, archive_file_name, file_type, cloud_sync_status
              FROM file_info
              WHERE cloud_sync_status = ? AND archive_file_name IS NOT NULL
@@ -126,9 +139,10 @@ impl FileInfoRepository {
         )
         .bind(status_int)
         .bind(limit)
-        .bind(offset);
-        let file_infos = query.fetch_all(&*self.pool).await?;
-        Ok(file_infos)
+        .bind(offset)
+        .fetch_all(&*self.pool)
+        .await?;
+        to_cloud_syncable(rows, "pending upload query")
     }
 
     /// Counts available files ready for upload (NotSynced + archive_file_name IS NOT NULL).
@@ -169,6 +183,73 @@ impl FileInfoRepository {
         let status_int = CloudSyncStatus::DeletionPending.to_db_int();
         let row = sqlx::query!(
             "SELECT COUNT(*) as count FROM file_info WHERE cloud_sync_status = ?",
+            status_int
+        )
+        .fetch_one(&*self.pool)
+        .await?;
+        Ok(row.count)
+    }
+
+    /// Returns DeletionPending files that have an archive_file_name (i.e. were uploaded to cloud),
+    /// paginated. These require a cloud delete operation before the record is removed.
+    pub async fn get_cloud_files_pending_deletion(
+        &self,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<CloudSyncableFileInfo>, Error> {
+        let status_int = CloudSyncStatus::DeletionPending.to_db_int();
+        let rows = sqlx::query_as::<_, FileInfo>(
+            "SELECT id, sha1_checksum, file_size, archive_file_name, file_type, cloud_sync_status
+             FROM file_info
+             WHERE cloud_sync_status = ? AND archive_file_name IS NOT NULL
+             LIMIT ? OFFSET ?",
+        )
+        .bind(status_int)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&*self.pool)
+        .await?;
+        to_cloud_syncable(rows, "cloud deletion query")
+    }
+
+    /// Counts DeletionPending files that have an archive_file_name.
+    pub async fn count_cloud_files_pending_deletion(&self) -> Result<i64, Error> {
+        let status_int = CloudSyncStatus::DeletionPending.to_db_int();
+        let row = sqlx::query!(
+            "SELECT COUNT(*) as count FROM file_info WHERE cloud_sync_status = ? AND archive_file_name IS NOT NULL",
+            status_int
+        )
+        .fetch_one(&*self.pool)
+        .await?;
+        Ok(row.count)
+    }
+
+    /// Returns DeletionPending tombstones that have no archive_file_name (i.e. were never uploaded),
+    /// paginated. These only require a DB delete — no cloud operation needed.
+    pub async fn get_tombstones_pending_deletion(
+        &self,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<FileInfo>, Error> {
+        let status_int = CloudSyncStatus::DeletionPending.to_db_int();
+        Ok(sqlx::query_as::<_, FileInfo>(
+            "SELECT id, sha1_checksum, file_size, archive_file_name, file_type, cloud_sync_status
+             FROM file_info
+             WHERE cloud_sync_status = ? AND archive_file_name IS NULL
+             LIMIT ? OFFSET ?",
+        )
+        .bind(status_int)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&*self.pool)
+        .await?)
+    }
+
+    /// Counts DeletionPending tombstones that have no archive_file_name.
+    pub async fn count_tombstones_pending_deletion(&self) -> Result<i64, Error> {
+        let status_int = CloudSyncStatus::DeletionPending.to_db_int();
+        let row = sqlx::query!(
+            "SELECT COUNT(*) as count FROM file_info WHERE cloud_sync_status = ? AND archive_file_name IS NULL",
             status_int
         )
         .fetch_one(&*self.pool)
@@ -616,5 +697,43 @@ mod tests {
 
         let count = repo.count_files_pending_upload().await.unwrap();
         assert_eq!(count, 0);
+    }
+
+    #[async_std::test]
+    async fn test_split_deletion_queries_partition_correctly() {
+        let pool = setup_test_db().await;
+        let repo = FileInfoRepository::new(Arc::new(pool.clone()));
+
+        // 2 DeletionPending with archive_file_name — these require a cloud delete
+        let id1 = insert_file_info(&pool, Some("cloud1.zst")).await;
+        let id2 = insert_file_info(&pool, Some("cloud2.zst")).await;
+        repo.update_cloud_sync_status(id1, CloudSyncStatus::DeletionPending).await.unwrap();
+        repo.update_cloud_sync_status(id2, CloudSyncStatus::DeletionPending).await.unwrap();
+
+        // 2 DeletionPending tombstones with no archive_file_name — DB-only cleanup
+        let id3 = insert_file_info(&pool, None).await;
+        let id4 = insert_file_info(&pool, None).await;
+        repo.update_cloud_sync_status(id3, CloudSyncStatus::DeletionPending).await.unwrap();
+        repo.update_cloud_sync_status(id4, CloudSyncStatus::DeletionPending).await.unwrap();
+
+        // 1 NotSynced — must not appear in either deletion query
+        insert_file_info(&pool, Some("pending.zst")).await;
+
+        let cloud_files = repo.get_cloud_files_pending_deletion(100, 0).await.unwrap();
+        let tombstones = repo.get_tombstones_pending_deletion(100, 0).await.unwrap();
+
+        assert_eq!(cloud_files.len(), 2);
+        assert_eq!(tombstones.len(), 2);
+        assert_eq!(repo.count_cloud_files_pending_deletion().await.unwrap(), 2);
+        assert_eq!(repo.count_tombstones_pending_deletion().await.unwrap(), 2);
+
+        // Cloud files must all have archive_file_name (guaranteed by CloudSyncableFileInfo)
+        for f in &cloud_files {
+            assert!(!f.archive_file_name.is_empty());
+        }
+        // Tombstones must all lack archive_file_name
+        for t in &tombstones {
+            assert!(t.archive_file_name.is_none());
+        }
     }
 }

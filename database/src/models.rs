@@ -35,10 +35,33 @@ impl FileInfo {
     pub fn is_available(&self) -> bool {
         self.archive_file_name.is_some()
     }
+}
 
-    pub fn generate_cloud_key(&self) -> Option<String> {
-        self.archive_file_name.as_ref().map(|name| {
-            format!("{}/{}", self.file_type.to_string().to_lowercase(), name)
+/// A file guaranteed to have been archived and is ready for cloud sync.
+/// `archive_file_name` is non-optional, enforcing the invariant that only
+/// files with an archive name are placed on the cloud upload/deletion path.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CloudSyncableFileInfo {
+    pub id: i64,
+    pub sha1_checksum: Sha1Checksum,
+    pub file_size: u64,
+    pub archive_file_name: String,
+    pub file_type: FileType,
+    pub cloud_sync_status: CloudSyncStatus,
+}
+
+impl TryFrom<FileInfo> for CloudSyncableFileInfo {
+    type Error = ();
+
+    fn try_from(f: FileInfo) -> Result<Self, Self::Error> {
+        let archive_file_name = f.archive_file_name.ok_or(())?;
+        Ok(Self {
+            id: f.id,
+            sha1_checksum: f.sha1_checksum,
+            file_size: f.file_size,
+            archive_file_name,
+            file_type: f.file_type,
+            cloud_sync_status: f.cloud_sync_status,
         })
     }
 }

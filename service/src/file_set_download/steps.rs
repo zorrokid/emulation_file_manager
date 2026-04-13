@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use core_types::{IMAGE_FILE_TYPES, events::DownloadEvent};
+use cloud_storage::cloud_key;
 use file_export::{FileSetExportModel, OutputFile};
 
 use crate::{
@@ -140,14 +141,6 @@ impl PipelineStep<DownloadContext> for DownloadFilesStep {
         );
 
         for file_info in context.files_to_download.iter() {
-            let Some(cloud_key) = file_info.generate_cloud_key() else {
-                tracing::warn!(
-                    file_info_id = file_info.id,
-                    "Failed to generate cloud key for file, skipping download"
-                );
-                continue;
-            };
-
             let Some(archive_file_name) = &file_info.archive_file_name else {
                 tracing::warn!(
                     file_info_id = file_info.id,
@@ -155,6 +148,8 @@ impl PipelineStep<DownloadContext> for DownloadFilesStep {
                 );
                 continue;
             };
+
+            let cloud_key = cloud_key(file_info.file_type, archive_file_name);
 
             tracing::debug!(
                 cloud_key = %cloud_key,
@@ -419,7 +414,7 @@ impl PipelineStep<DownloadContext> for PrepareThumbnailsStep {
 mod tests {
     use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
-    use cloud_storage::mock::MockCloudStorage;
+    use cloud_storage::{cloud_key, mock::MockCloudStorage};
     use core_types::{FileType, ImportedFile, Sha1Checksum};
     use database::{models::FileSet, repository_manager::RepositoryManager, setup_test_db};
     use file_export::{OutputFile, file_export_ops::MockFileExportOps};
@@ -626,13 +621,16 @@ mod tests {
         let file_path = context
             .settings
             .get_file_path(&file_type, archive_file_name);
-        let key = context.files_to_download[0].generate_cloud_key();
+        let key = cloud_key(
+            context.files_to_download[0].file_type,
+            context.files_to_download[0].archive_file_name.as_deref().unwrap(),
+        );
 
         context
             .cloud_ops
             .clone()
             .unwrap()
-            .upload_file(&file_path, key.as_deref().unwrap(), None)
+            .upload_file(&file_path, &key, None)
             .await
             .unwrap();
 
@@ -645,7 +643,7 @@ mod tests {
         assert_eq!(context.failed_downloads(), 0);
         assert_eq!(
             context.file_download_results.first().unwrap().cloud_key,
-            key.unwrap()
+            key
         );
     }
 
@@ -676,7 +674,10 @@ mod tests {
             .unwrap();
         context.files_to_download = context.files_in_set.iter().map(|f| f.into()).collect();
 
-        let key = context.files_to_download[0].generate_cloud_key();
+        let key = cloud_key(
+            context.files_to_download[0].file_type,
+            context.files_to_download[0].archive_file_name.as_deref().unwrap(),
+        );
 
         let step = DownloadFilesStep;
         let should_execute = step.should_execute(&context);
@@ -686,7 +687,7 @@ mod tests {
         assert_eq!(context.successful_downloads(), 0);
         assert_eq!(context.failed_downloads(), 1);
         let download_result = context.file_download_results.first().unwrap();
-        assert_eq!(download_result.cloud_key, key.unwrap());
+        assert_eq!(download_result.cloud_key, key);
         assert!(!download_result.cloud_operation_success);
         assert!(!download_result.file_write_success);
     }

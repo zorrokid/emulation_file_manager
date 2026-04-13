@@ -28,8 +28,12 @@ pub struct SyncContext {
     pub upload_results: HashMap<String, FileSyncResult>,
 
     // Deletion state
-    pub files_prepared_for_deletion: i64,
+    pub cloud_files_prepared_for_deletion: i64,
     pub deletion_results: HashMap<String, FileSyncResult>,
+
+    // Tombstone cleanup state
+    pub tombstones_prepared_for_cleanup: i64,
+    pub tombstones_cleaned_up: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -85,8 +89,10 @@ impl SyncContext {
             cloud_ops: None, // Will be filled by ConnectToCloudStep
             files_prepared_for_upload: 0,
             upload_results: HashMap::new(),
-            files_prepared_for_deletion: 0,
+            cloud_files_prepared_for_deletion: 0,
             deletion_results: HashMap::new(),
+            tombstones_prepared_for_cleanup: 0,
+            tombstones_cleaned_up: 0,
             settings_service,
             cancel_rx,
         }
@@ -154,6 +160,7 @@ impl CloudConnectionContext for SyncContext {
 
     fn should_connect(&self) -> bool {
         self.cloud_ops.is_none()
-            && (self.files_prepared_for_upload > 0 || self.files_prepared_for_deletion > 0)
+            && (self.files_prepared_for_upload > 0
+                || self.cloud_files_prepared_for_deletion > 0)
     }
 }
