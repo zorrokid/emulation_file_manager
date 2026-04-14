@@ -1,1 +1,1 @@
-pub const SUPPORTED_CORES: &[&str] = &["fceumm_libretro"];
+pub const SUPPORTED_CORES: &[&str] = &["fceumm_libretro", "freeintv_libretro"];
