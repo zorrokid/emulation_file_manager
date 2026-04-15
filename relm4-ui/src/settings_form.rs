@@ -33,6 +33,7 @@ pub struct SettingsForm {
     pub s3_access_key_id: String,
     pub s3_secret_access_key: String,
     pub libretro_core_dir: Option<PathBuf>,
+    pub libretro_system_dir: Option<PathBuf>,
 
     // Credential status indicator
     pub credentials_stored: bool,
@@ -81,8 +82,10 @@ pub enum SettingsFormMsg {
     LoadCredentialStatus,
     BrowseCollectionRootDir,
     BrowseLibretroCoreDir,
+    BrowseLibretroSystemDir,
     CollectionRootDirSelected(std::path::PathBuf),
     LibretroCoreDirSelected(std::path::PathBuf),
+    LibretroSystemDirSelected(std::path::PathBuf),
     MapLibretroCoresClicked,
 }
 
@@ -171,6 +174,23 @@ impl Component for SettingsForm {
                             gtk::Button {
                                 set_label: "Browse",
                                 connect_clicked => SettingsFormMsg::BrowseLibretroCoreDir,
+                            },
+                        },
+                        #[name = "libretro_system_dir_entry"]
+                        gtk::Box {
+                            set_orientation: gtk::Orientation::Horizontal,
+                            set_spacing: 5,
+                            set_margin_bottom: 10,
+                            gtk::Label {
+                                set_label: "Libretro System Directory",
+                            },
+                            gtk::Label {
+                                #[watch]
+                                set_label: &model.libretro_system_dir.as_ref().map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|| "Not set".to_string()),
+                            },
+                            gtk::Button {
+                                set_label: "Browse",
+                                connect_clicked => SettingsFormMsg::BrowseLibretroSystemDir,
                             },
                         },
                         gtk::Button {
@@ -381,6 +401,7 @@ impl Component for SettingsForm {
             stored_access_key_preview: None,
             collection_root_dir: Some(settings.collection_root_dir.clone()),
             libretro_core_dir: settings.libretro_core_dir.clone(),
+            libretro_system_dir: settings.libretro_system_dir.clone(),
             app_services: init.app_services,
             libretro_cores_dialog,
         };
@@ -406,11 +427,17 @@ impl Component for SettingsForm {
             SettingsFormMsg::BrowseLibretroCoreDir => {
                 self.select_libretro_core_dir(root, &sender);
             }
+            SettingsFormMsg::BrowseLibretroSystemDir => {
+                self.select_libretro_system_dir(root, &sender);
+            }
             SettingsFormMsg::CollectionRootDirSelected(path) => {
                 self.collection_root_dir = Some(path);
             }
             SettingsFormMsg::LibretroCoreDirSelected(path) => {
                 self.libretro_core_dir = Some(path);
+            }
+            SettingsFormMsg::LibretroSystemDirSelected(path) => {
+                self.libretro_system_dir = Some(path);
             }
             SettingsFormMsg::S3FileSyncToggled => {
                 self.s3_sync_enabled = !self.s3_sync_enabled;
@@ -590,6 +617,18 @@ impl SettingsForm {
             move |path| {
                 tracing::info!("Selected Libretro Core directory: {:?}", path);
                 sender.input(SettingsFormMsg::LibretroCoreDirSelected(path));
+            },
+        );
+    }
+    fn select_libretro_system_dir(&mut self, root: &gtk::Window, sender: &ComponentSender<Self>) {
+        let sender = sender.clone();
+        show_file_chooser_dialog(
+            root,
+            "Select Libretro System Directory",
+            gtk::FileChooserAction::SelectFolder,
+            move |path| {
+                tracing::info!("Selected Libretro System directory: {:?}", path);
+                sender.input(SettingsFormMsg::LibretroSystemDirSelected(path));
             },
         );
     }

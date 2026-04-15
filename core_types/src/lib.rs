@@ -289,6 +289,7 @@ pub enum SettingName {
     S3Bucket,
     S3FileSyncEnabled,
     LibretroCoresDir,
+    LibretroSystemDir,
 }
 
 impl SettingName {
@@ -300,6 +301,7 @@ impl SettingName {
             SettingName::S3Bucket => "s3_bucket",
             SettingName::S3FileSyncEnabled => "s3_file_sync_enabled",
             SettingName::LibretroCoresDir => "libretro_cores_dir",
+            SettingName::LibretroSystemDir => "libretro_system_dir",
         }
     }
 }
