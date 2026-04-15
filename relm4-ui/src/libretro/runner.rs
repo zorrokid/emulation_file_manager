@@ -47,7 +47,6 @@ pub enum LibretroRunnerMsg {
         systems: Vec<System>,
     },
     Hide,
-    Ignore,
     StartCore,
     ShowError(String),
     LibretroSessionEnded(Vec<String>),
@@ -221,7 +220,6 @@ impl Component for LibretroRunner {
             LibretroRunnerMsg::Hide => {
                 root.hide();
             }
-            LibretroRunnerMsg::Ignore => { /* do nothing */ }
             LibretroRunnerMsg::FetchCores { system_id } => {
                 let app_services = Arc::clone(&self.app_services);
                 sender.oneshot_command(async move {

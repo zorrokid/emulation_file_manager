@@ -15,6 +15,7 @@ pub struct SettingsSaveModel {
     pub secret_access_key: String,
     pub collection_root_dir: Option<PathBuf>,
     pub libretro_core_dir: Option<PathBuf>,
+    pub libretro_system_dir: Option<PathBuf>,
 }
 
 /// Service for managing application settings including settings stored to database and secure credentials stored in system keyring.
@@ -79,6 +80,15 @@ impl SettingsService {
                 // TODO: maybe consider some other option to store path instead of lossy string
                 // (e.g. base64 encoded bytes)
                 libretro_core_dir.to_string_lossy().to_string(),
+            );
+        }
+
+        if let Some(libretro_system_dir) = settings.libretro_system_dir {
+            settings_map.insert(
+                SettingName::LibretroSystemDir,
+                // TODO: maybe consider some other option to store path instead of lossy string
+                // (e.g. base64 encoded bytes)
+                libretro_system_dir.to_string_lossy().to_string(),
             );
         }
 

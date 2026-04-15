@@ -493,6 +493,7 @@ impl Component for SettingsForm {
                     secret_access_key: self.s3_secret_access_key.clone(),
                     collection_root_dir: self.collection_root_dir.clone(),
                     libretro_core_dir: self.libretro_core_dir.clone(),
+                    libretro_system_dir: self.libretro_system_dir.clone(),
                 };
 
                 sender.oneshot_command(async move {
