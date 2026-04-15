@@ -51,6 +51,7 @@ impl<T: AddFileSetContextOps + Send + Sync> PipelineStep<T> for ImportFilesStep<
         let file_import_model = context.get_file_import_model();
         match context.file_import_ops().import(&file_import_model) {
             Ok(imported_files) => {
+                tracing::info!("Successfully imported {} files.", imported_files.len());
                 context.set_imported_files(imported_files);
             }
             Err(err) => {
@@ -198,7 +199,10 @@ mod tests {
         assert!(context.imported_files.contains_key(&checksum));
         let imported = context.imported_files.get(&checksum).unwrap();
         assert_eq!(imported.original_file_name, "game.rom");
-        assert_eq!(imported.archive_file_name, Some("archive123.zst".to_string()));
+        assert_eq!(
+            imported.archive_file_name,
+            Some("archive123.zst".to_string())
+        );
     }
 
     #[async_std::test]

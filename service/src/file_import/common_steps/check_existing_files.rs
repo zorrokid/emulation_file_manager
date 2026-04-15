@@ -47,7 +47,7 @@ impl<T: CheckExistingFilesContext + Send + Sync> PipelineStep<T> for CheckExisti
         !context.get_sha1_checksums().is_empty()
     }
     async fn execute(&self, context: &mut T) -> StepAction {
-        println!("Checking for existing files in the database...");
+        tracing::info!("Checking for existing files in the database based on SHA1 checksums");
         let file_checksums = context.get_sha1_checksums();
         let existing_files_res = context
             .repository_manager()

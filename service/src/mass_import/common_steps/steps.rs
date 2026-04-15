@@ -131,12 +131,13 @@ impl<T: MassImportContextOps + Send + Sync> PipelineStep<T> for ReadFileMetadata
                         "Successfully created metadata reader",
                     );
                     let res = reader.read_metadata();
-                    tracing::info!(
-                        file = %file.display(),
-                        "Successfully read metadata",
-                    );
                     match res {
                         Ok(metadata_entries) => {
+                            tracing::info!(
+                                file = %file.display(),
+                                metadata_entries = ?metadata_entries,
+                                "Successfully read metadata",
+                            );
                             context
                                 .file_metadata()
                                 .insert(file.clone(), metadata_entries);
