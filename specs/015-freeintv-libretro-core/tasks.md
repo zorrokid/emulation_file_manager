@@ -6,11 +6,11 @@
   Define core metadata that can express supported extensions and required firmware files, while keeping existing consumers simple.
 
 ### Settings Plumbing
-- [ ] T2 [core_types] — Add a setting key for the libretro system directory
+- [x] T2 [core_types] — Add a setting key for the libretro system directory
   **File:** `core_types/src/lib.rs`
   Extend `SettingName` so the system/firmware directory can be persisted like the existing libretro core directory.
 
-- [ ] T3 [service] — Load and save the libretro system directory in settings models
+- [x] T3 [service] — Load and save the libretro system directory in settings models
   **File:** `service/src/view_models.rs`, `service/src/settings_service.rs`
   Thread the new setting through `Settings` and `SettingsSaveModel`.
 
@@ -24,12 +24,12 @@
   **File:** `service/src/libretro_runner/service.rs`
   Validate selected core metadata, ROM extension, and required firmware presence before launch.
 
-- [ ] T6 [service] — Pass the configured libretro system directory to the runner
+- [x] T6 [service] — Pass the configured libretro system directory to the runner
   **File:** `service/src/libretro_runner/service.rs`
   Stop using `temp_output_dir` as the libretro system directory.
 
 ### GUI
-- [ ] T7 [relm4-ui] — Add libretro system directory controls to settings
+- [x] T7 [relm4-ui] — Add libretro system directory controls to settings
   **File:** `relm4-ui/src/settings_form.rs`
   Add browse/select UI alongside the existing libretro core directory controls.
 
@@ -58,10 +58,10 @@
 
 ## Manual Verification Checklist
 
-- [ ] Configure libretro core directory and libretro system directory in Settings.
-- [ ] Place `freeintv_libretro.so` in the core directory and `exec.bin` / `grom.bin` in the system directory.
-- [ ] Map `freeintv_libretro` to the Intellivision system.
-- [ ] Launch a `.int`, `.rom`, or `.bin` Intellivision file successfully.
+- [x] Configure libretro core directory and libretro system directory in Settings.
+- [x] Place `freeintv_libretro.so` in the core directory and `exec.bin` / `grom.bin` in the system directory.
+- [x] Map `freeintv_libretro` to the Intellivision system.
+- [x] Launch a `.int`, `.rom`, or `.bin` Intellivision file successfully.
 - [ ] Verify keypad, disc, and controller-swap controls work through the keyboard-first frontend UX.
 - [ ] Confirm missing firmware produces a clear error dialog before the launch window opens.
 - [ ] Confirm an existing NES/FCEUmm launch still works after the change.

@@ -1,10 +1,6 @@
 use std::{path::PathBuf, sync::Arc};
 
-use crate::{
-    error::Error,
-    file_set_download::service::DownloadService,
-    view_models::Settings,
-};
+use crate::{error::Error, file_set_download::service::DownloadService, view_models::Settings};
 
 #[derive(Debug)]
 pub struct LibretroLaunchModel {
@@ -29,13 +25,17 @@ pub struct LibretroRunnerService {
 
 impl std::fmt::Debug for LibretroRunnerService {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("LibretroRunnerService").finish_non_exhaustive()
+        f.debug_struct("LibretroRunnerService")
+            .finish_non_exhaustive()
     }
 }
 
 impl LibretroRunnerService {
     pub fn new(settings: Arc<Settings>, download_service: Arc<DownloadService>) -> Self {
-        Self { settings, download_service }
+        Self {
+            settings,
+            download_service,
+        }
     }
 
     /// Download and extract the ROM to the temp directory.
@@ -55,10 +55,14 @@ impl LibretroRunnerService {
             .or_else(|| result.output_file_names.into_iter().next())
             .ok_or_else(|| Error::InvalidInput("No ROM file found in file set".into()))?;
 
+        let system_dir = self.settings.libretro_system_dir.as_ref().ok_or_else(|| {
+            Error::SettingsError("Libretro system directory is not set".to_string())
+        })?;
+
         Ok(LibretroLaunchPaths {
             rom_path: self.settings.temp_output_dir.join(&file_name),
             core_path: model.core_path,
-            system_dir: self.settings.temp_output_dir.clone(),
+            system_dir: system_dir.clone(),
             temp_files: vec![file_name],
         })
     }
