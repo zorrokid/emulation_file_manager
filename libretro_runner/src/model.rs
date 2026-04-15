@@ -2,7 +2,7 @@
 pub struct LibretroFirmwareInfo {
     pub desc: String,
     pub path: String,
-    pub opt: String,
+    pub opt: bool,
 }
 
 #[derive(Debug)]

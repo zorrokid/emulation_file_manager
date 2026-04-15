@@ -57,7 +57,7 @@ fn get_firmware_info(
             firmware_info.push(LibretroFirmwareInfo {
                 desc: desc.clone(),
                 path: path.clone(),
-                opt: opt.clone(),
+                opt: opt == "true",
             });
         } else {
             return Err(LibretroError::LibretroInfoParserError(format!(
@@ -149,12 +149,19 @@ mod tests {
         let core_name = "freeintv_libretro";
         let libretro_core_path = Path::new("example-data");
         let result = parse_libretro_info(core_name, libretro_core_path).await;
-        println!("Result: {:?}", result);
         assert!(result.is_ok());
         let system_info = result.unwrap();
         assert_eq!(
             system_info.display_name,
             "Mattel - Intellivision (FreeIntv)"
         );
+        let firmware_info = system_info.firmware;
+        assert_eq!(firmware_info.len(), 2);
+        assert_eq!(firmware_info[0].desc, "exec.bin");
+        assert_eq!(firmware_info[0].path, "exec.bin");
+        assert!(!firmware_info[0].opt);
+        assert_eq!(firmware_info[1].desc, "grom.bin");
+        assert_eq!(firmware_info[1].path, "grom.bin");
+        assert!(!firmware_info[1].opt);
     }
 }
