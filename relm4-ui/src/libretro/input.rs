@@ -3,8 +3,8 @@ use std::sync::{Arc, Mutex};
 use relm4::gtk;
 
 use libretro_runner::input::{
-    InputState, JOYPAD_A, JOYPAD_B, JOYPAD_DOWN, JOYPAD_L, JOYPAD_LEFT, JOYPAD_RIGHT,
-    JOYPAD_SELECT, JOYPAD_START, JOYPAD_UP, JOYPAD_X, JOYPAD_Y, JOYPAD_R,
+    InputState, JOYPAD_A, JOYPAD_B, JOYPAD_DOWN, JOYPAD_L, JOYPAD_LEFT, JOYPAD_R, JOYPAD_RIGHT,
+    JOYPAD_SELECT, JOYPAD_START, JOYPAD_UP, JOYPAD_X, JOYPAD_Y,
 };
 
 /// Map a GTK key value to a libretro JOYPAD button ID, if we handle it.

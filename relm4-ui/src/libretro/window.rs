@@ -6,6 +6,7 @@ use std::{
     time::Duration,
 };
 
+use gilrs::{Event, EventType, Gilrs};
 use relm4::{
     Component, ComponentParts, ComponentSender,
     gtk::{
@@ -118,6 +119,30 @@ impl Component for LibretroWindowModel {
             timer_source_id: None,
             temp_files: Vec::new(),
         };
+
+        let sender = sender.clone();
+        relm4::spawn(async move {
+            let mut gilrs = Gilrs::new().unwrap();
+            loop {
+                // Poll for events
+                while let Some(Event { id, event, .. }) = gilrs.next_event() {
+                    match event {
+                        EventType::ButtonPressed(button, _) => {
+                            tracing::info!(id = ?id, button = ?button, "Button pressed");
+                        }
+                        EventType::AxisChanged(axis, val, _) => {
+                            if val.abs() > 0.1 {
+                                tracing::info!(id = ?id, axis = ?axis, value = val, "Axis changed");
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                // This sleep is much more efficient than GDK's signal system
+                // when dealing with non-standard hardware.
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        });
 
         // Create the key controller once and attach it to the window here in
         // init().
