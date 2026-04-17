@@ -58,6 +58,7 @@ impl LibretroCore {
         core_path: &Path,
         rom_path: &Path,
         system_dir: &Path,
+        input_state: Arc<Mutex<InputState>>,
     ) -> Result<Self, LibretroError> {
         // dlopen() the shared library. All symbols resolved below borrow from
         // `lib`, so `lib` must not be moved or dropped until after we've copied
@@ -120,16 +121,18 @@ impl LibretroCore {
             b"retro_load_game\0",
             unsafe extern "C" fn(*const RetroGameInfo) -> bool
         );
+        let retro_set_controller_port_device = load_fn!(
+            b"retro_set_controller_port_device\0",
+            unsafe extern "C" fn(port: u32, device: u32)
+        );
         let retro_unload_game = load_fn!(b"retro_unload_game\0", unsafe extern "C" fn());
         let retro_run = load_fn!(b"retro_run\0", unsafe extern "C" fn());
         let retro_get_system_av_info = load_fn!(
             b"retro_get_system_av_info\0",
             unsafe extern "C" fn(*mut RetroSystemAvInfo)
         );
-
         // Build the shared state the callbacks will read/write.
         let frame_buffer = Arc::new(Mutex::new(FrameBuffer::new()));
-        let input_state = Arc::new(Mutex::new(InputState::new()));
 
         // Create the shared audio sample buffer. The libretro audio callbacks
         // will push into this; cpal drains it on its audio thread.
@@ -237,6 +240,11 @@ impl LibretroCore {
             return Err(LibretroError::GameLoad(
                 "retro_load_game() returned false — check ROM path and core compatibility".into(),
             ));
+        }
+
+        unsafe {
+            // Tell the core we're using a standard gamepad on port 1.
+            retro_set_controller_port_device(0, 1); // port 1, device RETRO_DEVICE_JOYPAD
         }
 
         // 7. Read final output geometry and timing now that the game is loaded.

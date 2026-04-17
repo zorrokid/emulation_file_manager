@@ -6,9 +6,9 @@ use std::{
 
 use crate::{
     ffi::{
-        RetroGameGeometry, RetroPixelFormat, RETRO_ENVIRONMENT_GET_LOG_INTERFACE,
-        RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, RETRO_ENVIRONMENT_GET_VARIABLE,
-        RETRO_ENVIRONMENT_SET_GEOMETRY, RETRO_ENVIRONMENT_SET_PIXEL_FORMAT,
+        RETRO_ENVIRONMENT_GET_LOG_INTERFACE, RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY,
+        RETRO_ENVIRONMENT_GET_VARIABLE, RETRO_ENVIRONMENT_SET_GEOMETRY,
+        RETRO_ENVIRONMENT_SET_PIXEL_FORMAT, RetroGameGeometry, RetroPixelFormat,
     },
     frame_buffer::FrameBuffer,
     input::InputState,
@@ -65,8 +65,20 @@ pub fn remove_state() {
     *state_mutex().lock().expect("remove_state lock") = None;
 }
 
-/// Run a closure with mutable access to the callback state.
-/// Returns None if no core is currently loaded.
+/// Provides temporary, thread-safe mutable access to the global callback state by running the given closure. Scoped access via closure ensures the mutable reference cannot escape and the lock is released promptly after the closure runs.
+///
+/// - Acquires a mutex lock on the callback state.  
+/// - If the state is present (i.e., a core is loaded), passes a mutable reference to the closure and returns its result wrapped in `Some`.
+/// - Returns `None` if no core is loaded or if the mutex cannot be locked (e.g., if poisoned).
+///
+/// # Parameters
+/// - `f`: A closure that takes a mutable reference to the callback state and returns any type.
+///
+/// # Returns
+/// - `Some(result)` if the state exists and the closure runs.
+/// - `None` if the state is unavailable or the lock cannot be acquired.
+///
+/// This pattern ensures the lock is held only for the duration of the closure and prevents the mutable reference from escaping.
 pub fn with_state<F, R>(f: F) -> Option<R>
 where
     F: FnOnce(&mut CoreCallbackState) -> R,
@@ -230,22 +242,32 @@ pub unsafe extern "C" fn input_poll_cb() {}
 /// # Safety
 /// Must be called from the core's retro_run() context with valid argument values,
 /// as guaranteed by the libretro spec.
-pub unsafe extern "C" fn input_state_cb(
-    port: u32,
-    device: u32,
-    _index: u32,
-    id: u32,
-) -> i16 {
-    // RETRO_DEVICE_JOYPAD = 1. We only support player 1's joypad.
+pub unsafe extern "C" fn input_state_cb(port: u32, device: u32, index: u32, id: u32) -> i16 {
+    // See API header for device and button definitions.
+    // https://github.com/libretro/libretro-common/blob/master/include/libretro.h
+    // Currently only player 1's joypad and analog stick are supported; ignore the rest.
     const RETRO_DEVICE_JOYPAD: u32 = 1;
-    if port != 0 || device != RETRO_DEVICE_JOYPAD {
+    const RETRO_DEVICE_ANALOG: u32 = 5;
+
+    if port != 0 || (device != RETRO_DEVICE_JOYPAD && device != RETRO_DEVICE_ANALOG) {
         return 0;
     }
-    with_state(|s| {
-        s.input_state
-            .lock()
-            .expect("input state lock")
-            .get_button(id) as i16
-    })
-    .unwrap_or(0)
+
+    match device {
+        RETRO_DEVICE_JOYPAD => with_state(|s| {
+            s.input_state
+                .lock()
+                .expect("input state lock")
+                .get_button(id) as i16
+        })
+        .unwrap_or(0),
+        RETRO_DEVICE_ANALOG => with_state(|s| {
+            s.input_state
+                .lock()
+                .expect("input state lock")
+                .get_axis(index, id)
+        })
+        .unwrap_or(0),
+        _ => 0,
+    }
 }

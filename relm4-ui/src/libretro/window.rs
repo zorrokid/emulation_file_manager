@@ -6,7 +6,7 @@ use std::{
     time::Duration,
 };
 
-use gilrs::{Event, EventType, Gilrs};
+use gilrs::{Event, Gilrs};
 use relm4::{
     Component, ComponentParts, ComponentSender,
     gtk::{
@@ -16,7 +16,9 @@ use relm4::{
     },
 };
 
-use libretro_runner::{core::LibretroCore, frame_buffer::FrameBuffer};
+use libretro_runner::{core::LibretroCore, frame_buffer::FrameBuffer, input::InputState};
+
+use crate::libretro::input::map_gamepad_event;
 
 use super::input::map_key_event;
 
@@ -38,6 +40,11 @@ pub struct LibretroWindowModel {
     ///
     /// None before the first Launch and after each Close.
     core: Rc<RefCell<Option<LibretroCore>>>,
+
+    /// The core's input state, shared with the key event handlers. Wrapped in
+    /// Arc<Mutex<>> so it can be shared across threads (core thread and gilrs event loop thread) and
+    /// mutated by the key handlers.
+    input_state: Arc<Mutex<InputState>>,
 
     /// Stored so we can call queue_draw() from the timer closure and
     /// set_draw_func() when a new core is loaded.
@@ -113,33 +120,26 @@ impl Component for LibretroWindowModel {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         tracing::info!("Initializing libretro window component");
+        let input_state = Arc::new(Mutex::new(InputState::default()));
         let model = LibretroWindowModel {
             core: Rc::new(RefCell::new(None)),
+            input_state: Arc::clone(&input_state),
             drawing_area: gtk::DrawingArea::new(),
             timer_source_id: None,
             temp_files: Vec::new(),
         };
 
+        // Spawn a background task to poll for gamepad events using gilrs and update the input
+        // state.
         let sender = sender.clone();
         relm4::spawn(async move {
             let mut gilrs = Gilrs::new().unwrap();
             loop {
                 // Poll for events
-                while let Some(Event { id, event, .. }) = gilrs.next_event() {
-                    match event {
-                        EventType::ButtonPressed(button, _) => {
-                            tracing::info!(id = ?id, button = ?button, "Button pressed");
-                        }
-                        EventType::AxisChanged(axis, val, _) => {
-                            if val.abs() > 0.1 {
-                                tracing::info!(id = ?id, axis = ?axis, value = val, "Axis changed");
-                            }
-                        }
-                        _ => {}
-                    }
+                while let Some(Event { event, .. }) = gilrs.next_event() {
+                    map_gamepad_event(event, &input_state);
                 }
-                // This sleep is much more efficient than GDK's signal system
-                // when dealing with non-standard hardware.
+                // Sleep briefly to avoid busy-waiting.
                 tokio::time::sleep(std::time::Duration::from_millis(10)).await;
             }
         });
@@ -195,7 +195,12 @@ impl Component for LibretroWindowModel {
                 );
                 self.temp_files = temp_files;
 
-                match LibretroCore::load(&core_path, &rom_path, &system_dir) {
+                match LibretroCore::load(
+                    &core_path,
+                    &rom_path,
+                    &system_dir,
+                    Arc::clone(&self.input_state),
+                ) {
                     Ok(core) => {
                         tracing::info!("Libretro core loaded successfully");
                         let fps = core.fps;

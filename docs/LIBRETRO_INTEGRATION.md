@@ -20,6 +20,9 @@ A libretro **core** is a `.so` shared library that emulates a system (NES, SNES,
 
 The core does not open windows, play audio, or read input on its own. It only emulates the hardware and hands the results back to the frontend via callbacks. The frontend is responsible for displaying video, playing audio, and feeding input.
 
+
+See the official libretro API reference for details:
+https://github.com/libretro/libretro-common/blob/master/include/libretro.h
 ---
 
 ## What is libloading?
