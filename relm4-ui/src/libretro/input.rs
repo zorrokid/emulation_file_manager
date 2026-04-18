@@ -58,9 +58,7 @@ pub fn map_gamepad_event(event_type: EventType, input_state: &Arc<Mutex<InputSta
                 gilrs::Axis::LeftStickX => state.set_axis(0, 0, libretro_value),
                 gilrs::Axis::LeftStickY => state.set_axis(0, 1, -libretro_value),
                 gilrs::Axis::RightStickX => state.set_axis(1, 0, libretro_value),
-
                 gilrs::Axis::RightStickY => state.set_axis(1, 1, -libretro_value),
-
                 _ => {}
             }
         }

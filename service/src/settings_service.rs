@@ -223,6 +223,7 @@ mod tests {
             secret_access_key: "test-secret-key".to_string(),
             collection_root_dir: Some(PathBuf::from("/path/to/collection")),
             libretro_core_dir: Some(PathBuf::from("/path/to/libretro/cores")),
+            libretro_system_dir: Some(PathBuf::from("/path/to/libretro/systems")),
         };
 
         // Save settings
