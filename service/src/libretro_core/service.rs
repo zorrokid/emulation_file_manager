@@ -4,6 +4,8 @@ use database::repository_manager::RepositoryManager;
 
 use crate::{error::Error, file_system_ops::FileSystemOps, view_models::Settings};
 
+pub use libretro_runner::model::LibretroSystemInfo;
+
 #[derive(Debug)]
 pub struct CoreMappingModel {
     pub id: i64,
@@ -22,6 +24,51 @@ pub struct LibretroCoreService {
     pub fs_ops: Arc<dyn FileSystemOps>,
     pub supported_cores: Vec<String>,
     pub repository_manager: Arc<RepositoryManager>,
+}
+
+#[derive(Debug, Clone)]
+pub struct LibretroFirmwareInfo {
+    pub desc: String,
+    pub path: String,
+    pub opt: bool,
+    pub available: bool,
+}
+
+#[derive(Debug, Clone)]
+pub enum InputProfile {
+    Standard,
+    Intellivision, // Right stick maps to keypad directions
+}
+
+impl From<&str> for InputProfile {
+    fn from(core_name: &str) -> Self {
+        match core_name {
+            "intellivision_libretro" => InputProfile::Intellivision,
+            _ => InputProfile::Standard,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct LibretroCoreInfo {
+    pub core_name: String,
+    pub is_available: bool,
+    pub is_supported: bool,
+    pub firmware_info: Vec<LibretroFirmwareInfo>,
+    pub input_profile: InputProfile,
+}
+
+impl LibretroCoreInfo {
+    fn has_required_firmware(&self) -> bool {
+        self.firmware_info
+            .iter()
+            .filter(|f| !f.opt)
+            .all(|f| f.available)
+    }
+
+    pub fn can_launch(&self) -> bool {
+        self.is_available && self.is_supported && self.has_required_firmware()
+    }
 }
 
 impl std::fmt::Debug for LibretroCoreService {
@@ -60,6 +107,7 @@ impl LibretroCoreService {
                         .into_iter()
                         .filter_map(|entry| {
                             if let Ok(entry) = entry
+                                // TODO: should we also check that info file is present?
                                 && self.fs_ops.is_file(&entry.path)
                                 // TODO: when implementing cross platform support, we need to
                                 // check the library extension based on the platform (.dll for
@@ -67,11 +115,11 @@ impl LibretroCoreService {
                                 // Probably would be good idea to have a helper function for that
                                 // in FileSystemOps
                                 && entry.path.extension().and_then(|ext| ext.to_str()) == Some("so")
-                                && let Some(file_name) = entry.path.file_stem()
-                                && let Some(file_name) = file_name.to_str()
-                                && self.supported_cores.contains(&file_name.to_string())
+                                && let Some(core_name) = entry.path.file_stem()
+                                && let Some(core_name) = core_name.to_str()
+                                && self.supported_cores.contains(&core_name.to_string())
                             {
-                                Some(file_name.to_string())
+                                Some(core_name.to_string())
                             } else {
                                 None
                             }
@@ -149,6 +197,63 @@ impl LibretroCoreService {
             .remove_mapping(mapping_id)
             .await?;
         Ok(())
+    }
+
+    fn get_core_file_name(&self, core_name: &str) -> String {
+        // TODO: if implementing cross platform support, we need to check the library extension
+        // based on the platform
+        format!("{}.so", core_name)
+    }
+
+    pub async fn get_core_system_info(&self, core_name: &str) -> Result<LibretroCoreInfo, Error> {
+        let libretro_core_dir = self.settings.libretro_core_dir.as_ref().ok_or_else(|| {
+            Error::SettingsError("Libretro core directory is not set".to_string())
+        })?;
+        let libretro_system_dir = self.settings.libretro_system_dir.as_ref().ok_or_else(|| {
+            Error::SettingsError("Libretro system directory is not set".to_string())
+        })?;
+        let res = libretro_runner::libretro_info_parser::parse_libretro_info(
+            core_name,
+            libretro_core_dir.as_ref(),
+        )
+        .await
+        .map_err(|e| Error::ParseError(e.to_string()))?;
+
+        let is_available = self
+            .fs_ops
+            .is_file(&libretro_core_dir.join(self.get_core_file_name(core_name)));
+
+        let is_supported = self.supported_cores.contains(&core_name.to_string());
+        tracing::info!(
+            "Core '{}' availability: {}, supported: {}",
+            core_name,
+            is_available,
+            is_supported
+        );
+
+        let firmware: Vec<LibretroFirmwareInfo> = res
+            .firmware
+            .iter()
+            .map(|f| {
+                let firmware_path = libretro_system_dir.join(&f.path);
+                let available = self.fs_ops.is_file(&firmware_path);
+                tracing::info!("Firmware '{}' availability: {}", f.path, available);
+                LibretroFirmwareInfo {
+                    desc: f.desc.clone(),
+                    path: f.path.clone(),
+                    opt: f.opt,
+                    available,
+                }
+            })
+            .collect();
+
+        Ok(LibretroCoreInfo {
+            core_name: res.core_name,
+            is_available,
+            is_supported,
+            firmware_info: firmware,
+            input_profile: core_name.into(),
+        })
     }
 }
 

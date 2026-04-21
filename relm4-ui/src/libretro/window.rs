@@ -17,6 +17,7 @@ use relm4::{
 };
 
 use libretro_runner::{core::LibretroCore, frame_buffer::FrameBuffer, input::InputState};
+use service::libretro_core::service::{InputProfile, LibretroCoreInfo};
 
 use crate::libretro::input::map_gamepad_event;
 
@@ -58,6 +59,7 @@ pub struct LibretroWindowModel {
     /// Temp files to clean up after the session ends. Populated on Launch,
     /// drained and returned to the parent via SessionEnded on Close.
     temp_files: Vec<String>,
+    input_profile: InputProfile,
 }
 
 #[derive(Debug)]
@@ -69,6 +71,7 @@ pub enum LibretroWindowMsg {
         /// Temp files extracted during ROM preparation — passed back to the
         /// parent via SessionEnded so it can call cleanup().
         temp_files: Vec<String>,
+        core_info: LibretroCoreInfo,
     },
     Close,
 }
@@ -127,6 +130,7 @@ impl Component for LibretroWindowModel {
             drawing_area: gtk::DrawingArea::new(),
             timer_source_id: None,
             temp_files: Vec::new(),
+            input_profile: InputProfile::Standard,
         };
 
         // Spawn a background task to poll for gamepad events using gilrs and update the input
@@ -185,6 +189,7 @@ impl Component for LibretroWindowModel {
                 rom_path,
                 system_dir,
                 temp_files,
+                core_info,
             } => {
                 tracing::info!(
                     core_path = ?core_path,
@@ -205,6 +210,7 @@ impl Component for LibretroWindowModel {
                         tracing::info!("Libretro core loaded successfully");
                         let fps = core.fps;
                         tracing::info!(fps, "Core reports FPS");
+                        self.input_profile = core_info.input_profile;
 
                         // Clone the frame_buffer Arc before moving core into the
                         // RefCell, so we can set up the draw func without locking.

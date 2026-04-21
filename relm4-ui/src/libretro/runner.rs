@@ -13,7 +13,7 @@ use relm4::{
 use service::{
     app_services::AppServices,
     error::Error,
-    libretro_core::service::CoreMappingModel,
+    libretro_core::service::{CoreMappingModel, LibretroCoreInfo},
     libretro_runner::service::{LibretroLaunchModel, LibretroLaunchPaths},
     view_models::{FileSetFileInfoViewModel, FileSetViewModel},
 };
@@ -55,9 +55,11 @@ pub enum LibretroRunnerMsg {
 #[derive(Debug)]
 pub enum LibretroRunnerCommandMsg {
     CoresFetched { cores: Vec<String> },
+
     FinishedRunningCore(Result<(), Error>),
     ProcessCoresResult(Result<Vec<CoreMappingModel>, Error>),
     FilesPrepared(Result<LibretroLaunchPaths, Error>),
+    ProcessSystemInfoResult(Result<LibretroCoreInfo, Error>),
 }
 
 pub struct LibretroRunnerInit {
@@ -79,12 +81,25 @@ pub struct LibretroRunner {
     // data
     cores: Vec<String>,
     systems: Vec<System>,
+    core_info: Option<LibretroCoreInfo>,
 
     // needed for running the core:
     file_set: Option<FileSetViewModel>,
     selected_file: Option<FileSetFileInfoViewModel>,
     selected_system: Option<System>,
     selected_core: Option<String>,
+}
+
+impl LibretroRunner {
+    pub fn can_launch_core(&self) -> bool {
+        self.selected_core.is_some()
+            && self.selected_file.is_some()
+            && self.file_set.is_some()
+            && self
+                .core_info
+                .as_ref()
+                .is_some_and(|info| info.can_launch())
+    }
 }
 
 #[relm4::component(pub)]
@@ -117,7 +132,7 @@ impl Component for LibretroRunner {
                     set_label: "Start",
                     connect_clicked => LibretroRunnerMsg::StartCore,
                     #[watch]
-                    set_sensitive: model.selected_core.is_some() && model.selected_file.is_some() && model.file_set.is_some(),
+                    set_sensitive: model.can_launch_core(),
                 },
 
             },
@@ -164,6 +179,7 @@ impl Component for LibretroRunner {
             selected_system: None,
             selected_core: None,
             libretro_window,
+            core_info: None,
         };
 
         let file_list_view = &model.file_list_view_wrapper.view;
@@ -208,7 +224,11 @@ impl Component for LibretroRunner {
                 self.handle_system_selection(index, &sender);
             }
             LibretroRunnerMsg::CoreSelected { name } => {
-                self.handle_core_selection(name);
+                // TODO: once core is selected, core info should be loaded and availability of
+                // possible firmware should be indicated in the UI.
+                // Also core info should be passed to the libretro window (it will be used for
+                // example to set the InputProfile.
+                self.handle_core_selection(name, &sender);
             }
             LibretroRunnerMsg::StartCore => {
                 self.handle_start_core(&sender, root);
@@ -267,18 +287,28 @@ impl Component for LibretroRunner {
             },
             LibretroRunnerCommandMsg::FilesPrepared(result) => match result {
                 Ok(paths) => {
-                    self.libretro_window.emit(LibretroWindowMsg::Launch {
-                        core_path: paths.core_path,
-                        rom_path: paths.rom_path,
-                        system_dir: paths.system_dir,
-                        temp_files: paths.temp_files,
-                    });
+                    if let Some(core_info) = &self.core_info {
+                        self.libretro_window.emit(LibretroWindowMsg::Launch {
+                            core_path: paths.core_path,
+                            rom_path: paths.rom_path,
+                            system_dir: paths.system_dir,
+                            temp_files: paths.temp_files,
+                            core_info: core_info.clone(),
+                        });
+                    }
                 }
                 Err(e) => {
                     eprintln!("Error preparing files for core launch: {:?}", e);
                     show_error_dialog("Failed to prepare files for core launch".into(), root);
                 }
             },
+            LibretroRunnerCommandMsg::ProcessSystemInfoResult(Ok(result)) => {
+                self.core_info = Some(result);
+            }
+            LibretroRunnerCommandMsg::ProcessSystemInfoResult(Err(e)) => {
+                tracing::error!(error = ?e, "Failed to fetch system info for core");
+                show_error_dialog("Failed to fetch system info for core".into(), root);
+            }
         }
     }
 }
@@ -307,8 +337,20 @@ impl LibretroRunner {
         }
     }
 
-    pub fn handle_core_selection(&mut self, name: Option<String>) {
+    pub fn handle_core_selection(&mut self, name: Option<String>, sender: &ComponentSender<Self>) {
         self.selected_core = name;
+        if let Some(name) = &self.selected_core {
+            let core_name = name.clone();
+            let service = Arc::clone(&self.app_services);
+            sender.oneshot_command(async move {
+                LibretroRunnerCommandMsg::ProcessSystemInfoResult(
+                    service
+                        .libretro_core()
+                        .get_core_system_info(core_name.as_str())
+                        .await,
+                )
+            });
+        }
     }
 
     pub fn handle_start_core(&mut self, sender: &ComponentSender<Self>, root: &Window) {
@@ -327,6 +369,7 @@ impl LibretroRunner {
                             app_services
                                 .libretro_runner()
                                 .prepare_rom(LibretroLaunchModel {
+                                    // TODO: add libretro system info?
                                     file_set_id: file_set.id,
                                     initial_file: Some(file_info.file_name.clone()),
                                     core_path,
