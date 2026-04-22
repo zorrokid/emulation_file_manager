@@ -14,6 +14,7 @@ pub const JOYPAD_L: u32 = 10;
 pub const JOYPAD_R: u32 = 11;
 
 pub struct InputState {
+    // Standard buttons (0-15)
     buttons: [bool; 16],
     // [Stick Index (Left=0, Right=1)][Axis ID (X=0, Y=1)]
     axes: [[i16; 2]; 2],

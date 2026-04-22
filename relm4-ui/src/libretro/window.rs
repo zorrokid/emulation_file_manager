@@ -59,7 +59,7 @@ pub struct LibretroWindowModel {
     /// Temp files to clean up after the session ends. Populated on Launch,
     /// drained and returned to the parent via SessionEnded on Close.
     temp_files: Vec<String>,
-    input_profile: InputProfile,
+    input_profile: Arc<Mutex<InputProfile>>,
 }
 
 #[derive(Debug)]
@@ -124,13 +124,14 @@ impl Component for LibretroWindowModel {
     ) -> ComponentParts<Self> {
         tracing::info!("Initializing libretro window component");
         let input_state = Arc::new(Mutex::new(InputState::default()));
+        let input_profile = Arc::new(Mutex::new(InputProfile::Standard));
         let model = LibretroWindowModel {
             core: Rc::new(RefCell::new(None)),
             input_state: Arc::clone(&input_state),
             drawing_area: gtk::DrawingArea::new(),
             timer_source_id: None,
             temp_files: Vec::new(),
-            input_profile: InputProfile::Standard,
+            input_profile: Arc::clone(&input_profile),
         };
 
         // Spawn a background task to poll for gamepad events using gilrs and update the input
@@ -141,7 +142,7 @@ impl Component for LibretroWindowModel {
             loop {
                 // Poll for events
                 while let Some(Event { event, .. }) = gilrs.next_event() {
-                    map_gamepad_event(event, &input_state);
+                    map_gamepad_event(event, &input_state, &input_profile);
                 }
                 // Sleep briefly to avoid busy-waiting.
                 tokio::time::sleep(std::time::Duration::from_millis(10)).await;
@@ -210,7 +211,15 @@ impl Component for LibretroWindowModel {
                         tracing::info!("Libretro core loaded successfully");
                         let fps = core.fps;
                         tracing::info!(fps, "Core reports FPS");
-                        self.input_profile = core_info.input_profile;
+                        match self.input_profile.lock() {
+                            Ok(mut input_profile_guard) => {
+                                *input_profile_guard = core_info.input_profile;
+                            }
+                            Err(e) => {
+                                tracing::error!("Failed to acquire input profile lock: {}", e);
+                                // Handle the error as needed, e.g., set a default profile or skip setting it
+                            }
+                        }
 
                         // Clone the frame_buffer Arc before moving core into the
                         // RefCell, so we can set up the draw func without locking.

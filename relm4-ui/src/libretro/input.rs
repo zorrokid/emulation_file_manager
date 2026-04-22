@@ -7,6 +7,11 @@ use libretro_runner::input::{
     InputState, JOYPAD_A, JOYPAD_B, JOYPAD_DOWN, JOYPAD_L, JOYPAD_LEFT, JOYPAD_R, JOYPAD_RIGHT,
     JOYPAD_SELECT, JOYPAD_START, JOYPAD_UP, JOYPAD_X, JOYPAD_Y,
 };
+use service::libretro_core::service::InputProfile;
+
+// Axis values beyond this will be treated as fully pressed in
+// that direction.
+// const SNAP_THRESHOLD: i16 = 2000;
 
 /// Map a GTK key value to a libretro JOYPAD button ID, if we handle it.
 fn keyval_to_button(keyval: gtk::gdk::Key) -> Option<u32> {
@@ -39,7 +44,11 @@ pub fn map_key_event(keyval: gtk::gdk::Key, input_state: &Arc<Mutex<InputState>>
     }
 }
 
-pub fn map_gamepad_event(event_type: EventType, input_state: &Arc<Mutex<InputState>>) {
+pub fn map_gamepad_event(
+    event_type: EventType,
+    input_state: &Arc<Mutex<InputState>>,
+    input_profile: &Arc<Mutex<InputProfile>>,
+) {
     let mut state = input_state.lock().expect("input state lock");
     match event_type {
         EventType::ButtonPressed(button, _code) => {
@@ -54,11 +63,30 @@ pub fn map_gamepad_event(event_type: EventType, input_state: &Arc<Mutex<InputSta
         }
         EventType::AxisChanged(axis, value, _code) => {
             let libretro_value = scale_gilrs_axis_to_libretro_axis(value);
-            match axis {
-                gilrs::Axis::LeftStickX => state.set_axis(0, 0, libretro_value),
-                gilrs::Axis::LeftStickY => state.set_axis(0, 1, -libretro_value),
-                gilrs::Axis::RightStickX => state.set_axis(1, 0, libretro_value),
-                gilrs::Axis::RightStickY => state.set_axis(1, 1, -libretro_value),
+
+            let input_profile_guard = input_profile.lock();
+            let input_profile = match input_profile_guard {
+                Ok(profile) => profile.clone(),
+                Err(_) => {
+                    tracing::error!(
+                        "Failed to lock input profile mutex, defaulting to Standard profile"
+                    );
+                    InputProfile::Standard
+                }
+            };
+            match (axis, input_profile) {
+                (gilrs::Axis::LeftStickX, _) => state.set_axis(0, 0, libretro_value),
+                (gilrs::Axis::LeftStickY, _) => state.set_axis(0, 1, -libretro_value),
+                (gilrs::Axis::RightStickX, _) => state.set_axis(1, 0, libretro_value),
+                (gilrs::Axis::RightStickY, _) => state.set_axis(1, 1, -libretro_value),
+                /*(gilrs::Axis::RightStickX, InputProfile::Intellivision) => {
+                    state.set_button(INT_KEY_2, libretro_value < -SNAP_THRESHOLD);
+                    state.set_button(INT_KEY_8, libretro_value > SNAP_THRESHOLD);
+                }
+                (gilrs::Axis::RightStickY, InputProfile::Intellivision) => {
+                    state.set_button(INT_KEY_4, libretro_value < -SNAP_THRESHOLD);
+                    state.set_button(INT_KEY_6, libretro_value > SNAP_THRESHOLD);
+                }*/
                 _ => {}
             }
         }

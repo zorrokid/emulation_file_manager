@@ -37,7 +37,8 @@ pub struct LibretroFirmwareInfo {
 #[derive(Debug, Clone)]
 pub enum InputProfile {
     Standard,
-    Intellivision, // Right stick maps to keypad directions
+    Intellivision, // Right stick maps to keypad directions, not actually needed at the moment
+                   // since core does the keypad mapping internally.
 }
 
 impl From<&str> for InputProfile {
