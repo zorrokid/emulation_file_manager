@@ -11,6 +11,10 @@ pub const RETRO_ENVIRONMENT_GET_VARIABLE: u32 = 15;
 pub const RETRO_ENVIRONMENT_GET_LOG_INTERFACE: u32 = 27;
 pub const RETRO_ENVIRONMENT_SET_GEOMETRY: u32 = 37;
 
+// Input device IDs used by retro_input_state_t callbacks.
+pub const RETRO_DEVICE_JOYPAD: u32 = 1;
+pub const RETRO_DEVICE_ANALOG: u32 = 5;
+
 // #[repr(u32)] tells Rust to store this enum as a plain u32 in memory,
 // matching the C enum type. Without this the size and layout would be
 // undefined and casting a raw u32 from C into this type would be unsafe.

@@ -362,7 +362,20 @@ Some cores need BIOS files (e.g. PlayStation needs `scph1001.bin`). The core req
 
 The path handed to the core comes from the `system_dir` argument passed into `LibretroCore::load()`. If a core depends on firmware, that directory must contain the files the core expects.
 
-In the current implementation, `LibretroRunnerService::prepare_rom()` passes the app's temp output directory as the libretro system directory. That works for cores with no firmware requirements, but BIOS-dependent cores need a real system directory populated with the required firmware files.
+In the current implementation, `LibretroRunnerService::prepare_rom()` passes the configured `libretro_system_dir` setting as the libretro system directory. That lets BIOS-dependent cores read firmware from a persistent user-configured location instead of the app's temp output directory.
+
+For FreeIntv specifically:
+
+1. `freeintv_libretro` is in the current supported-core allowlist.
+2. The service layer can parse the core's `.info` file to inspect supported extensions and firmware requirements.
+3. `LibretroCoreService::get_core_system_info()` checks whether required firmware files are present in the configured system directory.
+4. The launcher UI disables Start when the selected mapped core is unavailable or required firmware is missing.
+
+What is still pending:
+
+- `LibretroRunnerService::prepare_rom()` does not yet validate the selected ROM extension against the parsed core metadata before launch.
+- Launch-time failures still surface as generic preparation/fetch errors rather than FreeIntv-specific preflight messages.
+- The current controller mapping is generic Retropad-style input via keyboard + `gilrs`; FreeIntv-specific controller UX is intentionally out of scope for now.
 
 ### Step 6: Test
 

@@ -13,48 +13,38 @@ In Progress
 
 ## Problem
 
-The application already supports libretro core mapping and in-process launching, but it cannot reliably support the FreeIntv Intellivision core yet. The current implementation only knows about `fceumm_libretro`, does not model per-core requirements, always points libretro cores at the temp directory for system files, and only answers digital joypad input for player 1. That breaks FreeIntv, which requires `exec.bin` and `grom.bin` in the frontend system directory and relies on a wider Retropad surface, including analog-style disc and keypad interactions.
+The application now supports per-system libretro core mapping and in-process launching well enough to start integrating FreeIntv, but the feature is still incomplete. `freeintv_libretro` is now in the supported-core allowlist, the app persists a dedicated libretro system directory, the launch path passes that directory through to `LibretroCore::load()`, and the runner/frontend now support both digital joypad input and libretro analog axes.
 
-`docs/LIBRETRO_INTEGRATION.md` already documents the libretro callback architecture and BIOS/system-directory concept correctly, but its “hardcoded core path” onboarding section is stale relative to the current codebase, which already has per-system core mapping in the database, service, and settings UI.
+The remaining gap is that per-core requirements are still only partially modeled and enforced. Supported cores are still declared as a raw string list, while `.info` parsing was added separately for supported extensions and firmware requirements. `LibretroCoreService::get_core_system_info()` uses that parsed metadata to report firmware availability and gate the Start button, but `LibretroRunnerService::prepare_rom()` does not yet perform explicit extension validation or launch-path preflight based on those requirements.
 
-The current input path is also too narrow for this core. `relm4-ui/src/libretro/input.rs` currently only maps GTK keyboard events to digital joypad buttons, `libretro_runner::InputState` only stores digital button state, and `input_state_cb` only answers `RETRO_DEVICE_JOYPAD`. That means the frontend cannot yet express a physical joypad/analog-stick control surface, and the runner cannot expose the analog state a core would need for something like the FreeIntv 16-way disc.
+The frontend input work is now generic rather than FreeIntv-specific. `relm4-ui/src/libretro/input.rs` handles both keyboard input and physical gamepad input through `gilrs`, and `input_state_cb` answers both `RETRO_DEVICE_JOYPAD` and `RETRO_DEVICE_ANALOG`. This spec now treats FreeIntv-specific controller UX as out of scope and focuses on the generic libretro input path that is already implemented.
+
+`docs/LIBRETRO_INTEGRATION.md` and `README.md` are also behind the code: the integration doc still contains stale wording about the system directory coming from `temp_output_dir`, and the README still describes libretro input and core selection in terms that no longer match the current implementation.
 
 ## Proposed Solution
 
-Promote supported libretro cores from a string allowlist to structured metadata in `libretro_runner`. Add a `freeintv_libretro` definition that captures:
+Promote supported libretro cores from a string allowlist to structured app-policy metadata in `libretro_runner`. Add a `freeintv_libretro` definition that captures app-owned policy such as:
 
 - core name
-- supported ROM extensions (`.int`, `.rom`, `.bin`)
-- required firmware (`exec.bin`, `grom.bin`)
+- input profile
 
 Add a dedicated libretro system directory setting so the user can point the app at the directory containing libretro firmware files. Update the launch path to use that directory instead of `temp_output_dir` when passing `GET_SYSTEM_DIRECTORY` to the core.
 
 Extend the input layer so `libretro_runner` can answer more than digital joypad buttons. The input state should support:
 
 - joypad buttons
-- analog axes required by the FreeIntv disc/keypad mapping
-- FreeIntv-specific controller swap state routed through the existing libretro control surface
+- analog axes exposed through libretro's standard analog input surface
 
 `libretro_runner` should remain generic here: it owns a frontend-facing input state plus libretro device/axis query support, and `input_state_cb` should answer both `RETRO_DEVICE_JOYPAD` and `RETRO_DEVICE_ANALOG` from that shared state.
 
-On the frontend side, extend `relm4-ui/src/libretro/input.rs` beyond keyboard-only handling so libretro sessions can feed physical joypad/analog-stick input into the shared state. The current implementation stage focuses on generic controller forwarding first, with the final FreeIntv-specific profile layered on afterwards. The frontend target remains:
-
-- D-pad movement
-- 16-way disc input
-- keypad input including `0`, `Enter`, and `Clear`
-- controller swap
-
-The first implementation will not add an on-screen keypad overlay. Instead, it keeps the existing keyboard path where useful and adds physical joypad/analog-stick capture in `relm4-ui/src/libretro/input.rs`, routing that through the generic input state owned by `libretro_runner`. In the currently landed code, this frontend mapping is still generic Retropad-style input rather than a complete FreeIntv keypad/controller-swap profile.
+On the frontend side, extend `relm4-ui/src/libretro/input.rs` beyond keyboard-only handling so libretro sessions can feed physical joypad/analog-stick input into the shared state. The first implementation keeps the existing keyboard path where useful and adds physical joypad/analog-stick capture in `relm4-ui/src/libretro/input.rs`, routing that through the generic input state owned by `libretro_runner`.
 
 Physical controller input should not be read from GTK event controllers. GTK remains responsible for the libretro window lifecycle and keyboard fallback, while the actual joypad is read through a dedicated gamepad input layer in `relm4-ui` (planned as `gilrs` unless implementation constraints force a different backend). That layer translates controller events into the shared `InputState`.
-
-For the 16-way disc, the frontend should map analog-stick direction changes onto generic libretro analog X/Y values written into the shared input state. This keeps the runner core-agnostic while letting the frontend define the control profile needed by FreeIntv.
 
 The libretro-facing mapping should stay explicit:
 
 - physical controller buttons and D-pad inputs update the digital button fields read through `RETRO_DEVICE_JOYPAD`
 - analog-stick motion updates analog axis fields read through `RETRO_DEVICE_ANALOG`
-- the FreeIntv 16-way disc profile is implemented as frontend-side analog X/Y translation rather than a FreeIntv-specific callback path in `libretro_runner`
 
 Before launching a mapped core, run a small preflight in the service layer that validates:
 
@@ -73,9 +63,9 @@ If preflight fails, return a typed service error and show it in the existing GUI
 | Model core requirements as metadata in `libretro_runner` | FreeIntv needs firmware and extension validation, and this structure scales to future cores better than string constants. |
 | Extend the frontend input model instead of hardcoding FreeIntv logic inside callbacks | `libretro_runner` should stay generic and reusable for future cores that also need analog input. |
 | Keep the control UX in `relm4-ui` | Input presentation is a frontend concern; `libretro_runner` should only store/query state. |
-| Add physical joypad/analog-stick capture in the first phase | Joypad support is the target feature, and analog-stick input is the clearest fit for the FreeIntv disc. |
-| Keep the existing keyboard path as secondary input, not as the disc source | This preserves current usability without conflating disc emulation with keyboard bindings. |
-| Represent the 16-way disc through generic analog axes | Libretro already has a standard analog input surface; using it avoids a FreeIntv-only callback path in the runner. |
+| Add physical joypad/analog-stick capture in the first phase | Joypad support is the target feature, and generic analog input support is useful for libretro cores beyond keyboard-only control. |
+| Keep the existing keyboard path as secondary input | This preserves current usability while adding a generic physical-controller path for libretro sessions. |
+| Keep controller handling generic | FreeIntv-specific controller UX is out of scope for this spec revision; the current goal is a reusable joypad/analog input path. |
 | Read physical controllers through a dedicated input library rather than GTK | GTK4/relm4 does not provide the right abstraction for joypad polling; the controller path belongs in a frontend input backend such as `gilrs`. |
 | Map controller state to libretro at the `InputState` boundary | This keeps controller backend details inside `relm4-ui` and keeps `libretro_runner` focused on libretro device queries. |
 
@@ -87,14 +77,12 @@ If preflight fails, return a typed service error and show it in the existing GUI
 - Launching FreeIntv content fails fast with a clear error if `exec.bin` or `grom.bin` is missing.
 - Launching FreeIntv content fails fast with a clear error if the selected file does not use `.int`, `.rom`, or `.bin`.
 - `libretro_runner` can answer both digital joypad and analog libretro input queries from a shared frontend-owned input state.
-- The current implementation stage includes generic physical controller forwarding for Retropad buttons and analog axes; FreeIntv-specific keypad/controller-swap mapping remains follow-up work.
-- The frontend can express the FreeIntv control surface needed for keypad input, disc input, and controller swap.
+- The current implementation stage includes generic physical controller forwarding for Retropad buttons and analog axes.
 - Physical joypad input is read in `relm4-ui` via a dedicated controller backend instead of GTK event controllers.
 - `relm4-ui/src/libretro/input.rs` supports physical joypad/analog-stick capture for libretro sessions.
 - Physical controller buttons and D-pad inputs are exposed to cores through `RETRO_DEVICE_JOYPAD`.
-- The 16-way disc mapping is documented as analog-stick input routed through libretro analog X/Y state.
 - Analog-stick motion is exposed to cores through `RETRO_DEVICE_ANALOG`.
-- The final control mapping is documented in the app/docs so users know how to operate the core.
+- The current generic libretro controller behavior is documented in the app/docs, along with what remains out of scope.
 - Existing mapped-core flows for already supported cores continue to work.
 - Documentation explains how to configure FreeIntv firmware and what is intentionally out of scope.
 - `docs/LIBRETRO_INTEGRATION.md` no longer describes hardcoded core-path wiring as the current approach.
@@ -104,6 +92,9 @@ If preflight fails, return a typed service error and show it in the existing GUI
 - `core_types`, `service`, and `relm4-ui` now persist and expose a dedicated `libretro_system_dir` setting alongside the existing core-directory setting.
 - `LibretroRunnerService::prepare_rom()` now passes the configured libretro system directory to the runner instead of reusing `temp_output_dir`.
 - `SUPPORTED_CORES` now includes `freeintv_libretro`, so the core can be mapped in the existing per-system core-mapping flow.
+- `libretro_runner::libretro_info_parser` now parses `.info` files for supported extensions and firmware requirements, including the checked-in `freeintv_libretro.info` example data.
+- `LibretroCoreService::get_core_system_info()` now reports whether a mapped core is available, whether required firmware files are present in the configured system directory, and which input profile the frontend should use.
+- `relm4-ui/src/libretro/runner.rs` now disables the Start button unless the selected core reports `can_launch()`, so missing required firmware is already reflected in the launch UI even though launch-time preflight errors are still generic.
 - `libretro_runner::InputState` now stores both digital button state and analog axis state, and `input_state_cb` now answers both `RETRO_DEVICE_JOYPAD` and `RETRO_DEVICE_ANALOG`.
 - `relm4-ui` now uses `gilrs` to poll physical gamepad input and forwards generic controller state into the shared `InputState`.
 - The currently implemented gamepad mapping is generic Retropad-style input:
@@ -112,5 +103,6 @@ If preflight fails, return a typed service error and show it in the existing GUI
   - shoulder buttons map to `L`/`R`
   - Start/Select map to libretro `START`/`SELECT`
   - left and right analog sticks map to libretro analog X/Y axes with Y inverted and a small deadzone
-- FreeIntv-specific keypad input, controller swap, launch preflight validation, and the final user-facing control documentation are still pending.
-- The original metadata refactor proposed for `supported_cores` has not landed yet. The branch currently adds `freeintv_libretro` to the string allowlist and also adds `.info` parsing groundwork, but that metadata is not yet wired into launch validation.
+- FreeIntv-specific controller UX is now out of scope for this spec revision; the implemented input path is intentionally generic rather than core-specific.
+- `supported_cores.rs` now uses structured app-policy metadata instead of a raw allowlist, but `.info`-derived extensions and firmware requirements are still kept separate and are not yet wired into `LibretroRunnerService::prepare_rom()` for extension validation or typed launch preflight errors.
+- `docs/LIBRETRO_INTEGRATION.md` and `README.md` have not yet been updated to describe the current FreeIntv setup, current controller behavior, and remaining limitations accurately.

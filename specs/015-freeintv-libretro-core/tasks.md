@@ -1,9 +1,9 @@
 ## Phase 3 — Implementation
 
 ### Core Metadata
-- [ ] T1 [libretro_runner] — Replace the raw supported-core string list with structured metadata and add `freeintv_libretro`
+- [x] T1 [libretro_runner] — Replace the raw supported-core string list with structured app-policy metadata and add `freeintv_libretro`
   **File:** `libretro_runner/src/supported_cores.rs`
-  Define core metadata that can express supported extensions and required firmware files, while keeping existing consumers simple. Partial progress: `freeintv_libretro` is now in `SUPPORTED_CORES`, and `.info` parsing groundwork was added separately, but the metadata refactor is not wired into supported-core definitions yet.
+  Replace the raw supported-core string list with structured app-policy metadata while keeping existing consumers simple. `SUPPORTED_CORES` now defines supported core names and app-owned policy such as `InputProfile`, while supported extensions and firmware requirements continue to come from parsed `.info` data separately.
 
 ### Settings Plumbing
 - [x] T2 [core_types] — Add a setting key for the libretro system directory
@@ -15,14 +15,14 @@
   Thread the new setting through `Settings` and `SettingsSaveModel`.
 
 ### Input Model
-- [ ] T4 [libretro_runner] — Extend input state and callbacks for joypad + analog libretro input
+- [x] T4 [libretro_runner] — Extend input state and callbacks for joypad + analog libretro input
   **File:** `libretro_runner/src/input.rs`, `libretro_runner/src/callbacks.rs`, `libretro_runner/src/ffi.rs`
-  Keep the runner generic, but add shared state and callback handling for both digital joypad reads and libretro analog-axis reads needed by controller-driven disc input. Document the runner-side contract clearly: digital buttons answer `RETRO_DEVICE_JOYPAD`, analog axes answer `RETRO_DEVICE_ANALOG`. Partial progress: shared digital + analog state and callback support are implemented; any remaining work here is documentation/tests only.
+  Keep the runner generic, but add shared state and callback handling for both digital joypad reads and libretro analog-axis reads. Document the runner-side contract clearly: digital buttons answer `RETRO_DEVICE_JOYPAD`, analog axes answer `RETRO_DEVICE_ANALOG`.
 
 ### Launch Preflight
 - [ ] T5 [service] — Add libretro core preflight validation for firmware and file extensions
   **File:** `service/src/libretro_runner/service.rs`
-  Validate selected core metadata, ROM extension, and required firmware presence before launch.
+  Validate selected core metadata, ROM extension, and required firmware presence before launch. Partial progress: `LibretroCoreService::get_core_system_info()` already checks required firmware availability and `relm4-ui` disables Start when `can_launch()` is false, but `prepare_rom()` still lacks explicit extension validation and typed launch-path preflight errors.
 
 - [x] T6 [service] — Pass the configured libretro system directory to the runner
   **File:** `service/src/libretro_runner/service.rs`
@@ -33,18 +33,18 @@
   **File:** `relm4-ui/src/settings_form.rs`
   Add browse/select UI alongside the existing libretro core directory controls.
 
-- [ ] T8 [relm4-ui] — Add physical joypad/analog-stick capture and FreeIntv input profile in the libretro frontend
+- [x] T8 [relm4-ui] — Add physical joypad/analog-stick capture in the libretro frontend
   **File:** `relm4-ui/Cargo.toml`, `relm4-ui/src/libretro/input.rs`, `relm4-ui/src/libretro/window.rs`
-  Add a dedicated controller input backend in `relm4-ui` (planned as `gilrs`) so physical controller buttons and analog-stick motion feed the richer runner input state, including the 16-way disc profile, without relying on GTK event controllers for joypad polling. Partial progress: `gilrs` polling and generic button/axis forwarding are implemented; the final FreeIntv keypad/controller-swap/disc profile is still pending.
+  Add a dedicated controller input backend in `relm4-ui` (implemented with `gilrs`) so physical controller buttons and analog-stick motion feed the richer runner input state without relying on GTK event controllers for joypad polling.
 
 - [ ] T9 [relm4-ui] — Surface preflight failures with actionable messages
   **File:** `relm4-ui/src/libretro/runner.rs`
-  Keep failures in the existing error-dialog flow rather than silent launch failure.
+  Keep failures in the existing error-dialog flow rather than silent launch failure. Current behavior is only partially there: missing required firmware disables Start through `core_info.can_launch()`, but launch-path failures still surface as generic “failed to prepare/fetch” dialogs instead of actionable FreeIntv-specific preflight messages.
 
 ### Documentation
 - [ ] T10 [docs] — Document FreeIntv setup and firmware requirements
   **File:** `docs/LIBRETRO_INTEGRATION.md`, `README.md`
-  Update the onboarding docs to describe FreeIntv support, required firmware, the final chosen controller scheme, how the frontend reads physical controller input, the analog-stick disc mapping, and remove stale hardcoded-core-path guidance. Partial progress: the integration doc now links to the upstream libretro API reference, but the FreeIntv-specific setup/control docs are still missing and one system-directory note is stale.
+  Update the onboarding docs to describe FreeIntv support, required firmware, the current generic controller behavior, how the frontend reads physical controller input, and remove stale hardcoded-core-path guidance. Partial progress: the integration doc now links to the upstream libretro API reference, but the FreeIntv-specific setup docs are still missing, the system-directory note still mentions `temp_output_dir`, and the README still describes libretro support in terms that predate current core-mapping and controller-input work.
 
 ## Phase 5 — Tests
 
@@ -58,7 +58,7 @@
 
 - [ ] T13 [relm4-ui] — Add tests for controller-to-libretro input mapping
   **File:** `relm4-ui/src/libretro/input.rs`
-  Extract or reuse pure mapping helpers so tests can cover controller-backend event translation, physical joypad button handling, and the 16-way disc-to-analog mapping without needing a live libretro core.
+  Extract or reuse pure mapping helpers so tests can cover controller-backend event translation, physical joypad button handling, and analog-axis mapping without needing a live libretro core.
 
 ## Manual Verification Checklist
 
@@ -68,6 +68,5 @@
 - [x] Launch a `.int`, `.rom`, or `.bin` Intellivision file successfully.
 - [ ] Verify generic physical joypad button and D-pad actions reach the core through the expected libretro joypad inputs.
 - [ ] Verify left/right analog stick motion reaches the expected libretro analog X/Y state.
-- [ ] Verify the final FreeIntv keypad, disc, and controller-swap UX once that profile is implemented.
 - [ ] Confirm missing firmware produces a clear error dialog before the launch window opens.
 - [ ] Confirm an existing NES/FCEUmm launch still works after the change.
