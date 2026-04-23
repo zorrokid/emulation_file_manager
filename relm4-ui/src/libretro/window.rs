@@ -75,7 +75,7 @@ pub enum LibretroWindowMsg {
         /// Temp files extracted during ROM preparation — passed back to the
         /// parent via SessionEnded so it can call cleanup().
         temp_files: Vec<String>,
-        supported_core_def: SupportedCoreDefinition,
+        input_profile: InputProfile,
     },
     Close,
 }
@@ -194,7 +194,7 @@ impl Component for LibretroWindowModel {
                 rom_path,
                 system_dir,
                 temp_files,
-                supported_core_def,
+                input_profile,
             } => {
                 tracing::info!(
                     core_path = ?core_path,
@@ -217,7 +217,7 @@ impl Component for LibretroWindowModel {
                         tracing::info!(fps, "Core reports FPS");
                         match self.input_profile.lock() {
                             Ok(mut input_profile_guard) => {
-                                *input_profile_guard = supported_core_def.input_profile;
+                                *input_profile_guard = input_profile;
                             }
                             Err(e) => {
                                 tracing::error!("Failed to acquire input profile lock: {}", e);

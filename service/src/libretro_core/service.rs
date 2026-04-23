@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use database::repository_manager::RepositoryManager;
-use libretro_runner::supported_cores::{SupportedCoreDefinition, get_supported_core_definition};
+use libretro_runner::supported_cores::{InputProfile, get_supported_core};
 
 use crate::{error::Error, file_system_ops::FileSystemOps, view_models::Settings};
 
@@ -39,11 +39,7 @@ pub struct LibretroCoreInfo {
     pub core_name: String,
     pub is_available: bool,
     pub firmware_info: Vec<LibretroFirmwareInfo>,
-    /// This indicates whether the core is recognized and supported by our application (i.e. we
-    /// have a definition for it in SUPPORTED_CORES). Note that it's still possible for a core to
-    /// be recognized but not actually available if the library file is missing, so this is not the
-    /// same as `is_available`.
-    pub supported_core_def: Option<SupportedCoreDefinition>,
+    pub input_profile: InputProfile,
 }
 
 impl LibretroCoreInfo {
@@ -55,7 +51,7 @@ impl LibretroCoreInfo {
     }
 
     pub fn can_launch(&self) -> bool {
-        self.is_available && self.supported_core_def.is_some() && self.has_required_firmware()
+        self.is_available && self.has_required_firmware()
     }
 }
 
@@ -102,7 +98,7 @@ impl LibretroCoreService {
                                 && entry.path.extension().and_then(|ext| ext.to_str()) == Some("so")
                                 && let Some(core_name) = entry.path.file_stem()
                                 && let Some(core_name) = core_name.to_str()
-                                && get_supported_core_definition(core_name).is_some()
+                                && get_supported_core(core_name).is_some()
                             {
                                 Some(core_name.to_string())
                             } else {
@@ -162,7 +158,7 @@ impl LibretroCoreService {
     }
 
     pub async fn add_core_mapping(&self, system_id: i64, core_name: &str) -> Result<i64, Error> {
-        if get_supported_core_definition(core_name).is_none() {
+        if get_supported_core(core_name).is_none() {
             return Err(Error::InvalidInput(format!(
                 "'{}' is not a recognized libretro core",
                 core_name
@@ -198,6 +194,11 @@ impl LibretroCoreService {
         let libretro_system_dir = self.settings.libretro_system_dir.as_ref().ok_or_else(|| {
             Error::SettingsError("Libretro system directory is not set".to_string())
         })?;
+
+        let supported_core = get_supported_core(core_name).ok_or_else(|| {
+            Error::InvalidInput(format!("'{}' is not a recognized libretro core", core_name))
+        })?;
+
         let res = libretro_runner::libretro_info_parser::parse_libretro_info(
             core_name,
             libretro_core_dir.as_ref(),
@@ -208,8 +209,6 @@ impl LibretroCoreService {
         let is_available = self
             .fs_ops
             .is_file(&libretro_core_dir.join(self.get_core_file_name(core_name)));
-
-        let supported_core_def = get_supported_core_definition(&core_name.to_string());
 
         tracing::info!("Core '{}' availability: {}", core_name, is_available);
 
@@ -233,7 +232,7 @@ impl LibretroCoreService {
             core_name: res.core_name,
             is_available,
             firmware_info: firmware,
-            supported_core_def: supported_core_def.copied(),
+            input_profile: supported_core.input_profile,
         })
     }
 }

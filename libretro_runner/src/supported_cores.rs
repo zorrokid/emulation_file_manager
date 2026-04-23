@@ -22,7 +22,7 @@ pub const SUPPORTED_CORES: &[SupportedCoreDefinition] = &[
     },
 ];
 
-pub fn get_supported_core_definition(core_name: &str) -> Option<&'static SupportedCoreDefinition> {
+pub fn get_supported_core(core_name: &str) -> Option<&'static SupportedCoreDefinition> {
     SUPPORTED_CORES
         .iter()
         .find(|def| def.core_name == core_name)

@@ -1,7 +1,6 @@
 use std::sync::{Arc, OnceLock};
 
 use database::{get_db_pool, repository_manager::RepositoryManager};
-use libretro_runner::supported_cores::SUPPORTED_CORES;
 
 use crate::{
     cloud_sync::service::CloudStorageSyncService, document_viewer_service::DocumentViewerService,
