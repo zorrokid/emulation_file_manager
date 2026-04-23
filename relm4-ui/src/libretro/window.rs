@@ -16,8 +16,12 @@ use relm4::{
     },
 };
 
-use libretro_runner::{core::LibretroCore, frame_buffer::FrameBuffer, input::InputState};
-use service::libretro_core::service::{InputProfile, LibretroCoreInfo};
+use libretro_runner::{
+    core::LibretroCore,
+    frame_buffer::FrameBuffer,
+    input::InputState,
+    supported_cores::{InputProfile, SupportedCoreDefinition},
+};
 
 use crate::libretro::input::map_gamepad_event;
 
@@ -71,7 +75,7 @@ pub enum LibretroWindowMsg {
         /// Temp files extracted during ROM preparation — passed back to the
         /// parent via SessionEnded so it can call cleanup().
         temp_files: Vec<String>,
-        core_info: LibretroCoreInfo,
+        supported_core_def: SupportedCoreDefinition,
     },
     Close,
 }
@@ -190,7 +194,7 @@ impl Component for LibretroWindowModel {
                 rom_path,
                 system_dir,
                 temp_files,
-                core_info,
+                supported_core_def,
             } => {
                 tracing::info!(
                     core_path = ?core_path,
@@ -213,7 +217,7 @@ impl Component for LibretroWindowModel {
                         tracing::info!(fps, "Core reports FPS");
                         match self.input_profile.lock() {
                             Ok(mut input_profile_guard) => {
-                                *input_profile_guard = core_info.input_profile;
+                                *input_profile_guard = supported_core_def.input_profile;
                             }
                             Err(e) => {
                                 tracing::error!("Failed to acquire input profile lock: {}", e);

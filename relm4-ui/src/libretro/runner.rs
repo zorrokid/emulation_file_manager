@@ -287,13 +287,15 @@ impl Component for LibretroRunner {
             },
             LibretroRunnerCommandMsg::FilesPrepared(result) => match result {
                 Ok(paths) => {
-                    if let Some(core_info) = &self.core_info {
+                    if let Some(core_info) = &self.core_info
+                        && let Some(supported_core_def) = core_info.supported_core_def
+                    {
                         self.libretro_window.emit(LibretroWindowMsg::Launch {
                             core_path: paths.core_path,
                             rom_path: paths.rom_path,
                             system_dir: paths.system_dir,
                             temp_files: paths.temp_files,
-                            core_info: core_info.clone(),
+                            supported_core_def,
                         });
                     }
                 }

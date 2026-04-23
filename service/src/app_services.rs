@@ -247,13 +247,11 @@ impl AppServices {
     }
 
     pub fn libretro_core(&self) -> Arc<LibretroCoreService> {
-        let supported_cores: Vec<String> = SUPPORTED_CORES.iter().map(|s| s.to_string()).collect();
         self.libretro_core
             .get_or_init(|| {
                 Arc::new(LibretroCoreService::new(
                     Arc::clone(&self.app_settings),
                     Arc::new(crate::file_system_ops::StdFileSystemOps),
-                    supported_cores,
                     Arc::clone(&self.repository_manager),
                 ))
             })

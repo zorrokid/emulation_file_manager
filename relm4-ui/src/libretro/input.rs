@@ -3,11 +3,13 @@ use std::sync::{Arc, Mutex};
 use gilrs::EventType;
 use relm4::gtk;
 
-use libretro_runner::input::{
-    InputState, JOYPAD_A, JOYPAD_B, JOYPAD_DOWN, JOYPAD_L, JOYPAD_LEFT, JOYPAD_R, JOYPAD_RIGHT,
-    JOYPAD_SELECT, JOYPAD_START, JOYPAD_UP, JOYPAD_X, JOYPAD_Y,
+use libretro_runner::{
+    input::{
+        InputState, JOYPAD_A, JOYPAD_B, JOYPAD_DOWN, JOYPAD_L, JOYPAD_LEFT, JOYPAD_R, JOYPAD_RIGHT,
+        JOYPAD_SELECT, JOYPAD_START, JOYPAD_UP, JOYPAD_X, JOYPAD_Y,
+    },
+    supported_cores::InputProfile,
 };
-use service::libretro_core::service::InputProfile;
 
 // Axis values beyond this will be treated as fully pressed in
 // that direction.
