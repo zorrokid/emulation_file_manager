@@ -91,7 +91,7 @@ pub async fn parse_libretro_info(
         authors: info_content_map.get("authors").cloned().unwrap_or_default(),
         supported_extensions: info_content_map
             .get("supported_extensions")
-            .map(|exts| exts.split(',').map(|s| s.trim().to_string()).collect())
+            .map(|exts| exts.split('|').map(|s| s.trim().to_string()).collect())
             .unwrap_or_default(),
         core_name: info_content_map
             .get("core_name")

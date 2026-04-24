@@ -40,6 +40,7 @@ pub struct LibretroCoreInfo {
     pub is_available: bool,
     pub firmware_info: Vec<LibretroFirmwareInfo>,
     pub input_profile: InputProfile,
+    pub supported_extensions: Vec<String>,
 }
 
 impl LibretroCoreInfo {
@@ -233,6 +234,7 @@ impl LibretroCoreService {
             is_available,
             firmware_info: firmware,
             input_profile: supported_core.input_profile,
+            supported_extensions: res.supported_extensions.clone(),
         })
     }
 }

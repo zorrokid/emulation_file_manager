@@ -148,7 +148,7 @@ impl Component for EmulatorRunnerModel {
                     set_label: "Run Emulator",
                     connect_clicked => EmulatorRunnerMsg::StartEmulator,
                     #[watch]
-                    set_sensitive: model.selected_emulator.is_some() && model.selected_file.is_some() && model.file_set.is_some(),
+                    set_sensitive: model.can_launch_emulator(),
                 },
             }
         }
@@ -385,6 +385,15 @@ impl Component for EmulatorRunnerModel {
 }
 
 impl EmulatorRunnerModel {
+    pub fn can_launch_emulator(&self) -> bool {
+        tracing::info!(
+            selected_emulator = ?self.selected_emulator,
+            selected_file = ?self.selected_file,
+            file_set = ?self.file_set,
+            "Checking if emulator can be launched"
+        );
+        self.selected_emulator.is_some() && self.selected_file.is_some() && self.file_set.is_some()
+    }
     pub fn handle_file_selection(&mut self, index: u32) {
         let file_list_item = self.file_list_view_wrapper.get(index);
         if let (Some(item), Some(file_set)) = (file_list_item, &self.file_set) {

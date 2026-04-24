@@ -354,12 +354,32 @@ impl LibretroRunner {
     }
 
     pub fn handle_start_core(&mut self, sender: &ComponentSender<Self>, root: &Window) {
-        if let (Some(core_name), Some(file_set), Some(file_info), Some(system)) = (
+        if let (Some(core_name), Some(file_set), Some(file_info), Some(core_info)) = (
             self.selected_core.clone(),
             self.file_set.clone(),
             self.selected_file.clone(),
-            self.selected_system.clone(),
+            &self.core_info,
         ) {
+            let extension = std::path::Path::new(&file_info.file_name)
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .unwrap_or_default();
+
+            if !core_info
+                .supported_extensions
+                .iter()
+                .any(|ext| ext.eq_ignore_ascii_case(extension))
+            {
+                show_error_dialog(
+                    format!(
+                        "Selected file extension .{} is not supported by the selected core",
+                        extension
+                    ),
+                    root,
+                );
+                return;
+            }
+
             // first need to prepare the files
             let app_services = Arc::clone(&self.app_services);
             match app_services.libretro_runner().resolve_core_path(&core_name) {
