@@ -4,14 +4,14 @@ use core_types::events::DownloadEvent;
 use flume::Sender;
 
 use crate::{
-    file_set_download::service::{DownloadResult, DownloadService},
+    file_set_download::{download_service_ops::DownloadServiceOps, service::DownloadResult},
     libretro_core::service::LibretroCoreInfo,
     libretro_runner::service::LibretroLaunchPaths,
     view_models::Settings,
 };
 
 pub struct PrepareLaunchContextDeps {
-    pub download_service: Arc<DownloadService>,
+    pub download_service: Arc<dyn DownloadServiceOps>,
     pub settings: Arc<Settings>,
     pub progress_tx: Option<Sender<DownloadEvent>>,
 }

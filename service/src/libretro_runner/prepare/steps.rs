@@ -211,3 +211,385 @@ impl PipelineStep<PrepareLaunchContext, LibretroPreflightError> for BuildLaunchP
         StepAction::Continue
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{path::PathBuf, sync::Arc};
+
+    use database::setup_test_repository_manager;
+    use libretro_runner::supported_cores::InputProfile;
+
+    use super::*;
+    use crate::{
+        file_set_download::{
+            download_service_ops::{DownloadServiceOps, MockDownloadServiceOps},
+            service::{DownloadResult, DownloadService},
+        },
+        libretro_core::service::{LibretroCoreInfo, LibretroFirmwareInfo},
+        libretro_runner::prepare::context::{
+            PrepareLaunchContextDeps, PrepareLaunchContextInput, PrepareLaunchContextState,
+        },
+        view_models::Settings,
+    };
+
+    fn create_core_info(
+        supported_extensions: Vec<&str>,
+        firmware_info: Vec<LibretroFirmwareInfo>,
+    ) -> LibretroCoreInfo {
+        LibretroCoreInfo {
+            core_name: "freeintv_libretro".to_string(),
+            is_available: true,
+            firmware_info,
+            input_profile: InputProfile::Standard,
+            supported_extensions: supported_extensions
+                .into_iter()
+                .map(str::to_string)
+                .collect(),
+        }
+    }
+
+    async fn create_test_context() -> PrepareLaunchContext {
+        let repository_manager = setup_test_repository_manager().await;
+        let settings = Arc::new(Settings {
+            temp_output_dir: PathBuf::from("/tmp/libretro-test-output"),
+            libretro_system_dir: Some(PathBuf::from("/tmp/libretro-system")),
+            ..Default::default()
+        });
+
+        let download_service = Arc::new(DownloadService::new(repository_manager, settings.clone()));
+        create_test_context_with_download_service(settings, download_service)
+    }
+
+    fn create_test_context_with_download_service(
+        settings: Arc<Settings>,
+        download_service: Arc<dyn DownloadServiceOps>,
+    ) -> PrepareLaunchContext {
+        PrepareLaunchContext {
+            deps: PrepareLaunchContextDeps {
+                download_service,
+                settings,
+                progress_tx: None,
+            },
+            input: PrepareLaunchContextInput {
+                extract_files: true,
+                file_set_id: 123,
+                initial_file: None,
+                core_info: create_core_info(vec!["bin", "int"], vec![]),
+                core_path: PathBuf::from("/cores/freeintv_libretro.so"),
+            },
+            state: PrepareLaunchContextState::default(),
+        }
+    }
+
+    fn create_test_settings() -> Arc<Settings> {
+        Arc::new(Settings {
+            temp_output_dir: PathBuf::from("/tmp/libretro-test-output"),
+            libretro_system_dir: Some(PathBuf::from("/tmp/libretro-system")),
+            ..Default::default()
+        })
+    }
+
+    fn set_download_results(context: &mut PrepareLaunchContext, output_file_names: Vec<&str>) {
+        context.state.download_results = Some(DownloadResult {
+            successful_downloads: output_file_names.len(),
+            failed_downloads: 0,
+            thumbnail_path_map: Default::default(),
+            output_file_names: output_file_names.into_iter().map(str::to_string).collect(),
+            errors: vec![],
+        });
+    }
+
+    #[async_std::test]
+    async fn test_download_file_set_stores_results_on_success() {
+        let step = DownloadFileSetStep;
+        let download_service = Arc::new(MockDownloadServiceOps::new());
+        let settings = create_test_settings();
+        let mut context = create_test_context_with_download_service(settings, download_service);
+
+        let result = step.execute(&mut context).await;
+
+        assert!(matches!(result, StepAction::Continue));
+        let results = context
+            .state
+            .download_results
+            .as_ref()
+            .expect("download results should be stored");
+        assert_eq!(results.successful_downloads, 1);
+        assert_eq!(results.failed_downloads, 0);
+    }
+
+    #[async_std::test]
+    async fn test_download_file_set_returns_download_error_when_service_fails() {
+        let step = DownloadFileSetStep;
+        let download_service = Arc::new(MockDownloadServiceOps::with_failure("Network error"));
+        let settings = create_test_settings();
+        let mut context = create_test_context_with_download_service(settings, download_service);
+
+        let result = step.execute(&mut context).await;
+
+        assert!(matches!(
+            result,
+            StepAction::Abort(LibretroPreflightError::DownloadError(message))
+            if message == "Download error: Network error"
+        ));
+        assert!(context.state.download_results.is_none());
+    }
+
+    #[async_std::test]
+    async fn test_download_file_set_returns_download_error_when_some_downloads_fail() {
+        let step = DownloadFileSetStep;
+        let download_service = Arc::new(MockDownloadServiceOps::with_successful_and_failed_downloads(1, 2));
+        let settings = create_test_settings();
+        let mut context = create_test_context_with_download_service(settings, download_service);
+
+        let result = step.execute(&mut context).await;
+
+        assert!(matches!(
+            result,
+            StepAction::Abort(LibretroPreflightError::DownloadError(message))
+            if message == "2 files failed to download"
+        ));
+        assert!(context.state.download_results.is_none());
+    }
+
+    #[async_std::test]
+    async fn test_select_launch_file_should_execute_only_when_file_not_selected_and_results_exist() {
+        let step = SelectLaunchFileStep;
+        let mut context = create_test_context().await;
+
+        assert!(!step.should_execute(&context));
+
+        set_download_results(&mut context, vec!["game.bin"]);
+        assert!(step.should_execute(&context));
+
+        context.state.selected_file = Some("game.bin".to_string());
+        assert!(!step.should_execute(&context));
+    }
+
+    #[async_std::test]
+    async fn test_select_launch_file_uses_initial_file_when_present_in_download_results() {
+        let step = SelectLaunchFileStep;
+        let mut context = create_test_context().await;
+        context.input.initial_file = Some("alt.bin".to_string());
+        set_download_results(&mut context, vec!["game.bin", "alt.bin"]);
+
+        let result = step.execute(&mut context).await;
+
+        assert!(matches!(result, StepAction::Continue));
+        assert_eq!(context.state.selected_file.as_deref(), Some("alt.bin"));
+    }
+
+    #[async_std::test]
+    async fn test_select_launch_file_uses_first_downloaded_file_when_initial_file_not_set() {
+        let step = SelectLaunchFileStep;
+        let mut context = create_test_context().await;
+        set_download_results(&mut context, vec!["game.bin", "alt.bin"]);
+
+        let result = step.execute(&mut context).await;
+
+        assert!(matches!(result, StepAction::Continue));
+        assert_eq!(context.state.selected_file.as_deref(), Some("game.bin"));
+    }
+
+    #[async_std::test]
+    async fn test_select_launch_file_returns_invalid_initial_file_when_requested_file_missing() {
+        let step = SelectLaunchFileStep;
+        let mut context = create_test_context().await;
+        context.input.initial_file = Some("missing.bin".to_string());
+        set_download_results(&mut context, vec!["game.bin"]);
+
+        let result = step.execute(&mut context).await;
+
+        assert!(matches!(
+            result,
+            StepAction::Abort(LibretroPreflightError::InvalidInitialFile(file))
+            if file == "missing.bin"
+        ));
+        assert!(context.state.selected_file.is_none());
+    }
+
+    #[async_std::test]
+    async fn test_select_launch_file_returns_no_file_in_file_set_when_download_results_are_empty() {
+        let step = SelectLaunchFileStep;
+        let mut context = create_test_context().await;
+        set_download_results(&mut context, vec![]);
+
+        let result = step.execute(&mut context).await;
+
+        assert!(matches!(
+            result,
+            StepAction::Abort(LibretroPreflightError::NoFileInFileSet)
+        ));
+        assert!(context.state.selected_file.is_none());
+    }
+
+    #[async_std::test]
+    async fn test_validate_firmware_should_execute_only_when_required_firmware_exists() {
+        let step = ValidateFirmwareStep;
+        let mut context = create_test_context().await;
+
+        assert!(!step.should_execute(&context));
+
+        context.input.core_info.firmware_info = vec![LibretroFirmwareInfo {
+            desc: "ECS".to_string(),
+            path: "ecs.bin".to_string(),
+            opt: false,
+            available: true,
+        }];
+        assert!(step.should_execute(&context));
+    }
+
+    #[async_std::test]
+    async fn test_validate_firmware_continues_when_all_required_firmware_is_available() {
+        let step = ValidateFirmwareStep;
+        let mut context = create_test_context().await;
+        context.input.core_info.firmware_info = vec![
+            LibretroFirmwareInfo {
+                desc: "Exec".to_string(),
+                path: "exec.bin".to_string(),
+                opt: false,
+                available: true,
+            },
+            LibretroFirmwareInfo {
+                desc: "Optional Overlay".to_string(),
+                path: "overlay.bin".to_string(),
+                opt: true,
+                available: false,
+            },
+        ];
+
+        let result = step.execute(&mut context).await;
+
+        assert!(matches!(result, StepAction::Continue));
+    }
+
+    #[async_std::test]
+    async fn test_validate_firmware_aborts_when_required_firmware_is_missing() {
+        let step = ValidateFirmwareStep;
+        let mut context = create_test_context().await;
+        context.input.core_info.firmware_info = vec![
+            LibretroFirmwareInfo {
+                desc: "Exec".to_string(),
+                path: "exec.bin".to_string(),
+                opt: false,
+                available: false,
+            },
+            LibretroFirmwareInfo {
+                desc: "GROM".to_string(),
+                path: "grom.bin".to_string(),
+                opt: false,
+                available: false,
+            },
+        ];
+
+        let result = step.execute(&mut context).await;
+
+        assert!(matches!(
+            result,
+            StepAction::Abort(LibretroPreflightError::FirmwareNotAvailable(message))
+            if message == "Exec, GROM"
+        ));
+    }
+
+    #[async_std::test]
+    async fn test_validate_extension_should_execute_only_when_selected_file_exists_and_extensions_configured(
+    ) {
+        let step = ValidateExtensionStep;
+        let mut context = create_test_context().await;
+
+        assert!(!step.should_execute(&context));
+
+        context.state.selected_file = Some("game.bin".to_string());
+        assert!(step.should_execute(&context));
+
+        context.input.core_info.supported_extensions.clear();
+        assert!(!step.should_execute(&context));
+    }
+
+    #[async_std::test]
+    async fn test_validate_extension_continues_when_selected_file_extension_is_supported_case_insensitively(
+    ) {
+        let step = ValidateExtensionStep;
+        let mut context = create_test_context().await;
+        context.state.selected_file = Some("GAME.BIN".to_string());
+        context.input.core_info.supported_extensions = vec!["bin".to_string()];
+
+        let result = step.execute(&mut context).await;
+
+        assert!(matches!(result, StepAction::Continue));
+    }
+
+    #[async_std::test]
+    async fn test_validate_extension_aborts_when_selected_file_extension_is_not_supported() {
+        let step = ValidateExtensionStep;
+        let mut context = create_test_context().await;
+        context.state.selected_file = Some("game.rom".to_string());
+        context.input.core_info.supported_extensions = vec!["bin".to_string(), "int".to_string()];
+
+        let result = step.execute(&mut context).await;
+
+        assert!(matches!(
+            result,
+            StepAction::Abort(LibretroPreflightError::UnsupportedExtension(extension))
+            if extension == "rom"
+        ));
+    }
+
+    #[async_std::test]
+    async fn test_build_launch_paths_should_execute_only_when_selected_file_exists() {
+        let step = BuildLaunchPathsStep;
+        let mut context = create_test_context().await;
+
+        assert!(!step.should_execute(&context));
+
+        context.state.selected_file = Some("game.bin".to_string());
+        assert!(step.should_execute(&context));
+    }
+
+    #[async_std::test]
+    async fn test_build_launch_paths_sets_launch_paths_when_system_dir_is_configured() {
+        let step = BuildLaunchPathsStep;
+        let mut context = create_test_context().await;
+        context.state.selected_file = Some("game.bin".to_string());
+
+        let result = step.execute(&mut context).await;
+
+        assert!(matches!(result, StepAction::Continue));
+
+        let launch_paths = context
+            .state
+            .launch_paths
+            .as_ref()
+            .expect("launch paths should be set");
+
+        assert_eq!(
+            launch_paths.rom_path,
+            PathBuf::from("/tmp/libretro-test-output/game.bin")
+        );
+        assert_eq!(
+            launch_paths.core_path,
+            PathBuf::from("/cores/freeintv_libretro.so")
+        );
+        assert_eq!(
+            launch_paths.system_dir,
+            PathBuf::from("/tmp/libretro-system")
+        );
+        assert_eq!(launch_paths.temp_files, vec!["game.bin".to_string()]);
+    }
+
+    #[async_std::test]
+    async fn test_build_launch_paths_aborts_when_system_dir_is_not_configured() {
+        let step = BuildLaunchPathsStep;
+        let mut context = create_test_context().await;
+        context.state.selected_file = Some("game.bin".to_string());
+        Arc::make_mut(&mut context.deps.settings).libretro_system_dir = None;
+
+        let result = step.execute(&mut context).await;
+
+        assert!(matches!(
+            result,
+            StepAction::Abort(LibretroPreflightError::SystemDirNotSet)
+        ));
+        assert!(context.state.launch_paths.is_none());
+    }
+}
