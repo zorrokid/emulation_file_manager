@@ -20,9 +20,9 @@
   Keep the runner generic, but add shared state and callback handling for both digital joypad reads and libretro analog-axis reads. Document the runner-side contract clearly: digital buttons answer `RETRO_DEVICE_JOYPAD`, analog axes answer `RETRO_DEVICE_ANALOG`.
 
 ### Launch Preflight
-- [ ] T5 [service] — Add libretro core preflight validation for firmware and file extensions
+- [x] T5 [service] — Add libretro core preflight validation for firmware and file extensions
   **File:** `service/src/libretro_runner/service.rs`
-  Validate selected core metadata, ROM extension, and required firmware presence before launch. Partial progress: `LibretroCoreService::get_core_system_info()` already checks required firmware availability and exposes supported extensions, and `relm4-ui` now blocks unsupported extensions before launch while disabling Start when `can_launch()` is false, but `prepare_rom()` still lacks service-side extension validation and typed launch-path preflight errors.
+  `prepare_rom()` now delegates to a typed preflight pipeline in `service/src/libretro_runner/prepare/` that downloads the file set, validates the selected file, validates required firmware, validates supported extensions, and builds launch paths using the configured system directory. Failures now return `LibretroPreflightError`.
 
 - [x] T6 [service] — Pass the configured libretro system directory to the runner
   **File:** `service/src/libretro_runner/service.rs`
@@ -54,7 +54,7 @@
 
 - [ ] T12 [service] — Add tests for settings persistence and FreeIntv preflight validation
   **File:** `service/src/settings_service.rs`, `service/src/libretro_runner/service.rs`
-  Cover missing system directory, missing firmware, unsupported extension, and happy-path launch preparation.
+  Cover missing system directory, missing firmware, unsupported extension, and happy-path launch preparation. Partial progress: `service/src/libretro_runner/prepare/steps.rs` now covers the preflight pipeline steps for download, file selection, firmware validation, extension validation, and launch-path building. Remaining work is higher-level `LibretroRunnerService::prepare_rom()` coverage and settings persistence tests.
 
 - [ ] T13 [relm4-ui] — Add tests for controller-to-libretro input mapping
   **File:** `relm4-ui/src/libretro/input.rs`

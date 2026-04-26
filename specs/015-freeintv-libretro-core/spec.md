@@ -15,7 +15,7 @@ In Progress
 
 The application now supports per-system libretro core mapping and in-process launching well enough to start integrating FreeIntv, but the feature is still incomplete. `freeintv_libretro` is now in the supported-core allowlist, the app persists a dedicated libretro system directory, the launch path passes that directory through to `LibretroCore::load()`, and the runner/frontend now support both digital joypad input and libretro analog axes.
 
-The remaining gap is that per-core requirements are still only partially modeled and enforced. Supported cores are still declared as a raw string list, while `.info` parsing was added separately for supported extensions and firmware requirements. `LibretroCoreService::get_core_system_info()` uses that parsed metadata to report firmware availability and gate the Start button, but `LibretroRunnerService::prepare_rom()` does not yet perform explicit extension validation or launch-path preflight based on those requirements.
+The remaining gap is no longer the basic preflight itself, but the surfaces around it. Supported cores are now modeled as structured app-policy metadata, `.info` parsing provides supported extensions and firmware requirements, and `LibretroRunnerService::prepare_rom()` now runs a typed preflight pipeline before launch. The remaining work is mainly to keep UI messaging fully actionable, finish the remaining FreeIntv-specific setup documentation, and close the last metadata and frontend-input test gaps.
 
 The frontend input work is now generic rather than FreeIntv-specific. `relm4-ui/src/libretro/input.rs` handles both keyboard input and physical gamepad input through `gilrs`, and `input_state_cb` answers both `RETRO_DEVICE_JOYPAD` and `RETRO_DEVICE_ANALOG`. This spec now treats FreeIntv-specific controller UX as out of scope and focuses on the generic libretro input path that is already implemented.
 
@@ -104,5 +104,9 @@ If preflight fails, return a typed service error and show it in the existing GUI
   - Start/Select map to libretro `START`/`SELECT`
   - left and right analog sticks map to libretro analog X/Y axes with Y inverted and a small deadzone
 - FreeIntv-specific controller UX is now out of scope for this spec revision; the implemented input path is intentionally generic rather than core-specific.
-- `supported_cores.rs` now uses structured app-policy metadata instead of a raw allowlist, but `.info`-derived extensions and firmware requirements are still kept separate and are not yet wired into `LibretroRunnerService::prepare_rom()` for service-side extension validation or typed launch preflight errors.
+- `supported_cores.rs` now uses structured app-policy metadata instead of a raw allowlist, while `.info`-derived extensions and firmware requirements remain the source of truth for per-core launch requirements.
+- `LibretroRunnerService::prepare_rom()` now runs a typed preflight pipeline that downloads the file set, selects the launch file, validates required firmware, validates supported extensions, and builds launch paths using the configured libretro system directory.
+- `LibretroPreflightError` now covers unsupported extensions, download failures, missing files, missing firmware, missing system directory configuration, and invalid initial file selection.
+- `service/src/libretro_runner/prepare/context.rs` now depends on `DownloadServiceOps`, allowing the preflight download step to use the existing mock boundary in tests.
+- `service/src/libretro_runner/prepare/steps.rs` now has unit tests covering the deterministic preflight steps, including the download step through `MockDownloadServiceOps`.
 - `docs/LIBRETRO_INTEGRATION.md` and `README.md` now describe the current system-directory behavior and generic controller behavior, but fuller FreeIntv-specific setup and firmware documentation is still incomplete.
