@@ -66,10 +66,9 @@ impl<T: CloudConnectionContext> Default for ConnectToCloudStep<T> {
 }
 
 #[async_trait::async_trait]
-impl<T, E> PipelineStep<T, E> for ConnectToCloudStep<T, E>
+impl<T> PipelineStep<T, Error> for ConnectToCloudStep<T>
 where
     T: CloudConnectionContext + Send + Sync,
-    E: From<crate::error::Error> + Send + Sync + 'static,
 {
     fn name(&self) -> &'static str {
         "connect_to_cloud"
@@ -79,14 +78,14 @@ where
         context.should_connect()
     }
 
-    async fn execute(&self, context: &mut T) -> StepAction<E> {
+    async fn execute(&self, context: &mut T) -> StepAction<Error> {
         let s3_settings = match context.settings().s3_settings.clone() {
             Some(settings) => settings,
             None => {
                 eprintln!("S3 settings are not configured.");
-                return StepAction::Abort(
-                    crate::error::Error::SettingsError("S3 settings missing".to_string()).into(),
-                );
+                return StepAction::Abort(crate::error::Error::SettingsError(
+                    "S3 settings missing".to_string(),
+                ));
             }
         };
 
@@ -94,20 +93,16 @@ where
             Ok(Some(creds)) => creds,
             Ok(None) => {
                 eprintln!("No S3 credentials found in keyring or environment.");
-                return StepAction::Abort(
-                    crate::error::Error::SettingsError("S3 credentials not found".to_string())
-                        .into(),
-                );
+                return StepAction::Abort(crate::error::Error::SettingsError(
+                    "S3 credentials not found".to_string(),
+                ));
             }
             Err(e) => {
                 eprintln!("Error retrieving S3 credentials: {}", e);
-                return StepAction::Abort(
-                    crate::error::Error::SettingsError(format!(
-                        "Failed to get S3 credentials: {}",
-                        e
-                    ))
-                    .into(),
-                );
+                return StepAction::Abort(crate::error::Error::SettingsError(format!(
+                    "Failed to get S3 credentials: {}",
+                    e
+                )));
             }
         };
 
@@ -126,10 +121,10 @@ where
             }
             Err(e) => {
                 eprintln!("Error connecting to S3: {}", e);
-                StepAction::Abort(
-                    crate::error::Error::CloudSyncError(format!("Failed to connect to S3: {}", e))
-                        .into(),
-                )
+                StepAction::Abort(crate::error::Error::CloudSyncError(format!(
+                    "Failed to connect to S3: {}",
+                    e
+                )))
             }
         }
     }

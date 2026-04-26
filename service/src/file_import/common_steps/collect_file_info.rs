@@ -35,21 +35,19 @@ impl<T: CollectFileInfoContext> CollectFileInfoStep<T> {
 }
 
 #[async_trait::async_trait]
-impl<T, E> PipelineStep<T, E> for CollectFileInfoStep<T>
+impl<T> PipelineStep<T, Error> for CollectFileInfoStep<T>
 where
     T: CollectFileInfoContext + Send + Sync,
-    E: From<Error> + Send + Sync + 'static,
 {
     fn name(&self) -> &'static str {
         "collect_file_info"
     }
 
     fn should_execute(&self, context: &T) -> bool {
-        let exists = context.fs_ops().exists(context.file_path());
-        exists
+        context.fs_ops().exists(context.file_path())
     }
 
-    async fn execute(&self, context: &mut T) -> StepAction<E> {
+    async fn execute(&self, context: &mut T) -> StepAction<Error> {
         let is_zip = match context.fs_ops().is_zip_archive(context.file_path()) {
             Ok(is_zip) => is_zip,
             Err(err) => {
@@ -59,13 +57,10 @@ where
                     "Failed to determine if file is a zip archive"
                 );
 
-                return StepAction::Abort(
-                    Error::IoError(format!(
-                        "Failed to determine if file is a zip archive: {}",
-                        err,
-                    ))
-                    .into(),
-                );
+                return StepAction::Abort(Error::IoError(format!(
+                    "Failed to determine if file is a zip archive: {}",
+                    err,
+                )));
             }
         };
 

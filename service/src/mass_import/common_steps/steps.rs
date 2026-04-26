@@ -26,16 +26,15 @@ impl<T: MassImportContextOps> ReadFilesStep<T> {
 }
 
 #[async_trait::async_trait]
-impl<T, E> PipelineStep<T, E> for ReadFilesStep<T>
+impl<T> PipelineStep<T, Error> for ReadFilesStep<T>
 where
     T: MassImportContextOps + Send + Sync,
-    E: From<Error> + Send + Sync + 'static,
 {
     fn name(&self) -> &'static str {
         "read_files_step"
     }
 
-    async fn execute(&self, context: &mut T) -> StepAction<E> {
+    async fn execute(&self, context: &mut T) -> StepAction<Error> {
         let files_res = context.fs_ops().read_dir(context.source_path());
         tracing::info!(
             source_path = %context.source_path().display(),
@@ -51,14 +50,11 @@ where
                     path = %context.source_path().display(),
                     "Failed to read source path",
                 );
-                return StepAction::Abort(
-                    Error::IoError(format!(
-                        "Failed to read source path {}: {}",
-                        context.source_path().display(),
-                        e
-                    ))
-                    .into(),
-                );
+                return StepAction::Abort(Error::IoError(format!(
+                    "Failed to read source path {}: {}",
+                    context.source_path().display(),
+                    e
+                )));
             }
         };
 
@@ -117,10 +113,9 @@ impl<T: MassImportContextOps> ReadFileMetadataStep<T> {
 }
 
 #[async_trait::async_trait]
-impl<T, E> PipelineStep<T, E> for ReadFileMetadataStep<T>
+impl<T> PipelineStep<T, Error> for ReadFileMetadataStep<T>
 where
     T: MassImportContextOps + Send + Sync,
-    E: From<Error> + Send + Sync + 'static,
 {
     fn name(&self) -> &'static str {
         "read_file_metadata_step"
@@ -130,7 +125,7 @@ where
         !context.read_ok_files().is_empty()
     }
 
-    async fn execute(&self, context: &mut T) -> StepAction<E> {
+    async fn execute(&self, context: &mut T) -> StepAction<Error> {
         tracing::info!("Reading metadata for files.",);
         for file in &context.get_non_failed_files() {
             tracing::info!("Creating metadata reader for file: {}", file.display());

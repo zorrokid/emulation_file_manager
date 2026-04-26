@@ -37,10 +37,9 @@ impl<T: AddFileSetContextOps> Default for ImportFilesStep<T> {
 }
 
 #[async_trait::async_trait]
-impl<T, E> PipelineStep<T, E> for ImportFilesStep<T>
+impl<T> PipelineStep<T, Error> for ImportFilesStep<T>
 where
     T: AddFileSetContextOps + Send + Sync,
-    E: From<Error> + Send + Sync + 'static,
 {
     fn name(&self) -> &'static str {
         "import_files"
@@ -50,7 +49,7 @@ where
         context.needs_file_info_upsert()
     }
 
-    async fn execute(&self, context: &mut T) -> StepAction<E> {
+    async fn execute(&self, context: &mut T) -> StepAction<Error> {
         tracing::info!("Importing new files that are not already in the database.");
         let file_import_model = context.get_file_import_model();
         match context.file_import_ops().import(&file_import_model) {
@@ -60,9 +59,10 @@ where
             }
             Err(err) => {
                 tracing::error!("Error importing files: {}", err);
-                return StepAction::Abort(
-                    Error::FileImportError(format!("Error importing files: {}", err)).into(),
-                );
+                return StepAction::Abort(Error::FileImportError(format!(
+                    "Error importing files: {}",
+                    err
+                )));
             }
         }
         StepAction::Continue
@@ -78,6 +78,7 @@ mod tests {
     use file_import::mock::MockFileImportOps;
 
     use crate::{
+        error::Error,
         file_import::{
             common_steps::import::{AddFileSetContextOps, ImportFilesStep},
             model::{FileImportData, FileImportSource, ImportFileContent},
@@ -195,7 +196,7 @@ mod tests {
         let mut context = create_test_context(mock_ops, file_import_data);
 
         let step = ImportFilesStep::<TestContext>::new();
-        let result = step.execute(&mut context).await;
+        let result: StepAction<Error> = step.execute(&mut context).await;
 
         assert!(matches!(result, StepAction::Continue));
         assert_eq!(context.imported_files.len(), 1);
@@ -236,7 +237,7 @@ mod tests {
         let mut context = create_test_context(mock_ops, file_import_data);
 
         let step = ImportFilesStep::<TestContext>::new();
-        let result = step.execute(&mut context).await;
+        let result: StepAction<Error> = step.execute(&mut context).await;
 
         assert!(matches!(result, StepAction::Abort(_)));
         assert!(context.imported_files.is_empty());

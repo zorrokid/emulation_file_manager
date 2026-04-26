@@ -1,5 +1,4 @@
 use crate::{
-    error::Error,
     libretro_runner::{
         prepare::context::PrepareLaunchContext,
         service::{LibretroLaunchPaths, LibretroPreflightError},

@@ -574,7 +574,7 @@ mod tests {
 
     use cloud_storage::{CloudStorageOps, mock::MockCloudStorage};
     use core_types::{CloudSyncStatus, FileType, ImportedFile, Sha1Checksum};
-    use database::{repository_manager::RepositoryManager, setup_test_db};
+    use database::{models::FileInfo, repository_manager::RepositoryManager, setup_test_db};
 
     use crate::{
         file_system_ops::mock::MockFileSystemOps, settings_service::SettingsService,
