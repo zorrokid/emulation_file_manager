@@ -23,7 +23,7 @@ async fn send_progress_event(event: SyncEvent, progress_tx: &Sender<SyncEvent>) 
 pub struct UploadPendingFilesStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<SyncContext> for UploadPendingFilesStep {
+impl PipelineStep<SyncContext, Error> for UploadPendingFilesStep {
     fn name(&self) -> &'static str {
         "upload_pending_files"
     }
@@ -32,7 +32,7 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
         context.cloud_ops.is_some() && context.files_prepared_for_upload > 0
     }
 
-    async fn execute(&self, context: &mut SyncContext) -> StepAction {
+    async fn execute(&self, context: &mut SyncContext) -> StepAction<Error> {
         tracing::debug!("Uploading pending files to cloud storage");
         let mut file_count = 0;
         let mut session_skip: i64 = 0;
@@ -64,10 +64,8 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
                             return StepAction::Abort(Error::OperationCancelled);
                         }
 
-                        let cloud_key = cloud_storage::cloud_key(
-                            file.file_type,
-                            &file.archive_file_name,
-                        );
+                        let cloud_key =
+                            cloud_storage::cloud_key(file.file_type, &file.archive_file_name);
 
                         let local_path = context
                             .settings
@@ -245,7 +243,7 @@ impl PipelineStep<SyncContext> for UploadPendingFilesStep {
 pub struct DeleteCloudFilesStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<SyncContext> for DeleteCloudFilesStep {
+impl PipelineStep<SyncContext, Error> for DeleteCloudFilesStep {
     fn name(&self) -> &'static str {
         "delete_cloud_files"
     }
@@ -254,7 +252,7 @@ impl PipelineStep<SyncContext> for DeleteCloudFilesStep {
         context.cloud_ops.is_some() && context.cloud_files_prepared_for_deletion > 0
     }
 
-    async fn execute(&self, context: &mut SyncContext) -> StepAction {
+    async fn execute(&self, context: &mut SyncContext) -> StepAction<Error> {
         tracing::debug!("Deleting cloud files");
         let mut file_count = 0;
         let mut session_skip: i64 = 0;
@@ -468,7 +466,7 @@ impl PipelineStep<SyncContext> for DeleteCloudFilesStep {
 pub struct CleanupTombstonesStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<SyncContext> for CleanupTombstonesStep {
+impl PipelineStep<SyncContext, Error> for CleanupTombstonesStep {
     fn name(&self) -> &'static str {
         "cleanup_tombstones"
     }
@@ -477,7 +475,7 @@ impl PipelineStep<SyncContext> for CleanupTombstonesStep {
         context.tombstones_prepared_for_cleanup > 0
     }
 
-    async fn execute(&self, context: &mut SyncContext) -> StepAction {
+    async fn execute(&self, context: &mut SyncContext) -> StepAction<Error> {
         tracing::debug!("Cleaning up tombstones");
 
         loop {
@@ -511,10 +509,7 @@ impl PipelineStep<SyncContext> for CleanupTombstonesStep {
                             .await
                         {
                             Ok(_) => {
-                                tracing::info!(
-                                    file_info_id = tombstone.id,
-                                    "Tombstone cleaned up"
-                                );
+                                tracing::info!(file_info_id = tombstone.id, "Tombstone cleaned up");
                                 batch_cleaned += 1;
                                 context.tombstones_cleaned_up += 1;
                             }
@@ -1181,7 +1176,11 @@ mod tests {
         for i in 11u8..=15 {
             let key = format!("rom/file{}.zst", i);
             assert!(
-                context.upload_results.get(&key).unwrap().cloud_operation_success,
+                context
+                    .upload_results
+                    .get(&key)
+                    .unwrap()
+                    .cloud_operation_success,
                 "file{i} should have been uploaded"
             );
         }
@@ -1214,8 +1213,12 @@ mod tests {
                 FileType::Rom,
             )
             .await;
-            set_sync_status(&context.repository_manager, id, CloudSyncStatus::DeletionPending)
-                .await;
+            set_sync_status(
+                &context.repository_manager,
+                id,
+                CloudSyncStatus::DeletionPending,
+            )
+            .await;
         }
 
         context.cloud_files_prepared_for_deletion = 15;
@@ -1227,7 +1230,11 @@ mod tests {
         for i in 11u8..=15 {
             let key = format!("rom/file{}.zst", i);
             assert!(
-                context.deletion_results.get(&key).unwrap().cloud_operation_success,
+                context
+                    .deletion_results
+                    .get(&key)
+                    .unwrap()
+                    .cloud_operation_success,
                 "file{i} should have been deleted"
             );
         }

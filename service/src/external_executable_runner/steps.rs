@@ -7,12 +7,12 @@ use crate::{
 pub struct PrepareFilesStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<ExternalExecutableRunnerContext> for PrepareFilesStep {
+impl PipelineStep<ExternalExecutableRunnerContext, Error> for PrepareFilesStep {
     fn name(&self) -> &'static str {
         "prepare_files"
     }
 
-    async fn execute(&self, context: &mut ExternalExecutableRunnerContext) -> StepAction {
+    async fn execute(&self, context: &mut ExternalExecutableRunnerContext) -> StepAction<Error> {
         let res = context
             .download_service_ops
             .download_file_set(
@@ -49,7 +49,7 @@ impl PipelineStep<ExternalExecutableRunnerContext> for PrepareFilesStep {
 pub struct StartExecutableStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<ExternalExecutableRunnerContext> for StartExecutableStep {
+impl PipelineStep<ExternalExecutableRunnerContext, Error> for StartExecutableStep {
     fn name(&self) -> &'static str {
         "start_executable"
     }
@@ -58,7 +58,7 @@ impl PipelineStep<ExternalExecutableRunnerContext> for StartExecutableStep {
         !context.file_names.is_empty()
     }
 
-    async fn execute(&self, context: &mut ExternalExecutableRunnerContext) -> StepAction {
+    async fn execute(&self, context: &mut ExternalExecutableRunnerContext) -> StepAction<Error> {
         let temp_dir = context.settings.temp_output_dir.clone();
 
         let initial_file = if context.file_names.len() == 1 {
@@ -111,7 +111,7 @@ impl PipelineStep<ExternalExecutableRunnerContext> for StartExecutableStep {
 pub struct CleanupFilesStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<ExternalExecutableRunnerContext> for CleanupFilesStep {
+impl PipelineStep<ExternalExecutableRunnerContext, Error> for CleanupFilesStep {
     fn name(&self) -> &'static str {
         "cleanup_files"
     }
@@ -120,7 +120,7 @@ impl PipelineStep<ExternalExecutableRunnerContext> for CleanupFilesStep {
         !context.file_names.is_empty() && !context.skip_cleanup
     }
 
-    async fn execute(&self, context: &mut ExternalExecutableRunnerContext) -> StepAction {
+    async fn execute(&self, context: &mut ExternalExecutableRunnerContext) -> StepAction<Error> {
         let path = &context.settings.temp_output_dir;
         tracing::info!("Cleaning up temporary files at {:?}", path);
         for file_name in &context.file_names {

@@ -93,8 +93,8 @@ If preflight fails, return a typed service error and show it in the existing GUI
 - `LibretroRunnerService::prepare_rom()` now passes the configured libretro system directory to the runner instead of reusing `temp_output_dir`.
 - `SUPPORTED_CORES` now includes `freeintv_libretro`, so the core can be mapped in the existing per-system core-mapping flow.
 - `libretro_runner::libretro_info_parser` now parses `.info` files for supported extensions and firmware requirements, including the checked-in `freeintv_libretro.info` example data.
-- `LibretroCoreService::get_core_system_info()` now reports whether a mapped core is available, whether required firmware files are present in the configured system directory, and which input profile the frontend should use.
-- `relm4-ui/src/libretro/runner.rs` now disables the Start button unless the selected core reports `can_launch()`, so missing required firmware is already reflected in the launch UI even though launch-time preflight errors are still generic.
+- `LibretroCoreService::get_core_system_info()` now reports whether a mapped core is available, which required firmware files are present in the configured system directory, which file extensions the core declares as supported, and which input profile the frontend should use.
+- `relm4-ui/src/libretro/runner.rs` now disables the Start button unless the selected core reports `can_launch()`, and it now checks the selected file extension against `core_info.supported_extensions` before launch so unsupported extensions fail with an actionable dialog in the UI.
 - `libretro_runner::InputState` now stores both digital button state and analog axis state, and `input_state_cb` now answers both `RETRO_DEVICE_JOYPAD` and `RETRO_DEVICE_ANALOG`.
 - `relm4-ui` now uses `gilrs` to poll physical gamepad input and forwards generic controller state into the shared `InputState`.
 - The currently implemented gamepad mapping is generic Retropad-style input:
@@ -104,5 +104,5 @@ If preflight fails, return a typed service error and show it in the existing GUI
   - Start/Select map to libretro `START`/`SELECT`
   - left and right analog sticks map to libretro analog X/Y axes with Y inverted and a small deadzone
 - FreeIntv-specific controller UX is now out of scope for this spec revision; the implemented input path is intentionally generic rather than core-specific.
-- `supported_cores.rs` now uses structured app-policy metadata instead of a raw allowlist, but `.info`-derived extensions and firmware requirements are still kept separate and are not yet wired into `LibretroRunnerService::prepare_rom()` for extension validation or typed launch preflight errors.
-- `docs/LIBRETRO_INTEGRATION.md` and `README.md` have not yet been updated to describe the current FreeIntv setup, current controller behavior, and remaining limitations accurately.
+- `supported_cores.rs` now uses structured app-policy metadata instead of a raw allowlist, but `.info`-derived extensions and firmware requirements are still kept separate and are not yet wired into `LibretroRunnerService::prepare_rom()` for service-side extension validation or typed launch preflight errors.
+- `docs/LIBRETRO_INTEGRATION.md` and `README.md` now describe the current system-directory behavior and generic controller behavior, but fuller FreeIntv-specific setup and firmware documentation is still incomplete.

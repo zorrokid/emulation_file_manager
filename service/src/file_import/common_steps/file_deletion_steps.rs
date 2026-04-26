@@ -53,7 +53,11 @@ impl<T: FileDeletionStepsContext> FilterDeletableFilesStep<T> {
 }
 
 #[async_trait::async_trait]
-impl<T: FileDeletionStepsContext + Send + Sync> PipelineStep<T> for FilterDeletableFilesStep<T> {
+impl<T, E> PipelineStep<T, E> for FilterDeletableFilesStep<T>
+where
+    T: FileDeletionStepsContext + Send + Sync,
+    E: From<Error> + Send + Sync + 'static,
+{
     fn name(&self) -> &'static str {
         "filter_deletable_files"
     }
@@ -63,7 +67,7 @@ impl<T: FileDeletionStepsContext + Send + Sync> PipelineStep<T> for FilterDeleta
         context.has_deletion_candidates()
     }
 
-    async fn execute(&self, context: &mut T) -> StepAction {
+    async fn execute(&self, context: &mut T) -> StepAction<E> {
         tracing::info!(
             file_set_id = context.file_set_id(),
             "Filtering deletable files for file set",
@@ -88,10 +92,13 @@ impl<T: FileDeletionStepsContext + Send + Sync> PipelineStep<T> for FilterDeleta
                         deletion_result.file_info.id,
                         e
                     );
-                    return StepAction::Abort(Error::DbError(format!(
-                        "Failed to fetch file sets for file info with id {}: {}",
-                        deletion_result.file_info.id, e
-                    )));
+                    return StepAction::Abort(
+                        Error::DbError(format!(
+                            "Failed to fetch file sets for file info with id {}: {}",
+                            deletion_result.file_info.id, e
+                        ))
+                        .into(),
+                    );
                 }
                 Ok(file_sets) => {
                     tracing::info!(
@@ -137,7 +144,11 @@ impl<T: FileDeletionStepsContext> DeleteLocalFilesStep<T> {
 }
 
 #[async_trait::async_trait]
-impl<T: FileDeletionStepsContext + Send + Sync> PipelineStep<T> for DeleteLocalFilesStep<T> {
+impl<T, E> PipelineStep<T, E> for DeleteLocalFilesStep<T>
+where
+    T: FileDeletionStepsContext + Send + Sync,
+    E: From<Error> + Send + Sync + 'static,
+{
     fn name(&self) -> &'static str {
         "delete_local_files"
     }
@@ -146,7 +157,7 @@ impl<T: FileDeletionStepsContext + Send + Sync> PipelineStep<T> for DeleteLocalF
         context.has_deletable_files()
     }
 
-    async fn execute(&self, context: &mut T) -> StepAction {
+    async fn execute(&self, context: &mut T) -> StepAction<E> {
         tracing::info!(
             file_set_id = context.file_set_id(),
             "Deleting local files for file set"
@@ -236,7 +247,11 @@ impl<T: FileDeletionStepsContext> MarkForCloudDeletionStep<T> {
 }
 
 #[async_trait::async_trait]
-impl<T: FileDeletionStepsContext + Send + Sync> PipelineStep<T> for MarkForCloudDeletionStep<T> {
+impl<T, E> PipelineStep<T, E> for MarkForCloudDeletionStep<T>
+where
+    T: FileDeletionStepsContext + Send + Sync,
+    E: From<Error> + Send + Sync + 'static,
+{
     fn name(&self) -> &'static str {
         "mark_for_cloud_deletion"
     }
@@ -251,7 +266,7 @@ impl<T: FileDeletionStepsContext + Send + Sync> PipelineStep<T> for MarkForCloud
         context.has_deleted_files()
     }
 
-    async fn execute(&self, context: &mut T) -> StepAction {
+    async fn execute(&self, context: &mut T) -> StepAction<E> {
         tracing::info!(
             file_set_id = context.file_set_id(),
             "Marking files for cloud deletion",
@@ -289,10 +304,13 @@ impl<T: FileDeletionStepsContext + Send + Sync> PipelineStep<T> for MarkForCloud
                                 error = %e,
                                 "Failed to mark file_info for cloud deletion",
                             );
-                            return StepAction::Abort(Error::DbError(format!(
-                                "Failed to mark file_info with id {} for cloud deletion: {}",
-                                deletion_result.file_info.id, e
-                            )));
+                            return StepAction::Abort(
+                                Error::DbError(format!(
+                                    "Failed to mark file_info with id {} for cloud deletion: {}",
+                                    deletion_result.file_info.id, e
+                                ))
+                                .into(),
+                            );
                         }
                     }
                 }
@@ -329,7 +347,11 @@ impl<T: FileDeletionStepsContext> DeleteFileInfosStep<T> {
 }
 
 #[async_trait::async_trait]
-impl<T: FileDeletionStepsContext + Send + Sync> PipelineStep<T> for DeleteFileInfosStep<T> {
+impl<T, E> PipelineStep<T, E> for DeleteFileInfosStep<T>
+where
+    T: FileDeletionStepsContext + Send + Sync,
+    E: From<Error> + Send + Sync + 'static,
+{
     fn name(&self) -> &'static str {
         "delete_file_info_entries"
     }
@@ -338,7 +360,7 @@ impl<T: FileDeletionStepsContext + Send + Sync> PipelineStep<T> for DeleteFileIn
         context.has_deleted_files()
     }
 
-    async fn execute(&self, context: &mut T) -> StepAction {
+    async fn execute(&self, context: &mut T) -> StepAction<E> {
         tracing::info!(
             "Deleting file_info entries for file set {}",
             context.file_set_id()

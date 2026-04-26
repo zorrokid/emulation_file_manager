@@ -35,7 +35,11 @@ impl<T: CollectFileInfoContext> CollectFileInfoStep<T> {
 }
 
 #[async_trait::async_trait]
-impl<T: CollectFileInfoContext + Send + Sync> PipelineStep<T> for CollectFileInfoStep<T> {
+impl<T, E> PipelineStep<T, E> for CollectFileInfoStep<T>
+where
+    T: CollectFileInfoContext + Send + Sync,
+    E: From<Error> + Send + Sync + 'static,
+{
     fn name(&self) -> &'static str {
         "collect_file_info"
     }
@@ -45,7 +49,7 @@ impl<T: CollectFileInfoContext + Send + Sync> PipelineStep<T> for CollectFileInf
         exists
     }
 
-    async fn execute(&self, context: &mut T) -> StepAction {
+    async fn execute(&self, context: &mut T) -> StepAction<E> {
         let is_zip = match context.fs_ops().is_zip_archive(context.file_path()) {
             Ok(is_zip) => is_zip,
             Err(err) => {
@@ -55,10 +59,13 @@ impl<T: CollectFileInfoContext + Send + Sync> PipelineStep<T> for CollectFileInf
                     "Failed to determine if file is a zip archive"
                 );
 
-                return StepAction::Abort(Error::IoError(format!(
-                    "Failed to determine if file is a zip archive: {}",
-                    err,
-                )));
+                return StepAction::Abort(
+                    Error::IoError(format!(
+                        "Failed to determine if file is a zip archive: {}",
+                        err,
+                    ))
+                    .into(),
+                );
             }
         };
 
@@ -85,10 +92,13 @@ impl<T: CollectFileInfoContext + Send + Sync> PipelineStep<T> for CollectFileInf
                     "Failed to read file contents and checksums"
                 );
 
-                StepAction::Abort(Error::IoError(format!(
-                    "Failed to read file contents and checksums: {}",
-                    err,
-                )))
+                StepAction::Abort(
+                    Error::IoError(format!(
+                        "Failed to read file contents and checksums: {}",
+                        err,
+                    ))
+                    .into(),
+                )
             }
         }
     }
@@ -99,7 +109,6 @@ mod tests {
     use std::{collections::HashMap, path::Path, sync::Arc};
 
     use core_types::{ReadFile, Sha1Checksum};
-    use file_import::{FileImportOps, mock::MockFileImportOps};
     use file_metadata::file_metadata_ops::{FileMetadataOps, mock::MockFileMetadataOps};
 
     use crate::{

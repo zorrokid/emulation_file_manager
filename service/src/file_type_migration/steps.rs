@@ -1,4 +1,3 @@
-use database::models::FileInfo;
 use cloud_storage::cloud_key;
 
 use crate::{
@@ -19,12 +18,12 @@ pub struct UpdateFileSetsStep;
 pub struct AddItemsToFileSetsStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<FileTypeMigrationContext> for CollectFileSetsStep {
+impl PipelineStep<FileTypeMigrationContext, Error> for CollectFileSetsStep {
     fn name(&self) -> &'static str {
         "collect_file_sets_step"
     }
 
-    async fn execute(&self, context: &mut FileTypeMigrationContext) -> StepAction {
+    async fn execute(&self, context: &mut FileTypeMigrationContext) -> StepAction<Error> {
         // NOTE: at this point there are not so many file sets, so loading all into memory is
         // acceptable
         let file_sets = context
@@ -73,12 +72,12 @@ impl PipelineStep<FileTypeMigrationContext> for CollectFileSetsStep {
 }
 
 #[async_trait::async_trait]
-impl PipelineStep<FileTypeMigrationContext> for CollectCloudFileSetsStep {
+impl PipelineStep<FileTypeMigrationContext, Error> for CollectCloudFileSetsStep {
     fn name(&self) -> &'static str {
         "collect_cloud_file_sets_step"
     }
 
-    async fn execute(&self, context: &mut FileTypeMigrationContext) -> StepAction {
+    async fn execute(&self, context: &mut FileTypeMigrationContext) -> StepAction<Error> {
         // NOTE: at this point there are not so many file sets, so loading all into memory is
         let files = context
             .repository_manager
@@ -104,12 +103,12 @@ impl PipelineStep<FileTypeMigrationContext> for CollectCloudFileSetsStep {
 }
 
 #[async_trait::async_trait]
-impl PipelineStep<FileTypeMigrationContext> for MoveLocalFilesStep {
+impl PipelineStep<FileTypeMigrationContext, Error> for MoveLocalFilesStep {
     fn name(&self) -> &'static str {
         "move_local_files_step"
     }
 
-    async fn execute(&self, context: &mut FileTypeMigrationContext) -> StepAction {
+    async fn execute(&self, context: &mut FileTypeMigrationContext) -> StepAction<Error> {
         for (file_set_id, file_type_migration) in context.file_sets_to_migrate.iter() {
             tracing::info!(
                 file_set_id = file_set_id,
@@ -138,8 +137,9 @@ impl PipelineStep<FileTypeMigrationContext> for MoveLocalFilesStep {
                             "Moving local file to new location based on new file type"
                         );
 
-                        let archive_name = file.archive_file_name.as_ref()
-                            .expect("archive_file_name must be present when is_available() is true");
+                        let archive_name = file.archive_file_name.as_ref().expect(
+                            "archive_file_name must be present when is_available() is true",
+                        );
                         let old_path = context
                             .settings
                             .get_file_path(&file_type_migration.old_file_type, archive_name);
@@ -223,7 +223,7 @@ impl PipelineStep<FileTypeMigrationContext> for MoveLocalFilesStep {
 }
 
 #[async_trait::async_trait]
-impl PipelineStep<FileTypeMigrationContext> for MoveCloudFilesStep {
+impl PipelineStep<FileTypeMigrationContext, Error> for MoveCloudFilesStep {
     fn name(&self) -> &'static str {
         "move_cloud_files_step"
     }
@@ -232,7 +232,7 @@ impl PipelineStep<FileTypeMigrationContext> for MoveCloudFilesStep {
         context.cloud_ops.is_some() && !context.file_ids_synced_to_cloud.is_empty()
     }
 
-    async fn execute(&self, context: &mut FileTypeMigrationContext) -> StepAction {
+    async fn execute(&self, context: &mut FileTypeMigrationContext) -> StepAction<Error> {
         let cloud_ops = context.cloud_ops.as_ref().unwrap().clone();
         for (file_set_id, file_type_migration) in context.file_sets_to_migrate.iter() {
             tracing::info!(
@@ -347,12 +347,12 @@ impl PipelineStep<FileTypeMigrationContext> for MoveCloudFilesStep {
 }
 
 #[async_trait::async_trait]
-impl PipelineStep<FileTypeMigrationContext> for UpdateFileInfosStep {
+impl PipelineStep<FileTypeMigrationContext, Error> for UpdateFileInfosStep {
     fn name(&self) -> &'static str {
         "update_file_infos_step"
     }
 
-    async fn execute(&self, context: &mut FileTypeMigrationContext) -> StepAction {
+    async fn execute(&self, context: &mut FileTypeMigrationContext) -> StepAction<Error> {
         println!("Updating FileInfo entries for migrated FileSets");
         for (file_set_id, file_type_migration) in context.file_sets_to_migrate.iter() {
             tracing::info!(
@@ -439,12 +439,12 @@ impl PipelineStep<FileTypeMigrationContext> for UpdateFileInfosStep {
 }
 
 #[async_trait::async_trait]
-impl PipelineStep<FileTypeMigrationContext> for UpdateFileSetsStep {
+impl PipelineStep<FileTypeMigrationContext, Error> for UpdateFileSetsStep {
     fn name(&self) -> &'static str {
         "update_file_sets_step"
     }
 
-    async fn execute(&self, context: &mut FileTypeMigrationContext) -> StepAction {
+    async fn execute(&self, context: &mut FileTypeMigrationContext) -> StepAction<Error> {
         println!("Updating FileInfo entries for migrated FileSets");
         for (file_set_id, file_type_migration) in context.file_sets_to_migrate.iter() {
             println!("Updating FileSet id {}", file_set_id);
@@ -502,12 +502,12 @@ impl PipelineStep<FileTypeMigrationContext> for UpdateFileSetsStep {
 }
 
 #[async_trait::async_trait]
-impl PipelineStep<FileTypeMigrationContext> for AddItemsToFileSetsStep {
+impl PipelineStep<FileTypeMigrationContext, Error> for AddItemsToFileSetsStep {
     fn name(&self) -> &'static str {
         "add_items_to_file_sets_step"
     }
 
-    async fn execute(&self, context: &mut FileTypeMigrationContext) -> StepAction {
+    async fn execute(&self, context: &mut FileTypeMigrationContext) -> StepAction<Error> {
         for (file_set_id, file_type_migration) in context.file_sets_to_migrate.iter() {
             tracing::info!(
                 file_set_id = file_set_id,
@@ -871,12 +871,20 @@ mod tests {
 
         // Assert
         assert!(matches!(action, StepAction::Continue));
-        assert!(context.moved_local_file_ids.contains(&available_id),
-            "available file should be moved");
-        assert!(!context.moved_local_file_ids.contains(&unavailable_id),
-            "unavailable file should not be moved");
-        assert!(!context.non_existing_local_file_ids.contains(&unavailable_id),
-            "unavailable file should not appear in non_existing_local_file_ids either");
+        assert!(
+            context.moved_local_file_ids.contains(&available_id),
+            "available file should be moved"
+        );
+        assert!(
+            !context.moved_local_file_ids.contains(&unavailable_id),
+            "unavailable file should not be moved"
+        );
+        assert!(
+            !context
+                .non_existing_local_file_ids
+                .contains(&unavailable_id),
+            "unavailable file should not appear in non_existing_local_file_ids either"
+        );
     }
 
     #[async_std::test]
@@ -919,7 +927,10 @@ mod tests {
             .settings
             .get_file_path(&FileType::ManualScan, archive_file_name.as_deref().unwrap());
         let cloud_ops = Arc::new(MockCloudStorage::new());
-        let old_cloud_key = cloud_key(file_info.file_type, file_info.archive_file_name.as_deref().unwrap());
+        let old_cloud_key = cloud_key(
+            file_info.file_type,
+            file_info.archive_file_name.as_deref().unwrap(),
+        );
 
         cloud_ops
             .upload_file(&file_path, &old_cloud_key, None)
@@ -949,7 +960,10 @@ mod tests {
             cloud_sync_status: file_info.cloud_sync_status,
         };
 
-        let new_cloud_key = cloud_key(new_file.file_type, new_file.archive_file_name.as_deref().unwrap());
+        let new_cloud_key = cloud_key(
+            new_file.file_type,
+            new_file.archive_file_name.as_deref().unwrap(),
+        );
         let exists = cloud_ops.file_exists(&new_cloud_key).await.unwrap_or(false);
         assert!(exists, "New cloud key should exist after move");
     }
@@ -990,10 +1004,15 @@ mod tests {
 
         // Assert: step continues, file not added to moved set, cloud move not called
         assert!(matches!(action, StepAction::Continue));
-        assert!(!context.moved_cloud_file_ids.contains(&file_info_id),
-            "file with missing archive_file_name should not be in moved_cloud_file_ids");
-        assert_eq!(cloud_ops.uploaded_count(), 0,
-            "no cloud move should have been attempted");
+        assert!(
+            !context.moved_cloud_file_ids.contains(&file_info_id),
+            "file with missing archive_file_name should not be in moved_cloud_file_ids"
+        );
+        assert_eq!(
+            cloud_ops.uploaded_count(),
+            0,
+            "no cloud move should have been attempted"
+        );
     }
 
     #[async_std::test]

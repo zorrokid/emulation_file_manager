@@ -26,12 +26,16 @@ impl<T: MassImportContextOps> ReadFilesStep<T> {
 }
 
 #[async_trait::async_trait]
-impl<T: MassImportContextOps + Send + Sync> PipelineStep<T> for ReadFilesStep<T> {
+impl<T, E> PipelineStep<T, E> for ReadFilesStep<T>
+where
+    T: MassImportContextOps + Send + Sync,
+    E: From<Error> + Send + Sync + 'static,
+{
     fn name(&self) -> &'static str {
         "read_files_step"
     }
 
-    async fn execute(&self, context: &mut T) -> StepAction {
+    async fn execute(&self, context: &mut T) -> StepAction<E> {
         let files_res = context.fs_ops().read_dir(context.source_path());
         tracing::info!(
             source_path = %context.source_path().display(),
@@ -47,11 +51,14 @@ impl<T: MassImportContextOps + Send + Sync> PipelineStep<T> for ReadFilesStep<T>
                     path = %context.source_path().display(),
                     "Failed to read source path",
                 );
-                return StepAction::Abort(Error::IoError(format!(
-                    "Failed to read source path {}: {}",
-                    context.source_path().display(),
-                    e
-                )));
+                return StepAction::Abort(
+                    Error::IoError(format!(
+                        "Failed to read source path {}: {}",
+                        context.source_path().display(),
+                        e
+                    ))
+                    .into(),
+                );
             }
         };
 
@@ -110,7 +117,11 @@ impl<T: MassImportContextOps> ReadFileMetadataStep<T> {
 }
 
 #[async_trait::async_trait]
-impl<T: MassImportContextOps + Send + Sync> PipelineStep<T> for ReadFileMetadataStep<T> {
+impl<T, E> PipelineStep<T, E> for ReadFileMetadataStep<T>
+where
+    T: MassImportContextOps + Send + Sync,
+    E: From<Error> + Send + Sync + 'static,
+{
     fn name(&self) -> &'static str {
         "read_file_metadata_step"
     }
@@ -119,7 +130,7 @@ impl<T: MassImportContextOps + Send + Sync> PipelineStep<T> for ReadFileMetadata
         !context.read_ok_files().is_empty()
     }
 
-    async fn execute(&self, context: &mut T) -> StepAction {
+    async fn execute(&self, context: &mut T) -> StepAction<E> {
         tracing::info!("Reading metadata for files.",);
         for file in &context.get_non_failed_files() {
             tracing::info!("Creating metadata reader for file: {}", file.display());

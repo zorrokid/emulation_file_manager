@@ -15,7 +15,7 @@ pub struct FilterOutAlreadyExistingFileSetsStep;
 /// Filter out files from file_metadata that already have file sets in the system so that they
 /// won't be imported again.
 #[async_trait::async_trait]
-impl PipelineStep<FilesOnlyMassImportContext> for FilterOutAlreadyExistingFileSetsStep {
+impl PipelineStep<FilesOnlyMassImportContext, Error> for FilterOutAlreadyExistingFileSetsStep {
     fn name(&self) -> &'static str {
         "filter_out_already_existing_file_sets"
     }
@@ -24,7 +24,7 @@ impl PipelineStep<FilesOnlyMassImportContext> for FilterOutAlreadyExistingFileSe
         !context.state.common_state.file_metadata.is_empty()
     }
 
-    async fn execute(&self, context: &mut FilesOnlyMassImportContext) -> StepAction {
+    async fn execute(&self, context: &mut FilesOnlyMassImportContext) -> StepAction<Error> {
         let file_set_import_models = context.get_import_file_sets();
         let repository_manager = context.deps.repository_manager.clone();
         let file_type = context.input.file_type;
@@ -94,7 +94,7 @@ impl PipelineStep<FilesOnlyMassImportContext> for FilterOutAlreadyExistingFileSe
 pub struct ImportFileSetsStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<FilesOnlyMassImportContext> for ImportFileSetsStep {
+impl PipelineStep<FilesOnlyMassImportContext, Error> for ImportFileSetsStep {
     fn name(&self) -> &'static str {
         "import_file_sets_step"
     }
@@ -103,7 +103,7 @@ impl PipelineStep<FilesOnlyMassImportContext> for ImportFileSetsStep {
         context.can_import_file_sets()
     }
 
-    async fn execute(&self, context: &mut FilesOnlyMassImportContext) -> StepAction {
+    async fn execute(&self, context: &mut FilesOnlyMassImportContext) -> StepAction<Error> {
         let import_file_sets = context.get_import_file_sets();
         for file_set in import_file_sets {
             tracing::info!(
@@ -121,7 +121,10 @@ impl PipelineStep<FilesOnlyMassImportContext> for ImportFileSetsStep {
                             file_set_id = %import_result.file_set_id,
                             "Successfully imported file set",
                         );
-                        (Some(import_result.file_set_id), FileSetImportStatus::Success)
+                        (
+                            Some(import_result.file_set_id),
+                            FileSetImportStatus::Success,
+                        )
                     } else {
                         tracing::warn!(
                             file_set_id = %import_result.file_set_id,
@@ -157,7 +160,10 @@ impl PipelineStep<FilesOnlyMassImportContext> for ImportFileSetsStep {
                 file_set_name: file_set_name.clone(),
             });
             if let Some(sender_tx) = &context.progress_tx() {
-                let event = MassImportSyncEvent { file_set_name, status };
+                let event = MassImportSyncEvent {
+                    file_set_name,
+                    status,
+                };
                 if let Err(e) = sender_tx.send(event) {
                     tracing::error!(error = ?e, "Failed to send progress event");
                 }
@@ -249,8 +255,20 @@ mod tests {
 
         // Assert: file_1 (already in DB) is removed; file_2 (new) remains
         assert!(matches!(action, StepAction::Continue));
-        assert!(!context.state.common_state.file_metadata.contains_key(&file_1_path));
-        assert!(context.state.common_state.file_metadata.contains_key(&file_2_path));
+        assert!(
+            !context
+                .state
+                .common_state
+                .file_metadata
+                .contains_key(&file_1_path)
+        );
+        assert!(
+            context
+                .state
+                .common_state
+                .file_metadata
+                .contains_key(&file_2_path)
+        );
     }
 
     async fn add_system(repository_manager: Arc<RepositoryManager>) -> i64 {
@@ -315,18 +333,28 @@ mod tests {
         context.state.common_state.file_metadata = HashMap::from([
             (
                 file_1_path.clone(),
-                vec![ReadFile { file_name: "game_a".to_string(), file_size: 512, sha1_checksum: [0xaa; 20] }],
+                vec![ReadFile {
+                    file_name: "game_a".to_string(),
+                    file_size: 512,
+                    sha1_checksum: [0xaa; 20],
+                }],
             ),
             (
                 file_2_path.clone(),
-                vec![ReadFile { file_name: "game_b".to_string(), file_size: 1024, sha1_checksum: [0xbb; 20] }],
+                vec![ReadFile {
+                    file_name: "game_b".to_string(),
+                    file_size: 1024,
+                    sha1_checksum: [0xbb; 20],
+                }],
             ),
         ]);
 
         insert_file_set_to_db(&context, &file_1_path, FileType::Rom).await;
         insert_file_set_to_db(&context, &file_2_path, FileType::Rom).await;
 
-        let action = FilterOutAlreadyExistingFileSetsStep.execute(&mut context).await;
+        let action = FilterOutAlreadyExistingFileSetsStep
+            .execute(&mut context)
+            .await;
 
         assert!(matches!(action, StepAction::Continue));
         assert!(context.state.common_state.file_metadata.is_empty());

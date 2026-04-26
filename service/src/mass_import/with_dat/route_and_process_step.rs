@@ -5,6 +5,7 @@ use domain::naming_conventions::no_intro::{DatFile, DatGame};
 
 use crate::{
     dat_game_status_service::DatGameFileSetStatus,
+    error::Error,
     file_import::model::{
         CreateReleaseParams, FileImportSource, ImportFileContent, UpdateFileSetModel,
     },
@@ -23,7 +24,7 @@ use crate::{
 pub struct RouteAndProcessFileSetsStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<DatFileMassImportContext> for RouteAndProcessFileSetsStep {
+impl PipelineStep<DatFileMassImportContext, Error> for RouteAndProcessFileSetsStep {
     fn name(&self) -> &'static str {
         "route_and_process_file_sets_step"
     }
@@ -34,7 +35,7 @@ impl PipelineStep<DatFileMassImportContext> for RouteAndProcessFileSetsStep {
             && context.state.dat_file_id.is_some()
     }
 
-    async fn execute(&self, context: &mut DatFileMassImportContext) -> StepAction {
+    async fn execute(&self, context: &mut DatFileMassImportContext) -> StepAction<Error> {
         // Move statuses out of context so we can pass `&mut context` into handlers
         // inside the loop without holding an immutable borrow. mem::take leaves an
         // empty Vec in place — dat_game_statuses is not read again after this step.

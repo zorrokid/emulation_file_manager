@@ -22,7 +22,7 @@
 ### Launch Preflight
 - [ ] T5 [service] — Add libretro core preflight validation for firmware and file extensions
   **File:** `service/src/libretro_runner/service.rs`
-  Validate selected core metadata, ROM extension, and required firmware presence before launch. Partial progress: `LibretroCoreService::get_core_system_info()` already checks required firmware availability and `relm4-ui` disables Start when `can_launch()` is false, but `prepare_rom()` still lacks explicit extension validation and typed launch-path preflight errors.
+  Validate selected core metadata, ROM extension, and required firmware presence before launch. Partial progress: `LibretroCoreService::get_core_system_info()` already checks required firmware availability and exposes supported extensions, and `relm4-ui` now blocks unsupported extensions before launch while disabling Start when `can_launch()` is false, but `prepare_rom()` still lacks service-side extension validation and typed launch-path preflight errors.
 
 - [x] T6 [service] — Pass the configured libretro system directory to the runner
   **File:** `service/src/libretro_runner/service.rs`
@@ -39,18 +39,18 @@
 
 - [ ] T9 [relm4-ui] — Surface preflight failures with actionable messages
   **File:** `relm4-ui/src/libretro/runner.rs`
-  Keep failures in the existing error-dialog flow rather than silent launch failure. Current behavior is only partially there: missing required firmware disables Start through `core_info.can_launch()`, but launch-path failures still surface as generic “failed to prepare/fetch” dialogs instead of actionable FreeIntv-specific preflight messages.
+  Keep failures in the existing error-dialog flow rather than silent launch failure. Current behavior is only partially there: unsupported file extensions already show an actionable dialog, missing required firmware still only disables Start indirectly, and launch-path failures still surface as generic “failed to prepare/fetch” dialogs instead of actionable FreeIntv-specific preflight messages.
 
 ### Documentation
 - [ ] T10 [docs] — Document FreeIntv setup and firmware requirements
   **File:** `docs/LIBRETRO_INTEGRATION.md`, `README.md`
-  Update the onboarding docs to describe FreeIntv support, required firmware, the current generic controller behavior, how the frontend reads physical controller input, and remove stale hardcoded-core-path guidance. Partial progress: the integration doc now links to the upstream libretro API reference, but the FreeIntv-specific setup docs are still missing, the system-directory note still mentions `temp_output_dir`, and the README still describes libretro support in terms that predate current core-mapping and controller-input work.
+  Update the onboarding docs to describe FreeIntv support, required firmware, the current generic controller behavior, how the frontend reads physical controller input, and remove stale hardcoded-core-path guidance. Partial progress: the integration and README docs now reflect the configured libretro system directory, per-system core mapping, and generic controller behavior, but fuller FreeIntv-specific setup and firmware documentation is still missing.
 
 ## Phase 5 — Tests
 
 - [ ] T11 [libretro_runner] — Add tests for FreeIntv core metadata and digital/analog input state
   **File:** `libretro_runner/src/supported_cores.rs`, `libretro_runner/src/input.rs`, `libretro_runner/src/callbacks.rs`
-  Cover supported extensions, required firmware declarations, digital button reads, analog axis reads, and device filtering in the callback path.
+  Cover supported extensions, required firmware declarations, digital button reads, analog axis reads, and device filtering in the callback path. Partial progress: `input.rs` and `callbacks.rs` now cover digital/analog state handling and callback device filtering, but metadata coverage for supported cores and FreeIntv-specific parsed declarations is still missing.
 
 - [ ] T12 [service] — Add tests for settings persistence and FreeIntv preflight validation
   **File:** `service/src/settings_service.rs`, `service/src/libretro_runner/service.rs`

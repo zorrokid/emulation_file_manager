@@ -1,12 +1,23 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{fmt::Display, path::PathBuf, sync::Arc};
 
-use crate::{error::Error, file_set_download::service::DownloadService, view_models::Settings};
+use crate::{
+    error::Error,
+    file_set_download::service::DownloadService,
+    libretro_core::service::LibretroCoreInfo,
+    libretro_runner::prepare::context::{
+        PrepareLaunchContext, PrepareLaunchContextDeps, PrepareLaunchContextInput,
+        PrepareLaunchContextState,
+    },
+    pipeline::generic_pipeline::Pipeline,
+    view_models::Settings,
+};
 
 #[derive(Debug)]
 pub struct LibretroLaunchModel {
     pub file_set_id: i64,
     pub initial_file: Option<String>,
     pub core_path: PathBuf,
+    pub core_info: LibretroCoreInfo,
 }
 
 #[derive(Debug)]
@@ -30,6 +41,47 @@ impl std::fmt::Debug for LibretroRunnerService {
     }
 }
 
+#[derive(Debug)]
+pub enum LibretroPreflightError {
+    UnsupportedExtension(String),
+    DownloadError(String),
+    NoFileInFileSet,
+    SystemDirNotSet,
+    FirmwareNotAvailable(String),
+    InvalidInitialFile(String),
+}
+
+impl Display for LibretroPreflightError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LibretroPreflightError::UnsupportedExtension(ext) => {
+                write!(
+                    f,
+                    "The file extension '{ext}' is not supported by the selected core."
+                )
+            }
+            LibretroPreflightError::DownloadError(msg) => {
+                write!(f, "Failed to download ROM: {msg}")
+            }
+            LibretroPreflightError::NoFileInFileSet => {
+                write!(f, "The selected file set does not contain any files.")
+            }
+            LibretroPreflightError::SystemDirNotSet => {
+                write!(f, "The system directory is not configured in settings.")
+            }
+            LibretroPreflightError::FirmwareNotAvailable(desc) => {
+                write!(f, "Required firmware not available: {desc}")
+            }
+            LibretroPreflightError::InvalidInitialFile(file) => {
+                write!(
+                    f,
+                    "The specified initial file '{file}' was not found in the file set."
+                )
+            }
+        }
+    }
+}
+
 impl LibretroRunnerService {
     pub fn new(settings: Arc<Settings>, download_service: Arc<DownloadService>) -> Self {
         Self {
@@ -43,28 +95,36 @@ impl LibretroRunnerService {
     pub async fn prepare_rom(
         &self,
         model: LibretroLaunchModel,
-    ) -> Result<LibretroLaunchPaths, Error> {
-        let result = self
-            .download_service
-            .download_file_set(model.file_set_id, true, None)
-            .await?;
+    ) -> Result<LibretroLaunchPaths, LibretroPreflightError> {
+        let mut context = PrepareLaunchContext {
+            deps: PrepareLaunchContextDeps {
+                download_service: self.download_service.clone(),
+                settings: self.settings.clone(),
+                progress_tx: None,
+            },
+            input: PrepareLaunchContextInput {
+                extract_files: true,
+                file_set_id: model.file_set_id,
+                initial_file: model.initial_file.clone(),
+                core_info: model.core_info.clone(),
+                core_path: model.core_path.clone(),
+            },
+            state: PrepareLaunchContextState::default(),
+        };
 
-        // Pick the initial file if specified, otherwise take the first output file.
-        let file_name = model
-            .initial_file
-            .or_else(|| result.output_file_names.into_iter().next())
-            .ok_or_else(|| Error::InvalidInput("No ROM file found in file set".into()))?;
-
-        let system_dir = self.settings.libretro_system_dir.as_ref().ok_or_else(|| {
-            Error::SettingsError("Libretro system directory is not set".to_string())
-        })?;
-
-        Ok(LibretroLaunchPaths {
-            rom_path: self.settings.temp_output_dir.join(&file_name),
-            core_path: model.core_path,
-            system_dir: system_dir.clone(),
-            temp_files: vec![file_name],
-        })
+        let pipeline = Pipeline::<PrepareLaunchContext, LibretroPreflightError>::new();
+        match pipeline.execute(&mut context).await {
+            Ok(_) => {
+                if let Some(paths) = context.state.launch_paths {
+                    Ok(paths)
+                } else {
+                    Err(LibretroPreflightError::DownloadError(
+                        "Pipeline completed but launch paths not set".to_string(),
+                    ))
+                }
+            }
+            Err(e) => Err(e),
+        }
     }
 
     /// Resolve the full path for a core by name.

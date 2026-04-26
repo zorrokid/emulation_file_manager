@@ -14,7 +14,7 @@ use service::{
     app_services::AppServices,
     error::Error,
     libretro_core::service::{CoreMappingModel, LibretroCoreInfo},
-    libretro_runner::service::{LibretroLaunchModel, LibretroLaunchPaths},
+    libretro_runner::service::{LibretroLaunchModel, LibretroLaunchPaths, LibretroPreflightError},
     view_models::{FileSetFileInfoViewModel, FileSetViewModel},
 };
 use ui_components::string_list_view::{
@@ -58,7 +58,7 @@ pub enum LibretroRunnerCommandMsg {
 
     FinishedRunningCore(Result<(), Error>),
     ProcessCoresResult(Result<Vec<CoreMappingModel>, Error>),
-    FilesPrepared(Result<LibretroLaunchPaths, Error>),
+    FilesPrepared(Result<LibretroLaunchPaths, LibretroPreflightError>),
     ProcessSystemInfoResult(Result<LibretroCoreInfo, Error>),
 }
 
@@ -285,23 +285,21 @@ impl Component for LibretroRunner {
                     eprintln!("Error fetching cores for system: {:?}", e);
                 }
             },
-            LibretroRunnerCommandMsg::FilesPrepared(result) => match result {
-                Ok(paths) => {
-                    if let Some(core_info) = &self.core_info {
-                        self.libretro_window.emit(LibretroWindowMsg::Launch {
-                            core_path: paths.core_path,
-                            rom_path: paths.rom_path,
-                            system_dir: paths.system_dir,
-                            temp_files: paths.temp_files,
-                            input_profile: core_info.input_profile,
-                        });
-                    }
+            LibretroRunnerCommandMsg::FilesPrepared(Ok(paths)) => {
+                if let Some(core_info) = &self.core_info {
+                    self.libretro_window.emit(LibretroWindowMsg::Launch {
+                        core_path: paths.core_path,
+                        rom_path: paths.rom_path,
+                        system_dir: paths.system_dir,
+                        temp_files: paths.temp_files,
+                        input_profile: core_info.input_profile,
+                    });
                 }
-                Err(e) => {
-                    eprintln!("Error preparing files for core launch: {:?}", e);
-                    show_error_dialog("Failed to prepare files for core launch".into(), root);
-                }
-            },
+            }
+            LibretroRunnerCommandMsg::FilesPrepared(Err(e)) => {
+                tracing::error!(error = ?e, "Failed to prepare files for core launch");
+                show_error_dialog(e.to_string(), root);
+            }
             LibretroRunnerCommandMsg::ProcessSystemInfoResult(Ok(result)) => {
                 self.core_info = Some(result);
             }
@@ -360,28 +358,9 @@ impl LibretroRunner {
             self.selected_file.clone(),
             &self.core_info,
         ) {
-            let extension = std::path::Path::new(&file_info.file_name)
-                .extension()
-                .and_then(|ext| ext.to_str())
-                .unwrap_or_default();
-
-            if !core_info
-                .supported_extensions
-                .iter()
-                .any(|ext| ext.eq_ignore_ascii_case(extension))
-            {
-                show_error_dialog(
-                    format!(
-                        "Selected file extension .{} is not supported by the selected core",
-                        extension
-                    ),
-                    root,
-                );
-                return;
-            }
-
             // first need to prepare the files
             let app_services = Arc::clone(&self.app_services);
+            let core_info = core_info.clone();
             match app_services.libretro_runner().resolve_core_path(&core_name) {
                 Ok(core_path) => {
                     sender.oneshot_command(async move {
@@ -393,6 +372,7 @@ impl LibretroRunner {
                                     file_set_id: file_set.id,
                                     initial_file: Some(file_info.file_name.clone()),
                                     core_path,
+                                    core_info,
                                 })
                                 .await,
                         )
