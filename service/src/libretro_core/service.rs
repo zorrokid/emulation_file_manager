@@ -3,7 +3,10 @@ use std::sync::Arc;
 use database::repository_manager::RepositoryManager;
 use libretro_runner::supported_cores::{InputProfile, get_supported_core};
 
-use crate::{error::Error, file_system_ops::FileSystemOps, view_models::Settings};
+use crate::{
+    error::Error, file_system_ops::FileSystemOps, libretro_runner::service::LibretroPreflightError,
+    view_models::Settings,
+};
 
 pub use libretro_runner::model::LibretroSystemInfo;
 
@@ -188,24 +191,31 @@ impl LibretroCoreService {
         format!("{}.so", core_name)
     }
 
-    pub async fn get_core_system_info(&self, core_name: &str) -> Result<LibretroCoreInfo, Error> {
-        let libretro_core_dir = self.settings.libretro_core_dir.as_ref().ok_or_else(|| {
-            Error::SettingsError("Libretro core directory is not set".to_string())
-        })?;
-        let libretro_system_dir = self.settings.libretro_system_dir.as_ref().ok_or_else(|| {
-            Error::SettingsError("Libretro system directory is not set".to_string())
-        })?;
+    pub async fn get_core_system_info(
+        &self,
+        core_name: &str,
+    ) -> Result<LibretroCoreInfo, LibretroPreflightError> {
+        let libretro_core_dir = self
+            .settings
+            .libretro_core_dir
+            .as_ref()
+            .ok_or(LibretroPreflightError::CoreDirNotSet)?;
+        let libretro_system_dir = self
+            .settings
+            .libretro_system_dir
+            .as_ref()
+            .ok_or(LibretroPreflightError::SystemDirNotSet)?;
 
-        let supported_core = get_supported_core(core_name).ok_or_else(|| {
-            Error::InvalidInput(format!("'{}' is not a recognized libretro core", core_name))
-        })?;
+        let supported_core = get_supported_core(core_name).ok_or(
+            LibretroPreflightError::CoreNotRecognized(core_name.to_string()),
+        )?;
 
         let res = libretro_runner::libretro_info_parser::parse_libretro_info(
             core_name,
             libretro_core_dir.as_ref(),
         )
         .await
-        .map_err(|e| Error::ParseError(e.to_string()))?;
+        .map_err(|e| LibretroPreflightError::InfoParseError(e.to_string()))?;
 
         let is_available = self
             .fs_ops

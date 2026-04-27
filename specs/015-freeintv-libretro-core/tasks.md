@@ -37,9 +37,9 @@
   **File:** `relm4-ui/Cargo.toml`, `relm4-ui/src/libretro/input.rs`, `relm4-ui/src/libretro/window.rs`
   Add a dedicated controller input backend in `relm4-ui` (implemented with `gilrs`) so physical controller buttons and analog-stick motion feed the richer runner input state without relying on GTK event controllers for joypad polling.
 
-- [ ] T9 [relm4-ui] — Surface preflight failures with actionable messages
+- [x] T9 [relm4-ui] — Surface preflight failures with actionable messages
   **File:** `relm4-ui/src/libretro/runner.rs`
-  Keep failures in the existing error-dialog flow rather than silent launch failure. Current behavior is only partially there: unsupported file extensions already show an actionable dialog, missing required firmware still only disables Start indirectly, and launch-path failures still surface as generic “failed to prepare/fetch” dialogs instead of actionable FreeIntv-specific preflight messages.
+  Keep failures in the existing error-dialog flow rather than silent launch failure. `relm4-ui/src/libretro/runner.rs` now allows launch attempts when a core/file is selected and surfaces launch preparation, system-info, and core-path failures through `show_error_dialog(e.to_string(), root)`, so typed `LibretroPreflightError` messages reach the user instead of generic launch-failure text.
 
 ### Documentation
 - [ ] T10 [docs] — Document FreeIntv setup and firmware requirements

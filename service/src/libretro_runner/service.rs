@@ -49,6 +49,9 @@ pub enum LibretroPreflightError {
     SystemDirNotSet,
     FirmwareNotAvailable(String),
     InvalidInitialFile(String),
+    CoreDirNotSet,
+    CoreNotRecognized(String),
+    InfoParseError(String),
 }
 
 impl Display for LibretroPreflightError {
@@ -77,6 +80,21 @@ impl Display for LibretroPreflightError {
                     f,
                     "The specified initial file '{file}' was not found in the file set."
                 )
+            }
+            LibretroPreflightError::CoreDirNotSet => {
+                write!(
+                    f,
+                    "The libretro core directory is not configured in settings."
+                )
+            }
+            LibretroPreflightError::CoreNotRecognized(core) => {
+                write!(
+                    f,
+                    "The specified core '{core}' was not recognized in the core info."
+                )
+            }
+            LibretroPreflightError::InfoParseError(msg) => {
+                write!(f, "Failed to parse core info: {msg}")
             }
         }
     }
@@ -130,10 +148,12 @@ impl LibretroRunnerService {
     /// Resolve the full path for a core by name.
     /// `core_name` must be provided WITHOUT extension (e.g. `fceumm_libretro`).
     /// The `.so` extension is appended automatically.
-    pub fn resolve_core_path(&self, core_name: &str) -> Result<PathBuf, Error> {
-        let core_dir = self.settings.libretro_core_dir.as_ref().ok_or_else(|| {
-            Error::SettingsError("Libretro core directory is not set".to_string())
-        })?;
+    pub fn resolve_core_path(&self, core_name: &str) -> Result<PathBuf, LibretroPreflightError> {
+        let core_dir = self
+            .settings
+            .libretro_core_dir
+            .as_ref()
+            .ok_or(LibretroPreflightError::CoreDirNotSet)?;
         Ok(core_dir.join(format!("{core_name}.so")))
     }
 

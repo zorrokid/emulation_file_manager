@@ -59,7 +59,7 @@ pub enum LibretroRunnerCommandMsg {
     FinishedRunningCore(Result<(), Error>),
     ProcessCoresResult(Result<Vec<CoreMappingModel>, Error>),
     FilesPrepared(Result<LibretroLaunchPaths, LibretroPreflightError>),
-    ProcessSystemInfoResult(Result<LibretroCoreInfo, Error>),
+    ProcessSystemInfoResult(Result<LibretroCoreInfo, LibretroPreflightError>),
 }
 
 pub struct LibretroRunnerInit {
@@ -92,13 +92,10 @@ pub struct LibretroRunner {
 
 impl LibretroRunner {
     pub fn can_launch_core(&self) -> bool {
-        self.selected_core.is_some()
-            && self.selected_file.is_some()
-            && self.file_set.is_some()
-            && self
-                .core_info
-                .as_ref()
-                .is_some_and(|info| info.can_launch())
+        // Let's not do firmware checks here for now, since the UI doesn't currently indicate
+        // firmware requirements/availability. Now if firmware is missing, an error message will
+        // just be shown when trying to launch the core.
+        self.selected_core.is_some() && self.selected_file.is_some() && self.file_set.is_some()
     }
 }
 
@@ -305,7 +302,7 @@ impl Component for LibretroRunner {
             }
             LibretroRunnerCommandMsg::ProcessSystemInfoResult(Err(e)) => {
                 tracing::error!(error = ?e, "Failed to fetch system info for core");
-                show_error_dialog("Failed to fetch system info for core".into(), root);
+                show_error_dialog(e.to_string(), root);
             }
         }
     }
@@ -368,7 +365,6 @@ impl LibretroRunner {
                             app_services
                                 .libretro_runner()
                                 .prepare_rom(LibretroLaunchModel {
-                                    // TODO: add libretro system info?
                                     file_set_id: file_set.id,
                                     initial_file: Some(file_info.file_name.clone()),
                                     core_path,
@@ -380,7 +376,7 @@ impl LibretroRunner {
                 }
                 Err(e) => {
                     tracing::error!(error = ?e, "Failed to resolve core path");
-                    show_error_dialog("Failed to resolve core path".into(), root);
+                    show_error_dialog(e.to_string(), root);
                 }
             }
         }
