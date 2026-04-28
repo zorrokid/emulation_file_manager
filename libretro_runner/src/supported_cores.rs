@@ -40,5 +40,14 @@ mod tests {
         let core = get_supported_core("freeintv_libretro");
         assert!(core.is_some());
         assert_eq!(core.unwrap().input_profile, InputProfile::Standard);
+        let core = get_supported_core("nonexistent_core");
+        assert!(core.is_none());
+    }
+
+    #[test]
+    fn test_supported_cores_list() {
+        assert_eq!(SUPPORTED_CORES.len(), 2);
+        assert_eq!(SUPPORTED_CORES[0].core_name, "fceumm_libretro");
+        assert_eq!(SUPPORTED_CORES[1].core_name, "freeintv_libretro");
     }
 }

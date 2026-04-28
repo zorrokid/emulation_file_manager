@@ -48,9 +48,9 @@
 
 ## Phase 5 — Tests
 
-- [ ] T11 [libretro_runner] — Add tests for FreeIntv core metadata and digital/analog input state
-  **File:** `libretro_runner/src/supported_cores.rs`, `libretro_runner/src/input.rs`, `libretro_runner/src/callbacks.rs`
-  Cover supported extensions, required firmware declarations, digital button reads, analog axis reads, and device filtering in the callback path. Partial progress: `input.rs` and `callbacks.rs` now cover digital/analog state handling and callback device filtering, but metadata coverage for supported cores and FreeIntv-specific parsed declarations is still missing.
+- [x] T11 [libretro_runner] — Add tests for supported-core metadata and digital/analog input state
+  **File:** `libretro_runner/src/supported_cores.rs`, `libretro_runner/src/libretro_info_parser.rs`, `libretro_runner/src/input.rs`, `libretro_runner/src/callbacks.rs`
+  `supported_cores.rs` now covers supported-core lookup, expected input profiles, the supported core list, and unknown-core handling. `libretro_info_parser.rs` covers `freeintv_libretro` parsed metadata including supported extensions and firmware declarations. `input.rs` and `callbacks.rs` cover digital button reads, analog axis reads, and callback device filtering.
 
 - [ ] T12 [service] — Add tests for settings persistence and FreeIntv preflight validation
   **File:** `service/src/settings_service.rs`, `service/src/libretro_runner/service.rs`
