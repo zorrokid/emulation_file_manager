@@ -281,13 +281,9 @@ Each phase requires explicit user confirmation before moving to the next.
 
 ### Code Change Transparency
 
-Before making any edits to existing files, show the user exactly what will change (old → new, or a clear description) and wait for confirmation. After all edits are applied, run:
+Before making any edits to existing files, show the user exactly what will change (old → new, or a clear description) and ask whether they want that edit. That pre-edit diff/description is the confirmation step; no separate confirmation is needed before showing it.
 
-```bash
-git --no-pager diff HEAD <file1> <file2> ...
-```
-
-and display the output so the user can verify the final result matches what was agreed. Do not apply edits and then show the diff after the fact — confirmation must come **before** changes are written.
+Do not require a mandatory post-edit diff display. Show the final diff only when the user explicitly asks for it or when it is genuinely needed to clarify what changed.
 
 ### Temporary Files
 

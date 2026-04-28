@@ -42,9 +42,9 @@
   Keep failures in the existing error-dialog flow rather than silent launch failure. `relm4-ui/src/libretro/runner.rs` now allows launch attempts when a core/file is selected and surfaces launch preparation, system-info, and core-path failures through `show_error_dialog(e.to_string(), root)`, so typed `LibretroPreflightError` messages reach the user instead of generic launch-failure text.
 
 ### Documentation
-- [ ] T10 [docs] — Document FreeIntv setup and firmware requirements
+- [x] T10 [docs] — Document current libretro setup flow
   **File:** `docs/LIBRETRO_INTEGRATION.md`, `README.md`
-  Update the onboarding docs to describe FreeIntv support, required firmware, the current generic controller behavior, how the frontend reads physical controller input, and remove stale hardcoded-core-path guidance. Partial progress: the integration and README docs now reflect the configured libretro system directory, per-system core mapping, and generic controller behavior, but fuller FreeIntv-specific setup and firmware documentation is still missing.
+  The docs now describe `freeintv_libretro` support through the existing per-system core mapping flow, the configured libretro core/system directory setup, metadata-driven validation via `.info` files, the current generic libretro / Retropad-style controller behavior, and the current typed preflight/error-dialog flow. Stale hardcoded-core-path and preflight-status wording has been removed.
 
 ## Phase 5 — Tests
 

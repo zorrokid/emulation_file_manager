@@ -364,18 +364,19 @@ The path handed to the core comes from the `system_dir` argument passed into `Li
 
 In the current implementation, `LibretroRunnerService::prepare_rom()` passes the configured `libretro_system_dir` setting as the libretro system directory. That lets BIOS-dependent cores read firmware from a persistent user-configured location instead of the app's temp output directory.
 
-For FreeIntv specifically:
+For `freeintv_libretro` specifically:
 
-1. `freeintv_libretro` is in the current supported-core allowlist.
-2. The service layer can parse the core's `.info` file to inspect supported extensions and firmware requirements.
-3. `LibretroCoreService::get_core_system_info()` checks whether required firmware files are present in the configured system directory.
-4. The launcher UI disables Start when the selected mapped core is unavailable or required firmware is missing.
+1. `freeintv_libretro` is included in the current supported core definitions.
+2. Place the core shared library in the configured libretro core directory.
+3. Map the core to the Intellivision system from **Settings → Map Libretro Cores**.
+4. The service layer parses the core's `.info` metadata to inspect supported extensions and firmware requirements.
+5. `LibretroCoreService::get_core_system_info()` checks those metadata-driven requirements against the configured libretro system directory.
+6. `LibretroRunnerService::prepare_rom()` runs a typed preflight pipeline before launch, and launch-time validation failures are shown in the UI through the existing error-dialog flow.
 
-What is still pending:
+Current scope:
 
-- `LibretroRunnerService::prepare_rom()` does not yet validate the selected ROM extension against the parsed core metadata before launch.
-- Launch-time failures still surface as generic preparation/fetch errors rather than FreeIntv-specific preflight messages.
-- The current controller mapping is generic Retropad-style input via keyboard + `gilrs`; FreeIntv-specific controller UX is intentionally out of scope for now.
+- Controller mapping currently uses generic libretro / Retropad-style input via keyboard + `gilrs`.
+- This integration documents the current generic libretro input path and setup flow.
 
 ### Step 6: Test
 
