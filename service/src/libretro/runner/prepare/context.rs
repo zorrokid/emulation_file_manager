@@ -5,8 +5,8 @@ use flume::Sender;
 
 use crate::{
     file_set_download::{download_service_ops::DownloadServiceOps, service::DownloadResult},
-    libretro_core::service::LibretroCoreInfo,
-    libretro_runner::service::LibretroLaunchPaths,
+    libretro::core::service::LibretroCoreInfo,
+    libretro::runner::service::LibretroLaunchPaths,
     view_models::Settings,
 };
 

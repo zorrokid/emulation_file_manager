@@ -4,7 +4,7 @@ use database::repository_manager::RepositoryManager;
 use libretro_runner::supported_cores::{InputProfile, get_supported_core};
 
 use crate::{
-    error::Error, file_system_ops::FileSystemOps, libretro_runner::service::LibretroPreflightError,
+    error::Error, file_system_ops::FileSystemOps, libretro::error::LibretroPreflightError,
     view_models::Settings,
 };
 

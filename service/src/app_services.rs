@@ -9,7 +9,7 @@ use crate::{
     external_executable_runner::service::ExternalExecutableRunnerService,
     file_import::service::FileImportService, file_set_deletion::service::FileSetDeletionService,
     file_set_download::service::DownloadService as FileSetDownloadService,
-    libretro_core::service::LibretroCoreService, libretro_runner::service::LibretroRunnerService,
+    libretro::core::service::LibretroCoreService, libretro::runner::service::LibretroRunnerService,
     mass_import::service::MassImportService, release_item_service::ReleaseItemService,
     release_service::ReleaseService, settings_service::SettingsService,
     software_title_service::SoftwareTitleService, system_service::SystemService,

@@ -13,8 +13,9 @@ use relm4::{
 use service::{
     app_services::AppServices,
     error::Error,
-    libretro_core::service::{CoreMappingModel, LibretroCoreInfo},
-    libretro_runner::service::{LibretroLaunchModel, LibretroLaunchPaths, LibretroPreflightError},
+    libretro::core::service::{CoreMappingModel, LibretroCoreInfo},
+    libretro::error::LibretroPreflightError,
+    libretro::runner::service::{LibretroLaunchModel, LibretroLaunchPaths},
     view_models::{FileSetFileInfoViewModel, FileSetViewModel},
 };
 use ui_components::string_list_view::{

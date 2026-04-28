@@ -1,8 +1,6 @@
 use crate::{
-    libretro_runner::{
-        prepare::context::PrepareLaunchContext,
-        service::{LibretroLaunchPaths, LibretroPreflightError},
-    },
+    libretro::error::LibretroPreflightError,
+    libretro::runner::{prepare::context::PrepareLaunchContext, service::LibretroLaunchPaths},
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
 
@@ -225,8 +223,8 @@ mod tests {
             download_service_ops::{DownloadServiceOps, MockDownloadServiceOps},
             service::{DownloadResult, DownloadService},
         },
-        libretro_core::service::{LibretroCoreInfo, LibretroFirmwareInfo},
-        libretro_runner::prepare::context::{
+        libretro::core::service::{LibretroCoreInfo, LibretroFirmwareInfo},
+        libretro::runner::prepare::context::{
             PrepareLaunchContextDeps, PrepareLaunchContextInput, PrepareLaunchContextState,
         },
         view_models::Settings,
@@ -338,7 +336,8 @@ mod tests {
     #[async_std::test]
     async fn test_download_file_set_returns_download_error_when_some_downloads_fail() {
         let step = DownloadFileSetStep;
-        let download_service = Arc::new(MockDownloadServiceOps::with_successful_and_failed_downloads(1, 2));
+        let download_service =
+            Arc::new(MockDownloadServiceOps::with_successful_and_failed_downloads(1, 2));
         let settings = create_test_settings();
         let mut context = create_test_context_with_download_service(settings, download_service);
 
@@ -353,7 +352,8 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn test_select_launch_file_should_execute_only_when_file_not_selected_and_results_exist() {
+    async fn test_select_launch_file_should_execute_only_when_file_not_selected_and_results_exist()
+    {
         let step = SelectLaunchFileStep;
         let mut context = create_test_context().await;
 
@@ -492,8 +492,8 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn test_validate_extension_should_execute_only_when_selected_file_exists_and_extensions_configured(
-    ) {
+    async fn test_validate_extension_should_execute_only_when_selected_file_exists_and_extensions_configured()
+     {
         let step = ValidateExtensionStep;
         let mut context = create_test_context().await;
 
@@ -507,8 +507,8 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn test_validate_extension_continues_when_selected_file_extension_is_supported_case_insensitively(
-    ) {
+    async fn test_validate_extension_continues_when_selected_file_extension_is_supported_case_insensitively()
+     {
         let step = ValidateExtensionStep;
         let mut context = create_test_context().await;
         context.state.selected_file = Some("GAME.BIN".to_string());

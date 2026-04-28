@@ -27,3 +27,18 @@ pub fn get_supported_core(core_name: &str) -> Option<&'static SupportedCoreDefin
         .iter()
         .find(|def| def.core_name == core_name)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_supported_core() {
+        let core = get_supported_core("fceumm_libretro");
+        assert!(core.is_some());
+        assert_eq!(core.unwrap().input_profile, InputProfile::Standard);
+        let core = get_supported_core("freeintv_libretro");
+        assert!(core.is_some());
+        assert_eq!(core.unwrap().input_profile, InputProfile::Standard);
+    }
+}

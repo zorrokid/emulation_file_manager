@@ -244,6 +244,14 @@ mod tests {
             settings.collection_root_dir,
             PathBuf::from("/path/to/collection")
         );
+        assert_eq!(
+            settings.libretro_core_dir.as_ref().unwrap(),
+            &PathBuf::from("/path/to/libretro/cores")
+        );
+        assert_eq!(
+            settings.libretro_system_dir.as_ref().unwrap(),
+            &PathBuf::from("/path/to/libretro/systems")
+        );
 
         // Clean up test credentials after test
         credentials_storage::delete_credentials().ok();

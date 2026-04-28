@@ -94,7 +94,7 @@ pub async fn parse_libretro_info(
             .map(|exts| exts.split('|').map(|s| s.trim().to_string()).collect())
             .unwrap_or_default(),
         core_name: info_content_map
-            .get("core_name")
+            .get("corename")
             .cloned()
             .unwrap_or_default(),
         categories: info_content_map
@@ -104,7 +104,7 @@ pub async fn parse_libretro_info(
         license: info_content_map.get("license").cloned().unwrap_or_default(),
         permissions: info_content_map
             .get("permissions")
-            .map(|perms| perms.split(',').map(|s| s.trim().to_string()).collect())
+            .cloned()
             .unwrap_or_default(),
         display_version: info_content_map
             .get("display_version")
@@ -115,15 +115,15 @@ pub async fn parse_libretro_info(
             .cloned()
             .unwrap_or_default(),
         system_name: info_content_map
-            .get("system_name")
+            .get("systemname")
             .cloned()
             .unwrap_or_default(),
-        sustem_id: info_content_map
-            .get("sustem_id")
+        system_id: info_content_map
+            .get("systemid")
             .cloned()
             .unwrap_or_default(),
-        databasae: info_content_map
-            .get("databasae")
+        database: info_content_map
+            .get("database")
             .cloned()
             .unwrap_or_default(),
         supports_no_game: info_content_map
@@ -146,6 +146,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_parse_libretro_info() {
+        // TODO: maybe use this example file instead: https://github.com/libretro/libretro-core-info/blob/master/00_example_libretro.info
         let core_name = "freeintv_libretro";
         let libretro_core_path = Path::new("example-data");
         let result = parse_libretro_info(core_name, libretro_core_path).await;
@@ -155,6 +156,18 @@ mod tests {
             system_info.display_name,
             "Mattel - Intellivision (FreeIntv)"
         );
+        assert_eq!(system_info.authors, "David Richardson");
+        assert_eq!(system_info.supported_extensions, vec!["int", "bin", "rom"]);
+        assert_eq!(system_info.core_name, "FreeIntv");
+        assert_eq!(system_info.categories, vec!["Emulator"]);
+        assert_eq!(system_info.license, "GPLv3");
+        assert_eq!(system_info.permissions, "");
+        assert_eq!(system_info.display_version, "2018.1.5");
+        assert_eq!(system_info.manufacturer, "Mattel");
+        assert_eq!(system_info.system_name, "Intellivision");
+        assert_eq!(system_info.system_id, "intellivision");
+        assert_eq!(system_info.database, "Mattel - Intellivision");
+        assert!(!system_info.supports_no_game);
         let firmware_info = system_info.firmware;
         assert_eq!(firmware_info.len(), 2);
         assert_eq!(firmware_info[0].desc, "exec.bin");
@@ -163,5 +176,9 @@ mod tests {
         assert_eq!(firmware_info[1].desc, "grom.bin");
         assert_eq!(firmware_info[1].path, "grom.bin");
         assert!(!firmware_info[1].opt);
+        assert_eq!(
+            system_info.description,
+            "A libretro emulation core for the Mattel Intellivision computer (but not the Entertainment Computer System or Intellivoice). Many Intellivision games relied on controller overlays to provide context for the controls, and many of these can be found online for reference, including at https://arcadepunks.com/intellivision-controller-overlays."
+        );
     }
 }
