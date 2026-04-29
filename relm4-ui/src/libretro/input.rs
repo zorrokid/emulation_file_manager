@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use gilrs::EventType;
+use gilrs::{Axis, EventType};
 use relm4::gtk;
 
 use libretro_runner::{
@@ -46,51 +46,38 @@ pub fn map_key_event(keyval: gtk::gdk::Key, input_state: &Arc<Mutex<InputState>>
     }
 }
 
+fn apply_button_event(button: gilrs::Button, pressed: bool, state: &mut InputState) {
+    if let Some(libretro_button) = button_to_libretro_button(button) {
+        state.set_button(libretro_button, pressed);
+    }
+}
+
+fn apply_axis_event(axis: Axis, value: f32, state: &mut InputState) {
+    let libretro_value = scale_gilrs_axis_to_libretro_axis(value);
+    match axis {
+        gilrs::Axis::LeftStickX => state.set_axis(0, 0, libretro_value),
+        gilrs::Axis::LeftStickY => state.set_axis(0, 1, -libretro_value),
+        gilrs::Axis::RightStickX => state.set_axis(1, 0, libretro_value),
+        gilrs::Axis::RightStickY => state.set_axis(1, 1, -libretro_value),
+        _ => {}
+    }
+}
+
 pub fn map_gamepad_event(
     event_type: EventType,
     input_state: &Arc<Mutex<InputState>>,
-    input_profile: &Arc<Mutex<InputProfile>>,
+    _input_profile: &Arc<Mutex<InputProfile>>,
 ) {
     let mut state = input_state.lock().expect("input state lock");
     match event_type {
         EventType::ButtonPressed(button, _code) => {
-            if let Some(libretro_button) = button_to_libretro_button(button) {
-                state.set_button(libretro_button, true);
-            }
+            apply_button_event(button, true, &mut state);
         }
         EventType::ButtonReleased(button, _code) => {
-            if let Some(libretro_button) = button_to_libretro_button(button) {
-                state.set_button(libretro_button, false);
-            }
+            apply_button_event(button, false, &mut state);
         }
         EventType::AxisChanged(axis, value, _code) => {
-            let libretro_value = scale_gilrs_axis_to_libretro_axis(value);
-
-            let input_profile_guard = input_profile.lock();
-            let input_profile = match input_profile_guard {
-                Ok(profile) => profile.clone(),
-                Err(_) => {
-                    tracing::error!(
-                        "Failed to lock input profile mutex, defaulting to Standard profile"
-                    );
-                    InputProfile::Standard
-                }
-            };
-            match (axis, input_profile) {
-                (gilrs::Axis::LeftStickX, _) => state.set_axis(0, 0, libretro_value),
-                (gilrs::Axis::LeftStickY, _) => state.set_axis(0, 1, -libretro_value),
-                (gilrs::Axis::RightStickX, _) => state.set_axis(1, 0, libretro_value),
-                (gilrs::Axis::RightStickY, _) => state.set_axis(1, 1, -libretro_value),
-                /*(gilrs::Axis::RightStickX, InputProfile::Intellivision) => {
-                    state.set_button(INT_KEY_2, libretro_value < -SNAP_THRESHOLD);
-                    state.set_button(INT_KEY_8, libretro_value > SNAP_THRESHOLD);
-                }
-                (gilrs::Axis::RightStickY, InputProfile::Intellivision) => {
-                    state.set_button(INT_KEY_4, libretro_value < -SNAP_THRESHOLD);
-                    state.set_button(INT_KEY_6, libretro_value > SNAP_THRESHOLD);
-                }*/
-                _ => {}
-            }
+            apply_axis_event(axis, value, &mut state);
         }
         _ => {}
     }
@@ -126,4 +113,58 @@ fn scale_gilrs_axis_to_libretro_axis(value: f32) -> i16 {
         return 0;
     }
     (value * LIBRETRO_AXIS_MAX).round() as i16
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Arc, Mutex};
+
+    use libretro_runner::input::InputState;
+    use relm4::gtk;
+
+    #[test]
+    fn test_map_key_events_maps_supported_keys() {
+        let cases = [
+            (gtk::gdk::Key::Down, JOYPAD_DOWN),
+            (gtk::gdk::Key::Up, JOYPAD_UP),
+            (gtk::gdk::Key::z, JOYPAD_B),
+            (gtk::gdk::Key::Z, JOYPAD_B),
+            (gtk::gdk::Key::x, JOYPAD_A),
+            (gtk::gdk::Key::X, JOYPAD_A),
+            (gtk::gdk::Key::a, JOYPAD_Y),
+            (gtk::gdk::Key::A, JOYPAD_Y),
+            (gtk::gdk::Key::s, JOYPAD_X),
+            (gtk::gdk::Key::S, JOYPAD_X),
+            (gtk::gdk::Key::q, JOYPAD_L),
+            (gtk::gdk::Key::Q, JOYPAD_L),
+            (gtk::gdk::Key::w, JOYPAD_R),
+            (gtk::gdk::Key::W, JOYPAD_R),
+            (gtk::gdk::Key::Return, JOYPAD_START),
+            (gtk::gdk::Key::BackSpace, JOYPAD_SELECT),
+        ];
+
+        let input_state = Arc::new(Mutex::new(InputState::default()));
+
+        for (key, expected_button) in cases {
+            map_key_event(key, &input_state, true);
+            let state = input_state.lock().unwrap();
+            assert!(state.get_button(expected_button));
+        }
+    }
+
+    #[test]
+    fn test_map_key_events_release() {
+        let input_state = Arc::new(Mutex::new(InputState::default()));
+        map_key_event(gtk::gdk::Key::x, &input_state, true);
+        {
+            let state = input_state.lock().unwrap();
+            assert!(state.get_button(JOYPAD_A));
+        }
+        map_key_event(gtk::gdk::Key::x, &input_state, false);
+        {
+            let state = input_state.lock().unwrap();
+            assert!(!state.get_button(JOYPAD_A));
+        }
+    }
 }
