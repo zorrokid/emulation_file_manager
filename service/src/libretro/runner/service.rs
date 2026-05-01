@@ -109,3 +109,13 @@ impl LibretroRunnerService {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[async_std::test]
+    async fn test_prepare_rom() {
+        let settings = Settings::default();
+    }
+}

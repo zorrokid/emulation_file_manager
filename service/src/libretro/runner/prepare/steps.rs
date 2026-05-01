@@ -219,13 +219,16 @@ mod tests {
 
     use super::*;
     use crate::{
+        error::Error,
         file_set_download::{
-            download_service_ops::{DownloadServiceOps, MockDownloadServiceOps},
+            download_service_ops::{ConfiguredOutcome, DownloadServiceOps, MockDownloadServiceOps},
             service::{DownloadResult, DownloadService},
         },
-        libretro::core::service::{LibretroCoreInfo, LibretroFirmwareInfo},
-        libretro::runner::prepare::context::{
-            PrepareLaunchContextDeps, PrepareLaunchContextInput, PrepareLaunchContextState,
+        libretro::{
+            core::service::{LibretroCoreInfo, LibretroFirmwareInfo},
+            runner::prepare::context::{
+                PrepareLaunchContextDeps, PrepareLaunchContextInput, PrepareLaunchContextState,
+            },
         },
         view_models::Settings,
     };
@@ -300,7 +303,13 @@ mod tests {
     #[async_std::test]
     async fn test_download_file_set_stores_results_on_success() {
         let step = DownloadFileSetStep;
-        let download_service = Arc::new(MockDownloadServiceOps::new());
+        let download_service = Arc::new(MockDownloadServiceOps::with_outcome(ConfiguredOutcome {
+            result: Ok(DownloadResult {
+                successful_downloads: 1,
+                ..Default::default()
+            }),
+            ..Default::default()
+        }));
         let settings = create_test_settings();
         let mut context = create_test_context_with_download_service(settings, download_service);
 
@@ -319,7 +328,12 @@ mod tests {
     #[async_std::test]
     async fn test_download_file_set_returns_download_error_when_service_fails() {
         let step = DownloadFileSetStep;
-        let download_service = Arc::new(MockDownloadServiceOps::with_failure("Network error"));
+        let download_service = Arc::new(MockDownloadServiceOps::with_outcome(ConfiguredOutcome {
+            result: Err(Error::DownloadError("Network error".into())),
+            ..Default::default()
+        }));
+
+        //"Network error"));
         let settings = create_test_settings();
         let mut context = create_test_context_with_download_service(settings, download_service);
 
@@ -336,8 +350,14 @@ mod tests {
     #[async_std::test]
     async fn test_download_file_set_returns_download_error_when_some_downloads_fail() {
         let step = DownloadFileSetStep;
-        let download_service =
-            Arc::new(MockDownloadServiceOps::with_successful_and_failed_downloads(1, 2));
+        let download_service = Arc::new(MockDownloadServiceOps::with_outcome(ConfiguredOutcome {
+            result: Ok(DownloadResult {
+                successful_downloads: 1,
+                failed_downloads: 2,
+                ..Default::default()
+            }),
+            ..Default::default()
+        }));
         let settings = create_test_settings();
         let mut context = create_test_context_with_download_service(settings, download_service);
 

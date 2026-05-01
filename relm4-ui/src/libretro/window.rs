@@ -146,7 +146,7 @@ impl Component for LibretroWindowModel {
             loop {
                 // Poll for events
                 while let Some(Event { event, .. }) = gilrs.next_event() {
-                    map_gamepad_event(event, &input_state, &input_profile);
+                    map_gamepad_event(event, Arc::clone(&input_state), Arc::clone(&input_profile));
                 }
                 // Sleep briefly to avoid busy-waiting.
                 tokio::time::sleep(std::time::Duration::from_millis(10)).await;

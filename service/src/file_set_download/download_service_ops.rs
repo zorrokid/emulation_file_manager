@@ -3,7 +3,6 @@ use crate::file_set_download::service::{DownloadResult, DownloadService};
 use core_types::events::DownloadEvent;
 use flume::Sender;
 use std::sync::{Arc, Mutex};
-use thumbnails::ThumbnailPathMap;
 
 /// Trait for download service operations.
 ///
@@ -52,6 +51,25 @@ pub struct DownloadCall {
     pub file_set_id: i64,
     /// Whether files should be extracted
     pub extract_files: bool,
+    /// Did caller pass progress sender
+    pub had_progress_tx: bool,
+}
+
+/// Test fixture for describing what mock should do.
+pub struct ConfiguredOutcome {
+    /// Result returned from `download_file_set`.
+    pub result: Result<DownloadResult, Error>,
+    /// Progress events emitted.
+    pub progress_events: Vec<DownloadEvent>,
+}
+
+impl Default for ConfiguredOutcome {
+    fn default() -> Self {
+        Self {
+            result: Ok(DownloadResult::default()),
+            progress_events: vec![],
+        }
+    }
 }
 
 /// Internal state for MockDownloadServiceOps.
@@ -59,11 +77,8 @@ pub struct DownloadCall {
 /// Groups all mutable state into a single struct for simplified locking.
 #[derive(Default)]
 struct MockState {
-    should_fail: bool,
-    error_message: Option<String>,
     download_calls: Vec<DownloadCall>,
-    failed_downloads_count: Option<usize>,
-    successful_downloads_count: Option<usize>,
+    outcome: ConfiguredOutcome,
 }
 
 /// Mock implementation for testing download service operations.
@@ -74,12 +89,19 @@ struct MockState {
 /// # Examples
 ///
 /// ```
-/// use service::file_set_download::download_service_ops::{DownloadServiceOps, MockDownloadServiceOps};
+/// use service::file_set_download::download_service_ops::{ConfiguredOutcome, DownloadServiceOps, MockDownloadServiceOps};
+/// use service::file_set_download::service::DownloadResult;
 ///
 /// #[async_std::main]
 /// async fn main() {
 ///     // Test successful download
-///     let mock = MockDownloadServiceOps::new();
+///     let mock = MockDownloadServiceOps::with_outcome(ConfiguredOutcome {
+///         result: Ok(DownloadResult {
+///             successful_downloads: 1,
+///             ..Default::default()
+///             }),
+///         ..Default::default()
+///     });
 ///     let result = mock.download_file_set(1, true, None).await;
 ///     assert!(result.is_ok());
 ///
@@ -111,51 +133,14 @@ impl MockDownloadServiceOps {
         Self::default()
     }
 
-    /// Creates a new mock that fails on all download operations with the given error message.
-    ///
-    /// Use this for testing error handling paths in your code.
-    ///
-    /// # Arguments
-    /// * `error_msg` - The error message to return when download operations fail
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use service::file_set_download::download_service_ops::MockDownloadServiceOps;
-    ///
-    /// let mock = MockDownloadServiceOps::with_failure("Network error");
-    /// // All download operations will now fail with "Network error" error
-    /// ```
-    pub fn with_failure(error_msg: impl Into<String>) -> Self {
+    /// Creates new mock with given outcome.
+    pub fn with_outcome(outcome: ConfiguredOutcome) -> Self {
         Self {
             state: Arc::new(Mutex::new(MockState {
-                should_fail: true,
-                error_message: Some(error_msg.into()),
+                outcome,
                 ..Default::default()
             })),
         }
-    }
-
-    pub fn with_successful_and_failed_downloads(successful: usize, failed: usize) -> Self {
-        Self {
-            state: Arc::new(Mutex::new(MockState {
-                successful_downloads_count: Some(successful),
-                failed_downloads_count: Some(failed),
-                ..Default::default()
-            })),
-        }
-    }
-
-    /// Set whether downloads should fail (useful for reconfiguring mock in tests)
-    pub fn set_should_fail(&self, should_fail: bool) {
-        let mut state = self.state.lock().unwrap();
-        state.should_fail = should_fail;
-    }
-
-    /// Set the error message for failures
-    pub fn set_error_message(&self, error_msg: impl Into<String>) {
-        let mut state = self.state.lock().unwrap();
-        state.error_message = Some(error_msg.into());
     }
 
     /// Returns all calls made to the `download_file_set` method.
@@ -183,56 +168,76 @@ impl DownloadServiceOps for MockDownloadServiceOps {
         &self,
         file_set_id: i64,
         extract_files: bool,
-        _progress_tx: Option<Sender<DownloadEvent>>,
+        progress_tx: Option<Sender<DownloadEvent>>,
     ) -> Result<DownloadResult, Error> {
-        println!(
-            "Mock download_file_set called with file_set_id: {}, extract_files: {}",
-            file_set_id, extract_files
-        );
+        let (events, result) = {
+            let mut state = self.state.lock().unwrap();
 
-        let mut state = self.state.lock().unwrap();
-
-        let call = DownloadCall {
-            file_set_id,
-            extract_files,
+            let call = DownloadCall {
+                file_set_id,
+                extract_files,
+                had_progress_tx: progress_tx.is_some(),
+            };
+            state.download_calls.push(call);
+            (
+                state.outcome.progress_events.clone(),
+                state.outcome.result.clone(),
+            )
         };
-        state.download_calls.push(call);
-        println!(
-            "Total download calls so far: {}",
-            state.download_calls.len()
-        );
 
-        if state.should_fail {
-            println!("Mock download is set to fail");
-            return Err(Error::DownloadError(
-                state
-                    .error_message
-                    .clone()
-                    .unwrap_or_else(|| "Mock download failed".to_string()),
-            ));
+        if let Some(tx) = progress_tx.as_ref() {
+            for event in &events {
+                if tx.send(event.clone()).is_err() {
+                    return Err(Error::DownloadError(
+                        "mock: failed to send progress event".into(),
+                    ));
+                }
+            }
         }
 
-        println!("Mock download succeeded");
-
-        Ok(DownloadResult {
-            successful_downloads: state.successful_downloads_count.unwrap_or(1),
-            failed_downloads: state.failed_downloads_count.unwrap_or(0),
-            thumbnail_path_map: ThumbnailPathMap::new(),
-            output_file_names: vec![],
-            errors: vec![],
-        })
+        result
     }
 }
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
 
     #[async_std::test]
     async fn test_mock_download_service_ops_success() {
-        let mock = MockDownloadServiceOps::new();
+        let events = [
+            DownloadEvent::DownloadStarted { number_of_files: 1 },
+            DownloadEvent::FileDownloadStarted { key: "key".into() },
+            DownloadEvent::FileDownloadProgress {
+                key: "key".into(),
+                bytes_downloaded: 123,
+            },
+            DownloadEvent::FileDownloadProgress {
+                key: "key".into(),
+                bytes_downloaded: 123,
+            },
+            DownloadEvent::FileDownloadCompleted { key: "key".into() },
+            DownloadEvent::DownloadCompleted,
+        ];
+        let outcome = ConfiguredOutcome {
+            result: Ok(DownloadResult {
+                successful_downloads: 1,
+                ..Default::default()
+            }),
+            progress_events: events.clone().into(),
+        };
 
-        let result = mock.download_file_set(123, true, None).await;
+        let mock = MockDownloadServiceOps::with_outcome(outcome);
+        let (tx, rx) = flume::unbounded();
+
+        let result = mock.download_file_set(123, true, Some(tx)).await;
+
+        let mut event_count = 0;
+        while let Ok(event) = rx.try_recv() {
+            assert_eq!(event, events[event_count]);
+            event_count += 1;
+        }
 
         assert!(result.is_ok());
 
@@ -252,21 +257,46 @@ mod tests {
 
     #[async_std::test]
     async fn test_mock_download_service_ops_failure() {
-        let mock = MockDownloadServiceOps::with_failure("Simulated network error");
+        let events = [
+            DownloadEvent::DownloadStarted { number_of_files: 1 },
+            DownloadEvent::FileDownloadStarted { key: "key".into() },
+            DownloadEvent::FileDownloadFailed {
+                key: "key".into(),
+                error: "Download error".into(),
+            },
+        ];
+        let outcome = ConfiguredOutcome {
+            result: Err(Error::DownloadError("Download error".into())),
+            progress_events: events.clone().into(),
+        };
 
-        let result = mock.download_file_set(456, false, None).await;
+        let mock = MockDownloadServiceOps::with_outcome(outcome);
+        let (tx, rx) = flume::unbounded();
+
+        let result = mock.download_file_set(123, true, Some(tx)).await;
+
+        let mut event_count = 0;
+        while let Ok(event) = rx.try_recv() {
+            assert_eq!(event, events[event_count]);
+            event_count += 1;
+        }
 
         assert!(result.is_err());
 
-        // Verify the call was tracked even though it failed
+        // Verify the call was tracked
         assert_eq!(mock.total_calls(), 1);
+        let calls = mock.download_calls();
+        assert_eq!(calls.len(), 1);
 
-        match result {
-            Err(Error::DownloadError(msg)) => {
-                assert_eq!(msg, "Simulated network error");
-            }
-            _ => panic!("Expected DownloadError"),
-        }
+        let call = &calls[0];
+        assert_eq!(call.file_set_id, 123);
+        assert!(call.extract_files);
+
+        let download_result = result.err().unwrap();
+        assert_eq!(
+            download_result,
+            Error::DownloadError("Download error".into())
+        );
     }
 
     #[async_std::test]

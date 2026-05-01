@@ -152,10 +152,14 @@ mod tests {
     use executable_runner::ops::{ExecutableRunnerOps, MockExecutableRunnerOps};
 
     use crate::{
+        error::Error,
         external_executable_runner::{
             context::ExternalExecutableRunnerContext, steps::PrepareFilesStep,
         },
-        file_set_download::download_service_ops::{DownloadServiceOps, MockDownloadServiceOps},
+        file_set_download::{
+            download_service_ops::{ConfiguredOutcome, DownloadServiceOps, MockDownloadServiceOps},
+            service::DownloadResult,
+        },
         file_system_ops::{FileSystemOps, mock::MockFileSystemOps},
         pipeline::pipeline_step::{PipelineStep, StepAction},
         view_models::Settings,
@@ -178,9 +182,11 @@ mod tests {
 
     #[async_std::test]
     async fn test_prepare_files_step_failure() {
-        let download_service_ops = Arc::new(MockDownloadServiceOps::with_failure(
-            "Simulated download failure",
-        ));
+        let download_service_ops =
+            Arc::new(MockDownloadServiceOps::with_outcome(ConfiguredOutcome {
+                result: Err(Error::DownloadError("Simulated download failure".into())),
+                ..Default::default()
+            }));
 
         let mut context = initialize_context(Some(download_service_ops.clone()), None, None).await;
         let step = PrepareFilesStep;
@@ -197,7 +203,14 @@ mod tests {
     async fn test_prepare_files_step_with_failed_downloads() {
         // if even one download fails, the step should abort
         let download_service_ops =
-            Arc::new(MockDownloadServiceOps::with_successful_and_failed_downloads(1, 1));
+            Arc::new(MockDownloadServiceOps::with_outcome(ConfiguredOutcome {
+                result: Ok(DownloadResult {
+                    successful_downloads: 1,
+                    failed_downloads: 1,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }));
 
         let mut context = initialize_context(Some(download_service_ops.clone()), None, None).await;
         let step = PrepareFilesStep;

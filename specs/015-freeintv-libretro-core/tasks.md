@@ -52,13 +52,13 @@
   **File:** `libretro_runner/src/supported_cores.rs`, `libretro_runner/src/libretro_info_parser.rs`, `libretro_runner/src/input.rs`, `libretro_runner/src/callbacks.rs`
   `supported_cores.rs` now covers supported-core lookup, expected input profiles, the supported core list, and unknown-core handling. `libretro_info_parser.rs` covers `freeintv_libretro` parsed metadata including supported extensions and firmware declarations. `input.rs` and `callbacks.rs` cover digital button reads, analog axis reads, and callback device filtering.
 
-- [ ] T12 [service] — Add tests for settings persistence and FreeIntv preflight validation
-  **File:** `service/src/settings_service.rs`, `service/src/libretro_runner/service.rs`
-  Cover missing system directory, missing firmware, unsupported extension, and happy-path launch preparation. Partial progress: `service/src/libretro_runner/prepare/steps.rs` now covers the preflight pipeline steps for download, file selection, firmware validation, extension validation, and launch-path building. Remaining work is higher-level `LibretroRunnerService::prepare_rom()` coverage and settings persistence tests.
+- [ ] T12 [service] — Add higher-level tests for libretro launch preparation
+  **File:** `service/src/libretro/runner/service.rs`
+  Add service-level tests for `LibretroRunnerService::prepare_rom()` covering missing system directory, missing firmware, unsupported extension, invalid initial file, and happy-path launch preparation. `settings_service.rs` persistence coverage already exists, and `service/src/libretro/runner/prepare/steps.rs` already covers the individual preflight pipeline steps.
 
-- [ ] T13 [relm4-ui] — Add tests for controller-to-libretro input mapping
+- [x] T13 [relm4-ui] — Add tests for controller-to-libretro input mapping
   **File:** `relm4-ui/src/libretro/input.rs`
-  Extract or reuse pure mapping helpers so tests can cover controller-backend event translation, physical joypad button handling, and analog-axis mapping without needing a live libretro core.
+  `relm4-ui/src/libretro/input.rs` now uses pure mapping helpers that are covered by tests for physical joypad button handling, analog-axis mapping, deadzone handling, and keyboard-to-libretro button mapping without needing a live libretro core.
 
 ## Manual Verification Checklist
 

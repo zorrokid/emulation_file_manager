@@ -23,7 +23,7 @@ pub const JOYPAD_R: u32 = 11;
 pub struct InputState {
     // Standard buttons (0-15)
     buttons: [bool; 16],
-    // [Stick Index (Left=0, Right=1)][Axis ID (X=0, Y=1)]
+    // [Stick Index (Left=0, Right=1)][Axis Index (X=0, Y=1)]
     axes: [[i16; 2]; 2],
 }
 
@@ -74,9 +74,9 @@ impl InputState {
     ///
     /// `index` selects the stick and `id` selects the axis within that stick.
     /// Invalid stick or axis IDs are ignored.
-    pub fn set_axis(&mut self, index: u32, id: u32, value: i16) {
-        if let Some(stick) = self.axes.get_mut(index as usize)
-            && let Some(slot) = stick.get_mut(id as usize)
+    pub fn set_axis(&mut self, stick_index: u32, axis_index: u32, value: i16) {
+        if let Some(stick) = self.axes.get_mut(stick_index as usize)
+            && let Some(slot) = stick.get_mut(axis_index as usize)
         {
             *slot = value;
         }

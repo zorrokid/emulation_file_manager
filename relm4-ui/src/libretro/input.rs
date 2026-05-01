@@ -15,6 +15,9 @@ use libretro_runner::{
 // that direction.
 // const SNAP_THRESHOLD: i16 = 2000;
 
+/// Libretro's axis range is [-32768, 32767]
+const LIBRETRO_AXIS_MAX: i16 = 32767;
+
 /// Map a GTK key value to a libretro JOYPAD button ID, if we handle it.
 fn keyval_to_button(keyval: gtk::gdk::Key) -> Option<u32> {
     match keyval {
@@ -46,14 +49,16 @@ pub fn map_key_event(keyval: gtk::gdk::Key, input_state: &Arc<Mutex<InputState>>
     }
 }
 
-fn apply_button_event(button: gilrs::Button, pressed: bool, state: &mut InputState) {
+fn apply_button_event(button: gilrs::Button, pressed: bool, state: &Arc<Mutex<InputState>>) {
+    let mut state = state.lock().expect("input state lock");
     if let Some(libretro_button) = button_to_libretro_button(button) {
         state.set_button(libretro_button, pressed);
     }
 }
 
-fn apply_axis_event(axis: Axis, value: f32, state: &mut InputState) {
-    let libretro_value = scale_gilrs_axis_to_libretro_axis(value);
+fn apply_axis_event(axis: Axis, value: f32, state: &Arc<Mutex<InputState>>) {
+    let mut state = state.lock().expect("input state lock");
+    let libretro_value = scale_gilrs_axis_to_libretro_axis(value, axis);
     match axis {
         gilrs::Axis::LeftStickX => state.set_axis(0, 0, libretro_value),
         gilrs::Axis::LeftStickY => state.set_axis(0, 1, -libretro_value),
@@ -65,19 +70,18 @@ fn apply_axis_event(axis: Axis, value: f32, state: &mut InputState) {
 
 pub fn map_gamepad_event(
     event_type: EventType,
-    input_state: &Arc<Mutex<InputState>>,
-    _input_profile: &Arc<Mutex<InputProfile>>,
+    state: Arc<Mutex<InputState>>,
+    _input_profile: Arc<Mutex<InputProfile>>,
 ) {
-    let mut state = input_state.lock().expect("input state lock");
     match event_type {
         EventType::ButtonPressed(button, _code) => {
-            apply_button_event(button, true, &mut state);
+            apply_button_event(button, true, &state);
         }
         EventType::ButtonReleased(button, _code) => {
-            apply_button_event(button, false, &mut state);
+            apply_button_event(button, false, &state);
         }
         EventType::AxisChanged(axis, value, _code) => {
-            apply_axis_event(axis, value, &mut state);
+            apply_axis_event(axis, value, &state);
         }
         _ => {}
     }
@@ -104,15 +108,21 @@ fn button_to_libretro_button(button: gilrs::Button) -> Option<u32> {
 
 /// Gilrs axes are in the range [-1.0, 1.0]. Scale to libretro's expected
 /// range of [-32768, 32767]. Also apply a deadzone to ignore small inputs near the center.
-fn scale_gilrs_axis_to_libretro_axis(value: f32) -> i16 {
-    const LIBRETRO_AXIS_MAX: f32 = 32767.0;
+/// Also invert y-axis.
+fn scale_gilrs_axis_to_libretro_axis(value: f32, axis: gilrs::Axis) -> i16 {
     // TODO: is this good value for a deadzone? We want to ignore small inputs near the center to
     // prevent drift.
     const DEADZONE: f32 = 0.1;
     if value.abs() < DEADZONE {
         return 0;
     }
-    (value * LIBRETRO_AXIS_MAX).round() as i16
+    let axis_invert = if axis == gilrs::Axis::LeftStickY || axis == gilrs::Axis::RightStickY {
+        -1.0
+    } else {
+        1.0
+    };
+
+    (value * LIBRETRO_AXIS_MAX as f32 * axis_invert).round() as i16
 }
 
 #[cfg(test)]
@@ -120,8 +130,77 @@ mod tests {
     use super::*;
     use std::sync::{Arc, Mutex};
 
+    use gilrs::Button;
     use libretro_runner::input::InputState;
     use relm4::gtk;
+
+    #[test]
+    fn test_apply_axis_event() {
+        let cases = [
+            (gilrs::Axis::LeftStickX, 1.0, LIBRETRO_AXIS_MAX, 0, 0),
+            (gilrs::Axis::LeftStickX, -1.0, -LIBRETRO_AXIS_MAX, 0, 0),
+            (gilrs::Axis::LeftStickY, 1.0, LIBRETRO_AXIS_MAX, 0, 1),
+            (gilrs::Axis::LeftStickY, -1.0, -LIBRETRO_AXIS_MAX, 0, 1),
+            (gilrs::Axis::RightStickX, 1.0, LIBRETRO_AXIS_MAX, 1, 0),
+            (gilrs::Axis::RightStickX, -1.0, -LIBRETRO_AXIS_MAX, 1, 0),
+            (gilrs::Axis::RightStickY, 1.0, LIBRETRO_AXIS_MAX, 1, 1),
+            (gilrs::Axis::RightStickY, -1.0, -LIBRETRO_AXIS_MAX, 1, 1),
+        ];
+        let state = Arc::new(Mutex::new(InputState::default()));
+        for (axis, value, expected_value, stick_index, axis_index) in cases {
+            apply_axis_event(axis, value, &state);
+            {
+                let state = state.lock().unwrap();
+                assert_eq!(state.get_axis(stick_index, axis_index), expected_value);
+            }
+        }
+    }
+
+    #[test]
+    fn test_apply_axis_event_movement_in_dead_zone() {
+        let state = Arc::new(Mutex::new(InputState::default()));
+        apply_axis_event(gilrs::Axis::LeftStickX, 0.01, &state);
+        let state = state.lock().unwrap();
+        assert_eq!(state.get_axis(0, 0), 0);
+    }
+
+    #[test]
+    fn test_apply_button_event() {
+        let cases = [
+            (Button::South, true, JOYPAD_A),
+            (Button::South, false, JOYPAD_A),
+            (Button::North, true, JOYPAD_Y),
+            (Button::North, false, JOYPAD_Y),
+            (Button::West, true, JOYPAD_X),
+            (Button::West, false, JOYPAD_X),
+            (Button::East, true, JOYPAD_B),
+            (Button::East, false, JOYPAD_B),
+            (Button::LeftTrigger, true, JOYPAD_L),
+            (Button::LeftTrigger, false, JOYPAD_L),
+            (Button::RightTrigger, true, JOYPAD_R),
+            (Button::RightTrigger, false, JOYPAD_R),
+            (Button::Select, true, JOYPAD_SELECT),
+            (Button::Select, false, JOYPAD_SELECT),
+            (Button::Start, true, JOYPAD_START),
+            (Button::Start, false, JOYPAD_START),
+            (Button::DPadUp, true, JOYPAD_UP),
+            (Button::DPadUp, false, JOYPAD_UP),
+            (Button::DPadDown, true, JOYPAD_DOWN),
+            (Button::DPadDown, false, JOYPAD_DOWN),
+            (Button::DPadLeft, true, JOYPAD_LEFT),
+            (Button::DPadLeft, false, JOYPAD_LEFT),
+            (Button::DPadRight, true, JOYPAD_RIGHT),
+            (Button::DPadRight, false, JOYPAD_RIGHT),
+        ];
+        let state = Arc::new(Mutex::new(InputState::default()));
+        for (button, pressed, libretro_button) in cases {
+            apply_button_event(button, pressed, &state);
+            {
+                let state = state.lock().unwrap();
+                assert!(state.get_button(libretro_button) == pressed);
+            }
+        }
+    }
 
     #[test]
     fn test_map_key_events_maps_supported_keys() {
