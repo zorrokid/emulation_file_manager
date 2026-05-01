@@ -115,6 +115,7 @@ Use these as models when creating new mocks:
 - `cloud_storage/src/mock.rs`
 - `service/src/file_set/mock_file_set_service.rs`
 - `service/src/file_system_ops.rs` (`service::file_system_ops::mock::MockFileSystemOps`)
+- `service/src/file_set_download/download_service_ops.rs` (`MockDownloadServiceOps`) — example of a service-boundary mock with configured outcomes, progress events, and call tracking
 
 ## Making Mocking Easier in This Repository
 
