@@ -138,7 +138,8 @@ Critical gotchas (see the `relm4-gui` skill for full patterns):
 - Never mock `RepositoryManager` — use `database::setup_test_repository_manager().await` (real in-memory SQLite)
 - Mock service traits using a single `Arc<Mutex<MockState>>` struct — not one `Arc<Mutex<>>` per field
 - Reference implementations: `cloud_storage/src/mock.rs`, `service/src/file_set/mock_file_set_service.rs`
-- See the `qa` skill for full mock structure, coverage expectations, and test naming conventions
+- See `docs/TESTING_MOCKS.md` for the canonical repository mock guideline
+- See the `qa` skill for expanded mock structure, coverage expectations, and test naming conventions
 
 ### Spec-Driven Development
 
