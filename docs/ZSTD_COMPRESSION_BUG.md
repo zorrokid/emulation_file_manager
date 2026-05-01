@@ -1,423 +1,106 @@
-# File Import/Export Bugs - Critical Issues
+# Cloud Download Validation Bug
 
-## Issue Date
-2025-12-26
+## Summary
 
-## FOUR CRITICAL BUGS FOUND
+This document tracks the remaining cloud download bug where an S3-compatible error response can be saved to disk as if it were a valid `.zst` file.
 
-### Bug #1: Cloud Download Saves Error Responses as Data Files
-**Severity:** CRITICAL  
-**Impact:** Files become corrupted with XML error messages  
-**Status:** ⚠️ ACTIVE - Needs fixing
+The earlier issues that were originally bundled into this document are no longer active and are kept here only as brief historical notes.
 
-### Bug #2: CloudFileWriter Double-Compresses Files
-**Severity:** ~~CRITICAL~~ N/A  
-**Impact:** ~~Files cannot be decompressed~~ Dead code, never used  
-**Status:** ✅ RESOLVED - Dead code removed (Dec 27, 2025)
+## Current Status
 
-### Bug #3: Files Saved to Wrong Directory Path
-**Severity:** ~~HIGH~~ FIXED  
-**Impact:** ~~File organization broken~~ Fixed  
-**Status:** ✅ FIXED - Helper method implemented (Dec 27, 2025)
+- **Active:** cloud download can save error response bodies as file data
+- **Resolved:** dead `CloudFileWriter` double-compression path
+- **Resolved:** imported files now use file-type-specific output directories
+- **Resolved:** test credentials no longer overwrite production keyring entries
 
-### Bug #4: Credentials Not Persisted Between Sessions
-**Severity:** HIGH  
-**Impact:** Users must re-enter credentials every application restart  
-**Status:** ⚠️ ACTIVE - Needs investigation
-
----
-
-## Status Summary (as of December 27, 2025)
-
-- ✅ **Bug #3: FIXED** - File path issue resolved with `get_output_dir_for_file_type()` helper
-- ✅ **Bug #2: RESOLVED** - CloudFileWriter dead code removed
-- ✅ **Bug #4: FIXED** - Test credentials no longer overwrite production credentials
-- ⚠️ **Bug #1: ACTIVE** - Cloud download error response issue still needs fixing
-
----
-
-## Bug #1: Cloud Download Error Response Bug
+## Active Bug: Error Responses Saved as `.zst` Files
 
 ### Problem
-Cloud downloads that fail (e.g., invalid credentials) save the **XML error response** as if it were the actual file data, creating a corrupted `.zst` file.
-
-### Evidence
-File at `/home/mikko/.local/share/efm/files/manual/61392fe1-3cb6-45ed-9b94-b5d149c428c5.zst` contains:
-```xml
-<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Error>
-    <Code>InvalidAccessKeyId</Code>
-    <Message>Malformed Access Key Id</Message>
-</Error>
-```
-
-This causes "Unknown frame descriptor" error when trying to decompress because zstd sees XML instead of the magic number `28 b5 2f fd`.
-
-### Root Cause Analysis
-
-**Why credentials aren't validated during "connect_to_cloud" step:**
-- `Bucket::new()` in the S3 library just creates a configuration object (line 49 in `cloud_storage/src/lib.rs`)
-- **No network call is made** during bucket creation
-- Authentication only happens on the first actual API call (like `get_object_stream()`)
-
-**Why XML error responses get saved as files:**
-- Location: `cloud_storage/src/lib.rs`, `download_file()` function, lines 76-99
-- Line 82: `bucket.get_object_stream(key).await?` returns a stream object
-- The S3 library doesn't fail here - it returns a stream that contains the error response body
-- Line 83: File is created **before validating stream content**
-- Lines 85-96: The code blindly writes all bytes from the stream to the file
-- Result: XML error response is written as if it were valid file data
-
-**The bug:** The download code doesn't:
-1. Check HTTP response status codes before writing
-2. Validate the response is actually file data (not an error response)
-3. Check for zstd magic number (`28 b5 2f fd`) before writing
-4. Handle S3 API errors properly - they come as response bodies, not Rust errors
-
-### Fix Required
-
-**Location:** `cloud_storage/src/lib.rs`, `download_file()` function (lines 76-99)
-
-**Options to fix:**
-
-**Option 1: Check HTTP status before streaming** (Recommended)
-```rust
-async fn download_file(...) -> Result<(), CloudStorageError> {
-    let response = bucket.get_object(key).await?;  // Get full response, not stream
-    
-    // Check HTTP status
-    if response.status_code() != 200 {
-        return Err(CloudStorageError::Other(format!(
-            "Download failed with status {}: {}", 
-            response.status_code(),
-            String::from_utf8_lossy(&response.bytes)
-        )));
-    }
-    
-    // Validate zstd magic number
-    let bytes = response.bytes();
-    if !bytes.starts_with(&[0x28, 0xB5, 0x2F, 0xFD]) {
-        return Err(CloudStorageError::Other("Invalid zstd file format".to_string()));
-    }
-    
-    // Now write to file
-    let mut file = async_std::fs::File::create(local_path).await?;
-    file.write_all(&bytes).await?;
-    Ok(())
-}
-```
-
-**Option 2: Validate first bytes from stream**
-```rust
-async fn download_file(...) -> Result<(), CloudStorageError> {
-    let mut response_stream = bucket.get_object_stream(key).await?;
-    let mut file = async_std::fs::File::create(local_path).await?;
-    
-    let mut first_chunk = true;
-    while let Some(chunk_res) = response_stream.bytes.next().await {
-        let chunk = chunk_res?;
-        
-        // Validate first chunk is zstd data
-        if first_chunk {
-            if chunk.len() >= 4 && !chunk.starts_with(&[0x28, 0xB5, 0x2F, 0xFD]) {
-                return Err(CloudStorageError::Other(
-                    format!("Invalid file format. Got: {:?}", &chunk[..4.min(chunk.len())])
-                ));
-            }
-            first_chunk = false;
-        }
-        
-        file.write_all(&chunk).await?;
-        // ... progress reporting ...
-    }
-    Ok(())
-}
-```
-
-**Option 3: Test connection with a lightweight API call**
-Add a `test_connection()` method that makes a simple API call (like `list_objects` with limit=1) during the connect step to validate credentials early.
-
----
-
-## Bug #2: CloudFileWriter Double-Compression Bug
-
-### **STATUS: RESOLVED** ✅
-**Resolution Date:** December 27, 2025  
-**Resolution:** CloudFileWriter was dead code that was never actually used in the application. The dead code has been removed.
-
-### Original Problem
-Files compressed using `CloudFileWriter::output_zstd_compressed` are **corrupted and cannot be decompressed**. This causes "Unknown frame descriptor" errors when attempting to decompress these files.
-
-## Root Cause
-The `CloudFileWriter::output_zstd_compressed` method in `file_import/src/file_writer.rs` has a critical bug where it **double-compresses data**:
-
-### Current Buggy Flow (lines 78-175):
-
-1. **First Compression (lines 83-110)**: 
-   - Creates a temp zstd file
-   - Compresses the input file to this temp file
-   - Calculates checksum of **uncompressed data**
-   - **BUT** this temp file is never used after creation!
-
-2. **Second Compression (lines 136-167)**:
-   - Reads from the **original uncompressed input file** again
-   - For each 8MB chunk:
-     - Creates a NEW zstd encoder
-     - Compresses the chunk independently
-     - Uploads the compressed chunk
-   - This creates **multiple independent zstd frames** concatenated together
-
-### Why This Causes "Unknown frame descriptor" Error:
-- The file ends up with multiple independent zstd compression frames
-- Each chunk was compressed separately, creating fragmented frames
-- The zstd decoder may not properly handle these fragmented/concatenated frames
-- Results in: `Zip error: Failed decompressing zstd file: Unknown frame descriptor`
-
-## Impact
-- **Any file uploaded using CloudFileWriter is CORRUPTED**
-- Files can be uploaded successfully to cloud storage
-- Files stored locally appear fine
-- **Decompression fails** when trying to export/download these files
-- Error occurs during `export_files` step in `file_export/src/lib.rs`
-
-## Affected Code
-File: `file_import/src/file_writer.rs`
-Method: `CloudFileWriter::output_zstd_compressed` (lines 78-175)
-
-## The Fix
-The method should:
-1. Compress the input file ONCE to a temp file (lines 83-110) ✓ Already done
-2. Upload the **already-compressed temp file** to cloud storage
-3. Remove the duplicate compression loop (lines 144-150)
-
-### Corrected Flow:
-```rust
-// Step 1: Compress to temp file (keep existing code lines 83-110)
-let zstd_file_path = system_temp_dir.join(archive_file_name).with_extension("zst");
-let zstd_file = File::create(&zstd_file_path)?;
-let mut encoder = Encoder::new(zstd_file, compression_level.to_zstd_level())?;
-// ... compress input file ...
-encoder.finish()?;
-
-// Step 2: Upload the COMPRESSED temp file (not the original!)
-let mut compressed_file = File::open(&zstd_file_path)?;
-loop {
-    let bytes_read = compressed_file.read(&mut buffer)?;
-    // Upload directly - NO ADDITIONAL COMPRESSION
-    bucket.put_multipart_chunk(buffer[..bytes_read].to_vec(), ...).await?;
-}
-
-// Step 3: Clean up temp file
-std::fs::remove_file(&zstd_file_path).ok();
-```
-
-## Note About Your Specific Error
-
-### ACTUAL ROOT CAUSE (December 26, 2025)
-The file `/home/mikko/.local/share/efm/files/manual/61392fe1-3cb6-45ed-9b94-b5d149c428c5.zst` is **NOT a zstd file**.
-
-It contains an **S3/Backblaze B2 error response**:
-```xml
-<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Error>
-    <Code>InvalidAccessKeyId</Code>
-    <Message>Malformed Access Key Id</Message>
-</Error>
-```
-
-**What happened:**
-1. A cloud download was attempted with invalid credentials
-2. The download "succeeded" but saved the XML error response as the file content
-3. The file has a `.zst` extension but contains XML, not zstd data
-4. When trying to decompress, zstd sees XML instead of the magic number `28 b5 2f fd`
-5. Error: "Unknown frame descriptor"
-
-**The real bug:** The cloud download code doesn't validate that downloaded content is actually zstd data before saving it with a `.zst` extension.
-
-### Solutions
-**Immediate fix for your file:**
-```bash
-# Delete the corrupted file
-rm /home/mikko/.local/share/efm/files/manual/61392fe1-3cb6-45ed-9b94-b5d149c428c5.zst
-
-# Re-download with valid credentials or copy the good version
-cp /home/mikko/.local/share/efm/files/61392fe1-3cb6-45ed-9b94-b5d149c428c5.zst \
-   /home/mikko/.local/share/efm/files/manual/61392fe1-3cb6-45ed-9b94-b5d149c428c5.zst
-```
-
-**Code fixes needed:**
-1. Cloud download must validate HTTP response status codes
-2. Must not save error responses as data files
-3. Should verify zstd magic number after download
-4. Should fail loudly when credentials are invalid
-
----
-
-## Bug #3: Files Saved to Wrong Directory
-
-Status: Fixed, nned to test
-
-### Problem
-Files are being saved to the wrong directory path. 
-
-### Evidence
-- File EXISTS at: `/home/mikko/.local/share/efm/files/61392fe1-3cb6-45ed-9b94-b5d149c428c5.zst`
-- File SHOULD be at: `/home/mikko/.local/share/efm/files/manual/61392fe1-3cb6-45ed-9b94-b5d149c428c5.zst`
-
-The correct file is in the root `files/` directory when it should be in the `files/manual/` subdirectory based on the file type/category.
-
-### Impact
-- File organization is broken
-- Files not in expected locations
-- May cause duplicate files (one in correct location, one in wrong location)
-- Makes file management and cleanup difficult
-
-### Investigation Needed → Fix Applied
-
-**✅ BUG FIXED!**
-
-**Location:** `service/src/file_import/service.rs`, lines 88-96, 140-148
-
-**Fix Applied:**
-```rust
-fn get_output_dir_for_file_type(&self, file_type: &FileType) -> std::path::PathBuf {
-    self.settings.get_file_type_path(file_type)
-}
-
-// Then used in both import methods:
-let output_dir = self.get_output_dir_for_file_type(&file_type);
-```
-
-**Previous buggy code:**
-```rust
-let output_dir = self.settings.collection_root_dir.clone();
-```
-
-**Explanation:**
-- Files are being imported to the root collection directory (`/home/mikko/.local/share/efm/files/`)
-- They should be imported to file-type-specific subdirectories (e.g., `/home/mikko/.local/share/efm/files/manual/`)
-- The `Settings` struct already has a helper method `get_file_type_path()` that does this correctly (line 67-69 in `service/src/view_models.rs`)
-- The export code uses this correctly via `resolve_file_type_path()` (line 124 in `service/src/export_service.rs`)
-- But import code doesn't use it!
-
-**File Type to Directory Mapping** (from `core_types/src/lib.rs` lines 102-116):
-- `Manual` → `manual/`
-- `Rom` → `rom/`
-- `Screenshot` → `screenshot/`
-- `DiskImage` → `disk_image/`
-- etc.
-
-### Impact
-- All imported files go to wrong location
-- Export expects files in subdirectories, import puts them in root
-- Creates mismatches between database paths and actual file locations
-
-
----
-
-## Bug #4: Credentials Not Persisted Between Sessions
-
-### **STATUS: FIXED** ✅
-**Fix Date:** December 27, 2025  
-**Fix Applied:** Tests now use separate keyring service name and clean up after themselves
-
-### Original Problem
-Cloud storage credentials (S3/Backblaze B2 access keys) are only stored for the current session. When the application is restarted, credentials are lost and must be re-entered.
-
-### Evidence
-- After entering valid credentials, cloud operations work correctly
-- After restarting the application, cloud downloads fail with `InvalidAccessKeyId: Malformed Access Key Id`
-- This causes Bug #1 to trigger (error responses saved as files)
-
-### Impact
-- Poor user experience - credentials must be re-entered every time
-- Silent failures when credentials expire
-- Downloads fail and save error responses instead of proper error handling
-- Users may not realize credentials are missing until operations fail
-
-### Root Cause (FOUND!)
-Unit tests were writing test credentials to the **production keyring**:
-- Tests in `service/src/settings_service.rs` called `save_settings()` with `"test-access-key"`
-- This overwrote real user credentials with test credentials
-- Tests used the same service name as production: `"efm-cloud-sync"`
-
-### The Fix (Applied)
-
-**File:** `credentials_storage/src/lib.rs`
-
-1. **Separate service names for test vs production:**
-```rust
-#[cfg(not(test))]
-const SERVICE_NAME: &str = "efm-cloud-sync";
-
-#[cfg(test)]
-const TEST_SERVICE_NAME: &str = "efm-cloud-sync-test";
-
-fn get_service_name() -> &'static str {
-    #[cfg(test)]
-    { TEST_SERVICE_NAME }
-    #[cfg(not(test))]
-    { SERVICE_NAME }
-}
-```
-
-2. **Updated all credential functions to use `get_service_name()`**
-
-3. **Added cleanup in tests:**
-```rust
-#[test]
-fn test_store_and_load() {
-    cleanup_test_credentials(); // Before
-    
-    // ... test code ...
-    
-    cleanup_test_credentials(); // After
-}
-```
-
-4. **Cleared production keyring of test credentials:**
-```bash
-secret-tool clear service efm-cloud-sync username s3-credentials
-```
-
-### Result
-- ✅ Tests use isolated keyring entry (`efm-cloud-sync-test`)
-- ✅ Production uses separate entry (`efm-cloud-sync`)
-- ✅ Tests clean up after themselves
-- ✅ Real credentials no longer overwritten by tests
-- ✅ Credentials persist between application sessions
-
-### Related Components
-- `credentials_storage/` - Credential storage module using keyring
-- `credentials_storage/src/lib.rs` - Store/load implementation with test isolation
-- `service/src/settings_service.rs` - Service layer using credentials
-
----
-
-## Recommended Actions
-
-### Immediate
-1. ⚠️ **Fix Bug #1:** Add HTTP response validation to cloud download code
-2. ✅ **~~Fix Bug #2~~:** ~~Fix CloudFileWriter double-compression~~ - RESOLVED: Dead code removed
-3. ✅ **~~Fix Bug #3~~:** ~~Fix file path construction during import~~ - FIXED: December 27, 2025
-4. ⚠️ **Fix Bug #4:** Investigate and fix credential persistence
-
-### Validation
-5. **Add integration tests** that:
-   - Upload AND download files to catch compression issues
-   - Verify files are in correct directories
-   - Validate downloaded content before saving
-   - Test with invalid credentials to ensure proper error handling
-
-### Cleanup
-6. ⚠️ **Identify all corrupted files** saved with XML error responses
-7. ✅ **~~Identify all double-compressed files~~** - Not applicable, CloudFileWriter was unused (dead code removed)
-8. **Re-import files** that were placed in wrong directories (before Bug #3 fix)
-9. **Re-download corrupted files** affected by Bug #1
-
-## Related Files
-- `file_import/src/file_writer.rs` - Bug #2: CloudFileWriter double-compression (lines 78-175)
-- `file_export/src/lib.rs` - Where decompression fails (line 165)
-- `service/src/file_import/service.rs` - Bug #3: Wrong directory (line 96)
-- Cloud download code (location TBD) - Bug #1: Error response saving
-- Credential storage code (location TBD) - Bug #4: Credentials not persisted
+
+`cloud_storage/src/lib.rs` currently downloads with `bucket.get_object_stream(key).await?`, creates the destination file immediately, and writes every returned chunk directly to disk.
+
+If the server responds with an XML or other error body instead of actual zstd content, that response can be persisted as a `.zst` file. Later decompression then fails because the file does not contain valid zstd frames.
+
+### Current Code Path
+
+- `cloud_storage/src/lib.rs`
+- `download_file()`
+
+Current behavior:
+
+1. open response stream
+2. create local output file
+3. write all returned bytes to disk
+4. report progress
+5. return success if the stream finishes without a transport-level error
+
+### Why This Is Unsafe
+
+The current implementation does **not** guarantee that the downloaded body is actually a valid file payload.
+
+Missing safeguards:
+
+- no validation that the response represents a successful file download before writing
+- no validation of the first bytes before persisting the file as `.zst`
+- no protection against error bodies being written as user data
+
+## Required Behavior of the Fix
+
+Any final fix should guarantee all of the following:
+
+- failed downloads do **not** create or keep corrupted output files
+- an authentication or authorization failure is surfaced as an error, not as a fake successful download
+- invalid or unexpected response bodies are rejected before being treated as zstd files
+- partial or invalid outputs are cleaned up on failure
+
+Implementation details can vary, but the fix must be behaviorally equivalent to:
+
+- validate response success before writing, or
+- validate the first chunk before writing any file data, and
+- remove any partially written file if validation fails
+
+## Validation Checklist
+
+After fixing the bug, verify at least these cases:
+
+- valid download writes a readable `.zst` file
+- invalid credentials return an error and do not leave a corrupted local file
+- missing object / other failure response does not leave a corrupted local file
+- non-zstd response body is rejected before being accepted as a successful download
+- progress events are still emitted correctly for successful downloads
+
+## Cleanup for Already-Corrupted Files
+
+This code fix alone does not repair files already written incorrectly.
+
+Repository/users may still need cleanup for:
+
+- files whose `.zst` content is actually XML or another error body
+- files that need to be re-downloaded after credentials or connectivity issues are fixed
+
+Operational follow-up may include:
+
+- identifying suspicious `.zst` files that do not start with the zstd magic bytes
+- deleting corrupted local copies
+- re-downloading known-good versions
+
+## Historical Notes on Resolved Items
+
+### Resolved: Dead Double-Compression Path
+
+The previously documented `CloudFileWriter` double-compression concern is no longer active. That path was dead code and has been removed. The current import compression path is `file_import/src/file_outputter.rs`.
+
+### Resolved: Wrong Import Output Directory
+
+The import flow now uses file-type-specific output directories through:
+
+- `service/src/file_import/service.rs`
+- `Settings::get_file_type_path(...)`
+
+### Resolved: Test Credentials Polluting Production Keyring
+
+Credential storage now separates test and production service names in:
+
+- `credentials_storage/src/lib.rs`
+
+This prevents tests from overwriting production credentials.
