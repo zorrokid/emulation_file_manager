@@ -128,9 +128,7 @@ mod tests {
     async fn test_prepare_rom_download_error() {
         let settings = Settings::default();
         let download_service = MockDownloadServiceOps::with_outcome(ConfiguredOutcome {
-            result: Err(Error::DownloadError("Download error".into())), /*Ok(DownloadResult {
-                                                                            ..Default::default()
-                                                                        })*/
+            result: Err(Error::DownloadError("Download error".into())),
             ..Default::default()
         });
         let libretro_runner_service =
@@ -156,6 +154,80 @@ mod tests {
         assert!(matches!(
             error,
             Some(LibretroPreflightError::DownloadError(_))
+        ));
+    }
+
+    #[async_std::test]
+    async fn test_prepare_rom_no_files_in_file_set() {
+        let settings = Settings::default();
+        let download_service = MockDownloadServiceOps::with_outcome(ConfiguredOutcome {
+            result: Ok(crate::file_set_download::service::DownloadResult {
+                successful_downloads: 1,
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
+        let libretro_runner_service =
+            LibretroRunnerService::new(Arc::new(settings), Arc::new(download_service));
+
+        let launch_model = LibretroLaunchModel {
+            file_set_id: 1,
+            initial_file: None,
+            core_path: PathBuf::from("/tmp"),
+            core_info: LibretroCoreInfo {
+                core_name: "test".into(),
+                is_available: false,
+                firmware_info: vec![],
+                input_profile: InputProfile::Standard,
+                supported_extensions: vec![],
+            },
+        };
+
+        let result = libretro_runner_service.prepare_rom(launch_model).await;
+        assert!(result.is_err());
+        let error = result.err();
+        dbg!(&error);
+        assert!(matches!(
+            error,
+            Some(LibretroPreflightError::NoFileInFileSet)
+        ));
+    }
+
+    #[async_std::test]
+    async fn test_prepare_invalid_initial_file() {
+        let settings = Settings::default();
+        let initial_file = "initial_file".to_string();
+        let download_service = MockDownloadServiceOps::with_outcome(ConfiguredOutcome {
+            result: Ok(crate::file_set_download::service::DownloadResult {
+                successful_downloads: 1,
+                output_file_names: vec!["not_initial_file".to_string()],
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
+        let libretro_runner_service =
+            LibretroRunnerService::new(Arc::new(settings), Arc::new(download_service));
+
+        let launch_model = LibretroLaunchModel {
+            file_set_id: 1,
+            initial_file: Some(initial_file),
+            core_path: PathBuf::from("/tmp"),
+            core_info: LibretroCoreInfo {
+                core_name: "test".into(),
+                is_available: false,
+                firmware_info: vec![],
+                input_profile: InputProfile::Standard,
+                supported_extensions: vec![],
+            },
+        };
+
+        let result = libretro_runner_service.prepare_rom(launch_model).await;
+        assert!(result.is_err());
+        let error = result.err();
+        dbg!(&error);
+        assert!(matches!(
+            error,
+            Some(LibretroPreflightError::InvalidInitialFile(_))
         ));
     }
 }
