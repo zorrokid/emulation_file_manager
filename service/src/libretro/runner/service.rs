@@ -1,7 +1,6 @@
 use std::{path::PathBuf, sync::Arc};
 
 use crate::{
-    error::Error,
     file_set_download::download_service_ops::DownloadServiceOps,
     libretro::{
         core::service::LibretroCoreInfo,
@@ -119,11 +118,27 @@ mod tests {
     use libretro_runner::supported_cores::InputProfile;
 
     use crate::{
+        error::Error,
         file_set_download::download_service_ops::{ConfiguredOutcome, MockDownloadServiceOps},
         libretro::core::service::LibretroFirmwareInfo,
     };
 
     use super::*;
+
+    fn create_launch_model() -> LibretroLaunchModel {
+        LibretroLaunchModel {
+            file_set_id: 1,
+            initial_file: None,
+            core_path: PathBuf::from("/opt/libretro/cores"),
+            core_info: LibretroCoreInfo {
+                core_name: "test".into(),
+                is_available: false, // TODO: do we check if core is available or not?
+                firmware_info: vec![],
+                input_profile: InputProfile::Standard,
+                supported_extensions: vec![],
+            },
+        }
+    }
 
     #[async_std::test]
     async fn test_prepare_rom_download_error() {
@@ -135,18 +150,7 @@ mod tests {
         let libretro_runner_service =
             LibretroRunnerService::new(Arc::new(settings), Arc::new(download_service));
 
-        let launch_model = LibretroLaunchModel {
-            file_set_id: 1,
-            initial_file: None,
-            core_path: PathBuf::from("/tmp"),
-            core_info: LibretroCoreInfo {
-                core_name: "test".into(),
-                is_available: false,
-                firmware_info: vec![],
-                input_profile: InputProfile::Standard,
-                supported_extensions: vec![],
-            },
-        };
+        let launch_model = create_launch_model();
 
         let result = libretro_runner_service.prepare_rom(launch_model).await;
         assert!(result.is_err());
@@ -171,18 +175,7 @@ mod tests {
         let libretro_runner_service =
             LibretroRunnerService::new(Arc::new(settings), Arc::new(download_service));
 
-        let launch_model = LibretroLaunchModel {
-            file_set_id: 1,
-            initial_file: None,
-            core_path: PathBuf::from("/tmp"),
-            core_info: LibretroCoreInfo {
-                core_name: "test".into(),
-                is_available: false,
-                firmware_info: vec![],
-                input_profile: InputProfile::Standard,
-                supported_extensions: vec![],
-            },
-        };
+        let launch_model = create_launch_model();
 
         let result = libretro_runner_service.prepare_rom(launch_model).await;
         assert!(result.is_err());
@@ -209,18 +202,8 @@ mod tests {
         let libretro_runner_service =
             LibretroRunnerService::new(Arc::new(settings), Arc::new(download_service));
 
-        let launch_model = LibretroLaunchModel {
-            file_set_id: 1,
-            initial_file: Some(initial_file),
-            core_path: PathBuf::from("/tmp"),
-            core_info: LibretroCoreInfo {
-                core_name: "test".into(),
-                is_available: false,
-                firmware_info: vec![],
-                input_profile: InputProfile::Standard,
-                supported_extensions: vec![],
-            },
-        };
+        let mut launch_model = create_launch_model();
+        launch_model.initial_file = Some(initial_file);
 
         let result = libretro_runner_service.prepare_rom(launch_model).await;
         assert!(result.is_err());
@@ -246,23 +229,13 @@ mod tests {
         let libretro_runner_service =
             LibretroRunnerService::new(Arc::new(settings), Arc::new(download_service));
 
-        let launch_model = LibretroLaunchModel {
-            file_set_id: 1,
-            initial_file: None,
-            core_path: PathBuf::from("/tmp"),
-            core_info: LibretroCoreInfo {
-                core_name: "test".into(),
-                is_available: false,
-                firmware_info: vec![LibretroFirmwareInfo {
-                    desc: "".to_string(),
-                    path: "bios.bin".to_string(),
-                    opt: false,
-                    available: false,
-                }],
-                input_profile: InputProfile::Standard,
-                supported_extensions: vec![],
-            },
-        };
+        let mut launch_model = create_launch_model();
+        launch_model.core_info.firmware_info = vec![LibretroFirmwareInfo {
+            desc: "".to_string(),
+            path: "bios.bin".to_string(),
+            opt: false,
+            available: false,
+        }];
 
         let result = libretro_runner_service.prepare_rom(launch_model).await;
         assert!(result.is_err());
@@ -288,18 +261,8 @@ mod tests {
         let libretro_runner_service =
             LibretroRunnerService::new(Arc::new(settings), Arc::new(download_service));
 
-        let launch_model = LibretroLaunchModel {
-            file_set_id: 1,
-            initial_file: None,
-            core_path: PathBuf::from("/tmp"),
-            core_info: LibretroCoreInfo {
-                core_name: "test".into(),
-                is_available: false, // TODO: do we check if core is available or not?
-                firmware_info: vec![],
-                input_profile: InputProfile::Standard,
-                supported_extensions: vec!["dsk".to_string()],
-            },
-        };
+        let mut launch_model = create_launch_model();
+        launch_model.core_info.supported_extensions = vec!["dsk".to_string()];
 
         let result = libretro_runner_service.prepare_rom(launch_model).await;
         assert!(result.is_err());
@@ -325,18 +288,7 @@ mod tests {
         let libretro_runner_service =
             LibretroRunnerService::new(Arc::new(settings), Arc::new(download_service));
 
-        let launch_model = LibretroLaunchModel {
-            file_set_id: 1,
-            initial_file: None,
-            core_path: PathBuf::from("/tmp"),
-            core_info: LibretroCoreInfo {
-                core_name: "test".into(),
-                is_available: false, // TODO: do we check if core is available or not?
-                firmware_info: vec![],
-                input_profile: InputProfile::Standard,
-                supported_extensions: vec![],
-            },
-        };
+        let launch_model = create_launch_model();
 
         let result = libretro_runner_service.prepare_rom(launch_model).await;
         assert!(result.is_err());
@@ -366,18 +318,7 @@ mod tests {
         let libretro_runner_service =
             LibretroRunnerService::new(Arc::new(settings), Arc::new(download_service));
 
-        let launch_model = LibretroLaunchModel {
-            file_set_id: 1,
-            initial_file: None,
-            core_path: PathBuf::from("/opt/libretro/cores"),
-            core_info: LibretroCoreInfo {
-                core_name: "test".into(),
-                is_available: false, // TODO: do we check if core is available or not?
-                firmware_info: vec![],
-                input_profile: InputProfile::Standard,
-                supported_extensions: vec![],
-            },
-        };
+        let launch_model = create_launch_model();
 
         let result = libretro_runner_service.prepare_rom(launch_model).await;
         assert!(result.is_ok());
