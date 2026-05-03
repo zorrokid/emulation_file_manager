@@ -23,7 +23,7 @@ pub struct LibretroLaunchModel {
     pub core_info: LibretroCoreInfo,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct LibretroLaunchPaths {
     pub rom_path: PathBuf,
     pub core_path: PathBuf,
@@ -118,8 +118,9 @@ mod tests {
 
     use libretro_runner::supported_cores::InputProfile;
 
-    use crate::file_set_download::download_service_ops::{
-        ConfiguredOutcome, MockDownloadServiceOps,
+    use crate::{
+        file_set_download::download_service_ops::{ConfiguredOutcome, MockDownloadServiceOps},
+        libretro::core::service::LibretroFirmwareInfo,
     };
 
     use super::*;
@@ -229,5 +230,168 @@ mod tests {
             error,
             Some(LibretroPreflightError::InvalidInitialFile(_))
         ));
+    }
+
+    #[async_std::test]
+    async fn test_prepare_firmware_not_available() {
+        let settings = Settings::default();
+        let download_service = MockDownloadServiceOps::with_outcome(ConfiguredOutcome {
+            result: Ok(crate::file_set_download::service::DownloadResult {
+                successful_downloads: 1,
+                output_file_names: vec!["file".to_string()],
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
+        let libretro_runner_service =
+            LibretroRunnerService::new(Arc::new(settings), Arc::new(download_service));
+
+        let launch_model = LibretroLaunchModel {
+            file_set_id: 1,
+            initial_file: None,
+            core_path: PathBuf::from("/tmp"),
+            core_info: LibretroCoreInfo {
+                core_name: "test".into(),
+                is_available: false,
+                firmware_info: vec![LibretroFirmwareInfo {
+                    desc: "".to_string(),
+                    path: "bios.bin".to_string(),
+                    opt: false,
+                    available: false,
+                }],
+                input_profile: InputProfile::Standard,
+                supported_extensions: vec![],
+            },
+        };
+
+        let result = libretro_runner_service.prepare_rom(launch_model).await;
+        assert!(result.is_err());
+        let error = result.err();
+        dbg!(&error);
+        assert!(matches!(
+            error,
+            Some(LibretroPreflightError::FirmwareNotAvailable(_))
+        ));
+    }
+
+    #[async_std::test]
+    async fn test_prepare_unsupported_extension() {
+        let settings = Settings::default();
+        let download_service = MockDownloadServiceOps::with_outcome(ConfiguredOutcome {
+            result: Ok(crate::file_set_download::service::DownloadResult {
+                successful_downloads: 1,
+                output_file_names: vec!["file.img".to_string()],
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
+        let libretro_runner_service =
+            LibretroRunnerService::new(Arc::new(settings), Arc::new(download_service));
+
+        let launch_model = LibretroLaunchModel {
+            file_set_id: 1,
+            initial_file: None,
+            core_path: PathBuf::from("/tmp"),
+            core_info: LibretroCoreInfo {
+                core_name: "test".into(),
+                is_available: false, // TODO: do we check if core is available or not?
+                firmware_info: vec![],
+                input_profile: InputProfile::Standard,
+                supported_extensions: vec!["dsk".to_string()],
+            },
+        };
+
+        let result = libretro_runner_service.prepare_rom(launch_model).await;
+        assert!(result.is_err());
+        let error = result.err();
+        dbg!(&error);
+        assert!(matches!(
+            error,
+            Some(LibretroPreflightError::UnsupportedExtension(_))
+        ));
+    }
+
+    #[async_std::test]
+    async fn test_prepare_system_dir_not_set() {
+        let settings = Settings::default();
+        let download_service = MockDownloadServiceOps::with_outcome(ConfiguredOutcome {
+            result: Ok(crate::file_set_download::service::DownloadResult {
+                successful_downloads: 1,
+                output_file_names: vec!["file.img".to_string()],
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
+        let libretro_runner_service =
+            LibretroRunnerService::new(Arc::new(settings), Arc::new(download_service));
+
+        let launch_model = LibretroLaunchModel {
+            file_set_id: 1,
+            initial_file: None,
+            core_path: PathBuf::from("/tmp"),
+            core_info: LibretroCoreInfo {
+                core_name: "test".into(),
+                is_available: false, // TODO: do we check if core is available or not?
+                firmware_info: vec![],
+                input_profile: InputProfile::Standard,
+                supported_extensions: vec![],
+            },
+        };
+
+        let result = libretro_runner_service.prepare_rom(launch_model).await;
+        assert!(result.is_err());
+        let error = result.err();
+        dbg!(&error);
+        assert!(matches!(
+            error,
+            Some(LibretroPreflightError::SystemDirNotSet)
+        ));
+    }
+
+    #[async_std::test]
+    async fn test_prepare() {
+        let settings = Settings {
+            libretro_system_dir: Some(PathBuf::from("/opt/libretro/system_dir")),
+            temp_output_dir: PathBuf::from("/tmp/"),
+            ..Default::default()
+        };
+        let download_service = MockDownloadServiceOps::with_outcome(ConfiguredOutcome {
+            result: Ok(crate::file_set_download::service::DownloadResult {
+                successful_downloads: 1,
+                output_file_names: vec!["file.img".to_string()],
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
+        let libretro_runner_service =
+            LibretroRunnerService::new(Arc::new(settings), Arc::new(download_service));
+
+        let launch_model = LibretroLaunchModel {
+            file_set_id: 1,
+            initial_file: None,
+            core_path: PathBuf::from("/opt/libretro/cores"),
+            core_info: LibretroCoreInfo {
+                core_name: "test".into(),
+                is_available: false, // TODO: do we check if core is available or not?
+                firmware_info: vec![],
+                input_profile: InputProfile::Standard,
+                supported_extensions: vec![],
+            },
+        };
+
+        let result = libretro_runner_service.prepare_rom(launch_model).await;
+        assert!(result.is_ok());
+        let result = result.ok();
+        assert!(result.is_some());
+        let result = result.unwrap();
+        assert_eq!(
+            result,
+            LibretroLaunchPaths {
+                rom_path: PathBuf::from("/tmp/file.img"),
+                core_path: PathBuf::from("/opt/libretro/cores"),
+                system_dir: PathBuf::from("/opt/libretro/system_dir"),
+                temp_files: vec!["file.img".to_string()],
+            }
+        );
     }
 }
