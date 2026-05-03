@@ -1,6 +1,7 @@
 use std::{path::PathBuf, sync::Arc};
 
 use crate::{
+    error::Error,
     file_set_download::download_service_ops::DownloadServiceOps,
     libretro::{
         core::service::LibretroCoreInfo,
@@ -117,24 +118,19 @@ mod tests {
 
     use libretro_runner::supported_cores::InputProfile;
 
-    use crate::{
-        download_service,
-        file_set_download::{
-            download_service_ops::{ConfiguredOutcome, MockDownloadServiceOps},
-            service::DownloadResult,
-        },
+    use crate::file_set_download::download_service_ops::{
+        ConfiguredOutcome, MockDownloadServiceOps,
     };
 
     use super::*;
 
     #[async_std::test]
-    async fn test_prepare_rom() {
+    async fn test_prepare_rom_download_error() {
         let settings = Settings::default();
         let download_service = MockDownloadServiceOps::with_outcome(ConfiguredOutcome {
-            result: Ok(DownloadResult {
-                successful_downloads: 1,
-                ..Default::default()
-            }),
+            result: Err(Error::DownloadError("Download error".into())), /*Ok(DownloadResult {
+                                                                            ..Default::default()
+                                                                        })*/
             ..Default::default()
         });
         let libretro_runner_service =
@@ -155,5 +151,11 @@ mod tests {
 
         let result = libretro_runner_service.prepare_rom(launch_model).await;
         assert!(result.is_err());
+        let error = result.err();
+        dbg!(&error);
+        assert!(matches!(
+            error,
+            Some(LibretroPreflightError::DownloadError(_))
+        ));
     }
 }
