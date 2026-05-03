@@ -55,7 +55,6 @@ pub struct DownloadCall {
     pub had_progress_tx: bool,
 }
 
-/// Test fixture for describing what mock should do.
 pub struct ConfiguredOutcome {
     /// Result returned from `download_file_set`.
     pub result: Result<DownloadResult, Error>,

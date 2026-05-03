@@ -1,12 +1,14 @@
 use std::{path::PathBuf, sync::Arc};
 
 use crate::{
-    file_set_download::service::DownloadService,
-    libretro::core::service::LibretroCoreInfo,
-    libretro::error::LibretroPreflightError,
-    libretro::runner::prepare::context::{
-        PrepareLaunchContext, PrepareLaunchContextDeps, PrepareLaunchContextInput,
-        PrepareLaunchContextState,
+    file_set_download::download_service_ops::DownloadServiceOps,
+    libretro::{
+        core::service::LibretroCoreInfo,
+        error::LibretroPreflightError,
+        runner::prepare::context::{
+            PrepareLaunchContext, PrepareLaunchContextDeps, PrepareLaunchContextInput,
+            PrepareLaunchContextState,
+        },
     },
     pipeline::generic_pipeline::Pipeline,
     view_models::Settings,
@@ -31,7 +33,7 @@ pub struct LibretroLaunchPaths {
 
 pub struct LibretroRunnerService {
     settings: Arc<Settings>,
-    download_service: Arc<DownloadService>,
+    download_service: Arc<dyn DownloadServiceOps>,
 }
 
 impl std::fmt::Debug for LibretroRunnerService {
@@ -42,7 +44,7 @@ impl std::fmt::Debug for LibretroRunnerService {
 }
 
 impl LibretroRunnerService {
-    pub fn new(settings: Arc<Settings>, download_service: Arc<DownloadService>) -> Self {
+    pub fn new(settings: Arc<Settings>, download_service: Arc<dyn DownloadServiceOps>) -> Self {
         Self {
             settings,
             download_service,
@@ -112,10 +114,46 @@ impl LibretroRunnerService {
 
 #[cfg(test)]
 mod tests {
+
+    use libretro_runner::supported_cores::InputProfile;
+
+    use crate::{
+        download_service,
+        file_set_download::{
+            download_service_ops::{ConfiguredOutcome, MockDownloadServiceOps},
+            service::DownloadResult,
+        },
+    };
+
     use super::*;
 
     #[async_std::test]
     async fn test_prepare_rom() {
         let settings = Settings::default();
+        let download_service = MockDownloadServiceOps::with_outcome(ConfiguredOutcome {
+            result: Ok(DownloadResult {
+                successful_downloads: 1,
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
+        let libretro_runner_service =
+            LibretroRunnerService::new(Arc::new(settings), Arc::new(download_service));
+
+        let launch_model = LibretroLaunchModel {
+            file_set_id: 1,
+            initial_file: None,
+            core_path: PathBuf::from("/tmp"),
+            core_info: LibretroCoreInfo {
+                core_name: "test".into(),
+                is_available: false,
+                firmware_info: vec![],
+                input_profile: InputProfile::Standard,
+                supported_extensions: vec![],
+            },
+        };
+
+        let result = libretro_runner_service.prepare_rom(launch_model).await;
+        assert!(result.is_err());
     }
 }
