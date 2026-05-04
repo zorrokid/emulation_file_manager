@@ -20,6 +20,9 @@ A libretro **core** is a `.so` shared library that emulates a system (NES, SNES,
 
 The core does not open windows, play audio, or read input on its own. It only emulates the hardware and hands the results back to the frontend via callbacks. The frontend is responsible for displaying video, playing audio, and feeding input.
 
+
+See the official libretro API reference for details:
+https://github.com/libretro/libretro-common/blob/master/include/libretro.h
 ---
 
 ## What is libloading?
@@ -359,7 +362,21 @@ Some cores need BIOS files (e.g. PlayStation needs `scph1001.bin`). The core req
 
 The path handed to the core comes from the `system_dir` argument passed into `LibretroCore::load()`. If a core depends on firmware, that directory must contain the files the core expects.
 
-In the current implementation, `LibretroRunnerService::prepare_rom()` passes the app's temp output directory as the libretro system directory. That works for cores with no firmware requirements, but BIOS-dependent cores need a real system directory populated with the required firmware files.
+In the current implementation, `LibretroRunnerService::prepare_rom()` passes the configured `libretro_system_dir` setting as the libretro system directory. That lets BIOS-dependent cores read firmware from a persistent user-configured location instead of the app's temp output directory.
+
+For `freeintv_libretro` specifically:
+
+1. `freeintv_libretro` is included in the current supported core definitions.
+2. Place the core shared library in the configured libretro core directory.
+3. Map the core to the Intellivision system from **Settings → Map Libretro Cores**.
+4. The service layer parses the core's `.info` metadata to inspect supported extensions and firmware requirements.
+5. `LibretroCoreService::get_core_system_info()` checks those metadata-driven requirements against the configured libretro system directory.
+6. `LibretroRunnerService::prepare_rom()` runs a typed preflight pipeline before launch, and launch-time validation failures are shown in the UI through the existing error-dialog flow.
+
+Current scope:
+
+- Controller mapping currently uses generic libretro / Retropad-style input via keyboard + `gilrs`.
+- This integration documents the current generic libretro input path and setup flow.
 
 ### Step 6: Test
 

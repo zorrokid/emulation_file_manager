@@ -46,7 +46,10 @@ impl<T: CheckExistingFileSetContext> CheckExistingFileSetStep<T> {
 }
 
 #[async_trait::async_trait]
-impl<T: CheckExistingFileSetContext + Send + Sync> PipelineStep<T> for CheckExistingFileSetStep<T> {
+impl<T> PipelineStep<T, Error> for CheckExistingFileSetStep<T>
+where
+    T: CheckExistingFileSetContext + Send + Sync,
+{
     fn name(&self) -> &'static str {
         "check_existing_file_set"
     }
@@ -55,7 +58,7 @@ impl<T: CheckExistingFileSetContext + Send + Sync> PipelineStep<T> for CheckExis
         context.files_in_file_set_already_exist()
     }
 
-    async fn execute(&self, context: &mut T) -> StepAction {
+    async fn execute(&self, context: &mut T) -> StepAction<Error> {
         tracing::info!("Checking for existing file set in the database.");
 
         let existing_file_set_result = context

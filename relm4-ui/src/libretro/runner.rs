@@ -13,8 +13,9 @@ use relm4::{
 use service::{
     app_services::AppServices,
     error::Error,
-    libretro_core::service::CoreMappingModel,
-    libretro_runner::service::{LibretroLaunchModel, LibretroLaunchPaths},
+    libretro::core::service::{CoreMappingModel, LibretroCoreInfo},
+    libretro::error::LibretroPreflightError,
+    libretro::runner::service::{LibretroLaunchModel, LibretroLaunchPaths},
     view_models::{FileSetFileInfoViewModel, FileSetViewModel},
 };
 use ui_components::string_list_view::{
@@ -47,7 +48,6 @@ pub enum LibretroRunnerMsg {
         systems: Vec<System>,
     },
     Hide,
-    Ignore,
     StartCore,
     ShowError(String),
     LibretroSessionEnded(Vec<String>),
@@ -56,9 +56,11 @@ pub enum LibretroRunnerMsg {
 #[derive(Debug)]
 pub enum LibretroRunnerCommandMsg {
     CoresFetched { cores: Vec<String> },
+
     FinishedRunningCore(Result<(), Error>),
     ProcessCoresResult(Result<Vec<CoreMappingModel>, Error>),
-    FilesPrepared(Result<LibretroLaunchPaths, Error>),
+    FilesPrepared(Result<LibretroLaunchPaths, LibretroPreflightError>),
+    ProcessSystemInfoResult(Result<LibretroCoreInfo, LibretroPreflightError>),
 }
 
 pub struct LibretroRunnerInit {
@@ -80,12 +82,22 @@ pub struct LibretroRunner {
     // data
     cores: Vec<String>,
     systems: Vec<System>,
+    core_info: Option<LibretroCoreInfo>,
 
     // needed for running the core:
     file_set: Option<FileSetViewModel>,
     selected_file: Option<FileSetFileInfoViewModel>,
     selected_system: Option<System>,
     selected_core: Option<String>,
+}
+
+impl LibretroRunner {
+    pub fn can_launch_core(&self) -> bool {
+        // Let's not do firmware checks here for now, since the UI doesn't currently indicate
+        // firmware requirements/availability. Now if firmware is missing, an error message will
+        // just be shown when trying to launch the core.
+        self.selected_core.is_some() && self.selected_file.is_some() && self.file_set.is_some()
+    }
 }
 
 #[relm4::component(pub)]
@@ -118,7 +130,7 @@ impl Component for LibretroRunner {
                     set_label: "Start",
                     connect_clicked => LibretroRunnerMsg::StartCore,
                     #[watch]
-                    set_sensitive: model.selected_core.is_some() && model.selected_file.is_some() && model.file_set.is_some(),
+                    set_sensitive: model.can_launch_core(),
                 },
 
             },
@@ -165,6 +177,7 @@ impl Component for LibretroRunner {
             selected_system: None,
             selected_core: None,
             libretro_window,
+            core_info: None,
         };
 
         let file_list_view = &model.file_list_view_wrapper.view;
@@ -209,7 +222,11 @@ impl Component for LibretroRunner {
                 self.handle_system_selection(index, &sender);
             }
             LibretroRunnerMsg::CoreSelected { name } => {
-                self.handle_core_selection(name);
+                // TODO: once core is selected, core info should be loaded and availability of
+                // possible firmware should be indicated in the UI.
+                // Also core info should be passed to the libretro window (it will be used for
+                // example to set the InputProfile.
+                self.handle_core_selection(name, &sender);
             }
             LibretroRunnerMsg::StartCore => {
                 self.handle_start_core(&sender, root);
@@ -221,7 +238,6 @@ impl Component for LibretroRunner {
             LibretroRunnerMsg::Hide => {
                 root.hide();
             }
-            LibretroRunnerMsg::Ignore => { /* do nothing */ }
             LibretroRunnerMsg::FetchCores { system_id } => {
                 let app_services = Arc::clone(&self.app_services);
                 sender.oneshot_command(async move {
@@ -267,20 +283,28 @@ impl Component for LibretroRunner {
                     eprintln!("Error fetching cores for system: {:?}", e);
                 }
             },
-            LibretroRunnerCommandMsg::FilesPrepared(result) => match result {
-                Ok(paths) => {
+            LibretroRunnerCommandMsg::FilesPrepared(Ok(paths)) => {
+                if let Some(core_info) = &self.core_info {
                     self.libretro_window.emit(LibretroWindowMsg::Launch {
                         core_path: paths.core_path,
                         rom_path: paths.rom_path,
                         system_dir: paths.system_dir,
                         temp_files: paths.temp_files,
+                        input_profile: core_info.input_profile,
                     });
                 }
-                Err(e) => {
-                    eprintln!("Error preparing files for core launch: {:?}", e);
-                    show_error_dialog("Failed to prepare files for core launch".into(), root);
-                }
-            },
+            }
+            LibretroRunnerCommandMsg::FilesPrepared(Err(e)) => {
+                tracing::error!(error = ?e, "Failed to prepare files for core launch");
+                show_error_dialog(e.to_string(), root);
+            }
+            LibretroRunnerCommandMsg::ProcessSystemInfoResult(Ok(result)) => {
+                self.core_info = Some(result);
+            }
+            LibretroRunnerCommandMsg::ProcessSystemInfoResult(Err(e)) => {
+                tracing::error!(error = ?e, "Failed to fetch system info for core");
+                show_error_dialog(e.to_string(), root);
+            }
         }
     }
 }
@@ -309,19 +333,32 @@ impl LibretroRunner {
         }
     }
 
-    pub fn handle_core_selection(&mut self, name: Option<String>) {
+    pub fn handle_core_selection(&mut self, name: Option<String>, sender: &ComponentSender<Self>) {
         self.selected_core = name;
+        if let Some(name) = &self.selected_core {
+            let core_name = name.clone();
+            let service = Arc::clone(&self.app_services);
+            sender.oneshot_command(async move {
+                LibretroRunnerCommandMsg::ProcessSystemInfoResult(
+                    service
+                        .libretro_core()
+                        .get_core_system_info(core_name.as_str())
+                        .await,
+                )
+            });
+        }
     }
 
     pub fn handle_start_core(&mut self, sender: &ComponentSender<Self>, root: &Window) {
-        if let (Some(core_name), Some(file_set), Some(file_info), Some(system)) = (
+        if let (Some(core_name), Some(file_set), Some(file_info), Some(core_info)) = (
             self.selected_core.clone(),
             self.file_set.clone(),
             self.selected_file.clone(),
-            self.selected_system.clone(),
+            &self.core_info,
         ) {
             // first need to prepare the files
             let app_services = Arc::clone(&self.app_services);
+            let core_info = core_info.clone();
             match app_services.libretro_runner().resolve_core_path(&core_name) {
                 Ok(core_path) => {
                     sender.oneshot_command(async move {
@@ -332,6 +369,7 @@ impl LibretroRunner {
                                     file_set_id: file_set.id,
                                     initial_file: Some(file_info.file_name.clone()),
                                     core_path,
+                                    core_info,
                                 })
                                 .await,
                         )
@@ -339,7 +377,7 @@ impl LibretroRunner {
                 }
                 Err(e) => {
                     tracing::error!(error = ?e, "Failed to resolve core path");
-                    show_error_dialog("Failed to resolve core path".into(), root);
+                    show_error_dialog(e.to_string(), root);
                 }
             }
         }

@@ -45,14 +45,16 @@ pub trait CloudConnectionContext {
 /// # Type Parameters
 ///
 /// * `T` - The context type that implements `CloudConnectionContext`
-pub struct ConnectToCloudStep<T: CloudConnectionContext> {
+pub struct ConnectToCloudStep<T: CloudConnectionContext, E = Error> {
     _phantom: std::marker::PhantomData<T>,
+    _phantom_e: std::marker::PhantomData<E>,
 }
 
-impl<T: CloudConnectionContext> ConnectToCloudStep<T> {
+impl<T: CloudConnectionContext, E> ConnectToCloudStep<T, E> {
     pub fn new() -> Self {
         Self {
             _phantom: std::marker::PhantomData,
+            _phantom_e: std::marker::PhantomData,
         }
     }
 }
@@ -64,7 +66,10 @@ impl<T: CloudConnectionContext> Default for ConnectToCloudStep<T> {
 }
 
 #[async_trait::async_trait]
-impl<T: CloudConnectionContext + Send + Sync> PipelineStep<T> for ConnectToCloudStep<T> {
+impl<T> PipelineStep<T, Error> for ConnectToCloudStep<T>
+where
+    T: CloudConnectionContext + Send + Sync,
+{
     fn name(&self) -> &'static str {
         "connect_to_cloud"
     }
@@ -73,12 +78,14 @@ impl<T: CloudConnectionContext + Send + Sync> PipelineStep<T> for ConnectToCloud
         context.should_connect()
     }
 
-    async fn execute(&self, context: &mut T) -> StepAction {
+    async fn execute(&self, context: &mut T) -> StepAction<Error> {
         let s3_settings = match context.settings().s3_settings.clone() {
             Some(settings) => settings,
             None => {
                 eprintln!("S3 settings are not configured.");
-                return StepAction::Abort(Error::SettingsError("S3 settings missing".to_string()));
+                return StepAction::Abort(crate::error::Error::SettingsError(
+                    "S3 settings missing".to_string(),
+                ));
             }
         };
 
@@ -86,13 +93,13 @@ impl<T: CloudConnectionContext + Send + Sync> PipelineStep<T> for ConnectToCloud
             Ok(Some(creds)) => creds,
             Ok(None) => {
                 eprintln!("No S3 credentials found in keyring or environment.");
-                return StepAction::Abort(Error::SettingsError(
+                return StepAction::Abort(crate::error::Error::SettingsError(
                     "S3 credentials not found".to_string(),
                 ));
             }
             Err(e) => {
                 eprintln!("Error retrieving S3 credentials: {}", e);
-                return StepAction::Abort(Error::SettingsError(format!(
+                return StepAction::Abort(crate::error::Error::SettingsError(format!(
                     "Failed to get S3 credentials: {}",
                     e
                 )));
@@ -114,7 +121,7 @@ impl<T: CloudConnectionContext + Send + Sync> PipelineStep<T> for ConnectToCloud
             }
             Err(e) => {
                 eprintln!("Error connecting to S3: {}", e);
-                StepAction::Abort(Error::CloudSyncError(format!(
+                StepAction::Abort(crate::error::Error::CloudSyncError(format!(
                     "Failed to connect to S3: {}",
                     e
                 )))

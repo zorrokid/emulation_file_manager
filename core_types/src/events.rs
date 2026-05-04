@@ -58,10 +58,12 @@ pub enum SyncEvent {
     },
     SyncCancelled,
     /// Sent when the sync pipeline aborts due to an unrecoverable error.
-    SyncFailed { error: String },
+    SyncFailed {
+        error: String,
+    },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DownloadEvent {
     DownloadStarted { number_of_files: usize },
     FileDownloadStarted { key: String },

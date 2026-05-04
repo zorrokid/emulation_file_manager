@@ -101,7 +101,7 @@ impl DownloadService {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default, Clone)]
 pub struct DownloadResult {
     // TODO: this doesn't serve the purpose. When one of the downloads fail, the operation is
     // aborted with an error listing all the error messages. So currently when we have a

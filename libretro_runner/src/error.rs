@@ -6,4 +6,6 @@ pub enum LibretroError {
     GameLoad(String),
     #[error("Audio initialisation failed: {0}")]
     AudioInit(String),
+    #[error("Error parsing libretro info: {0}")]
+    LibretroInfoParserError(String),
 }

@@ -7,12 +7,12 @@ use crate::{
 pub struct PrepareFilesStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<ExternalExecutableRunnerContext> for PrepareFilesStep {
+impl PipelineStep<ExternalExecutableRunnerContext, Error> for PrepareFilesStep {
     fn name(&self) -> &'static str {
         "prepare_files"
     }
 
-    async fn execute(&self, context: &mut ExternalExecutableRunnerContext) -> StepAction {
+    async fn execute(&self, context: &mut ExternalExecutableRunnerContext) -> StepAction<Error> {
         let res = context
             .download_service_ops
             .download_file_set(
@@ -49,7 +49,7 @@ impl PipelineStep<ExternalExecutableRunnerContext> for PrepareFilesStep {
 pub struct StartExecutableStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<ExternalExecutableRunnerContext> for StartExecutableStep {
+impl PipelineStep<ExternalExecutableRunnerContext, Error> for StartExecutableStep {
     fn name(&self) -> &'static str {
         "start_executable"
     }
@@ -58,7 +58,7 @@ impl PipelineStep<ExternalExecutableRunnerContext> for StartExecutableStep {
         !context.file_names.is_empty()
     }
 
-    async fn execute(&self, context: &mut ExternalExecutableRunnerContext) -> StepAction {
+    async fn execute(&self, context: &mut ExternalExecutableRunnerContext) -> StepAction<Error> {
         let temp_dir = context.settings.temp_output_dir.clone();
 
         let initial_file = if context.file_names.len() == 1 {
@@ -111,7 +111,7 @@ impl PipelineStep<ExternalExecutableRunnerContext> for StartExecutableStep {
 pub struct CleanupFilesStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<ExternalExecutableRunnerContext> for CleanupFilesStep {
+impl PipelineStep<ExternalExecutableRunnerContext, Error> for CleanupFilesStep {
     fn name(&self) -> &'static str {
         "cleanup_files"
     }
@@ -120,7 +120,7 @@ impl PipelineStep<ExternalExecutableRunnerContext> for CleanupFilesStep {
         !context.file_names.is_empty() && !context.skip_cleanup
     }
 
-    async fn execute(&self, context: &mut ExternalExecutableRunnerContext) -> StepAction {
+    async fn execute(&self, context: &mut ExternalExecutableRunnerContext) -> StepAction<Error> {
         let path = &context.settings.temp_output_dir;
         tracing::info!("Cleaning up temporary files at {:?}", path);
         for file_name in &context.file_names {
@@ -152,10 +152,14 @@ mod tests {
     use executable_runner::ops::{ExecutableRunnerOps, MockExecutableRunnerOps};
 
     use crate::{
+        error::Error,
         external_executable_runner::{
             context::ExternalExecutableRunnerContext, steps::PrepareFilesStep,
         },
-        file_set_download::download_service_ops::{DownloadServiceOps, MockDownloadServiceOps},
+        file_set_download::{
+            download_service_ops::{ConfiguredOutcome, DownloadServiceOps, MockDownloadServiceOps},
+            service::DownloadResult,
+        },
         file_system_ops::{FileSystemOps, mock::MockFileSystemOps},
         pipeline::pipeline_step::{PipelineStep, StepAction},
         view_models::Settings,
@@ -178,9 +182,11 @@ mod tests {
 
     #[async_std::test]
     async fn test_prepare_files_step_failure() {
-        let download_service_ops = Arc::new(MockDownloadServiceOps::with_failure(
-            "Simulated download failure",
-        ));
+        let download_service_ops =
+            Arc::new(MockDownloadServiceOps::with_outcome(ConfiguredOutcome {
+                result: Err(Error::DownloadError("Simulated download failure".into())),
+                ..Default::default()
+            }));
 
         let mut context = initialize_context(Some(download_service_ops.clone()), None, None).await;
         let step = PrepareFilesStep;
@@ -197,7 +203,14 @@ mod tests {
     async fn test_prepare_files_step_with_failed_downloads() {
         // if even one download fails, the step should abort
         let download_service_ops =
-            Arc::new(MockDownloadServiceOps::with_successful_and_failed_downloads(1, 1));
+            Arc::new(MockDownloadServiceOps::with_outcome(ConfiguredOutcome {
+                result: Ok(DownloadResult {
+                    successful_downloads: 1,
+                    failed_downloads: 1,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }));
 
         let mut context = initialize_context(Some(download_service_ops.clone()), None, None).await;
         let step = PrepareFilesStep;

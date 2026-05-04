@@ -138,7 +138,8 @@ Critical gotchas (see the `relm4-gui` skill for full patterns):
 - Never mock `RepositoryManager` — use `database::setup_test_repository_manager().await` (real in-memory SQLite)
 - Mock service traits using a single `Arc<Mutex<MockState>>` struct — not one `Arc<Mutex<>>` per field
 - Reference implementations: `cloud_storage/src/mock.rs`, `service/src/file_set/mock_file_set_service.rs`
-- See the `qa` skill for full mock structure, coverage expectations, and test naming conventions
+- See `docs/TESTING_MOCKS.md` for the canonical repository mock guideline
+- See the `qa` skill for expanded mock structure, coverage expectations, and test naming conventions
 
 ### Spec-Driven Development
 
@@ -281,13 +282,9 @@ Each phase requires explicit user confirmation before moving to the next.
 
 ### Code Change Transparency
 
-Before making any edits to existing files, show the user exactly what will change (old → new, or a clear description) and wait for confirmation. After all edits are applied, run:
+Before making any edits to existing files, show the user exactly what will change (old → new, or a clear description) and ask whether they want that edit. That pre-edit diff/description is the confirmation step; no separate confirmation is needed before showing it.
 
-```bash
-git --no-pager diff HEAD <file1> <file2> ...
-```
-
-and display the output so the user can verify the final result matches what was agreed. Do not apply edits and then show the diff after the fact — confirmation must come **before** changes are written.
+Do not require a mandatory post-edit diff display. Show the final diff only when the user explicitly asks for it or when it is genuinely needed to clarify what changed.
 
 ### Temporary Files
 

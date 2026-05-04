@@ -86,6 +86,8 @@ cargo test <test_name>            # single test by name
 
 ## Mock Implementation Pattern
 
+Repository-wide mock conventions are documented in `docs/TESTING_MOCKS.md`. Use that document as the canonical mock structure guideline; this skill expands on it with testing and coverage expectations.
+
 ### Structure
 
 Bundle all state into a **single `Arc<Mutex<MockState>>`** — never one `Arc<Mutex<>>` per field.

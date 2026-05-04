@@ -26,12 +26,15 @@ impl<T: MassImportContextOps> ReadFilesStep<T> {
 }
 
 #[async_trait::async_trait]
-impl<T: MassImportContextOps + Send + Sync> PipelineStep<T> for ReadFilesStep<T> {
+impl<T> PipelineStep<T, Error> for ReadFilesStep<T>
+where
+    T: MassImportContextOps + Send + Sync,
+{
     fn name(&self) -> &'static str {
         "read_files_step"
     }
 
-    async fn execute(&self, context: &mut T) -> StepAction {
+    async fn execute(&self, context: &mut T) -> StepAction<Error> {
         let files_res = context.fs_ops().read_dir(context.source_path());
         tracing::info!(
             source_path = %context.source_path().display(),
@@ -110,7 +113,10 @@ impl<T: MassImportContextOps> ReadFileMetadataStep<T> {
 }
 
 #[async_trait::async_trait]
-impl<T: MassImportContextOps + Send + Sync> PipelineStep<T> for ReadFileMetadataStep<T> {
+impl<T> PipelineStep<T, Error> for ReadFileMetadataStep<T>
+where
+    T: MassImportContextOps + Send + Sync,
+{
     fn name(&self) -> &'static str {
         "read_file_metadata_step"
     }
@@ -119,7 +125,7 @@ impl<T: MassImportContextOps + Send + Sync> PipelineStep<T> for ReadFileMetadata
         !context.read_ok_files().is_empty()
     }
 
-    async fn execute(&self, context: &mut T) -> StepAction {
+    async fn execute(&self, context: &mut T) -> StepAction<Error> {
         tracing::info!("Reading metadata for files.",);
         for file in &context.get_non_failed_files() {
             tracing::info!("Creating metadata reader for file: {}", file.display());
@@ -131,12 +137,13 @@ impl<T: MassImportContextOps + Send + Sync> PipelineStep<T> for ReadFileMetadata
                         "Successfully created metadata reader",
                     );
                     let res = reader.read_metadata();
-                    tracing::info!(
-                        file = %file.display(),
-                        "Successfully read metadata",
-                    );
                     match res {
                         Ok(metadata_entries) => {
+                            tracing::info!(
+                                file = %file.display(),
+                                metadata_entries = ?metadata_entries,
+                                "Successfully read metadata",
+                            );
                             context
                                 .file_metadata()
                                 .insert(file.clone(), metadata_entries);

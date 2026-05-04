@@ -56,12 +56,17 @@ The application has experimental support for launching games via **libretro core
 Currently supported:
 - Single core at a time (one game window open)
 - Video output in a dedicated GTK4 window
+- Per-system libretro core mapping from the settings UI
+- `freeintv_libretro` support through the existing per-system core mapping flow
+- A dedicated libretro core directory and libretro system directory in Settings
 - Keyboard input mapped to a joypad
+- Generic physical gamepad input via `gilrs` for libretro joypad buttons and analog axes
 - Audio output via the system's default audio device
 
-Per-system core selection (configuring which core to use for each system) is currently in development. Other planned improvements include:
+Current limitations and planned improvements:
 
 - Support for all libretro-compatible cores (SNES, GBA, PlayStation, etc.)
+- Controller mapping currently uses generic libretro / Retropad-style input
 - In-app core downloading (similar to RetroArch's Online Updater)
 
 See [docs/LIBRETRO_INTEGRATION.md](docs/LIBRETRO_INTEGRATION.md) for a full technical overview and instructions for adding new cores.
@@ -170,5 +175,3 @@ Both `file_info` and `file_set` contain a `file_type` field. While this appears 
 **Consistency guarantee**: The application validates that `file_info.file_type` matches `file_set.file_type` when linking them through `file_set_file_info`. This prevents data inconsistencies where a file's type doesn't match its containing file set. A `FileInfo` can only be added to a `FileSet` if their `file_type` values match.
 
 When file is used with emulator or external viewer, file is exported to a temporary directory. File is exported with file set specific file name. Emulator files are exported either as a complete file set as a zip archive or as individual files depending on the emulator configuration.
-
-

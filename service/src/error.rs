@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter, Result};
 
 use file_export::FileExportError;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {
     DbError(String),
     DeserializationError(String),

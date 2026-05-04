@@ -8,12 +8,12 @@ use crate::{
 pub struct ValidateFileSetNotInUseStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<DeletionContext> for ValidateFileSetNotInUseStep {
+impl PipelineStep<DeletionContext, Error> for ValidateFileSetNotInUseStep {
     fn name(&self) -> &'static str {
         "validate_file_set_not_in_use"
     }
 
-    async fn execute(&self, context: &mut DeletionContext) -> StepAction {
+    async fn execute(&self, context: &mut DeletionContext) -> StepAction<Error> {
         tracing::info!(
             "Validating that file set with id {} is not in use",
             context.file_set_id
@@ -56,12 +56,12 @@ impl PipelineStep<DeletionContext> for ValidateFileSetNotInUseStep {
 pub struct FetchFileInfosStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<DeletionContext> for FetchFileInfosStep {
+impl PipelineStep<DeletionContext, Error> for FetchFileInfosStep {
     fn name(&self) -> &'static str {
         "fetch_file_infos"
     }
 
-    async fn execute(&self, context: &mut DeletionContext) -> StepAction {
+    async fn execute(&self, context: &mut DeletionContext) -> StepAction<Error> {
         tracing::info!(
             "Fetching file infos for file set with id {}",
             context.file_set_id
@@ -107,12 +107,12 @@ impl PipelineStep<DeletionContext> for FetchFileInfosStep {
 pub struct DeleteFileSetStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<DeletionContext> for DeleteFileSetStep {
+impl PipelineStep<DeletionContext, Error> for DeleteFileSetStep {
     fn name(&self) -> &'static str {
         "delete_file_set"
     }
 
-    async fn execute(&self, context: &mut DeletionContext) -> StepAction {
+    async fn execute(&self, context: &mut DeletionContext) -> StepAction<Error> {
         tracing::info!("Deleting file set with id {}", context.file_set_id);
 
         let res = context

@@ -18,7 +18,7 @@ use crate::{
 pub struct CreateFileSetToDatabaseStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<AddFileSetContext> for CreateFileSetToDatabaseStep {
+impl PipelineStep<AddFileSetContext, Error> for CreateFileSetToDatabaseStep {
     fn name(&self) -> &'static str {
         "update_database"
     }
@@ -27,7 +27,7 @@ impl PipelineStep<AddFileSetContext> for CreateFileSetToDatabaseStep {
         context.state.file_set_id.is_none()
     }
 
-    async fn execute(&self, context: &mut AddFileSetContext) -> StepAction {
+    async fn execute(&self, context: &mut AddFileSetContext) -> StepAction<Error> {
         let files_in_file_set = context.get_files_in_file_set();
         if files_in_file_set.is_empty() {
             tracing::error!("No files in file set.");
@@ -113,7 +113,7 @@ impl PipelineStep<AddFileSetContext> for CreateFileSetToDatabaseStep {
 pub struct AddFileSetItemTypesStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<AddFileSetContext> for AddFileSetItemTypesStep {
+impl PipelineStep<AddFileSetContext, Error> for AddFileSetItemTypesStep {
     fn name(&self) -> &'static str {
         "add_file_set_item_types"
     }
@@ -122,7 +122,7 @@ impl PipelineStep<AddFileSetContext> for AddFileSetItemTypesStep {
         !context.state.item_types.is_empty() && context.state.file_set_id.is_some()
     }
 
-    async fn execute(&self, context: &mut AddFileSetContext) -> StepAction {
+    async fn execute(&self, context: &mut AddFileSetContext) -> StepAction<Error> {
         let file_set_id = context.state.file_set_id.unwrap();
         // check existing linking
         let existing_item_types = context
@@ -450,11 +450,8 @@ mod tests {
         let fs_ops = Arc::new(MockFileSystemOps::new());
         let checksum: Sha1Checksum = [1u8; 20];
 
-        let mut context = create_test_context(Some(create_file_import_data(
-            vec![checksum],
-            vec![],
-        )))
-        .await;
+        let mut context =
+            create_test_context(Some(create_file_import_data(vec![checksum], vec![]))).await;
 
         // Wire in the fs_ops we can inspect, and point to a non-existent system (FK failure)
         context.ops.fs_ops = fs_ops.clone();

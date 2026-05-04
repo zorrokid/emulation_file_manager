@@ -15,6 +15,7 @@ pub struct SettingsSaveModel {
     pub secret_access_key: String,
     pub collection_root_dir: Option<PathBuf>,
     pub libretro_core_dir: Option<PathBuf>,
+    pub libretro_system_dir: Option<PathBuf>,
 }
 
 /// Service for managing application settings including settings stored to database and secure credentials stored in system keyring.
@@ -79,6 +80,15 @@ impl SettingsService {
                 // TODO: maybe consider some other option to store path instead of lossy string
                 // (e.g. base64 encoded bytes)
                 libretro_core_dir.to_string_lossy().to_string(),
+            );
+        }
+
+        if let Some(libretro_system_dir) = settings.libretro_system_dir {
+            settings_map.insert(
+                SettingName::LibretroSystemDir,
+                // TODO: maybe consider some other option to store path instead of lossy string
+                // (e.g. base64 encoded bytes)
+                libretro_system_dir.to_string_lossy().to_string(),
             );
         }
 
@@ -213,6 +223,7 @@ mod tests {
             secret_access_key: "test-secret-key".to_string(),
             collection_root_dir: Some(PathBuf::from("/path/to/collection")),
             libretro_core_dir: Some(PathBuf::from("/path/to/libretro/cores")),
+            libretro_system_dir: Some(PathBuf::from("/path/to/libretro/systems")),
         };
 
         // Save settings
@@ -232,6 +243,14 @@ mod tests {
         assert_eq!(
             settings.collection_root_dir,
             PathBuf::from("/path/to/collection")
+        );
+        assert_eq!(
+            settings.libretro_core_dir.as_ref().unwrap(),
+            &PathBuf::from("/path/to/libretro/cores")
+        );
+        assert_eq!(
+            settings.libretro_system_dir.as_ref().unwrap(),
+            &PathBuf::from("/path/to/libretro/systems")
         );
 
         // Clean up test credentials after test

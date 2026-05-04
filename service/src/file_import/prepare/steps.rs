@@ -7,12 +7,12 @@ use crate::{
 pub struct CollectFileMetadataStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<PrepareFileImportContext> for CollectFileMetadataStep {
+impl PipelineStep<PrepareFileImportContext, Error> for CollectFileMetadataStep {
     fn name(&self) -> &'static str {
         "collect_file_metadata"
     }
 
-    async fn execute(&self, context: &mut PrepareFileImportContext) -> StepAction {
+    async fn execute(&self, context: &mut PrepareFileImportContext) -> StepAction<Error> {
         let file_set_name = context
             .file_path
             .file_stem()

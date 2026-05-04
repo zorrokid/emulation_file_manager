@@ -1,5 +1,3 @@
-use crate::error::Error;
-
 /// The action to take after a step completes.
 ///
 /// Steps return this enum to control pipeline flow:
@@ -7,13 +5,13 @@ use crate::error::Error;
 /// - `Skip`: Successfully exit early without running remaining steps
 /// - `Abort`: Stop the pipeline with an error
 #[derive(Debug, Clone, PartialEq)]
-pub enum StepAction {
+pub enum StepAction<E> {
     /// Continue to the next step
     Continue,
     /// Skip all remaining steps (successful early exit)
     Skip,
     /// Abort the pipeline with an error
-    Abort(Error),
+    Abort(E),
 }
 
 /// A trait for defining pipeline steps.
@@ -51,7 +49,7 @@ pub enum StepAction {
 /// }
 /// ```
 #[async_trait::async_trait]
-pub trait PipelineStep<T>: Send + Sync {
+pub trait PipelineStep<T, E>: Send + Sync {
     /// Returns the name of this step for logging and debugging.
     fn name(&self) -> &'static str;
 
@@ -92,5 +90,5 @@ pub trait PipelineStep<T>: Send + Sync {
     /// # Returns
     ///
     /// A `StepAction` indicating what the pipeline should do next
-    async fn execute(&self, context: &mut T) -> StepAction;
+    async fn execute(&self, context: &mut T) -> StepAction<E>;
 }
