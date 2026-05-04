@@ -75,9 +75,9 @@ impl Default for ConfiguredOutcome {
 ///
 /// Groups all mutable state into a single struct for simplified locking.
 #[derive(Default)]
-struct MockState {
-    download_calls: Vec<DownloadCall>,
-    outcome: ConfiguredOutcome,
+pub struct MockState {
+    pub download_calls: Vec<DownloadCall>,
+    pub outcome: ConfiguredOutcome,
 }
 
 /// Mock implementation for testing download service operations.
@@ -130,6 +130,11 @@ impl MockDownloadServiceOps {
     /// Use this for testing happy path scenarios where downloads should succeed.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Creates new mock with given state.
+    pub fn with_state(state: Arc<Mutex<MockState>>) -> Self {
+        Self { state }
     }
 
     /// Creates new mock with given outcome.
@@ -248,6 +253,41 @@ mod tests {
         let call = &calls[0];
         assert_eq!(call.file_set_id, 123);
         assert!(call.extract_files);
+        assert!(call.had_progress_tx);
+
+        let download_result = result.unwrap();
+        assert_eq!(download_result.successful_downloads, 1);
+        assert_eq!(download_result.failed_downloads, 0);
+    }
+
+    #[async_std::test]
+    async fn test_mock_download_service_ops_with_state_construction() {
+        let outcome = ConfiguredOutcome {
+            result: Ok(DownloadResult {
+                successful_downloads: 1,
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let mock_state = Arc::new(Mutex::new(MockState {
+            outcome,
+            ..Default::default()
+        }));
+
+        let mock = MockDownloadServiceOps::with_state(Arc::clone(&mock_state));
+        let result = mock.download_file_set(123, true, None).await;
+
+        assert!(result.is_ok());
+
+        // Verify the call was tracked
+        let state_guard = mock_state.lock().expect("poisoned lock");
+        assert_eq!(state_guard.download_calls.len(), 1);
+
+        let call = &state_guard.download_calls[0].clone();
+        assert_eq!(call.file_set_id, 123);
+        assert!(call.extract_files);
+        assert!(!call.had_progress_tx);
 
         let download_result = result.unwrap();
         assert_eq!(download_result.successful_downloads, 1);
@@ -290,6 +330,7 @@ mod tests {
         let call = &calls[0];
         assert_eq!(call.file_set_id, 123);
         assert!(call.extract_files);
+        assert!(call.had_progress_tx);
 
         let download_result = result.err().unwrap();
         assert_eq!(

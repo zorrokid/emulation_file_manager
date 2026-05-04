@@ -52,7 +52,7 @@
   **File:** `libretro_runner/src/supported_cores.rs`, `libretro_runner/src/libretro_info_parser.rs`, `libretro_runner/src/input.rs`, `libretro_runner/src/callbacks.rs`
   `supported_cores.rs` now covers supported-core lookup, expected input profiles, the supported core list, and unknown-core handling. `libretro_info_parser.rs` covers `freeintv_libretro` parsed metadata including supported extensions and firmware declarations. `input.rs` and `callbacks.rs` cover digital button reads, analog axis reads, and callback device filtering.
 
-- [ ] T12 [service] — Add higher-level tests for libretro launch preparation
+- [x] T12 [service] — Add higher-level tests for libretro launch preparation
   **File:** `service/src/libretro/runner/service.rs`
   Add service-level tests for `LibretroRunnerService::prepare_rom()` covering missing system directory, missing firmware, unsupported extension, invalid initial file, and happy-path launch preparation. `settings_service.rs` persistence coverage already exists, and `service/src/libretro/runner/prepare/steps.rs` already covers the individual preflight pipeline steps.
 

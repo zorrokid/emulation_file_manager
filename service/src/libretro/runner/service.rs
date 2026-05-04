@@ -115,15 +115,36 @@ impl LibretroRunnerService {
 #[cfg(test)]
 mod tests {
 
+    use std::sync::Mutex;
+
     use libretro_runner::supported_cores::InputProfile;
 
     use crate::{
         error::Error,
-        file_set_download::download_service_ops::{ConfiguredOutcome, MockDownloadServiceOps},
+        file_set_download::download_service_ops::{
+            ConfiguredOutcome, MockDownloadServiceOps, MockState,
+        },
         libretro::core::service::LibretroFirmwareInfo,
     };
 
     use super::*;
+
+    fn get_mock_state(outcome: ConfiguredOutcome) -> Arc<Mutex<MockState>> {
+        Arc::new(Mutex::new(MockState {
+            outcome,
+            ..Default::default()
+        }))
+    }
+
+    fn get_libretro_runner_service(
+        settings: Settings,
+        state: &Arc<Mutex<MockState>>,
+    ) -> LibretroRunnerService {
+        LibretroRunnerService::new(
+            Arc::new(settings),
+            Arc::new(MockDownloadServiceOps::with_state(Arc::clone(state))),
+        )
+    }
 
     fn create_launch_model() -> LibretroLaunchModel {
         LibretroLaunchModel {
@@ -141,21 +162,27 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn test_prepare_rom_download_error() {
+    async fn test_prepare_rom_when_download_fails_with_error() {
         let settings = Settings::default();
-        let download_service = MockDownloadServiceOps::with_outcome(ConfiguredOutcome {
+        let mock_state = get_mock_state(ConfiguredOutcome {
             result: Err(Error::DownloadError("Download error".into())),
             ..Default::default()
         });
-        let libretro_runner_service =
-            LibretroRunnerService::new(Arc::new(settings), Arc::new(download_service));
+        let libretro_runner_service = get_libretro_runner_service(settings, &mock_state);
 
         let launch_model = create_launch_model();
 
         let result = libretro_runner_service.prepare_rom(launch_model).await;
+
+        let state_guard = mock_state.lock().expect("lock poisoned");
+        assert_eq!(state_guard.download_calls.len(), 1);
+        let call = state_guard.download_calls[0].clone();
+        assert_eq!(call.file_set_id, 1);
+        assert!(call.extract_files);
+        assert!(!call.had_progress_tx);
+
         assert!(result.is_err());
         let error = result.err();
-        dbg!(&error);
         assert!(matches!(
             error,
             Some(LibretroPreflightError::DownloadError(_))
@@ -163,24 +190,30 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn test_prepare_rom_no_files_in_file_set() {
+    async fn test_prepare_rom_when_no_files_in_file_set() {
         let settings = Settings::default();
-        let download_service = MockDownloadServiceOps::with_outcome(ConfiguredOutcome {
+        let mock_state = get_mock_state(ConfiguredOutcome {
             result: Ok(crate::file_set_download::service::DownloadResult {
                 successful_downloads: 1,
                 ..Default::default()
             }),
             ..Default::default()
         });
-        let libretro_runner_service =
-            LibretroRunnerService::new(Arc::new(settings), Arc::new(download_service));
+        let libretro_runner_service = get_libretro_runner_service(settings, &mock_state);
 
         let launch_model = create_launch_model();
 
         let result = libretro_runner_service.prepare_rom(launch_model).await;
+
+        let state_guard = mock_state.lock().expect("lock poisoned");
+        assert_eq!(state_guard.download_calls.len(), 1);
+        let call = state_guard.download_calls[0].clone();
+        assert_eq!(call.file_set_id, 1);
+        assert!(call.extract_files);
+        assert!(!call.had_progress_tx);
+
         assert!(result.is_err());
         let error = result.err();
-        dbg!(&error);
         assert!(matches!(
             error,
             Some(LibretroPreflightError::NoFileInFileSet)
@@ -188,10 +221,11 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn test_prepare_invalid_initial_file() {
+    async fn test_prepare_rom_when_invalid_initial_file() {
         let settings = Settings::default();
         let initial_file = "initial_file".to_string();
-        let download_service = MockDownloadServiceOps::with_outcome(ConfiguredOutcome {
+
+        let mock_state = get_mock_state(ConfiguredOutcome {
             result: Ok(crate::file_set_download::service::DownloadResult {
                 successful_downloads: 1,
                 output_file_names: vec!["not_initial_file".to_string()],
@@ -199,16 +233,23 @@ mod tests {
             }),
             ..Default::default()
         });
-        let libretro_runner_service =
-            LibretroRunnerService::new(Arc::new(settings), Arc::new(download_service));
+
+        let libretro_runner_service = get_libretro_runner_service(settings, &mock_state);
 
         let mut launch_model = create_launch_model();
         launch_model.initial_file = Some(initial_file);
 
         let result = libretro_runner_service.prepare_rom(launch_model).await;
+
+        let state_guard = mock_state.lock().expect("lock poisoned");
+        assert_eq!(state_guard.download_calls.len(), 1);
+        let call = state_guard.download_calls[0].clone();
+        assert_eq!(call.file_set_id, 1);
+        assert!(call.extract_files);
+        assert!(!call.had_progress_tx);
+
         assert!(result.is_err());
         let error = result.err();
-        dbg!(&error);
         assert!(matches!(
             error,
             Some(LibretroPreflightError::InvalidInitialFile(_))
@@ -216,9 +257,9 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn test_prepare_firmware_not_available() {
+    async fn test_prepare_rom_when_firmware_not_available() {
         let settings = Settings::default();
-        let download_service = MockDownloadServiceOps::with_outcome(ConfiguredOutcome {
+        let mock_state = get_mock_state(ConfiguredOutcome {
             result: Ok(crate::file_set_download::service::DownloadResult {
                 successful_downloads: 1,
                 output_file_names: vec!["file".to_string()],
@@ -226,8 +267,7 @@ mod tests {
             }),
             ..Default::default()
         });
-        let libretro_runner_service =
-            LibretroRunnerService::new(Arc::new(settings), Arc::new(download_service));
+        let libretro_runner_service = get_libretro_runner_service(settings, &mock_state);
 
         let mut launch_model = create_launch_model();
         launch_model.core_info.firmware_info = vec![LibretroFirmwareInfo {
@@ -238,9 +278,16 @@ mod tests {
         }];
 
         let result = libretro_runner_service.prepare_rom(launch_model).await;
+
+        let state_guard = mock_state.lock().expect("lock poisoned");
+        assert_eq!(state_guard.download_calls.len(), 1);
+        let call = state_guard.download_calls[0].clone();
+        assert_eq!(call.file_set_id, 1);
+        assert!(call.extract_files);
+        assert!(!call.had_progress_tx);
+
         assert!(result.is_err());
         let error = result.err();
-        dbg!(&error);
         assert!(matches!(
             error,
             Some(LibretroPreflightError::FirmwareNotAvailable(_))
@@ -248,9 +295,9 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn test_prepare_unsupported_extension() {
+    async fn test_prepare_rom_when_unsupported_extension() {
         let settings = Settings::default();
-        let download_service = MockDownloadServiceOps::with_outcome(ConfiguredOutcome {
+        let mock_state = get_mock_state(ConfiguredOutcome {
             result: Ok(crate::file_set_download::service::DownloadResult {
                 successful_downloads: 1,
                 output_file_names: vec!["file.img".to_string()],
@@ -258,16 +305,22 @@ mod tests {
             }),
             ..Default::default()
         });
-        let libretro_runner_service =
-            LibretroRunnerService::new(Arc::new(settings), Arc::new(download_service));
+        let libretro_runner_service = get_libretro_runner_service(settings, &mock_state);
 
         let mut launch_model = create_launch_model();
         launch_model.core_info.supported_extensions = vec!["dsk".to_string()];
 
         let result = libretro_runner_service.prepare_rom(launch_model).await;
+
+        let state_guard = mock_state.lock().expect("lock poisoned");
+        assert_eq!(state_guard.download_calls.len(), 1);
+        let call = state_guard.download_calls[0].clone();
+        assert_eq!(call.file_set_id, 1);
+        assert!(call.extract_files);
+        assert!(!call.had_progress_tx);
+
         assert!(result.is_err());
         let error = result.err();
-        dbg!(&error);
         assert!(matches!(
             error,
             Some(LibretroPreflightError::UnsupportedExtension(_))
@@ -275,9 +328,9 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn test_prepare_system_dir_not_set() {
+    async fn test_prepare_rom_when_system_dir_not_set() {
         let settings = Settings::default();
-        let download_service = MockDownloadServiceOps::with_outcome(ConfiguredOutcome {
+        let mock_state = get_mock_state(ConfiguredOutcome {
             result: Ok(crate::file_set_download::service::DownloadResult {
                 successful_downloads: 1,
                 output_file_names: vec!["file.img".to_string()],
@@ -285,15 +338,21 @@ mod tests {
             }),
             ..Default::default()
         });
-        let libretro_runner_service =
-            LibretroRunnerService::new(Arc::new(settings), Arc::new(download_service));
+        let libretro_runner_service = get_libretro_runner_service(settings, &mock_state);
 
         let launch_model = create_launch_model();
 
         let result = libretro_runner_service.prepare_rom(launch_model).await;
+
+        let state_guard = mock_state.lock().expect("lock poisoned");
+        assert_eq!(state_guard.download_calls.len(), 1);
+        let call = state_guard.download_calls[0].clone();
+        assert_eq!(call.file_set_id, 1);
+        assert!(call.extract_files);
+        assert!(!call.had_progress_tx);
+
         assert!(result.is_err());
         let error = result.err();
-        dbg!(&error);
         assert!(matches!(
             error,
             Some(LibretroPreflightError::SystemDirNotSet)
@@ -301,13 +360,14 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn test_prepare() {
+    async fn test_prepare_rom_happy_path_returns_launch_paths() {
         let settings = Settings {
             libretro_system_dir: Some(PathBuf::from("/opt/libretro/system_dir")),
             temp_output_dir: PathBuf::from("/tmp/"),
             ..Default::default()
         };
-        let download_service = MockDownloadServiceOps::with_outcome(ConfiguredOutcome {
+
+        let mock_state = get_mock_state(ConfiguredOutcome {
             result: Ok(crate::file_set_download::service::DownloadResult {
                 successful_downloads: 1,
                 output_file_names: vec!["file.img".to_string()],
@@ -315,12 +375,20 @@ mod tests {
             }),
             ..Default::default()
         });
-        let libretro_runner_service =
-            LibretroRunnerService::new(Arc::new(settings), Arc::new(download_service));
+
+        let libretro_runner_service = get_libretro_runner_service(settings, &mock_state);
 
         let launch_model = create_launch_model();
 
         let result = libretro_runner_service.prepare_rom(launch_model).await;
+
+        let state_guard = mock_state.lock().expect("lock poisoned");
+        assert_eq!(state_guard.download_calls.len(), 1);
+        let call = state_guard.download_calls[0].clone();
+        assert_eq!(call.file_set_id, 1);
+        assert!(call.extract_files);
+        assert!(!call.had_progress_tx);
+
         assert!(result.is_ok());
         let result = result.ok();
         assert!(result.is_some());

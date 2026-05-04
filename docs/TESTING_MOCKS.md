@@ -108,6 +108,28 @@ pub fn clear(&self) {
 }
 ```
 
+### Prefer Interior Mutability for Rich Service Mocks
+
+For more stateful service-boundary mocks, prefer exposing a shared
+`Arc<Mutex<MockState>>` through a constructor such as `with_state(...)`.
+
+This lets tests:
+
+- configure the mock by mutating shared state directly
+- inspect recorded calls and configured outcomes directly
+- share one mock state between the test and the mock instance without adding many narrow helper methods
+
+Use this when the mock has enough behavior that direct state setup and assertion is clearer
+than adding many one-off configuration methods.
+
+Guidelines:
+
+- keep all shared mutable mock state in a single `MockState`
+- keep lock scopes short
+- never hold a `MutexGuard` across `.await`
+- keep convenience helpers like `with_outcome`, `total_calls`, or `clear` when they still improve readability
+- prefer this pattern for richer service mocks where tests need both direct configuration and direct assertions against mock state
+
 ## Reference Implementations
 
 Use these as models when creating new mocks:
@@ -115,7 +137,7 @@ Use these as models when creating new mocks:
 - `cloud_storage/src/mock.rs`
 - `service/src/file_set/mock_file_set_service.rs`
 - `service/src/file_system_ops.rs` (`service::file_system_ops::mock::MockFileSystemOps`)
-- `service/src/file_set_download/download_service_ops.rs` (`MockDownloadServiceOps`) — example of a service-boundary mock with configured outcomes, progress events, and call tracking
+- `service/src/file_set_download/download_service_ops.rs` (`MockDownloadServiceOps`) — example of a service-boundary mock with configured outcomes, progress events, call tracking, and shared interior-mutable state
 
 ## Making Mocking Easier in This Repository
 
