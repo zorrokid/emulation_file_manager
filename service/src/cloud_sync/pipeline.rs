@@ -3,6 +3,7 @@ use crate::{
         context::SyncContext,
         steps::{CleanupTombstonesStep, DeleteCloudFilesStep, UploadPendingFilesStep},
     },
+    error::Error,
     pipeline::{cloud_connection::ConnectToCloudStep, generic_pipeline::Pipeline},
 };
 
@@ -15,7 +16,7 @@ impl Default for Pipeline<SyncContext> {
 impl Pipeline<SyncContext> {
     pub fn new() -> Self {
         Self::with_steps(vec![
-            Box::new(ConnectToCloudStep::<SyncContext>::new()),
+            Box::new(ConnectToCloudStep::<SyncContext, Error>::new()),
             Box::new(UploadPendingFilesStep),
             Box::new(DeleteCloudFilesStep),
             Box::new(CleanupTombstonesStep),

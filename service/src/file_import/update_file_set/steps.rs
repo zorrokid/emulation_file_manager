@@ -13,12 +13,12 @@ use crate::{
 pub struct FetchFileSetStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<UpdateFileSetContext> for FetchFileSetStep {
+impl PipelineStep<UpdateFileSetContext, Error> for FetchFileSetStep {
     fn name(&self) -> &'static str {
         "fetch_file_set"
     }
 
-    async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
+    async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction<Error> {
         tracing::info!(
             file_set_id = %context.input.file_set_id,
             "Starting to fetch file set from database"
@@ -58,12 +58,12 @@ impl PipelineStep<UpdateFileSetContext> for FetchFileSetStep {
 
 pub struct FetchFilesInFileSetStep;
 #[async_trait::async_trait]
-impl PipelineStep<UpdateFileSetContext> for FetchFilesInFileSetStep {
+impl PipelineStep<UpdateFileSetContext, Error> for FetchFilesInFileSetStep {
     fn name(&self) -> &'static str {
         "fetch_files_in_file_set"
     }
 
-    async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
+    async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction<Error> {
         println!(
             "Fetching files in file set with id {}",
             context.input.file_set_id
@@ -104,7 +104,7 @@ impl PipelineStep<UpdateFileSetContext> for FetchFilesInFileSetStep {
 pub struct UpdateFileInfoToDatabaseStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<UpdateFileSetContext> for UpdateFileInfoToDatabaseStep {
+impl PipelineStep<UpdateFileSetContext, Error> for UpdateFileInfoToDatabaseStep {
     fn name(&self) -> &'static str {
         "update_file_info_in_database"
     }
@@ -115,7 +115,7 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileInfoToDatabaseStep {
             && context.state.file_set.is_some()
     }
 
-    async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
+    async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction<Error> {
         tracing::info!(
             file_set_id = %context.input.file_set_id,
             "Starting to add/update file info records in database"
@@ -216,12 +216,12 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileInfoToDatabaseStep {
 pub struct UpdateFileSetFilesStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<UpdateFileSetContext> for UpdateFileSetFilesStep {
+impl PipelineStep<UpdateFileSetContext, Error> for UpdateFileSetFilesStep {
     fn name(&self) -> &'static str {
         "update_file_set_files"
     }
 
-    async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
+    async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction<Error> {
         println!(
             "Adding files to file set with id {}",
             context.input.file_set_id
@@ -268,7 +268,7 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileSetFilesStep {
 pub struct CollectDeletionCandidatesStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<UpdateFileSetContext> for CollectDeletionCandidatesStep {
+impl PipelineStep<UpdateFileSetContext, Error> for CollectDeletionCandidatesStep {
     fn name(&self) -> &'static str {
         "collect_deletion_candidates"
     }
@@ -277,7 +277,7 @@ impl PipelineStep<UpdateFileSetContext> for CollectDeletionCandidatesStep {
         context.has_removed_files()
     }
 
-    async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
+    async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction<Error> {
         tracing::info!(
             file_set_id = %context.input.file_set_id,
             "Starting to collect files unlinked from file set for deletion candidates"
@@ -326,7 +326,7 @@ impl PipelineStep<UpdateFileSetContext> for CollectDeletionCandidatesStep {
 pub struct UnlinkFilesFromFileSetStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<UpdateFileSetContext> for UnlinkFilesFromFileSetStep {
+impl PipelineStep<UpdateFileSetContext, Error> for UnlinkFilesFromFileSetStep {
     fn name(&self) -> &'static str {
         "unlink_files_from_file_set"
     }
@@ -335,7 +335,7 @@ impl PipelineStep<UpdateFileSetContext> for UnlinkFilesFromFileSetStep {
         context.has_removed_files()
     }
 
-    async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
+    async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction<Error> {
         println!(
             "Unlinking files from file set with id {}",
             context.input.file_set_id
@@ -380,7 +380,7 @@ impl PipelineStep<UpdateFileSetContext> for UnlinkFilesFromFileSetStep {
 pub struct UpdateFileSetStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<UpdateFileSetContext> for UpdateFileSetStep {
+impl PipelineStep<UpdateFileSetContext, Error> for UpdateFileSetStep {
     fn name(&self) -> &'static str {
         "update_file_set"
     }
@@ -389,7 +389,7 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileSetStep {
         context.state.file_set.is_some()
     }
 
-    async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
+    async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction<Error> {
         let repository = context.deps.repository_manager.get_file_set_repository();
         let original_file_type = context.state.file_set.as_ref().unwrap().file_type;
         let result = repository
@@ -428,7 +428,7 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileSetStep {
 pub struct UpdateFileSetItemTypesStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<UpdateFileSetContext> for UpdateFileSetItemTypesStep {
+impl PipelineStep<UpdateFileSetContext, Error> for UpdateFileSetItemTypesStep {
     fn name(&self) -> &'static str {
         "update_file_set_item_types"
     }
@@ -437,7 +437,7 @@ impl PipelineStep<UpdateFileSetContext> for UpdateFileSetItemTypesStep {
         !context.input.item_types.is_empty()
     }
 
-    async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction {
+    async fn execute(&self, context: &mut UpdateFileSetContext) -> StepAction<Error> {
         let res = context
             .deps
             .repository_manager
@@ -1073,6 +1073,10 @@ mod tests {
             .get_file_infos_by_sha1_checksums(&[sha1_a], FileType::Rom)
             .await
             .unwrap();
-        assert_eq!(all_infos.len(), 1, "Must not insert a duplicate file_info row");
+        assert_eq!(
+            all_infos.len(),
+            1,
+            "Must not insert a duplicate file_info row"
+        );
     }
 }

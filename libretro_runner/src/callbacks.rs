@@ -6,9 +6,10 @@ use std::{
 
 use crate::{
     ffi::{
-        RetroGameGeometry, RetroPixelFormat, RETRO_ENVIRONMENT_GET_LOG_INTERFACE,
+        RETRO_DEVICE_ANALOG, RETRO_DEVICE_JOYPAD, RETRO_ENVIRONMENT_GET_LOG_INTERFACE,
         RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, RETRO_ENVIRONMENT_GET_VARIABLE,
-        RETRO_ENVIRONMENT_SET_GEOMETRY, RETRO_ENVIRONMENT_SET_PIXEL_FORMAT,
+        RETRO_ENVIRONMENT_SET_GEOMETRY, RETRO_ENVIRONMENT_SET_PIXEL_FORMAT, RetroGameGeometry,
+        RetroPixelFormat,
     },
     frame_buffer::FrameBuffer,
     input::InputState,
@@ -65,8 +66,20 @@ pub fn remove_state() {
     *state_mutex().lock().expect("remove_state lock") = None;
 }
 
-/// Run a closure with mutable access to the callback state.
-/// Returns None if no core is currently loaded.
+/// Provides temporary, thread-safe mutable access to the global callback state by running the given closure. Scoped access via closure ensures the mutable reference cannot escape and the lock is released promptly after the closure runs.
+///
+/// - Acquires a mutex lock on the callback state.  
+/// - If the state is present (i.e., a core is loaded), passes a mutable reference to the closure and returns its result wrapped in `Some`.
+/// - Returns `None` if no core is loaded or if the mutex cannot be locked (e.g., if poisoned).
+///
+/// # Parameters
+/// - `f`: A closure that takes a mutable reference to the callback state and returns any type.
+///
+/// # Returns
+/// - `Some(result)` if the state exists and the closure runs.
+/// - `None` if the state is unavailable or the lock cannot be acquired.
+///
+/// This pattern ensures the lock is held only for the duration of the closure and prevents the mutable reference from escaping.
 pub fn with_state<F, R>(f: F) -> Option<R>
 where
     F: FnOnce(&mut CoreCallbackState) -> R,
@@ -222,30 +235,104 @@ pub unsafe extern "C" fn audio_sample_batch_cb(data: *const i16, frames: usize) 
 /// Must be called from the core's retro_run() context, as guaranteed by the libretro spec.
 pub unsafe extern "C" fn input_poll_cb() {}
 
-/// Called by the core to read the state of a single button/axis.
-/// Returns 1 (pressed) or 0 (released) for digital buttons.
+/// Called by the core to read the state of a single digital button or analog axis.
+///
+/// Currently only player 1 is supported. `RETRO_DEVICE_JOYPAD` reads digital
+/// button state from the shared `InputState`, and `RETRO_DEVICE_ANALOG` reads
+/// analog axis state from the same shared state.
+///
+/// Unsupported ports or device types return `0`.
+///
 /// `port` = controller port (0 = player 1), `device` = device type,
-/// `index` = sub-device index, `id` = button ID (JOYPAD_* constants).
+/// `index` = sub-device index, `id` = button or axis ID.
 ///
 /// # Safety
 /// Must be called from the core's retro_run() context with valid argument values,
 /// as guaranteed by the libretro spec.
-pub unsafe extern "C" fn input_state_cb(
-    port: u32,
-    device: u32,
-    _index: u32,
-    id: u32,
-) -> i16 {
-    // RETRO_DEVICE_JOYPAD = 1. We only support player 1's joypad.
-    const RETRO_DEVICE_JOYPAD: u32 = 1;
-    if port != 0 || device != RETRO_DEVICE_JOYPAD {
+pub unsafe extern "C" fn input_state_cb(port: u32, device: u32, index: u32, id: u32) -> i16 {
+    // See API header for device and button definitions.
+    // https://github.com/libretro/libretro-common/blob/master/include/libretro.h
+    // Currently only player 1's joypad and analog stick are supported; ignore the rest.
+    if port != 0 || (device != RETRO_DEVICE_JOYPAD && device != RETRO_DEVICE_ANALOG) {
         return 0;
     }
-    with_state(|s| {
-        s.input_state
-            .lock()
-            .expect("input state lock")
-            .get_button(id) as i16
-    })
-    .unwrap_or(0)
+
+    match device {
+        RETRO_DEVICE_JOYPAD => with_state(|s| {
+            s.input_state
+                .lock()
+                .expect("input state lock")
+                .get_button(id) as i16
+        })
+        .unwrap_or(0),
+        RETRO_DEVICE_ANALOG => with_state(|s| {
+            s.input_state
+                .lock()
+                .expect("input state lock")
+                .get_axis(index, id)
+        })
+        .unwrap_or(0),
+        _ => 0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn install_test_state(input_state: InputState) {
+        remove_state();
+        install_state(CoreCallbackState {
+            frame_buffer: Arc::new(Mutex::new(FrameBuffer::new())),
+            input_state: Arc::new(Mutex::new(input_state)),
+            pixel_format: RetroPixelFormat::Xrgb8888,
+            system_directory: CString::new("/tmp").expect("valid CString"),
+            audio_buffer: Arc::new(Mutex::new(VecDeque::new())),
+        });
+    }
+
+    #[test]
+    fn input_state_cb_reads_joypad_button_state() {
+        let mut input_state = InputState::new();
+        input_state.set_button(crate::input::JOYPAD_A, true);
+        install_test_state(input_state);
+
+        let result =
+            unsafe { input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, crate::input::JOYPAD_A) };
+
+        assert_eq!(result, 1);
+        remove_state();
+    }
+
+    #[test]
+    fn input_state_cb_reads_analog_axis_state() {
+        let mut input_state = InputState::new();
+        input_state.set_axis(1, 0, 2345);
+        install_test_state(input_state);
+
+        let result = unsafe { input_state_cb(0, RETRO_DEVICE_ANALOG, 1, 0) };
+
+        assert_eq!(result, 2345);
+        remove_state();
+    }
+
+    #[test]
+    fn input_state_cb_returns_zero_for_unsupported_port() {
+        install_test_state(InputState::new());
+
+        let result = unsafe { input_state_cb(1, RETRO_DEVICE_JOYPAD, 0, crate::input::JOYPAD_A) };
+
+        assert_eq!(result, 0);
+        remove_state();
+    }
+
+    #[test]
+    fn input_state_cb_returns_zero_for_unsupported_device() {
+        install_test_state(InputState::new());
+
+        let result = unsafe { input_state_cb(0, 99, 0, crate::input::JOYPAD_A) };
+
+        assert_eq!(result, 0);
+        remove_state();
+    }
 }

@@ -111,6 +111,10 @@ impl FileImportService {
         &self,
         import_model: FileSetImportModel,
     ) -> Result<FileImportResult, Error> {
+        tracing::info!(
+            file_set_name = %import_model.file_set_name,
+            import_files = ?import_model.import_files,
+            "Starting file set import");
         let file_type = import_model.file_type;
         let output_dir = self.get_output_dir_for_file_type(&file_type);
         let (missing_files, dat_file_id) = import_model
@@ -621,8 +625,10 @@ mod tests {
             .unwrap();
 
         // simulate a successful cloud sync for the file in file set
-        let file_cloud_key =
-            cloud_key(file_info.file_type, file_info.archive_file_name.as_deref().unwrap());
+        let file_cloud_key = cloud_key(
+            file_info.file_type,
+            file_info.archive_file_name.as_deref().unwrap(),
+        );
         repository_manager
             .get_file_sync_log_repository()
             .add_log_entry(

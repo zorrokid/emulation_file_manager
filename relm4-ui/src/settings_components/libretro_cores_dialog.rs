@@ -9,7 +9,7 @@ use relm4::{
     },
     typed_view::list::TypedListView,
 };
-use service::{app_services::AppServices, libretro_core::service::SystemCoreMappingModel};
+use service::{app_services::AppServices, libretro::core::service::SystemCoreMappingModel};
 use ui_components::string_list_view::{
     StringListView, StringListViewInit, StringListViewMsg, StringListViewOutput,
 };

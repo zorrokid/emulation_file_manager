@@ -40,13 +40,16 @@ use crate::error::Error;
 /// let mut context = MyContext { data: String::new(), results: Vec::new() };
 /// pipeline.execute(&mut context).await?;
 /// ```
-pub struct Pipeline<T> {
-    pub steps: Vec<Box<dyn PipelineStep<T>>>,
+pub struct Pipeline<T, E = Error> {
+    pub steps: Vec<Box<dyn PipelineStep<T, E>>>,
 }
 
-impl<T> Pipeline<T> {
+impl<T, E> Pipeline<T, E>
+where
+    E: std::fmt::Display,
+{
     /// Create a pipeline with the given steps.
-    pub fn with_steps(steps: Vec<Box<dyn PipelineStep<T>>>) -> Self {
+    pub fn with_steps(steps: Vec<Box<dyn PipelineStep<T, E>>>) -> Self {
         Self { steps }
     }
 
@@ -64,7 +67,7 @@ impl<T> Pipeline<T> {
     ///
     /// `Ok(())` if all steps complete successfully or a step returns `Skip`,
     /// `Err(error)` if a step returns `Abort(error)`
-    pub async fn execute(&self, context: &mut T) -> Result<(), Error> {
+    pub async fn execute(&self, context: &mut T) -> Result<(), E> {
         for step in &self.steps {
             if !step.should_execute(context) {
                 tracing::info!("Step {} will be skipped based on context", step.name());

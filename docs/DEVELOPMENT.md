@@ -314,7 +314,7 @@ async fn test_connection(&self) -> Result<(), CloudStorageError> {
 
 ### Related Files
 - `cloud_storage/src/lib.rs` - S3 operations implementation
-- `ZSTD_COMPRESSION_BUG.md` - Bug #1 documents how download errors save XML responses as files
+- `ZSTD_COMPRESSION_BUG.md` - documents the active cloud download validation bug and its resolved historical context
 
 ## Tokio Async Runtime
 

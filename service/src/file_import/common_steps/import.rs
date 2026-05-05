@@ -37,7 +37,10 @@ impl<T: AddFileSetContextOps> Default for ImportFilesStep<T> {
 }
 
 #[async_trait::async_trait]
-impl<T: AddFileSetContextOps + Send + Sync> PipelineStep<T> for ImportFilesStep<T> {
+impl<T> PipelineStep<T, Error> for ImportFilesStep<T>
+where
+    T: AddFileSetContextOps + Send + Sync,
+{
     fn name(&self) -> &'static str {
         "import_files"
     }
@@ -46,11 +49,12 @@ impl<T: AddFileSetContextOps + Send + Sync> PipelineStep<T> for ImportFilesStep<
         context.needs_file_info_upsert()
     }
 
-    async fn execute(&self, context: &mut T) -> StepAction {
+    async fn execute(&self, context: &mut T) -> StepAction<Error> {
         tracing::info!("Importing new files that are not already in the database.");
         let file_import_model = context.get_file_import_model();
         match context.file_import_ops().import(&file_import_model) {
             Ok(imported_files) => {
+                tracing::info!("Successfully imported {} files.", imported_files.len());
                 context.set_imported_files(imported_files);
             }
             Err(err) => {
@@ -74,6 +78,7 @@ mod tests {
     use file_import::mock::MockFileImportOps;
 
     use crate::{
+        error::Error,
         file_import::{
             common_steps::import::{AddFileSetContextOps, ImportFilesStep},
             model::{FileImportData, FileImportSource, ImportFileContent},
@@ -191,14 +196,17 @@ mod tests {
         let mut context = create_test_context(mock_ops, file_import_data);
 
         let step = ImportFilesStep::<TestContext>::new();
-        let result = step.execute(&mut context).await;
+        let result: StepAction<Error> = step.execute(&mut context).await;
 
         assert!(matches!(result, StepAction::Continue));
         assert_eq!(context.imported_files.len(), 1);
         assert!(context.imported_files.contains_key(&checksum));
         let imported = context.imported_files.get(&checksum).unwrap();
         assert_eq!(imported.original_file_name, "game.rom");
-        assert_eq!(imported.archive_file_name, Some("archive123.zst".to_string()));
+        assert_eq!(
+            imported.archive_file_name,
+            Some("archive123.zst".to_string())
+        );
     }
 
     #[async_std::test]
@@ -229,7 +237,7 @@ mod tests {
         let mut context = create_test_context(mock_ops, file_import_data);
 
         let step = ImportFilesStep::<TestContext>::new();
-        let result = step.execute(&mut context).await;
+        let result: StepAction<Error> = step.execute(&mut context).await;
 
         assert!(matches!(result, StepAction::Abort(_)));
         assert!(context.imported_files.is_empty());

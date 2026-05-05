@@ -77,16 +77,17 @@ impl AddFileSetContext {
     /// Combines newly imported and existing files that were selected for import and missing files into a
     /// single list of `ImportedFile` that will be used for creating the file set.
     pub fn get_files_in_file_set(&self) -> Vec<ImportedFile> {
-        println!(
-            "Getting files in file set. Imported files count: {}, Existing files count: {}",
-            self.state.imported_files.len(),
-            self.state.existing_files.len()
+        tracing::info!(
+            imported_files_count = self.state.imported_files.len(),
+            existing_files_count = self.state.existing_files.len(),
+            "Getting files in file set."
         );
 
         dbg!("existing files", &self.state.existing_files);
+        dbg!("imported files", &self.state.imported_files);
 
         // combine newly imported files, existing files and missing files
-        // TODO: can be simplified
+        // TODO: can be simplified?
         self.state.imported_files
             .values()
             .cloned()

@@ -5,4 +5,6 @@ pub mod error;
 pub mod ffi;
 pub mod frame_buffer;
 pub mod input;
+pub mod libretro_info_parser;
+pub mod model;
 pub mod supported_cores;

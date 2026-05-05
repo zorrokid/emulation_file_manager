@@ -38,7 +38,10 @@ impl<T: CheckExistingFilesContext> CheckExistingFilesStep<T> {
 }
 
 #[async_trait::async_trait]
-impl<T: CheckExistingFilesContext + Send + Sync> PipelineStep<T> for CheckExistingFilesStep<T> {
+impl<T> PipelineStep<T, Error> for CheckExistingFilesStep<T>
+where
+    T: CheckExistingFilesContext + Send + Sync,
+{
     fn name(&self) -> &'static str {
         "check_existing_files"
     }
@@ -46,8 +49,8 @@ impl<T: CheckExistingFilesContext + Send + Sync> PipelineStep<T> for CheckExisti
     fn should_execute(&self, context: &T) -> bool {
         !context.get_sha1_checksums().is_empty()
     }
-    async fn execute(&self, context: &mut T) -> StepAction {
-        println!("Checking for existing files in the database...");
+    async fn execute(&self, context: &mut T) -> StepAction<Error> {
+        tracing::info!("Checking for existing files in the database based on SHA1 checksums");
         let file_checksums = context.get_sha1_checksums();
         let existing_files_res = context
             .repository_manager()

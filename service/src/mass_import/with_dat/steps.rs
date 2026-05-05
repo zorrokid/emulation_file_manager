@@ -11,12 +11,12 @@ pub struct ImportDatFileStep;
 /// This step is responsible for parsing the provided DAT file and storing its content in the
 /// context state.
 #[async_trait::async_trait]
-impl PipelineStep<DatFileMassImportContext> for ImportDatFileStep {
+impl PipelineStep<DatFileMassImportContext, Error> for ImportDatFileStep {
     fn name(&self) -> &'static str {
         "import_dat_file_step"
     }
 
-    async fn execute(&self, context: &mut DatFileMassImportContext) -> StepAction {
+    async fn execute(&self, context: &mut DatFileMassImportContext) -> StepAction<Error> {
         let dat_path = &context.input.dat_file_path;
 
         let parse_res = context.ops.dat_file_parser_ops.parse_dat_file(dat_path);
@@ -55,7 +55,7 @@ impl PipelineStep<DatFileMassImportContext> for ImportDatFileStep {
 /// to it later. If it doesn't exist, we will proceed to store it in the next step.
 pub struct CheckExistingDatFileStep;
 #[async_trait::async_trait]
-impl PipelineStep<DatFileMassImportContext> for CheckExistingDatFileStep {
+impl PipelineStep<DatFileMassImportContext, Error> for CheckExistingDatFileStep {
     fn name(&self) -> &'static str {
         "check_existing_dat_file_step"
     }
@@ -63,7 +63,7 @@ impl PipelineStep<DatFileMassImportContext> for CheckExistingDatFileStep {
         context.state.dat_file.is_some()
     }
 
-    async fn execute(&self, context: &mut DatFileMassImportContext) -> StepAction {
+    async fn execute(&self, context: &mut DatFileMassImportContext) -> StepAction<Error> {
         let dat_file = context
             .state
             .dat_file
@@ -123,7 +123,7 @@ impl PipelineStep<DatFileMassImportContext> for CheckExistingDatFileStep {
 /// set in the state), this step will be skipped.
 pub struct StoreDatFileStep;
 #[async_trait::async_trait]
-impl PipelineStep<DatFileMassImportContext> for StoreDatFileStep {
+impl PipelineStep<DatFileMassImportContext, Error> for StoreDatFileStep {
     fn name(&self) -> &'static str {
         "store_dat_file_step"
     }
@@ -132,7 +132,7 @@ impl PipelineStep<DatFileMassImportContext> for StoreDatFileStep {
         context.state.dat_file.is_some() && context.state.dat_file_id.is_none()
     }
 
-    async fn execute(&self, context: &mut DatFileMassImportContext) -> StepAction {
+    async fn execute(&self, context: &mut DatFileMassImportContext) -> StepAction<Error> {
         let dat_file = context
             .state
             .dat_file
@@ -222,7 +222,7 @@ impl PipelineStep<DatFileMassImportContext> for StoreDatFileStep {
 pub struct CategorizeFileSetsForImportStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<DatFileMassImportContext> for CategorizeFileSetsForImportStep {
+impl PipelineStep<DatFileMassImportContext, Error> for CategorizeFileSetsForImportStep {
     fn name(&self) -> &'static str {
         "categorize_file_sets_for_import_step"
     }
@@ -235,7 +235,7 @@ impl PipelineStep<DatFileMassImportContext> for CategorizeFileSetsForImportStep 
         context.state.dat_file.is_some() && context.state.dat_file_id.is_some()
     }
 
-    async fn execute(&self, context: &mut DatFileMassImportContext) -> StepAction {
+    async fn execute(&self, context: &mut DatFileMassImportContext) -> StepAction<Error> {
         // TODO: add to context if needs injection for mocking in tests
         // now it's fine since we use in mem test db anyway in tests
         let dat_game_status_service =

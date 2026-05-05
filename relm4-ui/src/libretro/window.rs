@@ -6,6 +6,7 @@ use std::{
     time::Duration,
 };
 
+use gilrs::{Event, Gilrs};
 use relm4::{
     Component, ComponentParts, ComponentSender,
     gtk::{
@@ -15,7 +16,14 @@ use relm4::{
     },
 };
 
-use libretro_runner::{core::LibretroCore, frame_buffer::FrameBuffer};
+use libretro_runner::{
+    core::LibretroCore,
+    frame_buffer::FrameBuffer,
+    input::InputState,
+    supported_cores::{InputProfile, SupportedCoreDefinition},
+};
+
+use crate::libretro::input::map_gamepad_event;
 
 use super::input::map_key_event;
 
@@ -38,6 +46,11 @@ pub struct LibretroWindowModel {
     /// None before the first Launch and after each Close.
     core: Rc<RefCell<Option<LibretroCore>>>,
 
+    /// The core's input state, shared with the key event handlers. Wrapped in
+    /// Arc<Mutex<>> so it can be shared across threads (core thread and gilrs event loop thread) and
+    /// mutated by the key handlers.
+    input_state: Arc<Mutex<InputState>>,
+
     /// Stored so we can call queue_draw() from the timer closure and
     /// set_draw_func() when a new core is loaded.
     drawing_area: gtk::DrawingArea,
@@ -50,6 +63,7 @@ pub struct LibretroWindowModel {
     /// Temp files to clean up after the session ends. Populated on Launch,
     /// drained and returned to the parent via SessionEnded on Close.
     temp_files: Vec<String>,
+    input_profile: Arc<Mutex<InputProfile>>,
 }
 
 #[derive(Debug)]
@@ -61,6 +75,7 @@ pub enum LibretroWindowMsg {
         /// Temp files extracted during ROM preparation — passed back to the
         /// parent via SessionEnded so it can call cleanup().
         temp_files: Vec<String>,
+        input_profile: InputProfile,
     },
     Close,
 }
@@ -112,12 +127,31 @@ impl Component for LibretroWindowModel {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         tracing::info!("Initializing libretro window component");
+        let input_state = Arc::new(Mutex::new(InputState::default()));
+        let input_profile = Arc::new(Mutex::new(InputProfile::Standard));
         let model = LibretroWindowModel {
             core: Rc::new(RefCell::new(None)),
+            input_state: Arc::clone(&input_state),
             drawing_area: gtk::DrawingArea::new(),
             timer_source_id: None,
             temp_files: Vec::new(),
+            input_profile: Arc::clone(&input_profile),
         };
+
+        // Spawn a background task to poll for gamepad events using gilrs and update the input
+        // state.
+        let sender = sender.clone();
+        relm4::spawn(async move {
+            let mut gilrs = Gilrs::new().unwrap();
+            loop {
+                // Poll for events
+                while let Some(Event { event, .. }) = gilrs.next_event() {
+                    map_gamepad_event(event, Arc::clone(&input_state), Arc::clone(&input_profile));
+                }
+                // Sleep briefly to avoid busy-waiting.
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        });
 
         // Create the key controller once and attach it to the window here in
         // init().
@@ -160,6 +194,7 @@ impl Component for LibretroWindowModel {
                 rom_path,
                 system_dir,
                 temp_files,
+                input_profile,
             } => {
                 tracing::info!(
                     core_path = ?core_path,
@@ -170,11 +205,25 @@ impl Component for LibretroWindowModel {
                 );
                 self.temp_files = temp_files;
 
-                match LibretroCore::load(&core_path, &rom_path, &system_dir) {
+                match LibretroCore::load(
+                    &core_path,
+                    &rom_path,
+                    &system_dir,
+                    Arc::clone(&self.input_state),
+                ) {
                     Ok(core) => {
                         tracing::info!("Libretro core loaded successfully");
                         let fps = core.fps;
                         tracing::info!(fps, "Core reports FPS");
+                        match self.input_profile.lock() {
+                            Ok(mut input_profile_guard) => {
+                                *input_profile_guard = input_profile;
+                            }
+                            Err(e) => {
+                                tracing::error!("Failed to acquire input profile lock: {}", e);
+                                // Handle the error as needed, e.g., set a default profile or skip setting it
+                            }
+                        }
 
                         // Clone the frame_buffer Arc before moving core into the
                         // RefCell, so we can set up the draw func without locking.

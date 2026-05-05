@@ -53,7 +53,10 @@ impl<T: FileDeletionStepsContext> FilterDeletableFilesStep<T> {
 }
 
 #[async_trait::async_trait]
-impl<T: FileDeletionStepsContext + Send + Sync> PipelineStep<T> for FilterDeletableFilesStep<T> {
+impl<T> PipelineStep<T, Error> for FilterDeletableFilesStep<T>
+where
+    T: FileDeletionStepsContext + Send + Sync,
+{
     fn name(&self) -> &'static str {
         "filter_deletable_files"
     }
@@ -63,7 +66,7 @@ impl<T: FileDeletionStepsContext + Send + Sync> PipelineStep<T> for FilterDeleta
         context.has_deletion_candidates()
     }
 
-    async fn execute(&self, context: &mut T) -> StepAction {
+    async fn execute(&self, context: &mut T) -> StepAction<Error> {
         tracing::info!(
             file_set_id = context.file_set_id(),
             "Filtering deletable files for file set",
@@ -137,7 +140,11 @@ impl<T: FileDeletionStepsContext> DeleteLocalFilesStep<T> {
 }
 
 #[async_trait::async_trait]
-impl<T: FileDeletionStepsContext + Send + Sync> PipelineStep<T> for DeleteLocalFilesStep<T> {
+impl<T, E> PipelineStep<T, E> for DeleteLocalFilesStep<T>
+where
+    T: FileDeletionStepsContext + Send + Sync,
+    E: From<Error> + Send + Sync + 'static,
+{
     fn name(&self) -> &'static str {
         "delete_local_files"
     }
@@ -146,7 +153,7 @@ impl<T: FileDeletionStepsContext + Send + Sync> PipelineStep<T> for DeleteLocalF
         context.has_deletable_files()
     }
 
-    async fn execute(&self, context: &mut T) -> StepAction {
+    async fn execute(&self, context: &mut T) -> StepAction<E> {
         tracing::info!(
             file_set_id = context.file_set_id(),
             "Deleting local files for file set"
@@ -236,7 +243,10 @@ impl<T: FileDeletionStepsContext> MarkForCloudDeletionStep<T> {
 }
 
 #[async_trait::async_trait]
-impl<T: FileDeletionStepsContext + Send + Sync> PipelineStep<T> for MarkForCloudDeletionStep<T> {
+impl<T> PipelineStep<T, Error> for MarkForCloudDeletionStep<T>
+where
+    T: FileDeletionStepsContext + Send + Sync,
+{
     fn name(&self) -> &'static str {
         "mark_for_cloud_deletion"
     }
@@ -251,7 +261,7 @@ impl<T: FileDeletionStepsContext + Send + Sync> PipelineStep<T> for MarkForCloud
         context.has_deleted_files()
     }
 
-    async fn execute(&self, context: &mut T) -> StepAction {
+    async fn execute(&self, context: &mut T) -> StepAction<Error> {
         tracing::info!(
             file_set_id = context.file_set_id(),
             "Marking files for cloud deletion",
@@ -329,7 +339,10 @@ impl<T: FileDeletionStepsContext> DeleteFileInfosStep<T> {
 }
 
 #[async_trait::async_trait]
-impl<T: FileDeletionStepsContext + Send + Sync> PipelineStep<T> for DeleteFileInfosStep<T> {
+impl<T> PipelineStep<T, Error> for DeleteFileInfosStep<T>
+where
+    T: FileDeletionStepsContext + Send + Sync,
+{
     fn name(&self) -> &'static str {
         "delete_file_info_entries"
     }
@@ -338,7 +351,7 @@ impl<T: FileDeletionStepsContext + Send + Sync> PipelineStep<T> for DeleteFileIn
         context.has_deleted_files()
     }
 
-    async fn execute(&self, context: &mut T) -> StepAction {
+    async fn execute(&self, context: &mut T) -> StepAction<Error> {
         tracing::info!(
             "Deleting file_info entries for file set {}",
             context.file_set_id()
@@ -393,6 +406,7 @@ mod tests {
     use database::{repository_manager::RepositoryManager, setup_test_db};
 
     use crate::{
+        error::Error,
         file_import::common_steps::file_deletion_steps::{
             DeleteFileInfosStep, DeleteLocalFilesStep, FileDeletionStepsContext,
             FilterDeletableFilesStep, MarkForCloudDeletionStep,
@@ -703,7 +717,7 @@ mod tests {
             )]),
         };
         let step = DeleteLocalFilesStep::<TestContext>::new();
-        let res = step.execute(&mut context).await;
+        let res: StepAction<Error> = step.execute(&mut context).await;
 
         assert!(
             context
@@ -758,7 +772,7 @@ mod tests {
             )]),
         };
         let step = DeleteLocalFilesStep::<TestContext>::new();
-        let res = step.execute(&mut context).await;
+        let res: StepAction<Error> = step.execute(&mut context).await;
 
         assert!(
             !context
@@ -810,7 +824,7 @@ mod tests {
             )]),
         };
         let step = DeleteLocalFilesStep::<TestContext>::new();
-        let res = step.execute(&mut context).await;
+        let res: StepAction<Error> = step.execute(&mut context).await;
         let fp = settings.get_file_path(
             &file_info.file_type,
             file_info.archive_file_name.as_deref().unwrap(),
@@ -869,7 +883,7 @@ mod tests {
         };
 
         let step = DeleteLocalFilesStep::<TestContext>::new();
-        let res = step.execute(&mut context).await;
+        let res: StepAction<Error> = step.execute(&mut context).await;
 
         // No FS delete should have been attempted
         assert_eq!(fs_ops.get_deleted_files(), vec![] as Vec<String>);
@@ -931,7 +945,7 @@ mod tests {
         //delete_file_set_step.execute(&mut context).await;
 
         let step = DeleteFileInfosStep::<TestContext>::new();
-        let action = step.execute(&mut context).await;
+        let action: StepAction<Error> = step.execute(&mut context).await;
         assert_eq!(action, StepAction::Continue);
 
         let deletion_result = context
@@ -1003,7 +1017,7 @@ mod tests {
         };
 
         let step = DeleteFileInfosStep::<TestContext>::new();
-        let action = step.execute(&mut context).await;
+        let action: StepAction<Error> = step.execute(&mut context).await;
         assert_eq!(action, StepAction::Continue);
 
         // file_info must still exist — it's a tombstone for cloud deletion
@@ -1058,7 +1072,7 @@ mod tests {
         };
 
         let step = DeleteFileInfosStep::<TestContext>::new();
-        let action = step.execute(&mut context).await;
+        let action: StepAction<Error> = step.execute(&mut context).await;
         assert_eq!(action, StepAction::Continue);
 
         let deletion_result = context

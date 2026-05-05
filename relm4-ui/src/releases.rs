@@ -293,6 +293,10 @@ impl Component for ReleasesModel {
                             }
                         })
                         .collect();
+                    tracing::info!(
+                        "Clearing and updating releases list view with {} items.",
+                        items.len()
+                    );
                     self.releases_list_view_wrapper.clear();
                     self.releases_list_view_wrapper.extend_from_iter(items);
                     sender.input(ReleasesMsg::ReleaseSelected);

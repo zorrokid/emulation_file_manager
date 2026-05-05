@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 
-use core_types::{IMAGE_FILE_TYPES, events::DownloadEvent};
 use cloud_storage::cloud_key;
+use core_types::{IMAGE_FILE_TYPES, events::DownloadEvent};
 use file_export::{FileSetExportModel, OutputFile};
 
 use crate::{
+    error::Error,
     file_set_download::context::{DownloadContext, FileDownloadResult},
     pipeline::pipeline_step::{PipelineStep, StepAction},
 };
@@ -12,12 +13,12 @@ use crate::{
 pub struct FetchFileSetStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<DownloadContext> for FetchFileSetStep {
+impl PipelineStep<DownloadContext, Error> for FetchFileSetStep {
     fn name(&self) -> &'static str {
         "fetch_file_set"
     }
 
-    async fn execute(&self, context: &mut DownloadContext) -> StepAction {
+    async fn execute(&self, context: &mut DownloadContext) -> StepAction<Error> {
         tracing::debug!(file_set_id = context.file_set_id, "Fetching file set");
 
         let file_set_res = context
@@ -50,12 +51,12 @@ impl PipelineStep<DownloadContext> for FetchFileSetStep {
 pub struct FetchFileSetFileInfoStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<DownloadContext> for FetchFileSetFileInfoStep {
+impl PipelineStep<DownloadContext, Error> for FetchFileSetFileInfoStep {
     fn name(&self) -> &'static str {
         "fetch_file_set_file_info"
     }
 
-    async fn execute(&self, context: &mut DownloadContext) -> StepAction {
+    async fn execute(&self, context: &mut DownloadContext) -> StepAction<Error> {
         let file_set_file_infos_res = context
             .repository_manager
             .get_file_set_repository()
@@ -83,7 +84,7 @@ impl PipelineStep<DownloadContext> for FetchFileSetFileInfoStep {
 pub struct PrepareFileForDownloadStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<DownloadContext> for PrepareFileForDownloadStep {
+impl PipelineStep<DownloadContext, Error> for PrepareFileForDownloadStep {
     fn name(&self) -> &'static str {
         "prepare_file_for_download"
     }
@@ -92,7 +93,7 @@ impl PipelineStep<DownloadContext> for PrepareFileForDownloadStep {
         !context.files_in_set.is_empty() && context.file_set.is_some()
     }
 
-    async fn execute(&self, context: &mut DownloadContext) -> StepAction {
+    async fn execute(&self, context: &mut DownloadContext) -> StepAction<Error> {
         if let Some(file_set) = &context.file_set {
             for file in context.files_in_set.iter() {
                 let Some(archive_name) = &file.archive_file_name else {
@@ -122,7 +123,7 @@ impl PipelineStep<DownloadContext> for PrepareFileForDownloadStep {
 /// If any downloads fail, the step aborts the pipeline with an error.
 pub struct DownloadFilesStep;
 #[async_trait::async_trait]
-impl PipelineStep<DownloadContext> for DownloadFilesStep {
+impl PipelineStep<DownloadContext, Error> for DownloadFilesStep {
     fn name(&self) -> &'static str {
         "download_files"
     }
@@ -134,7 +135,7 @@ impl PipelineStep<DownloadContext> for DownloadFilesStep {
             && context.file_set.is_some()
     }
 
-    async fn execute(&self, context: &mut DownloadContext) -> StepAction {
+    async fn execute(&self, context: &mut DownloadContext) -> StepAction<Error> {
         tracing::info!(
             file_count = context.files_to_download.len(),
             "Starting file downloads"
@@ -263,7 +264,7 @@ impl PipelineStep<DownloadContext> for DownloadFilesStep {
 
 pub struct ExportFilesStep;
 #[async_trait::async_trait]
-impl PipelineStep<DownloadContext> for ExportFilesStep {
+impl PipelineStep<DownloadContext, Error> for ExportFilesStep {
     fn name(&self) -> &'static str {
         "export_files"
     }
@@ -272,7 +273,7 @@ impl PipelineStep<DownloadContext> for ExportFilesStep {
         !context.files_in_set.is_empty() && context.file_set.is_some()
     }
 
-    async fn execute(&self, context: &mut DownloadContext) -> StepAction {
+    async fn execute(&self, context: &mut DownloadContext) -> StepAction<Error> {
         let file_set = context
             .file_set
             .as_ref()
@@ -357,7 +358,7 @@ impl PipelineStep<DownloadContext> for ExportFilesStep {
 pub struct PrepareThumbnailsStep;
 
 #[async_trait::async_trait]
-impl PipelineStep<DownloadContext> for PrepareThumbnailsStep {
+impl PipelineStep<DownloadContext, Error> for PrepareThumbnailsStep {
     fn name(&self) -> &'static str {
         "prepare_thumbnails"
     }
@@ -375,7 +376,7 @@ impl PipelineStep<DownloadContext> for PrepareThumbnailsStep {
         }
     }
 
-    async fn execute(&self, context: &mut DownloadContext) -> StepAction {
+    async fn execute(&self, context: &mut DownloadContext) -> StepAction<Error> {
         tracing::info!("Preparing thumbnails for image file set");
         let thumnail_dir = context.settings.get_thumbnails_path();
         let output_dir = &context.settings.temp_output_dir;
@@ -572,8 +573,10 @@ mod tests {
 
         // Assert: step continues and no files queued for download
         assert!(matches!(action, StepAction::Continue));
-        assert!(context.files_to_download.is_empty(),
-            "file with missing archive_file_name should not be queued for download");
+        assert!(
+            context.files_to_download.is_empty(),
+            "file with missing archive_file_name should not be queued for download"
+        );
     }
 
     #[async_std::test]
@@ -587,8 +590,10 @@ mod tests {
         assert!(context.files_to_download.is_empty());
 
         // DownloadFilesStep should_execute guard confirms the file is fully excluded
-        assert!(!DownloadFilesStep.should_execute(&context),
-            "DownloadFilesStep should not execute when files_to_download is empty");
+        assert!(
+            !DownloadFilesStep.should_execute(&context),
+            "DownloadFilesStep should not execute when files_to_download is empty"
+        );
     }
 
     #[async_std::test]
@@ -623,7 +628,10 @@ mod tests {
             .get_file_path(&file_type, archive_file_name);
         let key = cloud_key(
             context.files_to_download[0].file_type,
-            context.files_to_download[0].archive_file_name.as_deref().unwrap(),
+            context.files_to_download[0]
+                .archive_file_name
+                .as_deref()
+                .unwrap(),
         );
 
         context
@@ -676,7 +684,10 @@ mod tests {
 
         let key = cloud_key(
             context.files_to_download[0].file_type,
-            context.files_to_download[0].archive_file_name.as_deref().unwrap(),
+            context.files_to_download[0]
+                .archive_file_name
+                .as_deref()
+                .unwrap(),
         );
 
         let step = DownloadFilesStep;
