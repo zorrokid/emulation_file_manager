@@ -41,6 +41,7 @@ pub struct FsOpsOutcome {
     pub remove_result: Option<io::Result<()>>,
 }
 
+#[derive(Debug, PartialEq)]
 pub enum FsOpsCall {
     CreateDir { path: PathBuf },
     Rename { from: PathBuf, to: PathBuf },

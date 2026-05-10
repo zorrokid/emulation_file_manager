@@ -414,11 +414,23 @@ mod tests {
             },
             ..Default::default()
         }));
-        let fs_ops = MockFsOps::new(fs_mock_state);
+        let fs_ops = MockFsOps::new(Arc::clone(&fs_mock_state));
         let staged_file_path = Path::new("/temp/");
         let output_dir = Path::new("/output/");
         let archive_file_name = "archive_file_name";
         let res = persist_staged_file(&fs_ops, staged_file_path, output_dir, archive_file_name);
         assert!(res.is_err());
+        let err = res.expect_err("Error expected");
+        assert!(matches!(err, FileImportError::FileIoError(_)));
+
+        let guard = fs_mock_state.lock().unwrap();
+        assert_eq!(guard.calls.len(), 1);
+        let call = &guard.calls[0];
+        assert_eq!(
+            *call,
+            FsOpsCall::CreateDir {
+                path: PathBuf::from("/output/")
+            }
+        );
     }
 }
