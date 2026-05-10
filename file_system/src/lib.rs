@@ -1,3 +1,4 @@
+pub mod fs_ops;
 use std::{fs, path::PathBuf};
 
 use directories_next::ProjectDirs;

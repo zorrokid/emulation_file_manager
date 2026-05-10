@@ -1551,8 +1551,10 @@ name = "file_import"
 version = "0.1.0"
 dependencies = [
  "core_types",
+ "file_system",
  "sha1 0.10.6",
  "tempfile",
+ "tracing",
  "utils",
  "uuid",
  "zip",

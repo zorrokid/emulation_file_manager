@@ -1,11 +1,8 @@
-use std::{
-    collections::{HashMap, HashSet},
-    path::PathBuf,
-};
+use std::{collections::HashMap, path::PathBuf};
 
 use core_types::{FileSize, FileType, ImportedFile, Sha1Checksum, item_type::ItemType};
 use database::models::FileInfo;
-use file_import::FileImportModel;
+use file_import::{FileImportModel, SelectedImportEntry};
 
 use crate::error::Error;
 
@@ -73,7 +70,7 @@ pub struct FileImportData {
     /// From this collection of files, the ones that are in selected_files and are new files, will be imported.
     /// If the files are existing files, they will be just linked to the file set.
     /// TODO: instead having existing info in FileImportSoure, maybe add a separate field for it?
-    /// OR: maybe provide existing files as parameter for get_new_selected_file_names
+    /// OR: maybe provide existing files as parameter for get_new_selected_entries
     pub import_files: Vec<FileImportSource>,
 
     /// When importing with DAT file, some files from the DAT file can be missing. Obviously we
@@ -112,13 +109,16 @@ impl FileImportData {
                 .collect::<Vec<PathBuf>>(),
             output_dir: self.output_dir.clone(),
             file_type: self.file_type,
-            new_files_file_name_filter: self.get_new_selected_file_names(existing_files),
+            selected_entries: self.get_new_selected_entries(existing_files),
         }
     }
 }
 
 impl FileImportData {
-    pub fn get_new_selected_file_names(&self, existing_files: &[FileInfo]) -> HashSet<String> {
+    pub fn get_new_selected_entries(
+        &self,
+        existing_files: &[FileInfo],
+    ) -> HashMap<Sha1Checksum, SelectedImportEntry> {
         self.import_files
             .iter()
             .flat_map(|file| {
@@ -130,17 +130,23 @@ impl FileImportData {
                                 .iter()
                                 .any(|f| f.sha1_checksum == *sha1_checksum && f.is_available())
                         {
-                            Some(import_content.file_name.clone())
+                            Some((
+                                *sha1_checksum,
+                                SelectedImportEntry {
+                                    sha1_checksum: *sha1_checksum,
+                                    file_name: import_content.file_name.clone(),
+                                },
+                            ))
                         } else {
                             None
                         }
                     })
             })
-            .collect::<HashSet<String>>()
+            .collect::<HashMap<Sha1Checksum, SelectedImportEntry>>()
     }
 
     pub fn is_new_files_to_be_imported(&self, existing_files: &[FileInfo]) -> bool {
-        !self.get_new_selected_file_names(existing_files).is_empty()
+        !self.get_new_selected_entries(existing_files).is_empty()
     }
 }
 
@@ -216,15 +222,15 @@ mod tests {
     }
 
     #[test]
-    fn test_get_new_selected_file_names_empty() {
+    fn test_get_new_selected_entries_empty() {
         let file_import_data = create_file_import_data(vec![], vec![]);
         let existing_files = vec![];
-        let result = file_import_data.get_new_selected_file_names(&existing_files);
+        let result = file_import_data.get_new_selected_entries(&existing_files);
         assert!(result.is_empty());
     }
 
     #[test]
-    fn test_get_new_selected_file_names_with_some_new_files() {
+    fn test_get_new_selected_entries_with_some_new_files() {
         let checksum1: Sha1Checksum = [1u8; 20];
         let checksum2: Sha1Checksum = [2u8; 20];
         let checksum3: Sha1Checksum = [3u8; 20];
@@ -272,13 +278,11 @@ mod tests {
             cloud_sync_status: Default::default(),
         }];
 
-        let result = file_import_data.get_new_selected_file_names(&existing_files);
+        let result = file_import_data.get_new_selected_entries(&existing_files);
         assert_eq!(result.len(), 2);
-        // assert included new files
-        assert!(result.contains("game1.rom"));
-        assert!(result.contains("game3.rom"));
-        // assert excluded existing file
-        assert!(!result.contains("game2.rom"));
+        assert_eq!(result.get(&checksum1).unwrap().file_name, "game1.rom");
+        assert_eq!(result.get(&checksum3).unwrap().file_name, "game3.rom");
+        assert!(!result.contains_key(&checksum2));
     }
 
     #[test]
@@ -308,8 +312,10 @@ mod tests {
         assert_eq!(model.file_type, FileType::Rom);
         assert_eq!(model.file_path.len(), 1);
         assert_eq!(model.file_path[0], PathBuf::from("/test/games.zip"));
-        assert_eq!(model.new_files_file_name_filter.len(), 1);
-        assert!(model.new_files_file_name_filter.contains("game.rom"));
+        assert_eq!(model.selected_entries.len(), 1);
+        let entry = model.selected_entries.get(&checksum).unwrap();
+        assert_eq!(entry.file_name, "game.rom");
+        assert_eq!(entry.sha1_checksum, checksum);
     }
 
     #[test]
@@ -346,6 +352,6 @@ mod tests {
         assert_eq!(model.file_type, FileType::Rom);
         assert_eq!(model.file_path.len(), 1);
         assert_eq!(model.file_path[0], PathBuf::from("/test/games.zip"));
-        assert!(model.new_files_file_name_filter.is_empty());
+        assert!(model.selected_entries.is_empty());
     }
 }

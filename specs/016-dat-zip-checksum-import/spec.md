@@ -2,53 +2,55 @@
 
 ## Status
 <!-- Planning | In Progress | Complete | Abandoned -->
-Planning
+In Progress
 
 ## Affected Crates
-- `service` — preserve DAT ROM names through the mass-import and file-import models for DAT-driven imports
-- `file_import` — import ZIP members by selected SHA1, not only by archive member name, and return the DAT ROM name as the stored original filename
+- `service` — preserve canonical file names through the file-import model while selecting files solely by SHA1
+- `file_import` — import ZIP members by selected SHA1 only and return the canonical service-provided file name as the stored original filename
 
 ## Problem
 
-DAT-driven mass import currently selects files in two different ways:
+ZIP import currently mixes two selection concepts:
 
-1. `service/src/mass_import/with_dat/` identifies candidate source archives by SHA1 checksum.
-2. `file_import` then extracts ZIP members by exact filename match.
+1. `service` already tracks selected files by SHA1 checksum.
+2. `file_import` still contains ZIP-member filename filtering logic.
 
-This split causes a false negative when the DAT ROM name and the ZIP member name differ even
-though the file contents are identical. In that case the import model contains the correct
-archive path and selected checksum, but ZIP extraction imports zero files and the add-file-set
-pipeline fails later with `FileImportError("No files in file set.")`.
+That split makes the import contract more complicated than it needs to be and is especially
+problematic for DAT-driven imports, where the checksum is already the authoritative identity.
+When the canonical file name from `service` differs from the ZIP member name, the current design
+forces `file_import` to care about an incidental archive detail instead of the selected checksum.
 
-For DAT imports, the checksum is the authoritative identity of the ROM. The archive member name
-is incidental and may contain typos or naming variations. When a ZIP member matches a selected
-DAT checksum, the imported file set should store the DAT ROM name, not the archive member name.
+The import boundary should be simpler: `service` decides which SHA1 checksums are selected and
+which file name should be stored for each one, while `file_import` only finds matching ZIP members
+by SHA1 and persists the file under the provided canonical name.
 
 ## Proposed Solution
 
-Make ZIP extraction checksum-aware for DAT-driven imports while preserving current behavior for
-filename-driven imports.
+Make ZIP extraction SHA1-driven for all imports.
 
-`service` will continue building `FileSetImportModel` from DAT ROM metadata, but the import model
-passed to `file_import` will include enough selected-file metadata to map:
+`service` will continue building `FileSetImportModel` from import metadata, but the import model
+passed to `file_import` will include one selected entry per chosen SHA1. That selection metadata is
+generic to all imports and captures only:
 
-- selected SHA1 checksum
-- expected stored file name (the DAT ROM name)
+- the selected SHA1 checksum
+- the canonical file name to persist for that checksum
 
-`file_import` will use that metadata when importing ZIP archives:
+`file_import` will consume that selection metadata through a single ZIP import flow with no
+filename-based filtering.
+
+When importing ZIP archives:
 
 1. Iterate ZIP members as today.
-2. Accept a member when either:
-   - its filename matches the selected filename filter, or
-   - its computed SHA1 matches one of the selected checksums.
-3. When a member is accepted via checksum match, set `ImportedFile.original_file_name` to the DAT
-   ROM name from the selected metadata instead of the archive member name.
-4. Return only matched selected files; do not import unrelated ZIP members.
+2. Extract each ZIP member to a temp/staging location first instead of writing directly to the collection output directory.
+3. While staging the member, compute its SHA1 checksum.
+4. Match the staged member against the selected import metadata by SHA1 checksum only.
+5. When a member is accepted, create the final imported output from the staged file and set `ImportedFile.original_file_name` to the canonical stored file name from the selected metadata, not the archive member name.
+6. When a member is not accepted, delete the staged file and do not create collection output for it.
+7. Return only matched selected files; do not import unrelated ZIP members.
 
 This keeps the architecture boundary intact:
 
-- `service` remains responsible for DAT-specific business rules and for deciding the canonical
-  filename to store.
+- `service` remains responsible for business rules and for deciding the canonical filename to store.
 - `file_import` remains responsible for archive reading, checksum calculation, and file output,
   with no database awareness.
 
@@ -59,27 +61,28 @@ the value passed into the existing service/database flow.
 ## Key Decisions
 | Decision | Rationale |
 |---|---|
-| Use SHA1 as the source of truth for DAT ZIP member selection | DAT import already identifies ROMs by checksum; filename mismatches should not block valid imports |
-| Store the DAT ROM name as `original_file_name` when a ZIP member is accepted for a DAT import | The DAT is the canonical catalog entry and should define the persisted file name shown in the file set |
-| Keep checksum-aware fallback scoped to selected import metadata rather than adding DAT logic to `file_import` | Preserves crate boundaries by passing generic selection metadata instead of leaking DAT-specific types downward |
-| Preserve filename-only behavior for non-DAT imports | Avoids changing unrelated import flows and keeps the fix surgical |
-| Fail at the import stage when no ZIP member matches the selected DAT files | Surfaces the real mismatch earlier instead of deferring to the generic `No files in file set` pipeline failure |
+| Use SHA1 as the only ZIP member selection key | `service` already selects files by checksum, and keeping a second filename filter adds complexity without adding correctness |
+| Store the canonical service-provided file name as `original_file_name` when a ZIP member is accepted | The service layer owns naming decisions; `file_import` should persist the chosen name without deriving one from the archive |
+| Use a typed selection model instead of filename-filter APIs | Keeps ZIP import logic in one place and lets `service` pass generic metadata without DAT-specific coupling |
+| Stage ZIP members in temp before final persistence | Avoids writing unconfirmed files into the collection directory and keeps ZIP selection semantics consistent |
+| Fail at the import stage when no ZIP member matches the selected SHA1 entries | Surfaces the real mismatch earlier instead of deferring to the generic `No files in file set` pipeline failure |
 
 ## Acceptance Criteria
 
 1. A DAT-driven mass import succeeds when a ZIP archive contains a selected ROM under a different
-   archive member name, as long as the member's SHA1 matches the DAT ROM checksum.
-2. For such imports, the created file set stores the DAT ROM name as the file name in the file
-   set, not the ZIP member name.
-3. ZIP members that do not match a selected filename or selected checksum are not imported.
-4. Non-DAT imports continue to use the existing filename-driven behavior unchanged.
-5. When a DAT-driven import selects a ZIP archive but none of its members match the selected DAT
-   ROMs by filename or checksum, the failure is reported from the import stage with an error that
-   identifies the selection mismatch instead of only failing later with `No files in file set`.
+   archive member name, as long as the member's SHA1 matches the selected DAT checksum.
+2. For such imports, the created file set stores the canonical service-provided file name in the
+   file set, not the ZIP member name.
+3. ZIP members that do not match any selected import metadata by SHA1 are not persisted to the
+   collection output.
+4. ZIP imports outside the DAT flow also select members by SHA1 only through the same import model.
+5. When an import selects a ZIP archive but none of its members match the selected SHA1 entries,
+   the failure is reported from the import stage with an error that identifies the selection
+   mismatch instead of only failing later with `No files in file set`.
 6. Regression tests cover:
    - checksum-based success with mismatched archive member name
-   - persisted DAT filename for the imported file
-   - non-DAT filename-driven ZIP import remaining unchanged
+   - persisted canonical filename through the service/database flow
+   - import-stage failure when no ZIP member matches the selected SHA1 entries
 
 ## As Implemented
 <!-- Filled in at the end of Phase 3. Document any deviations from Proposed Solution. -->

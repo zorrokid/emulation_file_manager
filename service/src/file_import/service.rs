@@ -301,7 +301,7 @@ mod tests {
 
         let file_import_source =
             FileImportSource::new(path_str.into()).with_content(ImportFileContent {
-                file_name,
+                file_name: file_name.clone(),
                 sha1_checksum,
                 file_size,
             });
@@ -336,14 +336,26 @@ mod tests {
 
         assert_eq!(file_set.name, file_set_name);
 
-        let file_set_files = repository_manager
+        let file_set_file_infos = repository_manager
             .get_file_info_repository()
             .get_file_infos_by_file_set(file_set.id)
             .await
             .unwrap();
 
+        assert_eq!(file_set_file_infos.len(), 1);
+        let file_info = &file_set_file_infos[0];
+        assert_eq!(file_info.sha1_checksum, sha1_checksum);
+
+        let file_set_files = repository_manager
+            .get_file_set_repository()
+            .get_file_set_file_info(result.file_set_id)
+            .await
+            .unwrap();
+
         assert_eq!(file_set_files.len(), 1);
-        assert_eq!(file_set_files[0].sha1_checksum, sha1_checksum);
+
+        let file_set_file = &file_set_files[0];
+        assert_eq!(file_set_file.file_name, file_name);
     }
 
     #[async_std::test]

@@ -12,7 +12,11 @@ use crate::{
     pipeline::generic_pipeline::Pipeline,
 };
 
-// NOTE: currently this pipeline is designed so that same file set could tried to be added multiple times for example as part of import operations. That makes logic somewhat complicated and this pipeline has characteristics of both add file set and update file set pipelines. We also have update pipeline. So better design would be that caller would check if file set already exists and then decide whether to call add file set pipeline or update file set pipeline. That way we could simplify both pipelines and have more clear separation of concerns.
+// NOTE: This add pipeline still handles cases where the file set may already exist,
+// for example during import flows. That makes the flow overlap somewhat with update
+// behavior. A cleaner design would move the add-vs-update routing into a higher-level
+// service/orchestration layer after the shared pre-checks, so the add and update
+// pipelines can have clearer responsibilities.
 impl Pipeline<AddFileSetContext> {
     pub fn new() -> Self {
         Self::with_steps(vec![
