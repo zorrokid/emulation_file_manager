@@ -21,6 +21,7 @@ pub enum FileImportError {
     ZipError(String),
     FileIoError(String),
     SelectionMismatch(String),
+    InvalidFilePath(PathBuf),
 }
 
 /// Used for filtering files that will be imported.
@@ -46,6 +47,7 @@ impl Display for FileImportError {
             FileImportError::ZipError(err) => write!(f, "Zip error: {}", err),
             FileImportError::FileIoError(err) => write!(f, "File IO error: {}", err),
             FileImportError::SelectionMismatch(err) => write!(f, "Selection mismatch: {}", err),
+            FileImportError::InvalidFilePath(path) => write!(f, "Invalid file path: {:?}", path),
         }
     }
 }
@@ -205,7 +207,7 @@ pub fn import_files_from_zip(
             continue;
         }
 
-        persist_staged_file(&fs_ops, &staged_file_path, output_dir, &archive_file_name)?;
+        persist_staged_file(&fs_ops, &staged_file_path, output_dir)?;
 
         let imported_file = ImportedFile {
             original_file_name: file_entry.file_name.clone(),
@@ -231,12 +233,14 @@ fn persist_staged_file(
     ops: &dyn FsOps,
     staged_file_path: &Path,
     output_dir: &Path,
-    archive_file_name: &str,
 ) -> Result<(), FileImportError> {
     ops.create_dir_all(output_dir).map_err(|e| {
         FileImportError::FileIoError(format!("Failed creating output directory: {}", e))
     })?;
-    let output_path = output_dir.join(archive_file_name).with_extension("zst");
+    let file_name = staged_file_path
+        .file_name()
+        .ok_or_else(|| FileImportError::InvalidFilePath(PathBuf::from(staged_file_path)))?;
+    let output_path = output_dir.join(file_name);
 
     match ops.rename(staged_file_path, &output_path) {
         Ok(()) => Ok(()),
@@ -282,6 +286,7 @@ fn generate_archive_file_name() -> String {
 #[cfg(test)]
 mod tests {
     use std::{
+        fs::exists,
         io::Write,
         sync::{Arc, Mutex},
     };
@@ -410,6 +415,14 @@ mod tests {
         ));
     }
 
+    fn test_paths() -> (PathBuf, PathBuf, PathBuf) {
+        let staged_file_path = PathBuf::from("/temp/archive_file_name.zst");
+        let output_dir = PathBuf::from("/output/");
+        let archive_file_name = "archive_file_name";
+        let expected_output_path = output_dir.join(archive_file_name).with_extension("zst");
+        (staged_file_path, output_dir, expected_output_path)
+    }
+
     #[test]
     fn test_persist_staged_file_when_create_dir_fails_return_error() {
         let fs_mock_state = Arc::new(Mutex::new(MockFsOpsState {
@@ -420,13 +433,40 @@ mod tests {
             ..Default::default()
         }));
         let fs_ops = MockFsOps::new(Arc::clone(&fs_mock_state));
-        let staged_file_path = Path::new("/temp/archive_file_name.zst");
-        let output_dir = Path::new("/output/");
-        let archive_file_name = "archive_file_name";
-        let res = persist_staged_file(&fs_ops, staged_file_path, output_dir, archive_file_name);
+        let (staged_file_path, output_dir, _) = test_paths();
+
+        let res = persist_staged_file(&fs_ops, &staged_file_path, &output_dir);
         assert!(res.is_err());
         let err = res.expect_err("Error expected");
         assert!(matches!(err, FileImportError::FileIoError(_)));
+
+        let guard = fs_mock_state.lock().unwrap();
+        assert_eq!(guard.calls.len(), 1);
+        let create_dir_call = &guard.calls[0];
+        assert_eq!(
+            *create_dir_call,
+            FsOpsCall::CreateDir {
+                path: PathBuf::from("/output/")
+            }
+        );
+    }
+
+    #[test]
+    fn test_persist_staged_file_when_staged_file_path_has_no_file_name() {
+        let fs_mock_state = Arc::new(Mutex::new(MockFsOpsState {
+            outcome: FsOpsOutcome {
+                create_dir_all_result: Some(Ok(())),
+                ..Default::default()
+            },
+            ..Default::default()
+        }));
+        let fs_ops = MockFsOps::new(Arc::clone(&fs_mock_state));
+        let staged_file_path = Path::new("");
+        let output_dir = Path::new("/output/");
+        let res = persist_staged_file(&fs_ops, staged_file_path, output_dir);
+        assert!(res.is_err());
+        let err = res.expect_err("Error expected");
+        assert!(matches!(err, FileImportError::InvalidFilePath(_)));
 
         let guard = fs_mock_state.lock().unwrap();
         assert_eq!(guard.calls.len(), 1);
@@ -450,12 +490,9 @@ mod tests {
             ..Default::default()
         }));
         let fs_ops = MockFsOps::new(Arc::clone(&fs_mock_state));
-        let staged_file_path = Path::new("/temp/archive_file_name.zst");
-        let output_dir = Path::new("/output/");
-        let archive_file_name = "archive_file_name";
-        let expected_output_path = output_dir.join(archive_file_name).with_extension("zst");
+        let (staged_file_path, output_dir, expected_output_path) = test_paths();
 
-        let res = persist_staged_file(&fs_ops, staged_file_path, output_dir, archive_file_name);
+        let res = persist_staged_file(&fs_ops, &staged_file_path, &output_dir);
         assert!(res.is_ok());
 
         let guard = fs_mock_state.lock().unwrap();
@@ -471,7 +508,7 @@ mod tests {
         assert_eq!(
             *rename_call,
             FsOpsCall::Rename {
-                from: PathBuf::from(staged_file_path),
+                from: staged_file_path,
                 to: expected_output_path.clone()
             }
         );
@@ -493,12 +530,9 @@ mod tests {
             ..Default::default()
         }));
         let fs_ops = MockFsOps::new(Arc::clone(&fs_mock_state));
-        let staged_file_path = Path::new("/temp/archive_file_name.zst");
-        let output_dir = Path::new("/output/");
-        let archive_file_name = "archive_file_name";
-        let expected_output_path = output_dir.join(archive_file_name).with_extension("zst");
+        let (staged_file_path, output_dir, expected_output_path) = test_paths();
 
-        let res = persist_staged_file(&fs_ops, staged_file_path, output_dir, archive_file_name);
+        let res = persist_staged_file(&fs_ops, &staged_file_path, &output_dir);
         assert!(res.is_ok());
 
         let guard = fs_mock_state.lock().unwrap();
@@ -514,7 +548,7 @@ mod tests {
         assert_eq!(
             *rename_call,
             FsOpsCall::Rename {
-                from: PathBuf::from(staged_file_path),
+                from: staged_file_path.clone(),
                 to: expected_output_path.clone()
             }
         );
@@ -522,7 +556,7 @@ mod tests {
         assert_eq!(
             *copy_call,
             FsOpsCall::Copy {
-                from: PathBuf::from(staged_file_path),
+                from: staged_file_path.clone(),
                 to: expected_output_path
             },
         );
@@ -530,14 +564,14 @@ mod tests {
         assert_eq!(
             *exists_call,
             FsOpsCall::Exists {
-                path: PathBuf::from(staged_file_path),
+                path: staged_file_path.clone(),
             },
         );
         let remove_call = &guard.calls[4];
         assert_eq!(
             *remove_call,
             FsOpsCall::Remove {
-                path: PathBuf::from(staged_file_path),
+                path: staged_file_path.clone(),
             },
         );
     }
@@ -561,16 +595,16 @@ mod tests {
             ..Default::default()
         }));
         let fs_ops = MockFsOps::new(Arc::clone(&fs_mock_state));
-        let staged_file_path = Path::new("/temp/archive_file_name.zst");
-        let output_dir = Path::new("/output/");
-        let archive_file_name = "archive_file_name";
-        let expected_output_path = output_dir.join(archive_file_name).with_extension("zst");
+        let (staged_file_path, output_dir, expected_output_path) = test_paths();
 
-        let res = persist_staged_file(&fs_ops, staged_file_path, output_dir, archive_file_name);
+        let res = persist_staged_file(&fs_ops, &staged_file_path, &output_dir);
         assert!(res.is_err());
         let err = res.expect_err("expected error");
-        // TODO: maybe more specific error kinds
-        assert!(matches!(err, FileImportError::FileIoError(_)));
+        assert!(matches!(
+            err,
+            FileImportError::FileIoError(message)
+                if message.contains("Failed copying staged file")
+        ));
 
         let guard = fs_mock_state.lock().unwrap();
         assert_eq!(guard.calls.len(), 3);
@@ -585,7 +619,7 @@ mod tests {
         assert_eq!(
             *rename_call,
             FsOpsCall::Rename {
-                from: PathBuf::from(staged_file_path),
+                from: staged_file_path.clone(),
                 to: expected_output_path.clone()
             }
         );
@@ -593,7 +627,7 @@ mod tests {
         assert_eq!(
             *copy_call,
             FsOpsCall::Copy {
-                from: PathBuf::from(staged_file_path),
+                from: staged_file_path.clone(),
                 to: expected_output_path
             },
         );
@@ -619,12 +653,9 @@ mod tests {
             ..Default::default()
         }));
         let fs_ops = MockFsOps::new(Arc::clone(&fs_mock_state));
-        let staged_file_path = Path::new("/temp/archive_file_name.zst");
-        let output_dir = Path::new("/output/");
-        let archive_file_name = "archive_file_name";
-        let expected_output_path = output_dir.join(archive_file_name).with_extension("zst");
+        let (staged_file_path, output_dir, expected_output_path) = test_paths();
 
-        let res = persist_staged_file(&fs_ops, staged_file_path, output_dir, archive_file_name);
+        let res = persist_staged_file(&fs_ops, &staged_file_path, &output_dir);
         assert!(res.is_err());
         let error = res.expect_err("Error was expected");
         assert!(matches!(error, FileImportError::FileIoError(_)));
@@ -642,7 +673,7 @@ mod tests {
         assert_eq!(
             *rename_call,
             FsOpsCall::Rename {
-                from: PathBuf::from(staged_file_path),
+                from: staged_file_path.clone(),
                 to: expected_output_path.clone()
             }
         );
@@ -650,7 +681,7 @@ mod tests {
         assert_eq!(
             *copy_call,
             FsOpsCall::Copy {
-                from: PathBuf::from(staged_file_path),
+                from: staged_file_path.clone(),
                 to: expected_output_path
             },
         );
@@ -658,14 +689,14 @@ mod tests {
         assert_eq!(
             *exists_call,
             FsOpsCall::Exists {
-                path: PathBuf::from(staged_file_path),
+                path: staged_file_path.clone(),
             },
         );
         let remove_call = &guard.calls[4];
         assert_eq!(
             *remove_call,
             FsOpsCall::Remove {
-                path: PathBuf::from(staged_file_path),
+                path: staged_file_path.clone(),
             },
         );
     }
@@ -686,12 +717,10 @@ mod tests {
             ..Default::default()
         }));
         let fs_ops = MockFsOps::new(Arc::clone(&fs_mock_state));
-        let staged_file_path = Path::new("/temp/archive_file_name.zst");
-        let output_dir = Path::new("/output/");
-        let archive_file_name = "archive_file_name";
-        let expected_output_path = output_dir.join(archive_file_name).with_extension("zst");
 
-        let res = persist_staged_file(&fs_ops, staged_file_path, output_dir, archive_file_name);
+        let (staged_file_path, output_dir, expected_output_path) = test_paths();
+
+        let res = persist_staged_file(&fs_ops, &staged_file_path, &output_dir);
         assert!(res.is_err());
         let err = res.expect_err("expected error");
         assert!(matches!(err, FileImportError::FileIoError(_)));
@@ -709,7 +738,7 @@ mod tests {
         assert_eq!(
             *rename_call,
             FsOpsCall::Rename {
-                from: PathBuf::from(staged_file_path),
+                from: staged_file_path.clone(),
                 to: expected_output_path.clone()
             }
         );
