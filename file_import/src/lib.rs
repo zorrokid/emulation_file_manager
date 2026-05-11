@@ -259,9 +259,13 @@ fn persist_staged_file(
 }
 
 fn remove_staged_file(ops: &dyn FsOps, staged_file_path: &Path) -> Result<(), FileImportError> {
-    if staged_file_path.exists() {
+    let exists = ops.exists(staged_file_path).map_err(|e| {
+        FileImportError::FileIoError(format!("Failed checking if staged file path exists {e}"))
+    })?;
+
+    if exists {
         ops.remove_file(staged_file_path).map_err(|e| {
-            FileImportError::FileIoError(format!("Failed removing staged file: {}", e))
+            FileImportError::FileIoError(format!("Failed removing staged file: {e}"))
         })?;
     }
     Ok(())
@@ -416,7 +420,7 @@ mod tests {
             ..Default::default()
         }));
         let fs_ops = MockFsOps::new(Arc::clone(&fs_mock_state));
-        let staged_file_path = Path::new("/temp/");
+        let staged_file_path = Path::new("/temp/archive_file_name.zst");
         let output_dir = Path::new("/output/");
         let archive_file_name = "archive_file_name";
         let res = persist_staged_file(&fs_ops, staged_file_path, output_dir, archive_file_name);
@@ -426,9 +430,9 @@ mod tests {
 
         let guard = fs_mock_state.lock().unwrap();
         assert_eq!(guard.calls.len(), 1);
-        let call = &guard.calls[0];
+        let create_dir_call = &guard.calls[0];
         assert_eq!(
-            *call,
+            *create_dir_call,
             FsOpsCall::CreateDir {
                 path: PathBuf::from("/output/")
             }
@@ -446,7 +450,7 @@ mod tests {
             ..Default::default()
         }));
         let fs_ops = MockFsOps::new(Arc::clone(&fs_mock_state));
-        let staged_file_path = Path::new("/temp/");
+        let staged_file_path = Path::new("/temp/archive_file_name.zst");
         let output_dir = Path::new("/output/");
         let archive_file_name = "archive_file_name";
         let expected_output_path = output_dir.join(archive_file_name).with_extension("zst");
@@ -456,16 +460,16 @@ mod tests {
 
         let guard = fs_mock_state.lock().unwrap();
         assert_eq!(guard.calls.len(), 2);
-        let call1 = &guard.calls[0];
+        let create_dir_call = &guard.calls[0];
         assert_eq!(
-            *call1,
+            *create_dir_call,
             FsOpsCall::CreateDir {
                 path: PathBuf::from("/output/")
             }
         );
-        let call2 = &guard.calls[1];
+        let rename_call = &guard.calls[1];
         assert_eq!(
-            *call2,
+            *rename_call,
             FsOpsCall::Rename {
                 from: PathBuf::from(staged_file_path),
                 to: expected_output_path.clone()
@@ -484,11 +488,12 @@ mod tests {
                 ))),
                 copy_result: Some(Ok(1234)),
                 remove_result: Some(Ok(())),
+                exists_result: Some(Ok(true)),
             },
             ..Default::default()
         }));
         let fs_ops = MockFsOps::new(Arc::clone(&fs_mock_state));
-        let staged_file_path = Path::new("/temp/");
+        let staged_file_path = Path::new("/temp/archive_file_name.zst");
         let output_dir = Path::new("/output/");
         let archive_file_name = "archive_file_name";
         let expected_output_path = output_dir.join(archive_file_name).with_extension("zst");
@@ -497,28 +502,170 @@ mod tests {
         assert!(res.is_ok());
 
         let guard = fs_mock_state.lock().unwrap();
-        assert_eq!(guard.calls.len(), 3);
-        let call1 = &guard.calls[0];
+        assert_eq!(guard.calls.len(), 5);
+        let create_dir_call = &guard.calls[0];
         assert_eq!(
-            *call1,
+            *create_dir_call,
             FsOpsCall::CreateDir {
                 path: PathBuf::from("/output/")
             }
         );
-        let call2 = &guard.calls[1];
+        let rename_call = &guard.calls[1];
         assert_eq!(
-            *call2,
+            *rename_call,
             FsOpsCall::Rename {
                 from: PathBuf::from(staged_file_path),
                 to: expected_output_path.clone()
             }
         );
-        let call3 = &guard.calls[2];
+        let copy_call = &guard.calls[2];
         assert_eq!(
-            *call3,
+            *copy_call,
             FsOpsCall::Copy {
                 from: PathBuf::from(staged_file_path),
                 to: expected_output_path
+            },
+        );
+        let exists_call = &guard.calls[3];
+        assert_eq!(
+            *exists_call,
+            FsOpsCall::Exists {
+                path: PathBuf::from(staged_file_path),
+            },
+        );
+        let remove_call = &guard.calls[4];
+        assert_eq!(
+            *remove_call,
+            FsOpsCall::Remove {
+                path: PathBuf::from(staged_file_path),
+            },
+        );
+    }
+
+    #[test]
+    fn test_persist_staged_file_when_copy_fails_returns_error_and_remove_not_called() {
+        let fs_mock_state = Arc::new(Mutex::new(MockFsOpsState {
+            outcome: FsOpsOutcome {
+                create_dir_all_result: Some(Ok(())),
+                rename_result: Some(Err(std::io::Error::new(
+                    std::io::ErrorKind::CrossesDevices,
+                    "cross-device link",
+                ))),
+                copy_result: Some(Err(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "permission denied error",
+                ))),
+                remove_result: Some(Ok(())),
+                exists_result: Some(Ok(true)),
+            },
+            ..Default::default()
+        }));
+        let fs_ops = MockFsOps::new(Arc::clone(&fs_mock_state));
+        let staged_file_path = Path::new("/temp/archive_file_name.zst");
+        let output_dir = Path::new("/output/");
+        let archive_file_name = "archive_file_name";
+        let expected_output_path = output_dir.join(archive_file_name).with_extension("zst");
+
+        let res = persist_staged_file(&fs_ops, staged_file_path, output_dir, archive_file_name);
+        assert!(res.is_err());
+        let err = res.expect_err("expected error");
+        // TODO: maybe more specific error kinds
+        assert!(matches!(err, FileImportError::FileIoError(_)));
+
+        let guard = fs_mock_state.lock().unwrap();
+        assert_eq!(guard.calls.len(), 3);
+        let create_dir_call = &guard.calls[0];
+        assert_eq!(
+            *create_dir_call,
+            FsOpsCall::CreateDir {
+                path: PathBuf::from("/output/")
+            }
+        );
+        let rename_call = &guard.calls[1];
+        assert_eq!(
+            *rename_call,
+            FsOpsCall::Rename {
+                from: PathBuf::from(staged_file_path),
+                to: expected_output_path.clone()
+            }
+        );
+        let copy_call = &guard.calls[2];
+        assert_eq!(
+            *copy_call,
+            FsOpsCall::Copy {
+                from: PathBuf::from(staged_file_path),
+                to: expected_output_path
+            },
+        );
+        // exists & remove is not called if copy fails
+    }
+
+    #[test]
+    fn test_persist_staged_file_when_remove_file_fails_returns_error() {
+        let fs_mock_state = Arc::new(Mutex::new(MockFsOpsState {
+            outcome: FsOpsOutcome {
+                create_dir_all_result: Some(Ok(())),
+                rename_result: Some(Err(std::io::Error::new(
+                    std::io::ErrorKind::CrossesDevices,
+                    "cross-device link",
+                ))),
+                copy_result: Some(Ok(1234)),
+                exists_result: Some(Ok(true)),
+                remove_result: Some(Err(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "permission denied",
+                ))),
+            },
+            ..Default::default()
+        }));
+        let fs_ops = MockFsOps::new(Arc::clone(&fs_mock_state));
+        let staged_file_path = Path::new("/temp/archive_file_name.zst");
+        let output_dir = Path::new("/output/");
+        let archive_file_name = "archive_file_name";
+        let expected_output_path = output_dir.join(archive_file_name).with_extension("zst");
+
+        let res = persist_staged_file(&fs_ops, staged_file_path, output_dir, archive_file_name);
+        assert!(res.is_err());
+        let error = res.expect_err("Error was expected");
+        assert!(matches!(error, FileImportError::FileIoError(_)));
+
+        let guard = fs_mock_state.lock().unwrap();
+        assert_eq!(guard.calls.len(), 5);
+        let create_dir_call = &guard.calls[0];
+        assert_eq!(
+            *create_dir_call,
+            FsOpsCall::CreateDir {
+                path: PathBuf::from("/output/")
+            }
+        );
+        let rename_call = &guard.calls[1];
+        assert_eq!(
+            *rename_call,
+            FsOpsCall::Rename {
+                from: PathBuf::from(staged_file_path),
+                to: expected_output_path.clone()
+            }
+        );
+        let copy_call = &guard.calls[2];
+        assert_eq!(
+            *copy_call,
+            FsOpsCall::Copy {
+                from: PathBuf::from(staged_file_path),
+                to: expected_output_path
+            },
+        );
+        let exists_call = &guard.calls[3];
+        assert_eq!(
+            *exists_call,
+            FsOpsCall::Exists {
+                path: PathBuf::from(staged_file_path),
+            },
+        );
+        let remove_call = &guard.calls[4];
+        assert_eq!(
+            *remove_call,
+            FsOpsCall::Remove {
+                path: PathBuf::from(staged_file_path),
             },
         );
     }
@@ -534,11 +681,12 @@ mod tests {
                 ))),
                 copy_result: Some(Ok(1234)),
                 remove_result: Some(Ok(())),
+                ..Default::default()
             },
             ..Default::default()
         }));
         let fs_ops = MockFsOps::new(Arc::clone(&fs_mock_state));
-        let staged_file_path = Path::new("/temp/");
+        let staged_file_path = Path::new("/temp/archive_file_name.zst");
         let output_dir = Path::new("/output/");
         let archive_file_name = "archive_file_name";
         let expected_output_path = output_dir.join(archive_file_name).with_extension("zst");
@@ -550,16 +698,16 @@ mod tests {
 
         let guard = fs_mock_state.lock().unwrap();
         assert_eq!(guard.calls.len(), 2);
-        let call1 = &guard.calls[0];
+        let create_dir_call = &guard.calls[0];
         assert_eq!(
-            *call1,
+            *create_dir_call,
             FsOpsCall::CreateDir {
                 path: PathBuf::from("/output/")
             }
         );
-        let call2 = &guard.calls[1];
+        let rename_call = &guard.calls[1];
         assert_eq!(
-            *call2,
+            *rename_call,
             FsOpsCall::Rename {
                 from: PathBuf::from(staged_file_path),
                 to: expected_output_path.clone()
