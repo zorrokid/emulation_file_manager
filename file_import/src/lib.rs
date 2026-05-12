@@ -286,7 +286,7 @@ fn generate_archive_file_name() -> String {
 #[cfg(test)]
 mod tests {
     use std::{
-        fs::exists,
+        fs,
         io::Write,
         sync::{Arc, Mutex},
     };
@@ -344,10 +344,13 @@ mod tests {
 
     #[test]
     fn test_import_files_from_zip_ignores_unselected_members() {
-        let temp_dir = tempdir().unwrap();
-        let output_path = temp_dir.path().to_path_buf();
+        let temp_dir = tempdir().unwrap().path().to_path_buf();
+        let input_path = temp_dir.join("input");
+        let output_path = temp_dir.join("output");
+        fs::create_dir_all(&input_path).unwrap();
+        fs::create_dir_all(&output_path).unwrap();
 
-        let zip_file_path = output_path.join(TEST_ZIP_ARCHIVE_NAME);
+        let zip_file_path = input_path.join(TEST_ZIP_ARCHIVE_NAME);
         let zip_file = File::create(&zip_file_path).unwrap();
         let mut zip_writer = zip::ZipWriter::new(zip_file);
         let file_options: FileOptions<'_, ()> = FileOptions::default();
@@ -377,6 +380,19 @@ mod tests {
 
         assert_eq!(result.len(), 1);
         assert!(result.contains_key(&checksum));
+        let imported_file = result
+            .get(&checksum)
+            .expect("result was expected to have the file");
+        let archive_file_name = imported_file.archive_file_name.clone().unwrap();
+        let selected_file_path = output_path.join(&archive_file_name).with_extension("zst");
+        assert!(selected_file_path.exists());
+
+        // assert that there are no extra entries imported
+        let entries = match std::fs::read_dir(output_path) {
+            Ok(read_dir) => read_dir.filter_map(|entry| entry.ok()).collect::<Vec<_>>(),
+            Err(_) => Vec::new(),
+        };
+        assert_eq!(entries.len(), 1);
     }
 
     #[test]
