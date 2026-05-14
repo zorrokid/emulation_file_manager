@@ -286,7 +286,7 @@ fn generate_archive_file_name() -> String {
 #[cfg(test)]
 mod tests {
     use std::{
-        fs,
+        fs::{self, DirEntry},
         io::Write,
         sync::{Arc, Mutex},
     };
@@ -302,14 +302,21 @@ mod tests {
     const TEST_FILE_NAME: &str = "test_file";
     const TEST_ZIP_ARCHIVE_NAME: &str = "test.zip";
 
+    fn prepare_zip_tests() -> (zip::ZipWriter<File>, PathBuf, PathBuf) {
+        let temp_dir = tempdir().unwrap().path().to_path_buf();
+        let input_path = temp_dir.join("input");
+        let output_path = temp_dir.join("output");
+        fs::create_dir_all(&input_path).unwrap();
+        fs::create_dir_all(&output_path).unwrap();
+        let zip_file_path = input_path.join(TEST_ZIP_ARCHIVE_NAME);
+        let zip_file = File::create(&zip_file_path).unwrap();
+        let zip_writer = zip::ZipWriter::new(zip_file);
+        (zip_writer, zip_file_path, output_path)
+    }
+
     #[test]
     fn test_import_files_from_zip_uses_sha1_selection_and_stored_file_name() {
-        let temp_dir = tempdir().unwrap();
-        let output_path = temp_dir.path().to_path_buf();
-
-        let zip_file_path = output_path.join(TEST_ZIP_ARCHIVE_NAME);
-        let zip_file = File::create(&zip_file_path).unwrap();
-        let mut zip_writer = zip::ZipWriter::new(zip_file);
+        let (mut zip_writer, zip_file_path, output_path) = prepare_zip_tests();
         let file_options: FileOptions<'_, ()> = FileOptions::default();
         zip_writer
             .start_file("archive_member_name.bin", file_options)
@@ -342,17 +349,16 @@ mod tests {
         assert_eq!(imported_file.file_size, size);
     }
 
+    fn get_dir_entries(path: PathBuf) -> Vec<DirEntry> {
+        match std::fs::read_dir(path) {
+            Ok(read_dir) => read_dir.filter_map(|entry| entry.ok()).collect::<Vec<_>>(),
+            Err(_) => Vec::new(),
+        }
+    }
+
     #[test]
     fn test_import_files_from_zip_ignores_unselected_members() {
-        let temp_dir = tempdir().unwrap().path().to_path_buf();
-        let input_path = temp_dir.join("input");
-        let output_path = temp_dir.join("output");
-        fs::create_dir_all(&input_path).unwrap();
-        fs::create_dir_all(&output_path).unwrap();
-
-        let zip_file_path = input_path.join(TEST_ZIP_ARCHIVE_NAME);
-        let zip_file = File::create(&zip_file_path).unwrap();
-        let mut zip_writer = zip::ZipWriter::new(zip_file);
+        let (mut zip_writer, zip_file_path, output_path) = prepare_zip_tests();
         let file_options: FileOptions<'_, ()> = FileOptions::default();
         zip_writer.start_file("selected.bin", file_options).unwrap();
         zip_writer.write_all(TEST_FILE_CONTENT.as_bytes()).unwrap();
@@ -388,21 +394,12 @@ mod tests {
         assert!(selected_file_path.exists());
 
         // assert that there are no extra entries imported
-        let entries = match std::fs::read_dir(output_path) {
-            Ok(read_dir) => read_dir.filter_map(|entry| entry.ok()).collect::<Vec<_>>(),
-            Err(_) => Vec::new(),
-        };
-        assert_eq!(entries.len(), 1);
+        assert_eq!(get_dir_entries(output_path).len(), 1);
     }
 
     #[test]
     fn test_import_files_from_zip_returns_selection_mismatch_when_no_match_found() {
-        let temp_dir = tempdir().unwrap();
-        let output_path = temp_dir.path().to_path_buf();
-
-        let zip_file_path = output_path.join(TEST_ZIP_ARCHIVE_NAME);
-        let zip_file = File::create(&zip_file_path).unwrap();
-        let mut zip_writer = zip::ZipWriter::new(zip_file);
+        let (mut zip_writer, zip_file_path, output_path) = prepare_zip_tests();
         let file_options: FileOptions<'_, ()> = FileOptions::default();
         zip_writer.start_file(TEST_FILE_NAME, file_options).unwrap();
         zip_writer.write_all(TEST_FILE_CONTENT.as_bytes()).unwrap();
@@ -429,6 +426,50 @@ mod tests {
             Err(FileImportError::SelectionMismatch(message))
                 if message.contains("matched the selected SHA1 entries")
         ));
+    }
+
+    #[test]
+    fn test_import_files_when_zip_contains_two_members_with_same_selected_sha1_the_second_is_skipped_and_cleaned_up()
+     {
+        let (mut zip_writer, zip_file_path, output_path) = prepare_zip_tests();
+        let file_options: FileOptions<'_, ()> = FileOptions::default();
+
+        zip_writer
+            .start_file("zip_member_1.bin", file_options)
+            .unwrap();
+        zip_writer.write_all(TEST_FILE_CONTENT.as_bytes()).unwrap();
+        // write same content to another zip memeber
+        zip_writer
+            .start_file("zip_member_2.bin", file_options)
+            .unwrap();
+        zip_writer.write_all(TEST_FILE_CONTENT.as_bytes()).unwrap();
+        zip_writer.finish().unwrap();
+
+        let (checksum, size) = get_sha1_and_size(TEST_FILE_CONTENT);
+        let mut selected_entries = HashMap::new();
+        selected_entries.insert(
+            checksum,
+            SelectedImportEntry {
+                sha1_checksum: checksum,
+                file_name: TEST_FILE_NAME.to_string(),
+            },
+        );
+        let result = import_files_from_zip(
+            &zip_file_path,
+            &output_path,
+            &selected_entries,
+            &FileType::Rom,
+        );
+        assert!(result.is_ok());
+        let hash_map = result.unwrap();
+        assert_eq!(hash_map.len(), 1);
+        let imported_file = hash_map.get(&checksum).unwrap();
+        assert_eq!(TEST_FILE_NAME, imported_file.original_file_name);
+        assert!(imported_file.archive_file_name.is_some());
+        assert_eq!(imported_file.sha1_checksum, checksum);
+        assert_eq!(imported_file.file_size, size);
+        // assert that there are no extra entries imported
+        assert_eq!(get_dir_entries(output_path).len(), 1);
     }
 
     fn test_paths() -> (PathBuf, PathBuf, PathBuf) {
