@@ -432,7 +432,7 @@ mod tests {
     }
 
     #[test]
-    fn test_import_files_when_zip_contains_two_members_with_same_selected_sha1_the_second_is_ignored()
+    fn test_import_files_from_zip_when_zip_contains_two_members_with_same_selected_sha1_the_second_is_ignored()
      {
         let (_temp_dir, mut zip_writer, zip_file_path, output_path) = prepare_zip_tests();
         let file_options: FileOptions<'_, ()> = FileOptions::default();
