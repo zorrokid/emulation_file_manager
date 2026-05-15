@@ -10,6 +10,7 @@ pub trait FsOps {
     fn rename(&self, from: &Path, to: &Path) -> io::Result<()>;
     fn copy(&self, from: &Path, to: &Path) -> io::Result<u64>;
     fn remove_file(&self, path: &Path) -> io::Result<()>;
+    fn exists(&self, path: &Path) -> io::Result<bool>;
 }
 
 #[derive(Default)]
@@ -31,6 +32,10 @@ impl FsOps for StdFsOps {
     fn remove_file(&self, path: &Path) -> io::Result<()> {
         std::fs::remove_file(path)
     }
+
+    fn exists(&self, path: &Path) -> io::Result<bool> {
+        std::fs::exists(path)
+    }
 }
 
 #[derive(Default)]
@@ -39,13 +44,16 @@ pub struct FsOpsOutcome {
     pub rename_result: Option<io::Result<()>>,
     pub copy_result: Option<io::Result<u64>>,
     pub remove_result: Option<io::Result<()>>,
+    pub exists_result: Option<io::Result<bool>>,
 }
 
+#[derive(Debug, PartialEq)]
 pub enum FsOpsCall {
     CreateDir { path: PathBuf },
     Rename { from: PathBuf, to: PathBuf },
     Copy { from: PathBuf, to: PathBuf },
     Remove { path: PathBuf },
+    Exists { path: PathBuf },
 }
 
 #[derive(Default)]
@@ -113,5 +121,17 @@ impl FsOps for MockFsOps {
             .remove_result
             .take()
             .expect("No mock outcome defined for remove_file")
+    }
+
+    fn exists(&self, path: &Path) -> io::Result<bool> {
+        let mut guard = self.state.lock().unwrap();
+        guard.calls.push(FsOpsCall::Exists {
+            path: PathBuf::from(path),
+        });
+        guard
+            .outcome
+            .exists_result
+            .take()
+            .expect("No mock outcome defined for exists")
     }
 }

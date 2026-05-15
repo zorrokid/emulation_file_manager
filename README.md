@@ -1,3 +1,6 @@
+
+This project is migrated to Codeberg and will be continued there at new home: https://codeberg.org/mikko/emulation_file_manager/
+
 # Why?
 
 I had lots of emulation related files (disk images, manuals, cover art, etc) stored in different locations on my computer or different computers and drives. Usually downloading them over and over again. I wanted to have a single application to manage these files and launch them with emulators and document viewers. I also wanted to be able to sync these files to cloud storage so that I can access them from multiple devices.
