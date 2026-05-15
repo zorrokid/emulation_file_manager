@@ -1,9 +1,7 @@
+use async_std::fs::File;
 use async_std::io::{ReadExt, WriteExt};
-use async_std::{
-    channel::{Receiver, Sender},
-    fs::File,
-};
 use core_types::events::HttpDownloadEvent;
+use flume::{Receiver, Sender};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
@@ -154,6 +152,14 @@ async fn download_file_internal(
     Ok(DownloadResult { file_path })
 }
 
+/*async fn download_file_internal_with_reqwest(
+    url: &str,
+    target_dir: &Path,
+    progress_tx: &Sender<HttpDownloadEvent>,
+    cancel_rx: &Receiver<()>,
+) {
+}*/
+
 fn extract_filename_from_url(url: &str) -> Option<String> {
     url.split('/')
         .next_back()
@@ -175,7 +181,7 @@ fn extract_filename_from_headers(response: &surf::Response) -> Option<String> {
 }
 
 async fn send_status_message(progress_tx: &Sender<HttpDownloadEvent>, event: HttpDownloadEvent) {
-    if let Err(err) = progress_tx.send(event).await {
+    if let Err(err) = progress_tx.send(event) {
         eprintln!("Failed to send download progress event: {}", err);
     }
 }

@@ -1,6 +1,5 @@
 use std::{path::PathBuf, sync::Arc};
 
-use async_std::{channel::unbounded, task};
 use core_types::{
     FileType, ReadFile, Sha1Checksum, events::HttpDownloadEvent, item_type::ItemType,
 };
@@ -37,6 +36,8 @@ use crate::{
         string_utils::format_bytes,
     },
 };
+
+use tokio::task;
 
 #[derive(Debug, Clone)]
 struct File {
@@ -186,7 +187,7 @@ pub struct FileSetFormModel {
     download_in_progress: bool,
     download_total_size: Option<u64>,
     download_bytes: u64,
-    download_cancel_tx: Option<async_std::channel::Sender<()>>,
+    download_cancel_tx: Option<flume::Sender<()>>,
     item_type_dropdown: Controller<ItemTypeDropdown>,
     selected_item_type: Option<ItemType>,
     drop_queue: Vec<PathBuf>,
@@ -550,16 +551,16 @@ impl Component for FileSetFormModel {
                     self.processing = true;
 
                     // unbounded channel for download progress events
-                    let (progress_tx, progress_rx) = unbounded::<HttpDownloadEvent>();
+                    let (progress_tx, progress_rx) = flume::unbounded::<HttpDownloadEvent>();
 
                     // Create cancellation channel
-                    let (cancel_tx, cancel_rx) = unbounded::<()>();
+                    let (cancel_tx, cancel_rx) = flume::unbounded::<()>();
                     self.download_cancel_tx = Some(cancel_tx);
 
                     // Spawn task to forward progress messages to UI
                     let ui_sender = sender.input_sender().clone();
                     task::spawn(async move {
-                        while let Ok(event) = progress_rx.recv().await {
+                        while let Ok(event) = progress_rx.recv() {
                             if let Err(e) =
                                 ui_sender.send(FileSetFormMsg::ProcessDownloadEvent(event))
                             {
