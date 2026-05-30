@@ -1,10 +1,10 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use async_std::channel::{Receiver, Sender};
 use core_types::FileType;
 use core_types::events::HttpDownloadEvent;
 use database::repository_manager::RepositoryManager;
+use flume::{Receiver, Sender};
 
 use crate::error::Error;
 use crate::file_import::model::FileImportPrepareResult;
@@ -48,9 +48,10 @@ impl DownloadService {
         cancel_rx: Receiver<()>,
     ) -> Result<FileImportPrepareResult, Error> {
         // Step 1: Download the file
-        let download_result = http_downloader::download_file(url, temp_dir, &progress_tx, &cancel_rx)
-            .await
-            .map_err(|e| Error::DownloadError(e.to_string()))?;
+        let download_result =
+            http_downloader::download_file(url, temp_dir, &progress_tx, &cancel_rx)
+                .await
+                .map_err(|e| Error::DownloadError(e.to_string()))?;
 
         // Step 2: Prepare the file for import
         self.file_import_service
