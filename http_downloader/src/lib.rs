@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 use tokio::io::AsyncWriteExt;
 
+/// Errors returned while requesting, naming, streaming, or cleaning up a download.
 #[derive(Error, Debug)]
 pub enum DownloadError {
     #[error("HTTP request failed: {0}")]
@@ -21,7 +22,9 @@ pub enum DownloadError {
     CleanUp(String),
 }
 
+/// Result of a completed HTTP download.
 pub struct DownloadResult {
+    /// Full path to the downloaded file on disk.
     pub file_path: PathBuf,
 }
 
@@ -150,6 +153,7 @@ fn extract_filename_from_url(url: &str) -> Option<String> {
         .map(String::from)
 }
 
+/// Errors returned while deriving a safe filename from response metadata.
 #[derive(Error, Debug)]
 pub enum FilenameError {
     #[error("invalid Content-Disposition header content")]
@@ -160,7 +164,6 @@ pub enum FilenameError {
     Filename,
 }
 
-// TODO: tests
 fn extract_filename_from_headers_reqwest(
     response: &reqwest::Response,
 ) -> Result<Option<String>, FilenameError> {
@@ -206,7 +209,6 @@ fn extract_filename_from_headers_reqwest(
     Ok(plain_filename)
 }
 
-// TODO: tests
 fn normalize_filename(raw: &str) -> Result<String, FilenameError> {
     let name = raw
         .rsplit(['/', '\\'])
@@ -236,21 +238,204 @@ async fn send_status_message(progress_tx: &Sender<HttpDownloadEvent>, event: Htt
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::{
+        Router,
+        http::{HeaderMap, HeaderValue, header::CONTENT_DISPOSITION},
+        routing::get,
+    };
+    use tokio::net::TcpListener;
+
+    async fn response_with_content_disposition(
+        content_disposition: Option<HeaderValue>,
+    ) -> reqwest::Response {
+        let app = Router::new().route(
+            "/",
+            get(move || {
+                let content_disposition = content_disposition.clone();
+                async move {
+                    let mut headers = HeaderMap::new();
+                    if let Some(content_disposition) = content_disposition {
+                        headers.insert(CONTENT_DISPOSITION, content_disposition);
+                    }
+                    (headers, "fixture body")
+                }
+            }),
+        );
+
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("test server should bind to an ephemeral localhost port");
+        let address = listener
+            .local_addr()
+            .expect("test server should expose its bound address");
+
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app)
+                .await
+                .expect("test server should serve header fixture responses");
+        });
+
+        let client = reqwest::Client::new();
+        let response = client
+            .get(format!("http://{address}/"))
+            .send()
+            .await
+            .expect("fixture response should be returned");
+
+        server.abort();
+
+        response
+    }
 
     #[test]
-    fn test_extract_filename_from_url() {
+    fn test_extract_filename_from_url_plain_filename_returns_filename() {
         assert_eq!(
             extract_filename_from_url("https://example.com/file.zip"),
             Some("file.zip".to_string())
         );
+    }
+
+    #[test]
+    fn test_extract_filename_from_url_nested_path_returns_last_segment() {
         assert_eq!(
             extract_filename_from_url("https://example.com/path/to/file.zip"),
             Some("file.zip".to_string())
         );
+    }
+
+    #[test]
+    fn test_extract_filename_from_url_query_string_returns_filename() {
         assert_eq!(
             extract_filename_from_url("https://example.com/file.zip?query=param"),
             Some("file.zip".to_string())
         );
-        assert_eq!(extract_filename_from_url("https://example.com/"), None);
+    }
+
+    #[test]
+    fn test_extract_filename_from_url_trailing_slash_returns_none() {
+        assert_eq!(extract_filename_from_url("https://example.com/path/"), None);
+    }
+
+    #[test]
+    fn test_extract_filename_from_url_without_usable_filename_returns_none() {
+        assert_eq!(
+            extract_filename_from_url("https://example.com/download"),
+            None
+        );
+    }
+
+    #[test]
+    fn test_normalize_filename_valid_name_returns_unchanged_filename() {
+        let result = normalize_filename("archive.zip");
+        assert!(matches!(result, Ok(ref name) if name == "archive.zip"));
+    }
+
+    #[test]
+    fn test_normalize_filename_path_like_value_returns_basename() {
+        let result = normalize_filename("dir/sub/file.zip");
+        assert!(matches!(result, Ok(ref name) if name == "file.zip"));
+    }
+
+    #[test]
+    fn test_normalize_filename_whitespace_returns_trimmed_filename() {
+        let result = normalize_filename("  archive.zip  ");
+        assert!(matches!(result, Ok(ref name) if name == "archive.zip"));
+    }
+
+    #[test]
+    fn test_normalize_filename_empty_input_returns_error() {
+        assert!(matches!(
+            normalize_filename("   "),
+            Err(FilenameError::Filename)
+        ));
+    }
+
+    #[test]
+    fn test_normalize_filename_dot_path_returns_error() {
+        assert!(matches!(
+            normalize_filename("."),
+            Err(FilenameError::Filename)
+        ));
+        assert!(matches!(
+            normalize_filename(".."),
+            Err(FilenameError::Filename)
+        ));
+    }
+
+    #[test]
+    fn test_normalize_filename_sanitized_empty_result_returns_error() {
+        assert!(matches!(
+            normalize_filename("???"),
+            Err(FilenameError::Filename)
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_extract_filename_from_headers_reqwest_ascii_filename_returns_filename() {
+        let response = response_with_content_disposition(Some(HeaderValue::from_static(
+            "attachment; filename=\"archive.zip\"",
+        )))
+        .await;
+
+        let result = extract_filename_from_headers_reqwest(&response);
+        assert!(matches!(result, Ok(Some(ref name)) if name == "archive.zip"));
+    }
+
+    #[tokio::test]
+    async fn test_extract_filename_from_headers_reqwest_utf_filename_returns_decoded_filename() {
+        let response = response_with_content_disposition(Some(HeaderValue::from_static(
+            "attachment; filename*=UTF-8''f%C3%A4ncy.zip",
+        )))
+        .await;
+
+        let result = extract_filename_from_headers_reqwest(&response);
+        assert!(matches!(result, Ok(Some(ref name)) if name == "fäncy.zip"));
+    }
+
+    #[tokio::test]
+    async fn test_extract_filename_from_headers_reqwest_utf_filename_takes_precedence() {
+        let response = response_with_content_disposition(Some(HeaderValue::from_static(
+            "attachment; filename=\"plain.zip\"; filename*=UTF-8''f%C3%A4ncy.zip",
+        )))
+        .await;
+
+        let result = extract_filename_from_headers_reqwest(&response);
+        assert!(matches!(result, Ok(Some(ref name)) if name == "fäncy.zip"));
+    }
+
+    #[tokio::test]
+    async fn test_extract_filename_from_headers_reqwest_invalid_header_content_returns_error() {
+        let response = response_with_content_disposition(Some(
+            HeaderValue::from_bytes(b"attachment; filename=\"bad\xff.zip\"")
+                .expect("fixture header should accept opaque bytes"),
+        ))
+        .await;
+
+        assert!(matches!(
+            extract_filename_from_headers_reqwest(&response),
+            Err(FilenameError::ContentDispositionContent)
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_extract_filename_from_headers_reqwest_invalid_utf_returns_error() {
+        let response = response_with_content_disposition(Some(HeaderValue::from_static(
+            "attachment; filename*=UTF-8''%FF",
+        )))
+        .await;
+
+        assert!(matches!(
+            extract_filename_from_headers_reqwest(&response),
+            Err(FilenameError::EncodedUtf)
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_extract_filename_from_headers_reqwest_without_usable_filename_returns_none() {
+        let response =
+            response_with_content_disposition(Some(HeaderValue::from_static("attachment"))).await;
+
+        let result = extract_filename_from_headers_reqwest(&response);
+        assert!(matches!(result, Ok(None)));
     }
 }
